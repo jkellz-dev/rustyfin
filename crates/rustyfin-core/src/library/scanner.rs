@@ -67,7 +67,9 @@ impl LibraryScanner {
             }
         }
 
-        libraries::touch_updated_at(&self.pool, library_id).await.ok();
+        libraries::touch_updated_at(&self.pool, library_id)
+            .await
+            .ok();
 
         result.duration = start.elapsed();
         tracing::info!(
@@ -250,10 +252,7 @@ impl LibraryScanner {
 
         // Process subdirectories (seasons)
         for subdir in &subdirs {
-            let dir_name = subdir
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let dir_name = subdir.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
             if let Some(season_num) = parse_season_folder(dir_name) {
                 let season_name_str = if season_num == 0 {
@@ -293,10 +292,7 @@ impl LibraryScanner {
                         Ok(IngestOutcome::Updated) => result.items_updated += 1,
                         Ok(IngestOutcome::Skipped) => result.items_skipped += 1,
                         Err(e) => {
-                            tracing::error!(
-                                "Error ingesting episode {}: {e}",
-                                video.display()
-                            );
+                            tracing::error!("Error ingesting episode {}: {e}", video.display());
                             result.errors += 1;
                         }
                     }
@@ -308,7 +304,13 @@ impl LibraryScanner {
         if !loose_videos.is_empty() {
             let season_name_str = "Season 1".to_string();
             let season_id = self
-                .find_or_create_folder(&season_name_str, "Season", library_id, Some(series_id), Some(1))
+                .find_or_create_folder(
+                    &season_name_str,
+                    "Season",
+                    library_id,
+                    Some(series_id),
+                    Some(1),
+                )
                 .await?;
 
             for video in &loose_videos {

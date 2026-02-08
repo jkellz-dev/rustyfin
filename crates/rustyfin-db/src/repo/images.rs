@@ -57,6 +57,16 @@ pub async fn list_by_item(pool: &PgPool, item_id: Uuid) -> Result<Vec<ImageRow>,
     .await
 }
 
+/// Get images for multiple media items (batch query to avoid N+1).
+pub async fn list_by_items(pool: &PgPool, item_ids: &[Uuid]) -> Result<Vec<ImageRow>, sqlx::Error> {
+    sqlx::query_as::<_, ImageRow>(
+        "SELECT * FROM images WHERE item_id = ANY($1) ORDER BY item_id, image_type, image_index",
+    )
+    .bind(item_ids)
+    .fetch_all(pool)
+    .await
+}
+
 /// Get a specific image for an item by type and index.
 pub async fn find_by_item_and_type(
     pool: &PgPool,

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -6,8 +8,10 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{media_items, user_data};
-use rustyfin_models::dto::{BaseItemDto, QueryResult, UserItemDataDto};
+use rustyfin_db::repo::images::ImageRow;
+use rustyfin_db::repo::{images, media_items, media_streams, user_data};
+use rustyfin_media::playback_info::stream_row_to_dto;
+use rustyfin_models::dto::{BaseItemDto, MediaSourceInfo, QueryResult, UserItemDataDto};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -71,6 +75,102 @@ fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseI
     }
 }
 
+struct ImageFields {
+    image_tags: Option<HashMap<String, String>>,
+    backdrop_image_tags: Option<Vec<String>>,
+    image_blur_hashes: Option<HashMap<String, HashMap<String, String>>>,
+    primary_image_aspect_ratio: Option<f64>,
+}
+
+/// Build image-related fields from a slice of `ImageRow`s for a single item.
+fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
+    if item_images.is_empty() {
+        return ImageFields {
+            image_tags: None,
+            backdrop_image_tags: None,
+            image_blur_hashes: None,
+            primary_image_aspect_ratio: None,
+        };
+    }
+
+    let mut image_tags: HashMap<String, String> = HashMap::new();
+    let mut backdrop_tags: Vec<String> = Vec::new();
+    let mut blur_hashes: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut primary_aspect_ratio: Option<f64> = None;
+
+    for img in item_images {
+        let tag = img.id.to_string();
+
+        match img.image_type.as_str() {
+            "Backdrop" => {
+                backdrop_tags.push(tag.clone());
+                if let Some(ref bh) = img.blurhash {
+                    blur_hashes
+                        .entry("Backdrop".to_string())
+                        .or_default()
+                        .insert(tag, bh.clone());
+                }
+            }
+            image_type => {
+                // Primary, Banner, Logo, Thumb, Art, Disc, etc. go into image_tags
+                image_tags.insert(image_type.to_string(), tag.clone());
+                if let Some(ref bh) = img.blurhash {
+                    blur_hashes
+                        .entry(image_type.to_string())
+                        .or_default()
+                        .insert(tag, bh.clone());
+                }
+                // Compute aspect ratio from Primary image dimensions
+                if image_type == "Primary"
+                    && let (Some(w), Some(h)) = (img.width, img.height)
+                    && h > 0
+                {
+                    primary_aspect_ratio = Some(f64::from(w) / f64::from(h));
+                }
+            }
+        }
+    }
+
+    ImageFields {
+        image_tags: if image_tags.is_empty() {
+            None
+        } else {
+            Some(image_tags)
+        },
+        backdrop_image_tags: if backdrop_tags.is_empty() {
+            None
+        } else {
+            Some(backdrop_tags)
+        },
+        image_blur_hashes: if blur_hashes.is_empty() {
+            None
+        } else {
+            Some(blur_hashes)
+        },
+        primary_image_aspect_ratio: primary_aspect_ratio,
+    }
+}
+
+/// Apply image fields to a DTO from a pre-grouped image map.
+fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow]) {
+    let fields = build_image_fields(item_images);
+    dto.image_tags = fields.image_tags;
+    dto.backdrop_image_tags = fields.backdrop_image_tags;
+    dto.image_blur_hashes = fields.image_blur_hashes;
+    dto.primary_image_aspect_ratio = fields.primary_image_aspect_ratio;
+}
+
+/// Group images by item_id for batch application.
+fn group_images_by_item(all_images: Vec<ImageRow>) -> HashMap<Uuid, Vec<ImageRow>> {
+    let mut map: HashMap<Uuid, Vec<ImageRow>> = HashMap::new();
+    for img in all_images {
+        if let Some(item_id) = img.item_id {
+            map.entry(item_id).or_default().push(img);
+        }
+    }
+    map
+}
+
 /// `GET /Items` — Main query endpoint.
 pub async fn get_items(
     State(state): State<AppState>,
@@ -108,6 +208,33 @@ pub async fn get_items(
         .map(|item| media_item_to_dto(item, &state.server_id))
         .collect();
 
+    // Batch load images
+    let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
+    if !item_ids.is_empty() {
+        let all_images = images::list_by_items(&state.pool, &item_ids)
+            .await
+            .unwrap_or_default();
+        let images_map = group_images_by_item(all_images);
+        for dto in &mut dtos {
+            if let Some(item_images) = images_map.get(&dto.id) {
+                apply_images_to_dto(dto, item_images);
+            }
+        }
+    }
+
+    // Batch load child counts for folders
+    let folder_ids: Vec<Uuid> = items.iter().filter(|i| i.is_folder).map(|i| i.id).collect();
+    if !folder_ids.is_empty() {
+        let counts = media_items::count_children_batch(&state.pool, &folder_ids)
+            .await
+            .unwrap_or_default();
+        for dto in &mut dtos {
+            if let Some(&count) = counts.get(&dto.id) {
+                dto.child_count = Some(count as i32);
+            }
+        }
+    }
+
     // Attach user data if requested
     if query.enable_user_data.unwrap_or(true) {
         for dto in &mut dtos {
@@ -142,6 +269,50 @@ pub async fn get_item_by_id(
         .ok_or(ApiError::NotFound)?;
 
     let mut dto = media_item_to_dto(&item, &state.server_id);
+
+    // Load images
+    let item_images = images::list_by_item(&state.pool, item_id)
+        .await
+        .unwrap_or_default();
+    apply_images_to_dto(&mut dto, &item_images);
+
+    // Child count for folders
+    if item.is_folder {
+        let count = media_items::count_by_parent(&state.pool, Some(item_id), &[])
+            .await
+            .unwrap_or(0);
+        dto.child_count = Some(count as i32);
+    }
+
+    // Media streams for non-folder items
+    if !item.is_folder {
+        let streams = media_streams::list_by_item(&state.pool, item_id)
+            .await
+            .unwrap_or_default();
+        if !streams.is_empty() {
+            let media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
+            let source = MediaSourceInfo {
+                id: item.id.to_string(),
+                path: None,
+                container: item.container.clone(),
+                size: item.size,
+                name: Some(item.name.clone()),
+                bitrate: item.total_bitrate,
+                runtime_ticks: item.runtime_ticks,
+                supports_direct_play: true,
+                supports_direct_stream: true,
+                supports_transcoding: false,
+                is_remote: false,
+                read_at_native_framerate: false,
+                source_type: "Default".to_string(),
+                protocol: "File".to_string(),
+                media_streams: Some(media_stream_dtos.clone()),
+                e_tag: item.etag.clone(),
+            };
+            dto.media_sources = Some(vec![source]);
+            dto.media_streams = Some(media_stream_dtos);
+        }
+    }
 
     // Attach user data
     if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, item_id).await {
@@ -179,10 +350,24 @@ pub async fn get_latest_items(
             .unwrap_or_default()
     };
 
-    let dtos: Vec<BaseItemDto> = items
+    let mut dtos: Vec<BaseItemDto> = items
         .iter()
         .map(|item| media_item_to_dto(item, &state.server_id))
         .collect();
+
+    // Batch load images
+    let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
+    if !item_ids.is_empty() {
+        let all_images = images::list_by_items(&state.pool, &item_ids)
+            .await
+            .unwrap_or_default();
+        let images_map = group_images_by_item(all_images);
+        for dto in &mut dtos {
+            if let Some(item_images) = images_map.get(&dto.id) {
+                apply_images_to_dto(dto, item_images);
+            }
+        }
+    }
 
     Ok(Json(dtos))
 }
@@ -213,6 +398,20 @@ pub async fn get_resume_items(
                 ..Default::default()
             });
             dtos.push(dto);
+        }
+    }
+
+    // Batch load images for resume items
+    let item_ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
+    if !item_ids.is_empty() {
+        let all_images = images::list_by_items(&state.pool, &item_ids)
+            .await
+            .unwrap_or_default();
+        let images_map = group_images_by_item(all_images);
+        for dto in &mut dtos {
+            if let Some(item_images) = images_map.get(&dto.id) {
+                apply_images_to_dto(dto, item_images);
+            }
         }
     }
 

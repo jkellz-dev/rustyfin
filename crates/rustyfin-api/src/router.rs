@@ -117,6 +117,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // ── Search ──────────────────────────────────────────────
         .route("/Search/Hints", get(search::search_hints))
+        // ── WebSocket ────────────────────────────────────────────
+        .route("/socket", get(websocket::websocket_handler))
         // ── State ───────────────────────────────────────────────
         .with_state(state)
 }

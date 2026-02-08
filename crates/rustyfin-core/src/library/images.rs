@@ -34,14 +34,20 @@ pub fn discover_images(dir: &Path, item_stem: &str) -> Vec<DiscoveredImage> {
         }
     }
 
-    images.sort_by(|a, b| a.image_type.cmp(&b.image_type).then(a.image_index.cmp(&b.image_index)));
+    images.sort_by(|a, b| {
+        a.image_type
+            .cmp(&b.image_type)
+            .then(a.image_index.cmp(&b.image_index))
+    });
     images
 }
 
 fn classify_image(stem_lower: &str, item_stem: &str, path: &str) -> Option<DiscoveredImage> {
     // Primary / Poster
-    if matches!(stem_lower, "poster" | "folder" | "cover" | "default" | "movie" | "show")
-        || stem_lower == item_stem.to_lowercase()
+    if matches!(
+        stem_lower,
+        "poster" | "folder" | "cover" | "default" | "movie" | "show"
+    ) || stem_lower == item_stem.to_lowercase()
     {
         return Some(DiscoveredImage {
             image_type: "Primary".to_string(),

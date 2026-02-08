@@ -29,7 +29,7 @@ rustyfin-media = { path = "crates/rustyfin-media" }
 rustyfin-frontend = { path = "crates/rustyfin-frontend" }
 
 # Server
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
@@ -55,3 +55,4 @@ thiserror = "2"
 anyhow = "1"
 walkdir = "2"
 regex = "1"
+futures-util = "0.3"

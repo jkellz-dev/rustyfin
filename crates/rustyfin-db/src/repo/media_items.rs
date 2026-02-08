@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -169,10 +171,7 @@ pub async fn latest_by_library(
 }
 
 /// Find a media item by its filesystem path.
-pub async fn find_by_path(
-    pool: &PgPool,
-    path: &str,
-) -> Result<Option<MediaItemRow>, sqlx::Error> {
+pub async fn find_by_path(pool: &PgPool, path: &str) -> Result<Option<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE path = $1")
         .bind(path)
         .fetch_optional(pool)
@@ -325,6 +324,20 @@ pub async fn delete_by_library(pool: &PgPool, library_id: Uuid) -> Result<u64, s
         .execute(pool)
         .await?;
     Ok(result.rows_affected())
+}
+
+/// Batch count children for multiple parent IDs.
+pub async fn count_children_batch(
+    pool: &PgPool,
+    parent_ids: &[Uuid],
+) -> Result<HashMap<Uuid, i64>, sqlx::Error> {
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT parent_id, COUNT(*) FROM media_items WHERE parent_id = ANY($1) GROUP BY parent_id",
+    )
+    .bind(parent_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Search items by name (basic ILIKE search).

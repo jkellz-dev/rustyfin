@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo *)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:kanidm.github.io)",
+      "WebFetch(domain:sycamore.dev)",
+      "WebFetch(domain:tailscale.dev)",
+      "WebFetch(domain:trunkrs.dev)",
+      "WebSearch",
+      "mcp__wikipedia-mcp__test_wikipedia_connectivity",
+      "Bash(trunk build:*)",
+      "Bash(jj diff:*)",
+      "Bash(jj status:*)",
+      "Bash(jj describe:*)",
+      "Bash(jj new:*)",
+      "Bash(jj log:*)",
+      "Bash(ffprobe:*)",
+      "WebFetch(domain:fanart.tv)",
+      "WebFetch(domain:www.discogs.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.linuxserver.io)",
+      "Bash(shellcheck:*)"
+    ]
+  }
+}

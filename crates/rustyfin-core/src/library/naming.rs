@@ -5,25 +5,20 @@ use regex::Regex;
 
 static RE_SXXEXX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)[Ss](\d{1,2})[Ee](\d{1,3})").unwrap());
-static RE_XN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)(\d{1,2})x(\d{1,3})").unwrap());
-static RE_YEAR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b((?:19|20)\d{2})\b").unwrap());
+static RE_XN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)(\d{1,2})x(\d{1,3})").unwrap());
+static RE_YEAR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b((?:19|20)\d{2})\b").unwrap());
 static RE_QUALITY_TAGS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(2160p|1080p|1080i|720p|480p|4k|uhd|hdr10?|dv|dolby\.?vision|remux|bluray|blu-ray|bdrip|brrip|webrip|web-dl|webdl|hdtv|dvdrip|x264|x265|h\.?264|h\.?265|hevc|avc|aac|dts|dts-hd|dts-x|truehd|atmos|flac|mp3|ac3|eac3|10bit|proper|repack|extended|unrated|directors\.?cut|theatrical)\b").unwrap()
 });
-static RE_BRACKETS: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[.*?\]").unwrap());
-static RE_SEASON_FOLDER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(?:Season\s*|Staffel\s*|Saison\s*|S)(\d{1,2})$").unwrap()
-});
-static RE_LEADING_ARTICLE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(the|a|an|der|die|das|le|la|les|el|los|las)\s+").unwrap()
-});
+static RE_BRACKETS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[.*?\]").unwrap());
+static RE_SEASON_FOLDER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^(?:Season\s*|Staffel\s*|Saison\s*|S)(\d{1,2})$").unwrap());
+static RE_LEADING_ARTICLE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^(the|a|an|der|die|das|le|la|les|el|los|las)\s+").unwrap());
 
 const VIDEO_EXTENSIONS: &[&str] = &[
-    "mkv", "mp4", "avi", "m2ts", "ts", "mov", "webm", "wmv", "flv", "mpg", "mpeg", "m4v",
-    "3gp", "ogv", "divx", "vob", "iso",
+    "mkv", "mp4", "avi", "m2ts", "ts", "mov", "webm", "wmv", "flv", "mpg", "mpeg", "m4v", "3gp",
+    "ogv", "divx", "vob", "iso",
 ];
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tbn"];
@@ -93,10 +88,7 @@ pub fn resolve_movie(path: &Path) -> ResolvedItem {
 }
 
 pub fn resolve_episode(path: &Path, _series_name: &str) -> Option<ResolvedItem> {
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let container = path
         .extension()
         .and_then(|e| e.to_str())
@@ -248,7 +240,9 @@ mod tests {
     #[test]
     fn test_resolve_episode_sxxexx() {
         let item = resolve_episode(
-            Path::new("/tv/Breaking Bad/Season 1/Breaking.Bad.S01E03.And.the.Bag's.in.the.River.mkv"),
+            Path::new(
+                "/tv/Breaking Bad/Season 1/Breaking.Bad.S01E03.And.the.Bag's.in.the.River.mkv",
+            ),
             "Breaking Bad",
         )
         .unwrap();
@@ -260,11 +254,7 @@ mod tests {
 
     #[test]
     fn test_resolve_episode_xn() {
-        let item = resolve_episode(
-            Path::new("/tv/Show/1x05.Episode.Title.mkv"),
-            "Show",
-        )
-        .unwrap();
+        let item = resolve_episode(Path::new("/tv/Show/1x05.Episode.Title.mkv"), "Show").unwrap();
         assert_eq!(item.index_number, Some(5));
         assert_eq!(item.parent_index_number, Some(1));
     }
@@ -292,7 +282,10 @@ mod tests {
 
     #[test]
     fn test_clean_title() {
-        assert_eq!(clean_title("Movie.Name.2020.1080p.BluRay.x264"), "Movie Name 2020");
+        assert_eq!(
+            clean_title("Movie.Name.2020.1080p.BluRay.x264"),
+            "Movie Name 2020"
+        );
         assert_eq!(clean_title("[GROUP] Movie Name"), "Movie Name");
         assert_eq!(clean_title("Movie_Name"), "Movie Name");
     }

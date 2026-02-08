@@ -174,22 +174,61 @@ fn map_stream(s: FfprobeStream) -> Option<ProbeStream> {
         title: tags.and_then(|t| t.get("title").cloned()),
         is_default: disp.and_then(|d| d.default).unwrap_or(0) != 0,
         is_forced: disp.and_then(|d| d.forced).unwrap_or(0) != 0,
-        width: if stream_type == "Video" { s.width } else { None },
-        height: if stream_type == "Video" { s.height } else { None },
+        width: if stream_type == "Video" {
+            s.width
+        } else {
+            None
+        },
+        height: if stream_type == "Video" {
+            s.height
+        } else {
+            None
+        },
         bit_rate: s.bit_rate.as_deref().and_then(|b| b.parse().ok()),
-        bit_depth: s.bits_per_raw_sample.as_deref().and_then(|b| b.parse().ok()),
-        pixel_format: if stream_type == "Video" { s.pix_fmt } else { None },
-        aspect_ratio: if stream_type == "Video" { s.display_aspect_ratio } else { None },
+        bit_depth: s
+            .bits_per_raw_sample
+            .as_deref()
+            .and_then(|b| b.parse().ok()),
+        pixel_format: if stream_type == "Video" {
+            s.pix_fmt
+        } else {
+            None
+        },
+        aspect_ratio: if stream_type == "Video" {
+            s.display_aspect_ratio
+        } else {
+            None
+        },
         real_frame_rate: if stream_type == "Video" {
             s.r_frame_rate.as_deref().and_then(parse_frame_rate)
         } else {
             None
         },
-        color_space: if stream_type == "Video" { s.color_space } else { None },
-        color_primaries: if stream_type == "Video" { s.color_primaries } else { None },
-        color_transfer: if stream_type == "Video" { s.color_transfer } else { None },
-        channels: if stream_type == "Audio" { s.channels } else { None },
-        channel_layout: if stream_type == "Audio" { s.channel_layout } else { None },
+        color_space: if stream_type == "Video" {
+            s.color_space
+        } else {
+            None
+        },
+        color_primaries: if stream_type == "Video" {
+            s.color_primaries
+        } else {
+            None
+        },
+        color_transfer: if stream_type == "Video" {
+            s.color_transfer
+        } else {
+            None
+        },
+        channels: if stream_type == "Audio" {
+            s.channels
+        } else {
+            None
+        },
+        channel_layout: if stream_type == "Audio" {
+            s.channel_layout
+        } else {
+            None
+        },
         sample_rate: if stream_type == "Audio" {
             s.sample_rate.as_deref().and_then(|r| r.parse().ok())
         } else {

@@ -5,6 +5,7 @@ pub mod query_result;
 pub mod session;
 pub mod system;
 pub mod user;
+pub mod websocket;
 
 pub use auth::*;
 pub use base_item::*;
@@ -13,3 +14,4 @@ pub use query_result::*;
 pub use session::*;
 pub use system::*;
 pub use user::*;
+pub use websocket::*;
