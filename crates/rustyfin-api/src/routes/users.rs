@@ -1,12 +1,13 @@
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
 };
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_db::repo::users;
-use rustyfin_models::dto::{UserConfiguration, UserDto, UserPolicy};
+use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, UserPolicy};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -90,4 +91,38 @@ pub async fn get_public_users(
         .map(|r| user_row_to_dto(r, &state.server_id))
         .collect();
     Ok(Json(dtos))
+}
+
+/// `DELETE /Users/{userId}` — Delete a user (admin only). Cannot delete self.
+pub async fn delete_user(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if admin.0.user_id == user_id {
+        return Err(ApiError::BadRequest("Cannot delete yourself".to_string()));
+    }
+    let deleted = users::delete(&state.pool, user_id)
+        .await
+        .map_err(ApiError::Database)?;
+    if !deleted {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /Users/{userId}/Policy` — Update user admin policy (admin only).
+pub async fn update_user_policy(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(user_id): Path<Uuid>,
+    Json(req): Json<UpdateUserPolicyRequest>,
+) -> Result<StatusCode, ApiError> {
+    let updated = users::update_policy(&state.pool, user_id, req.is_administrator)
+        .await
+        .map_err(ApiError::Database)?;
+    if !updated {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }

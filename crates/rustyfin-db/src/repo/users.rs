@@ -107,6 +107,21 @@ pub async fn count(pool: &PgPool) -> Result<i64, sqlx::Error> {
     Ok(row.0)
 }
 
+/// Update the administrator policy for a user.
+pub async fn update_policy(
+    pool: &PgPool,
+    id: Uuid,
+    is_administrator: bool,
+) -> Result<bool, sqlx::Error> {
+    let result =
+        sqlx::query("UPDATE users SET is_administrator = $1, updated_at = NOW() WHERE id = $2")
+            .bind(is_administrator)
+            .bind(id)
+            .execute(pool)
+            .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Delete a user by ID.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM users WHERE id = $1")

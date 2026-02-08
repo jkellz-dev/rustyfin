@@ -152,7 +152,12 @@ impl LibraryScanner {
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
             self.enrichment
-                .enrich_movie(updated.id, file_path, &updated.name, updated.production_year)
+                .enrich_movie(
+                    updated.id,
+                    file_path,
+                    &updated.name,
+                    updated.production_year,
+                )
                 .await;
             return Ok(IngestOutcome::Updated);
         }
@@ -193,7 +198,12 @@ impl LibraryScanner {
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
         self.enrichment
-            .enrich_movie(inserted.id, file_path, &inserted.name, inserted.production_year)
+            .enrich_movie(
+                inserted.id,
+                file_path,
+                &inserted.name,
+                inserted.production_year,
+            )
             .await;
         Ok(IngestOutcome::Added)
     }
@@ -468,9 +478,7 @@ impl LibraryScanner {
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
-            self.enrichment
-                .enrich_episode(updated.id, file_path)
-                .await;
+            self.enrichment.enrich_episode(updated.id, file_path).await;
             return Ok(IngestOutcome::Updated);
         }
 
@@ -530,9 +538,7 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
-        self.enrichment
-            .enrich_episode(inserted.id, file_path)
-            .await;
+        self.enrichment.enrich_episode(inserted.id, file_path).await;
         Ok(IngestOutcome::Added)
     }
 

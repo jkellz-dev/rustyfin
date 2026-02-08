@@ -25,13 +25,11 @@ pub async fn find_by_name_and_type(
     name: &str,
     person_type: &str,
 ) -> Result<Option<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>(
-        "SELECT * FROM people WHERE name = $1 AND person_type = $2",
-    )
-    .bind(name)
-    .bind(person_type)
-    .fetch_optional(pool)
-    .await
+    sqlx::query_as::<_, PersonRow>("SELECT * FROM people WHERE name = $1 AND person_type = $2")
+        .bind(name)
+        .bind(person_type)
+        .fetch_optional(pool)
+        .await
 }
 
 /// Insert a new person.

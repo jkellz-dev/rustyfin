@@ -6,9 +6,8 @@ use uuid::Uuid;
 use rustyfin_db::repo::{media_items, people};
 
 use super::nfo::{
-    NfoMetadata,
-    find_episode_nfo, find_movie_nfo, find_series_nfo,
-    parse_episode_nfo, parse_movie_nfo, parse_series_nfo,
+    NfoMetadata, find_episode_nfo, find_movie_nfo, find_series_nfo, parse_episode_nfo,
+    parse_movie_nfo, parse_series_nfo,
 };
 use super::tmdb::TmdbClient;
 
@@ -19,9 +18,7 @@ pub struct EnrichmentService {
 
 impl EnrichmentService {
     pub fn new(pool: PgPool, tmdb_api_key: Option<String>) -> Self {
-        let tmdb = tmdb_api_key
-            .filter(|k| !k.is_empty())
-            .map(TmdbClient::new);
+        let tmdb = tmdb_api_key.filter(|k| !k.is_empty()).map(TmdbClient::new);
         Self { pool, tmdb }
     }
 
@@ -34,8 +31,7 @@ impl EnrichmentService {
         year: Option<i32>,
     ) {
         // Try NFO first
-        let meta = find_movie_nfo(video_path)
-            .and_then(|p| parse_movie_nfo(&p));
+        let meta = find_movie_nfo(video_path).and_then(|p| parse_movie_nfo(&p));
 
         let meta = match meta {
             Some(m) => m,
@@ -55,26 +51,18 @@ impl EnrichmentService {
     }
 
     /// Enrich a series item with metadata from NFO or TMDB.
-    pub async fn enrich_series(
-        &self,
-        item_id: Uuid,
-        series_dir: &Path,
-        series_name: &str,
-    ) {
-        let meta = find_series_nfo(series_dir)
-            .and_then(|p| parse_series_nfo(&p));
+    pub async fn enrich_series(&self, item_id: Uuid, series_dir: &Path, series_name: &str) {
+        let meta = find_series_nfo(series_dir).and_then(|p| parse_series_nfo(&p));
 
         let meta = match meta {
             Some(m) => m,
-            None => {
-                match &self.tmdb {
-                    Some(client) => match client.search_series(series_name).await {
-                        Some(m) => m,
-                        None => return,
-                    },
+            None => match &self.tmdb {
+                Some(client) => match client.search_series(series_name).await {
+                    Some(m) => m,
                     None => return,
-                }
-            }
+                },
+                None => return,
+            },
         };
 
         self.apply_metadata(item_id, &meta).await;
@@ -82,8 +70,7 @@ impl EnrichmentService {
 
     /// Enrich an episode item with metadata from NFO.
     pub async fn enrich_episode(&self, item_id: Uuid, video_path: &Path) {
-        let meta = find_episode_nfo(video_path)
-            .and_then(|p| parse_episode_nfo(&p));
+        let meta = find_episode_nfo(video_path).and_then(|p| parse_episode_nfo(&p));
 
         let Some(meta) = meta else { return };
         self.apply_metadata(item_id, &meta).await;
@@ -99,13 +86,8 @@ impl EnrichmentService {
         match item.item_type.as_str() {
             "Movie" => {
                 if let Some(ref path) = item.path {
-                    self.enrich_movie(
-                        item_id,
-                        Path::new(path),
-                        &item.name,
-                        item.production_year,
-                    )
-                    .await;
+                    self.enrich_movie(item_id, Path::new(path), &item.name, item.production_year)
+                        .await;
                 }
             }
             "Series" => {

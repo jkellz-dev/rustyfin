@@ -117,6 +117,26 @@ where
     }
 }
 
+/// Admin user extractor — requires `is_administrator = true`.
+#[derive(Debug, Clone)]
+pub struct AdminUser(pub AuthenticatedUser);
+
+impl<S> FromRequestParts<S> for AdminUser
+where
+    PgPool: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let user = AuthenticatedUser::from_request_parts(parts, state).await?;
+        if !user.is_administrator {
+            return Err(StatusCode::FORBIDDEN);
+        }
+        Ok(AdminUser(user))
+    }
+}
+
 /// Optional authenticated user - doesn't fail if no auth present.
 #[derive(Debug, Clone)]
 pub struct OptionalUser(pub Option<AuthenticatedUser>);

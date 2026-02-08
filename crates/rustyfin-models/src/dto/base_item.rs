@@ -284,6 +284,38 @@ pub struct VirtualFolderInfo {
     pub library_options: LibraryOptions,
 }
 
+/// Request to create a new library.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateLibraryRequest {
+    pub name: String,
+    pub collection_type: String,
+    pub paths: Vec<String>,
+}
+
+/// Request to update user policy (admin status).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdateUserPolicyRequest {
+    pub is_administrator: bool,
+}
+
+/// Startup configuration response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct StartupConfiguration {
+    pub startup_wizard_completed: bool,
+}
+
+/// Dashboard statistics response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DashboardStats {
+    pub library_count: i64,
+    pub user_count: i64,
+    pub item_count: i64,
+}
+
 /// Library options.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]

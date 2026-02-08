@@ -9,11 +9,13 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_core::EnrichmentService;
 use rustyfin_db::repo::images::ImageRow;
 use rustyfin_db::repo::{images, media_items, media_streams, people, user_data};
 use rustyfin_media::playback_info::stream_row_to_dto;
-use rustyfin_core::EnrichmentService;
-use rustyfin_models::dto::{BaseItemDto, BaseItemPerson, MediaSourceInfo, QueryResult, UserItemDataDto};
+use rustyfin_models::dto::{
+    BaseItemDto, BaseItemPerson, MediaSourceInfo, QueryResult, UserItemDataDto,
+};
 
 use crate::error::ApiError;
 use crate::router::AppState;

@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());
 
-    // Merge frontend fallback
+    // Merge frontend routes (/web prefix)
     let app = app.merge(rustyfin_frontend::router());
 
     // Start server

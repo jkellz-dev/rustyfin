@@ -39,15 +39,8 @@ impl TmdbClient {
             url.push_str(&format!("&year={y}"));
         }
 
-        let resp: TmdbSearchResponse = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .ok()?
-            .json()
-            .await
-            .ok()?;
+        let resp: TmdbSearchResponse =
+            self.client.get(&url).send().await.ok()?.json().await.ok()?;
 
         resp.results.into_iter().next()
     }
@@ -59,15 +52,8 @@ impl TmdbClient {
             urlencoded(title)
         );
 
-        let resp: TmdbSearchResponse = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .ok()?
-            .json()
-            .await
-            .ok()?;
+        let resp: TmdbSearchResponse =
+            self.client.get(&url).send().await.ok()?.json().await.ok()?;
 
         resp.results.into_iter().next()
     }
@@ -78,15 +64,7 @@ impl TmdbClient {
             self.api_key
         );
 
-        let detail: TmdbMovieDetail = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .ok()?
-            .json()
-            .await
-            .ok()?;
+        let detail: TmdbMovieDetail = self.client.get(&url).send().await.ok()?.json().await.ok()?;
 
         Some(movie_detail_to_metadata(detail))
     }
@@ -97,15 +75,7 @@ impl TmdbClient {
             self.api_key
         );
 
-        let detail: TmdbTvDetail = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .ok()?
-            .json()
-            .await
-            .ok()?;
+        let detail: TmdbTvDetail = self.client.get(&url).send().await.ok()?.json().await.ok()?;
 
         Some(tv_detail_to_metadata(detail))
     }

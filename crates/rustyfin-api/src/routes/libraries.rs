@@ -1,9 +1,11 @@
 use axum::{Json, extract::State, http::StatusCode};
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
 use rustyfin_db::repo::libraries;
-use rustyfin_models::dto::{BaseItemDto, LibraryOptions, QueryResult, VirtualFolderInfo};
+use rustyfin_models::dto::{
+    BaseItemDto, CreateLibraryRequest, LibraryOptions, QueryResult, VirtualFolderInfo,
+};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -101,6 +103,49 @@ pub async fn refresh_library(
             }
         }
     });
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /Library/VirtualFolders` — Create a library (admin only).
+pub async fn create_virtual_folder(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Json(req): Json<CreateLibraryRequest>,
+) -> Result<Json<VirtualFolderInfo>, ApiError> {
+    let lib = libraries::create(&state.pool, &req.name, &req.collection_type, &req.paths)
+        .await
+        .map_err(ApiError::Database)?;
+
+    Ok(Json(VirtualFolderInfo {
+        name: lib.name,
+        locations: lib.paths,
+        collection_type: Some(lib.library_type),
+        item_id: lib.id.to_string(),
+        primary_image_item_id: None,
+        library_options: LibraryOptions::default(),
+    }))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteLibraryQuery {
+    pub id: uuid::Uuid,
+}
+
+/// `DELETE /Library/VirtualFolders` — Delete a library (admin only).
+pub async fn delete_virtual_folder(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    axum::extract::Query(query): axum::extract::Query<DeleteLibraryQuery>,
+) -> Result<StatusCode, ApiError> {
+    let deleted = libraries::delete(&state.pool, query.id)
+        .await
+        .map_err(ApiError::Database)?;
+
+    if !deleted {
+        return Err(ApiError::NotFound);
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }

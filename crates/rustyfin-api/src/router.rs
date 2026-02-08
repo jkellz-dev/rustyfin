@@ -32,6 +32,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/System/Ping", get(system::ping).post(system::ping))
         // ── System (auth required) ──────────────────────────────
         .route("/System/Info", get(system::get_info))
+        .route("/System/Stats", get(system::get_stats))
+        // ── Startup ─────────────────────────────────────────────
+        .route("/Startup/Configuration", get(system::get_startup_config))
+        .route("/Startup/Complete", post(system::complete_startup))
         // ── Branding (no auth) ──────────────────────────────────
         .route(
             "/Branding/Configuration",
@@ -47,7 +51,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Users", get(users::list_users))
         .route("/Users/Me", get(users::get_current_user))
         .route("/Users/Public", get(users::get_public_users))
-        .route("/Users/{userId}", get(users::get_user_by_id))
+        .route(
+            "/Users/{userId}",
+            get(users::get_user_by_id).delete(users::delete_user),
+        )
+        .route("/Users/{userId}/Policy", post(users::update_user_policy))
         // ── Library views ───────────────────────────────────────
         .route("/UserViews", get(libraries::get_user_views))
         .route(
@@ -56,7 +64,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/Library/VirtualFolders",
-            get(libraries::get_virtual_folders),
+            get(libraries::get_virtual_folders)
+                .post(libraries::create_virtual_folder)
+                .delete(libraries::delete_virtual_folder),
         )
         .route("/Library/Refresh", post(libraries::refresh_library))
         // ── Items ───────────────────────────────────────────────
