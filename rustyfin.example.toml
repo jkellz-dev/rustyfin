@@ -1,0 +1,15 @@
+[server]
+port = 8096
+base_url = "https://media.example.com"
+server_name = "Rustyfin"
+
+[database]
+url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
+
+[media]
+paths = ["/data/media", "/data/archive"]
+
+# Optional: Meilisearch for enhanced search
+# [search]
+# meilisearch_url = "http://localhost:7700"
+# meilisearch_key = "your-key"
