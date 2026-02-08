@@ -1,5 +1,6 @@
-- Phase 3 — Client compatibility (image tags in responses, WebSocket, media streams in item detail, child counts)
-- Phase 4 — Metadata enrichment (NFO parsing, external metadata providers TMDB/TVDB, people/cast, overview/ratings/genres)
-- Phase 5 Frontend (Sycamore WASM admin UI: library CRUD, scan triggering, user management, setup wizard)
-- Phase 6 — Transcoding pipeline (ffmpeg HLS output, device profile matching, transcode session management)
-- Phase 7 — Polish & advanced features (Meilisearch integration, session manager playback tracking, activity logging, chapters)
+- Phase 3 — Client compatibility (image tags in responses, WebSocket, media streams in item detail, child counts), write docs
+- Phase 4 — Metadata enrichment (NFO parsing, external metadata providers TMDB/TVDB, people/cast, overview/ratings/genres), write docs
+- Phase 5 Frontend (Sycamore WASM admin UI: library CRUD, scan triggering, user management, setup wizard), write docs
+- Phase 6 — Polish & advanced features (Meilisearch integration, session manager playback tracking, activity logging, chapters), write docs
+- Phase 7 — Transcoding pipeline (ffmpeg HLS output, device profile matching, transcode session management), write docs
+- Phase 8 - revisit documentation, fill in any gaps
