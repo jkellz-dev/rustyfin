@@ -48,6 +48,15 @@ pub async fn create(
     .await
 }
 
+/// Update the library's updated_at timestamp.
+pub async fn touch_updated_at(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE libraries SET updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Delete a library by ID.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM libraries WHERE id = $1")

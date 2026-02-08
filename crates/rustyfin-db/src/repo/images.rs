@@ -14,6 +14,39 @@ pub struct ImageRow {
     pub image_index: i32,
 }
 
+pub struct NewImage {
+    pub item_id: Uuid,
+    pub image_type: String,
+    pub path: String,
+    pub image_index: i32,
+}
+
+/// Insert an image record.
+pub async fn insert(pool: &PgPool, image: &NewImage) -> Result<ImageRow, sqlx::Error> {
+    sqlx::query_as::<_, ImageRow>(
+        r#"
+        INSERT INTO images (item_id, image_type, path, image_index)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+        "#,
+    )
+    .bind(image.item_id)
+    .bind(&image.image_type)
+    .bind(&image.path)
+    .bind(image.image_index)
+    .fetch_one(pool)
+    .await
+}
+
+/// Delete all images for a media item.
+pub async fn delete_by_item(pool: &PgPool, item_id: Uuid) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query("DELETE FROM images WHERE item_id = $1")
+        .bind(item_id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
 /// Get images for a media item.
 pub async fn list_by_item(pool: &PgPool, item_id: Uuid) -> Result<Vec<ImageRow>, sqlx::Error> {
     sqlx::query_as::<_, ImageRow>(

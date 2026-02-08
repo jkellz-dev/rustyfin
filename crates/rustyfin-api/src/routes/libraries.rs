@@ -1,6 +1,7 @@
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, http::StatusCode};
 
 use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_core::LibraryScanner;
 use rustyfin_db::repo::libraries;
 use rustyfin_models::dto::{BaseItemDto, LibraryOptions, QueryResult, VirtualFolderInfo};
 
@@ -64,4 +65,41 @@ pub async fn get_virtual_folders(
         .collect();
 
     Ok(Json(folders))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct RefreshLibraryQuery {
+    pub id: Option<uuid::Uuid>,
+}
+
+/// `POST /Library/Refresh` — Trigger a library scan.
+pub async fn refresh_library(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    axum::extract::Query(query): axum::extract::Query<RefreshLibraryQuery>,
+) -> Result<StatusCode, ApiError> {
+    let libs = if let Some(id) = query.id {
+        let lib = libraries::find_by_id(&state.pool, id)
+            .await
+            .map_err(ApiError::Database)?
+            .ok_or(ApiError::NotFound)?;
+        vec![lib]
+    } else {
+        libraries::list_all(&state.pool)
+            .await
+            .map_err(ApiError::Database)?
+    };
+
+    let pool = state.pool.clone();
+    tokio::spawn(async move {
+        let scanner = LibraryScanner::new(pool);
+        for lib in libs {
+            if let Err(e) = scanner.scan(lib.id, &lib.paths).await {
+                tracing::error!("Scan failed for library {}: {e}", lib.id);
+            }
+        }
+    });
+
+    Ok(StatusCode::NO_CONTENT)
 }

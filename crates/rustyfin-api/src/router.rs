@@ -57,6 +57,7 @@ pub fn build_router(state: AppState) -> Router {
             "/Library/VirtualFolders",
             get(libraries::get_virtual_folders),
         )
+        .route("/Library/Refresh", post(libraries::refresh_library))
         // ── Items ───────────────────────────────────────────────
         .route("/Items", get(items::get_items))
         .route("/Items/Latest", get(items::get_latest_items))
