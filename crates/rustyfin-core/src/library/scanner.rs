@@ -7,6 +7,7 @@ use uuid::Uuid;
 use rustyfin_db::repo::{images as images_repo, libraries, media_items, media_streams};
 use rustyfin_media::probe;
 
+use crate::library::enrichment::EnrichmentService;
 use crate::library::images::discover_images;
 use crate::library::naming::{
     is_video_file, make_sort_name, parse_season_folder, resolve_episode, resolve_movie,
@@ -14,6 +15,7 @@ use crate::library::naming::{
 
 pub struct LibraryScanner {
     pool: PgPool,
+    enrichment: EnrichmentService,
 }
 
 #[derive(Debug)]
@@ -26,8 +28,9 @@ pub struct ScanResult {
 }
 
 impl LibraryScanner {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, tmdb_api_key: Option<String>) -> Self {
+        let enrichment = EnrichmentService::new(pool.clone(), tmdb_api_key);
+        Self { pool, enrichment }
     }
 
     /// Scan a library and ingest media items.
@@ -148,6 +151,9 @@ impl LibraryScanner {
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
+            self.enrichment
+                .enrich_movie(updated.id, file_path, &updated.name, updated.production_year)
+                .await;
             return Ok(IngestOutcome::Updated);
         }
 
@@ -186,6 +192,9 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
+        self.enrichment
+            .enrich_movie(inserted.id, file_path, &inserted.name, inserted.production_year)
+            .await;
         Ok(IngestOutcome::Added)
     }
 
@@ -233,6 +242,11 @@ impl LibraryScanner {
 
         // Discover series-level images
         self.replace_images(series_id, series_dir).await;
+
+        // Enrich series metadata
+        self.enrichment
+            .enrich_series(series_id, series_dir, series_name)
+            .await;
 
         let Ok(entries) = std::fs::read_dir(series_dir) else {
             return Ok(());
@@ -454,6 +468,9 @@ impl LibraryScanner {
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
+            self.enrichment
+                .enrich_episode(updated.id, file_path)
+                .await;
             return Ok(IngestOutcome::Updated);
         }
 
@@ -513,6 +530,9 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
+        self.enrichment
+            .enrich_episode(inserted.id, file_path)
+            .await;
         Ok(IngestOutcome::Added)
     }
 

@@ -92,8 +92,9 @@ pub async fn refresh_library(
     };
 
     let pool = state.pool.clone();
+    let tmdb_key = state.tmdb_api_key.clone();
     tokio::spawn(async move {
-        let scanner = LibraryScanner::new(pool);
+        let scanner = LibraryScanner::new(pool, tmdb_key);
         for lib in libs {
             if let Err(e) = scanner.scan(lib.id, &lib.paths).await {
                 tracing::error!("Scan failed for library {}: {e}", lib.id);

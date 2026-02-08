@@ -15,6 +15,7 @@ pub struct AppState {
     pub server_name: String,
     pub base_url: String,
     pub port: u16,
+    pub tmdb_api_key: Option<String>,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -62,6 +63,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Items", get(items::get_items))
         .route("/Items/Latest", get(items::get_latest_items))
         .route("/Items/{itemId}", get(items::get_item_by_id))
+        .route("/Items/{itemId}/Refresh", post(items::refresh_item))
         .route("/UserItems/Resume", get(items::get_resume_items))
         // Legacy item routes
         .route("/Users/{userId}/Items", get(items::get_user_items_legacy))

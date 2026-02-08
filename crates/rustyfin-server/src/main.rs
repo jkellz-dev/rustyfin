@@ -47,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
         server_name: config.server.server_name,
         base_url: config.server.base_url,
         port: config.server.port,
+        tmdb_api_key: config.metadata.tmdb_api_key,
     };
 
     // Build router with all API routes

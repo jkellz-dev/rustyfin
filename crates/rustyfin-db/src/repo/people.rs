@@ -19,6 +19,91 @@ pub struct MediaItemPersonRow {
     pub sort_order: Option<i32>,
 }
 
+/// Find a person by name and type.
+pub async fn find_by_name_and_type(
+    pool: &PgPool,
+    name: &str,
+    person_type: &str,
+) -> Result<Option<PersonRow>, sqlx::Error> {
+    sqlx::query_as::<_, PersonRow>(
+        "SELECT * FROM people WHERE name = $1 AND person_type = $2",
+    )
+    .bind(name)
+    .bind(person_type)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Insert a new person.
+pub async fn insert(
+    pool: &PgPool,
+    name: &str,
+    person_type: &str,
+    sort_name: Option<&str>,
+    external_ids: Option<&serde_json::Value>,
+) -> Result<PersonRow, sqlx::Error> {
+    sqlx::query_as::<_, PersonRow>(
+        r#"
+        INSERT INTO people (name, person_type, sort_name, external_ids)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+        "#,
+    )
+    .bind(name)
+    .bind(person_type)
+    .bind(sort_name)
+    .bind(external_ids)
+    .fetch_one(pool)
+    .await
+}
+
+/// Find a person by name and type, or create if not found.
+pub async fn find_or_create(
+    pool: &PgPool,
+    name: &str,
+    person_type: &str,
+) -> Result<PersonRow, sqlx::Error> {
+    if let Some(existing) = find_by_name_and_type(pool, name, person_type).await? {
+        return Ok(existing);
+    }
+    insert(pool, name, person_type, None, None).await
+}
+
+/// Link a person to a media item. Uses ON CONFLICT to update role/sort_order if already linked.
+pub async fn link_to_item(
+    pool: &PgPool,
+    item_id: Uuid,
+    person_id: Uuid,
+    role: Option<&str>,
+    sort_order: Option<i32>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO media_item_people (item_id, person_id, role, sort_order)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (item_id, person_id) DO UPDATE SET
+            role = EXCLUDED.role,
+            sort_order = EXCLUDED.sort_order
+        "#,
+    )
+    .bind(item_id)
+    .bind(person_id)
+    .bind(role)
+    .bind(sort_order)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Delete all person links for a media item (used before re-linking).
+pub async fn delete_links_by_item(pool: &PgPool, item_id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM media_item_people WHERE item_id = $1")
+        .bind(item_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Get people associated with a media item.
 pub async fn list_by_item(
     pool: &PgPool,

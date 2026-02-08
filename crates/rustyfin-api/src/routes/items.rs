@@ -3,15 +3,17 @@ use std::collections::HashMap;
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::StatusCode,
 };
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::images::ImageRow;
-use rustyfin_db::repo::{images, media_items, media_streams, user_data};
+use rustyfin_db::repo::{images, media_items, media_streams, people, user_data};
 use rustyfin_media::playback_info::stream_row_to_dto;
-use rustyfin_models::dto::{BaseItemDto, MediaSourceInfo, QueryResult, UserItemDataDto};
+use rustyfin_core::EnrichmentService;
+use rustyfin_models::dto::{BaseItemDto, BaseItemPerson, MediaSourceInfo, QueryResult, UserItemDataDto};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -39,6 +41,16 @@ pub struct ItemsQuery {
 }
 
 fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
+    // Convert external_ids JSONB to provider_ids HashMap
+    let provider_ids = item.external_ids.as_ref().and_then(|v| {
+        let obj = v.as_object()?;
+        let map: HashMap<String, String> = obj
+            .iter()
+            .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+            .collect();
+        if map.is_empty() { None } else { Some(map) }
+    });
+
     BaseItemDto {
         name: item.name.clone(),
         original_title: item.original_title.clone(),
@@ -71,6 +83,7 @@ fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseI
         date_created: Some(item.date_created),
         date_last_media_added: item.date_last_media_added,
         etag: item.etag.clone(),
+        provider_ids,
         ..Default::default()
     }
 }
@@ -276,6 +289,25 @@ pub async fn get_item_by_id(
         .unwrap_or_default();
     apply_images_to_dto(&mut dto, &item_images);
 
+    // Load people for single-item detail
+    let people_rows = people::list_by_item(&state.pool, item_id)
+        .await
+        .unwrap_or_default();
+    if !people_rows.is_empty() {
+        dto.people = Some(
+            people_rows
+                .into_iter()
+                .map(|(person, role, _sort_order)| BaseItemPerson {
+                    name: person.name,
+                    id: person.id,
+                    role,
+                    person_type: person.person_type,
+                    primary_image_tag: None,
+                })
+                .collect(),
+        );
+    }
+
     // Child count for folders
     if item.is_folder {
         let count = media_items::count_by_parent(&state.pool, Some(item_id), &[])
@@ -438,4 +470,26 @@ pub async fn get_user_item_legacy(
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
     get_item_by_id(state, auth, Path(item_id)).await
+}
+
+/// `POST /Items/{itemId}/Refresh` — Re-enrich an item's metadata.
+pub async fn refresh_item(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    // Verify item exists
+    media_items::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    let pool = state.pool.clone();
+    let tmdb_key = state.tmdb_api_key.clone();
+    tokio::spawn(async move {
+        let service = EnrichmentService::new(pool, tmdb_key);
+        service.refresh_item(item_id).await;
+    });
+
+    Ok(StatusCode::NO_CONTENT)
 }

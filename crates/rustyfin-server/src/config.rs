@@ -11,6 +11,8 @@ pub struct Config {
     pub media: MediaConfig,
     #[serde(default)]
     pub search: Option<SearchConfig>,
+    #[serde(default)]
+    pub metadata: MetadataConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +42,11 @@ pub struct MediaConfig {
 pub struct SearchConfig {
     pub meilisearch_url: String,
     pub meilisearch_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct MetadataConfig {
+    pub tmdb_api_key: Option<String>,
 }
 
 fn default_server() -> ServerConfig {
@@ -88,6 +95,7 @@ impl Config {
                 database: DatabaseConfig::default(),
                 media: MediaConfig::default(),
                 search: None,
+                metadata: MetadataConfig::default(),
             }
         };
 
@@ -107,6 +115,11 @@ impl Config {
             },
             media: config.media,
             search: config.search,
+            metadata: MetadataConfig {
+                tmdb_api_key: std::env::var("RUSTYFIN_TMDB_API_KEY")
+                    .ok()
+                    .or(config.metadata.tmdb_api_key),
+            },
         };
 
         Ok(config)

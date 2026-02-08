@@ -340,6 +340,65 @@ pub async fn count_children_batch(
     Ok(rows.into_iter().collect())
 }
 
+/// Metadata fields that can be updated independently of structural insert/update.
+pub struct ItemMetadata {
+    pub overview: Option<String>,
+    pub original_title: Option<String>,
+    pub community_rating: Option<f32>,
+    pub critic_rating: Option<f32>,
+    pub official_rating: Option<String>,
+    pub genres: Option<Vec<String>>,
+    pub studios: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    pub premiere_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+    pub production_year: Option<i32>,
+    pub external_ids: Option<serde_json::Value>,
+}
+
+/// Update metadata fields on a media item. `None` fields preserve existing values via COALESCE.
+pub async fn update_metadata(
+    pool: &PgPool,
+    id: Uuid,
+    meta: &ItemMetadata,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE media_items SET
+            overview = COALESCE($2, overview),
+            original_title = COALESCE($3, original_title),
+            community_rating = COALESCE($4, community_rating),
+            critic_rating = COALESCE($5, critic_rating),
+            official_rating = COALESCE($6, official_rating),
+            genres = COALESCE($7, genres),
+            studios = COALESCE($8, studios),
+            tags = COALESCE($9, tags),
+            premiere_date = COALESCE($10, premiere_date),
+            end_date = COALESCE($11, end_date),
+            production_year = COALESCE($12, production_year),
+            external_ids = COALESCE($13, external_ids),
+            date_modified = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .bind(&meta.overview)
+    .bind(&meta.original_title)
+    .bind(meta.community_rating)
+    .bind(meta.critic_rating)
+    .bind(&meta.official_rating)
+    .bind(&meta.genres)
+    .bind(&meta.studios)
+    .bind(&meta.tags)
+    .bind(meta.premiere_date)
+    .bind(meta.end_date)
+    .bind(meta.production_year)
+    .bind(&meta.external_ids)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Search items by name (basic ILIKE search).
 pub async fn search_by_name(
     pool: &PgPool,
