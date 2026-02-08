@@ -1,13 +1,16 @@
 mod config;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use rustyfin_api::router::{AppState, build_router};
+use rustyfin_core::session::SessionManager;
 use rustyfin_db::pool;
+use rustyfin_search::SearchService;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,6 +43,29 @@ async fn main() -> anyhow::Result<()> {
     // Generate a stable server ID (based on hostname or random)
     let server_id = uuid::Uuid::new_v4().to_string();
 
+    // Initialize session manager
+    let session_manager = Arc::new(SessionManager::new(db_pool.clone()));
+
+    // Initialize search service
+    let search_service = Arc::new(SearchService::new(
+        db_pool.clone(),
+        config.search.as_ref().map(|s| s.meilisearch_url.as_str()),
+        config
+            .search
+            .as_ref()
+            .and_then(|s| s.meilisearch_key.as_deref()),
+    ));
+
+    // Trigger background reindex if Meilisearch is available
+    if search_service.is_meilisearch_available() {
+        let svc = search_service.clone();
+        tokio::spawn(async move {
+            if let Err(e) = svc.reindex_all().await {
+                tracing::error!("Initial Meilisearch reindex failed: {e}");
+            }
+        });
+    }
+
     // Build application state
     let state = AppState {
         pool: db_pool,
@@ -48,6 +74,8 @@ async fn main() -> anyhow::Result<()> {
         base_url: config.server.base_url,
         port: config.server.port,
         tmdb_api_key: config.metadata.tmdb_api_key,
+        session_manager,
+        search_service,
     };
 
     // Build router with all API routes

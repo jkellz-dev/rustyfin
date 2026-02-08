@@ -6,7 +6,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, media_items};
+use rustyfin_db::repo::images;
 use rustyfin_models::dto::{SearchHint, SearchHintResult};
 
 use crate::error::ApiError;
@@ -33,30 +33,39 @@ pub async fn search_hints(
 ) -> Result<Json<SearchHintResult>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
 
-    let items = media_items::search_by_name(&state.pool, &query.search_term, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let item_types: Option<Vec<String>> = query.include_item_types.as_deref().map(|s| {
+        s.split(',')
+            .filter(|t| !t.is_empty())
+            .map(String::from)
+            .collect()
+    });
 
-    let mut hints: Vec<SearchHint> = items
-        .iter()
-        .map(|item| SearchHint {
-            id: item.id,
-            name: item.name.clone(),
-            item_type: item.item_type.clone(),
-            production_year: item.production_year,
+    let hits = state
+        .search_service
+        .search(&query.search_term, limit, item_types.as_deref())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let mut hints: Vec<SearchHint> = hits
+        .into_iter()
+        .map(|hit| SearchHint {
+            id: hit.id,
+            name: hit.name,
+            item_type: hit.item_type,
+            production_year: hit.production_year,
             primary_image_tag: None,
             thumb_image_tag: None,
             backdrop_image_tags: None,
-            series_name: item.series_name.clone(),
-            index_number: item.index_number,
-            parent_index_number: item.parent_index_number,
-            run_time_ticks: item.runtime_ticks,
+            series_name: hit.series_name,
+            index_number: hit.index_number,
+            parent_index_number: hit.parent_index_number,
+            run_time_ticks: hit.runtime_ticks,
             channel_id: None,
         })
         .collect();
 
     // Batch load images for search results
-    let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
+    let item_ids: Vec<Uuid> = hints.iter().map(|h| h.id).collect();
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await

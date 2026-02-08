@@ -50,3 +50,75 @@ pub async fn list_recent(pool: &PgPool, limit: i64) -> Result<Vec<ActivityLogRow
     .fetch_all(pool)
     .await
 }
+
+/// List activity log entries with pagination and filtering.
+pub async fn list_paginated(
+    pool: &PgPool,
+    start_index: i64,
+    limit: i64,
+    min_date: Option<DateTime<Utc>>,
+    has_user_id: Option<bool>,
+) -> Result<Vec<ActivityLogRow>, sqlx::Error> {
+    let mut query = String::from("SELECT * FROM activity_log WHERE 1=1");
+    let mut param_index = 1;
+
+    if min_date.is_some() {
+        query.push_str(&format!(" AND created_at >= ${param_index}"));
+        param_index += 1;
+    }
+
+    if let Some(has_user) = has_user_id {
+        if has_user {
+            query.push_str(" AND user_id IS NOT NULL");
+        } else {
+            query.push_str(" AND user_id IS NULL");
+        }
+    }
+
+    query.push_str(&format!(
+        " ORDER BY created_at DESC LIMIT ${param_index} OFFSET ${}",
+        param_index + 1
+    ));
+
+    let mut q = sqlx::query_as::<_, ActivityLogRow>(&query);
+
+    if let Some(date) = min_date {
+        q = q.bind(date);
+    }
+    q = q.bind(limit).bind(start_index);
+
+    q.fetch_all(pool).await
+}
+
+/// Count activity log entries with optional filtering.
+pub async fn count(
+    pool: &PgPool,
+    min_date: Option<DateTime<Utc>>,
+    has_user_id: Option<bool>,
+) -> Result<i64, sqlx::Error> {
+    let mut query = String::from("SELECT COUNT(*) FROM activity_log WHERE 1=1");
+    let mut param_index = 1;
+
+    if min_date.is_some() {
+        query.push_str(&format!(" AND created_at >= ${param_index}"));
+        param_index += 1;
+    }
+    let _ = param_index;
+
+    if let Some(has_user) = has_user_id {
+        if has_user {
+            query.push_str(" AND user_id IS NOT NULL");
+        } else {
+            query.push_str(" AND user_id IS NULL");
+        }
+    }
+
+    let mut q = sqlx::query_as::<_, (i64,)>(&query);
+
+    if let Some(date) = min_date {
+        q = q.bind(date);
+    }
+
+    let row = q.fetch_one(pool).await?;
+    Ok(row.0)
+}

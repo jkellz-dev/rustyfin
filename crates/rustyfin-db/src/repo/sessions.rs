@@ -82,6 +82,15 @@ pub async fn deactivate(pool: &PgPool, session_id: Uuid) -> Result<(), sqlx::Err
     Ok(())
 }
 
+/// List all active sessions.
+pub async fn list_active(pool: &PgPool) -> Result<Vec<SessionRow>, sqlx::Error> {
+    sqlx::query_as::<_, SessionRow>(
+        "SELECT * FROM sessions WHERE is_active = true ORDER BY last_activity DESC",
+    )
+    .fetch_all(pool)
+    .await
+}
+
 /// Deactivate a session by token.
 pub async fn deactivate_by_token(pool: &PgPool, token: &str) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE sessions SET is_active = false WHERE access_token = $1")

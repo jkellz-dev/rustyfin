@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod auth;
 pub mod base_item;
 pub mod playback;
@@ -7,6 +8,7 @@ pub mod system;
 pub mod user;
 pub mod websocket;
 
+pub use activity::*;
 pub use auth::*;
 pub use base_item::*;
 pub use playback::*;

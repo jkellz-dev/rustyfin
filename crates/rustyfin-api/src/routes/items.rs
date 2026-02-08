@@ -11,10 +11,10 @@ use uuid::Uuid;
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_core::EnrichmentService;
 use rustyfin_db::repo::images::ImageRow;
-use rustyfin_db::repo::{images, media_items, media_streams, people, user_data};
+use rustyfin_db::repo::{chapters, images, media_items, media_streams, people, user_data};
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_models::dto::{
-    BaseItemDto, BaseItemPerson, MediaSourceInfo, QueryResult, UserItemDataDto,
+    BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, QueryResult, UserItemDataDto,
 };
 
 use crate::error::ApiError;
@@ -345,6 +345,26 @@ pub async fn get_item_by_id(
             };
             dto.media_sources = Some(vec![source]);
             dto.media_streams = Some(media_stream_dtos);
+        }
+    }
+
+    // Load chapters for non-folder items
+    if !item.is_folder {
+        let chapter_rows = chapters::list_by_item(&state.pool, item_id)
+            .await
+            .unwrap_or_default();
+        if !chapter_rows.is_empty() {
+            dto.chapters = Some(
+                chapter_rows
+                    .into_iter()
+                    .map(|ch| ChapterInfo {
+                        start_position_ticks: ch.start_position_ticks,
+                        name: ch.name,
+                        image_path: ch.image_path.clone(),
+                        image_tag: ch.image_path.map(|_| ch.id.to_string()),
+                    })
+                    .collect(),
+            );
         }
     }
 

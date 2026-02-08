@@ -2,7 +2,7 @@ use axum::{Json, extract::State, http::StatusCode};
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::libraries;
+use rustyfin_db::repo::{activity_log, libraries};
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, QueryResult, VirtualFolderInfo,
 };
@@ -95,12 +95,40 @@ pub async fn refresh_library(
 
     let pool = state.pool.clone();
     let tmdb_key = state.tmdb_api_key.clone();
+
+    let _ = activity_log::insert(
+        &state.pool,
+        "Library scan started",
+        None,
+        "TaskStarted",
+        "Informational",
+        None,
+        None,
+    )
+    .await;
+
+    let search_service = state.search_service.clone();
     tokio::spawn(async move {
-        let scanner = LibraryScanner::new(pool, tmdb_key);
+        let scanner = LibraryScanner::new(pool.clone(), tmdb_key);
         for lib in libs {
             if let Err(e) = scanner.scan(lib.id, &lib.paths).await {
                 tracing::error!("Scan failed for library {}: {e}", lib.id);
             }
+        }
+        let _ = activity_log::insert(
+            &pool,
+            "Library scan completed",
+            None,
+            "TaskCompleted",
+            "Informational",
+            None,
+            None,
+        )
+        .await;
+
+        // Reindex search after scan
+        if let Err(e) = search_service.reindex_all().await {
+            tracing::error!("Search reindex failed: {e}");
         }
     });
 
@@ -116,6 +144,17 @@ pub async fn create_virtual_folder(
     let lib = libraries::create(&state.pool, &req.name, &req.collection_type, &req.paths)
         .await
         .map_err(ApiError::Database)?;
+
+    let _ = activity_log::insert(
+        &state.pool,
+        "Library created",
+        Some(&req.name),
+        "LibraryCreated",
+        "Informational",
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(VirtualFolderInfo {
         name: lib.name,
@@ -146,6 +185,17 @@ pub async fn delete_virtual_folder(
     if !deleted {
         return Err(ApiError::NotFound);
     }
+
+    let _ = activity_log::insert(
+        &state.pool,
+        "Library deleted",
+        None,
+        "LibraryDeleted",
+        "Informational",
+        None,
+        None,
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }

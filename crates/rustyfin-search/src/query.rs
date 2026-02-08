@@ -1,3 +1,77 @@
 // Search query building and execution.
 // When Meilisearch is available, queries go there.
 // Otherwise falls back to Postgres ILIKE/tsvector.
+
+#[cfg(feature = "meilisearch")]
+use crate::SearchHit;
+
+#[cfg(feature = "meilisearch")]
+use serde::Deserialize;
+
+#[cfg(feature = "meilisearch")]
+#[derive(Deserialize)]
+struct MeiliHit {
+    id: String,
+    name: String,
+    item_type: String,
+    #[serde(default)]
+    production_year: Option<i32>,
+    #[serde(default)]
+    series_name: Option<String>,
+    #[serde(default)]
+    index_number: Option<i32>,
+    #[serde(default)]
+    parent_index_number: Option<i32>,
+    #[serde(default)]
+    runtime_ticks: Option<i64>,
+}
+
+/// Search Meilisearch for items matching a query.
+#[cfg(feature = "meilisearch")]
+pub async fn search(
+    client: &meilisearch_sdk::client::Client,
+    query: &str,
+    limit: usize,
+    item_type_filter: Option<&[String]>,
+) -> Result<Vec<SearchHit>, String> {
+    let index = client.index("media_items");
+
+    let mut search_query = index.search();
+    search_query.with_query(query);
+    search_query.with_limit(limit);
+
+    // Build filter string
+    if let Some(types) = item_type_filter {
+        if !types.is_empty() {
+            let filter_parts: Vec<String> = types
+                .iter()
+                .map(|t| format!("item_type = \"{t}\""))
+                .collect();
+            let filter = filter_parts.join(" OR ");
+            search_query.with_filter(&filter);
+        }
+    }
+
+    let results = search_query
+        .execute::<MeiliHit>()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(results
+        .hits
+        .into_iter()
+        .map(|hit| {
+            let h = hit.result;
+            SearchHit {
+                id: h.id.parse().unwrap_or_default(),
+                name: h.name,
+                item_type: h.item_type,
+                production_year: h.production_year,
+                series_name: h.series_name,
+                index_number: h.index_number,
+                parent_index_number: h.parent_index_number,
+                runtime_ticks: h.runtime_ticks,
+            }
+        })
+        .collect())
+}

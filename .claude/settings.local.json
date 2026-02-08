@@ -7,6 +7,7 @@
       "Bash(ls:*)",
       "Bash(wc:*)",
       "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:docs.rs)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:kanidm.github.io)",
       "WebFetch(domain:sycamore.dev)",

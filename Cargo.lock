@@ -1991,6 +1991,7 @@ dependencies = [
  "rustyfin-frontend",
  "rustyfin-media",
  "rustyfin-models",
+ "rustyfin-search",
  "serde",
  "serde_json",
  "sqlx",

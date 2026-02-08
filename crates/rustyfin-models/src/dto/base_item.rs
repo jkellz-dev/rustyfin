@@ -100,6 +100,10 @@ pub struct BaseItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub media_streams: Option<Vec<MediaStream>>,
 
+    // Chapters
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chapters: Option<Vec<ChapterInfo>>,
+
     // External IDs
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_ids: Option<HashMap<String, String>>,
@@ -314,6 +318,19 @@ pub struct DashboardStats {
     pub library_count: i64,
     pub user_count: i64,
     pub item_count: i64,
+}
+
+/// Chapter info for a media item.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ChapterInfo {
+    pub start_position_ticks: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_tag: Option<String>,
 }
 
 /// Library options.

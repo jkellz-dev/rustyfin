@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode};
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::user_data;
+use rustyfin_db::repo::{media_items, user_data};
 use rustyfin_models::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
 
 use crate::error::ApiError;
@@ -24,6 +24,31 @@ pub async fn report_playback_start(
             0,
         )
         .await;
+
+        // Look up item for session tracking
+        let (item_name, item_type) =
+            if let Ok(Some(item)) = media_items::find_by_id(&state.pool, item_id).await {
+                (item.name, item.item_type)
+            } else {
+                ("Unknown".to_string(), "Unknown".to_string())
+            };
+
+        state
+            .session_manager
+            .report_playback_start(
+                auth.session_id,
+                item_id,
+                item_name,
+                item_type,
+                body.position_ticks,
+                body.is_paused,
+                body.is_muted,
+                body.volume_level,
+                body.play_method.clone(),
+                body.audio_stream_index,
+                body.subtitle_stream_index,
+            )
+            .await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -48,6 +73,20 @@ pub async fn report_playback_progress(
         )
         .await;
     }
+
+    state
+        .session_manager
+        .report_playback_progress(
+            auth.session_id,
+            body.position_ticks,
+            body.is_paused,
+            body.is_muted,
+            body.volume_level,
+            body.audio_stream_index,
+            body.subtitle_stream_index,
+        )
+        .await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -70,10 +109,17 @@ pub async fn report_playback_stopped(
         )
         .await;
     }
+
+    state
+        .session_manager
+        .report_playback_stopped(auth.session_id)
+        .await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// `POST /Sessions/Playing/Ping` — Keep session alive.
-pub async fn playback_ping() -> StatusCode {
+pub async fn playback_ping(State(state): State<AppState>, auth: AuthenticatedUser) -> StatusCode {
+    state.session_manager.touch(auth.session_id).await;
     StatusCode::NO_CONTENT
 }

@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::HeaderMap};
 
 use rustyfin_auth::{forward_auth, middleware::parse_mediabrowser_header, session};
-use rustyfin_db::repo::users;
+use rustyfin_db::repo::{activity_log, users};
 use rustyfin_models::dto::{
     AuthenticateByNameRequest, AuthenticationResult, SessionInfoDto, UserConfiguration, UserDto,
     UserPolicy,
@@ -68,16 +68,35 @@ pub async fn authenticate_by_name(
     };
 
     // Create session
-    let token = session::create_session(
+    let device_id = mb_auth.device_id.as_deref().unwrap_or("unknown");
+    let device_name = mb_auth.device.as_deref().unwrap_or("Unknown Device");
+    let app_name = mb_auth.client.as_deref().unwrap_or("Unknown Client");
+    let app_version = mb_auth.version.as_deref();
+
+    let (token, session_id) = session::create_session(
         &state.pool,
         user.id,
-        mb_auth.device_id.as_deref().unwrap_or("unknown"),
-        mb_auth.device.as_deref().unwrap_or("Unknown Device"),
-        mb_auth.client.as_deref().unwrap_or("Unknown Client"),
-        mb_auth.version.as_deref(),
+        device_id,
+        device_name,
+        app_name,
+        app_version,
     )
     .await
     .map_err(ApiError::Database)?;
+
+    // Register session with in-memory manager
+    state
+        .session_manager
+        .register_session(
+            session_id,
+            user.id,
+            &user.username,
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+        )
+        .await;
 
     let user_dto = UserDto {
         name: user.username.clone(),
@@ -98,13 +117,13 @@ pub async fn authenticate_by_name(
     };
 
     let session_info = SessionInfoDto {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: session_id.to_string(),
         user_id: user.id,
         user_name: Some(user.username),
-        client: mb_auth.client.unwrap_or_else(|| "Unknown".to_string()),
-        device_name: mb_auth.device.unwrap_or_else(|| "Unknown".to_string()),
-        device_id: mb_auth.device_id.unwrap_or_else(|| "unknown".to_string()),
-        application_version: mb_auth.version,
+        client: app_name.to_string(),
+        device_name: device_name.to_string(),
+        device_id: device_id.to_string(),
+        application_version: app_version.map(String::from),
         last_activity_date: chrono::Utc::now(),
         is_active: true,
         now_playing_item: None,
@@ -112,6 +131,18 @@ pub async fn authenticate_by_name(
         supports_remote_control: false,
         server_id: state.server_id.clone(),
     };
+
+    // Log authentication
+    let _ = activity_log::insert(
+        &state.pool,
+        "User authenticated",
+        None,
+        "AuthenticationSucceeded",
+        "Informational",
+        Some(user.id),
+        None,
+    )
+    .await;
 
     Ok(Json(AuthenticationResult {
         user: user_dto,

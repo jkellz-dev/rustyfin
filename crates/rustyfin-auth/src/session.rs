@@ -11,7 +11,7 @@ pub fn generate_token() -> String {
     hex::encode(bytes)
 }
 
-/// Create a new session for a user and return the access token.
+/// Create a new session for a user and return (access_token, session_id).
 pub async fn create_session(
     pool: &PgPool,
     user_id: Uuid,
@@ -19,9 +19,9 @@ pub async fn create_session(
     device_name: &str,
     app_name: &str,
     app_version: Option<&str>,
-) -> Result<String, sqlx::Error> {
+) -> Result<(String, Uuid), sqlx::Error> {
     let token = generate_token();
-    sessions::create(
+    let session = sessions::create(
         pool,
         &token,
         user_id,
@@ -31,5 +31,5 @@ pub async fn create_session(
         app_version,
     )
     .await?;
-    Ok(token)
+    Ok((token, session.id))
 }

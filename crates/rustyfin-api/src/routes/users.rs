@@ -6,7 +6,7 @@ use axum::{
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_db::repo::users;
+use rustyfin_db::repo::{activity_log, users};
 use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, UserPolicy};
 
 use crate::error::ApiError;
@@ -108,6 +108,18 @@ pub async fn delete_user(
     if !deleted {
         return Err(ApiError::NotFound);
     }
+
+    let _ = activity_log::insert(
+        &state.pool,
+        "User deleted",
+        None,
+        "UserDeleted",
+        "Informational",
+        Some(admin.0.user_id),
+        None,
+    )
+    .await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 

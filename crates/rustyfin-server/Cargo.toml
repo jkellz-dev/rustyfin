@@ -15,6 +15,7 @@ rustyfin-core.workspace = true
 rustyfin-db.workspace = true
 rustyfin-models.workspace = true
 rustyfin-media.workspace = true
+rustyfin-search.workspace = true
 rustyfin-frontend.workspace = true
 
 axum.workspace = true

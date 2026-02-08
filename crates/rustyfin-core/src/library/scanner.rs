@@ -4,7 +4,7 @@ use std::time::Instant;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{images as images_repo, libraries, media_items, media_streams};
+use rustyfin_db::repo::{chapters, images as images_repo, libraries, media_items, media_streams};
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
@@ -150,6 +150,7 @@ impl LibraryScanner {
 
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
+            self.replace_chapters(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
             self.enrichment
                 .enrich_movie(
@@ -196,6 +197,7 @@ impl LibraryScanner {
 
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
+        self.replace_chapters(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
         self.enrichment
             .enrich_movie(
@@ -477,6 +479,7 @@ impl LibraryScanner {
 
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
+            self.replace_chapters(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
             self.enrichment.enrich_episode(updated.id, file_path).await;
             return Ok(IngestOutcome::Updated);
@@ -537,6 +540,7 @@ impl LibraryScanner {
 
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
+        self.replace_chapters(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
         self.enrichment.enrich_episode(inserted.id, file_path).await;
         Ok(IngestOutcome::Added)
@@ -579,6 +583,29 @@ impl LibraryScanner {
 
             if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
                 tracing::error!("Failed to insert stream for {item_id}: {e}");
+            }
+        }
+    }
+
+    async fn replace_chapters(&self, item_id: Uuid, probe_result: &Option<probe::ProbeResult>) {
+        if let Err(e) = chapters::delete_by_item(&self.pool, item_id).await {
+            tracing::error!("Failed to delete chapters for {item_id}: {e}");
+            return;
+        }
+
+        let Some(pr) = probe_result else { return };
+
+        for ch in &pr.chapters {
+            if let Err(e) = chapters::insert(
+                &self.pool,
+                item_id,
+                ch.index,
+                ch.start_ticks,
+                ch.name.as_deref(),
+            )
+            .await
+            {
+                tracing::error!("Failed to insert chapter for {item_id}: {e}");
             }
         }
     }

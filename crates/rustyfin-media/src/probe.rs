@@ -22,7 +22,16 @@ pub struct ProbeResult {
     pub total_bitrate: Option<i32>,
     pub size: Option<i64>,
     pub streams: Vec<ProbeStream>,
+    pub chapters: Vec<ProbeChapter>,
     pub container: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProbeChapter {
+    pub index: i32,
+    pub start_ticks: i64,
+    pub end_ticks: i64,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +64,14 @@ pub struct ProbeStream {
 struct FfprobeOutput {
     streams: Option<Vec<FfprobeStream>>,
     format: Option<FfprobeFormat>,
+    chapters: Option<Vec<FfprobeChapter>>,
+}
+
+#[derive(Deserialize)]
+struct FfprobeChapter {
+    start_time: Option<String>,
+    end_time: Option<String>,
+    tags: Option<HashMap<String, String>>,
 }
 
 #[derive(Deserialize)]
@@ -104,6 +121,7 @@ pub async fn probe_file(path: &Path) -> anyhow::Result<ProbeResult> {
             "json",
             "-show_streams",
             "-show_format",
+            "-show_chapters",
             &path_str,
         ])
         .output()
@@ -145,11 +163,30 @@ pub async fn probe_file(path: &Path) -> anyhow::Result<ProbeResult> {
         .filter_map(map_stream)
         .collect();
 
+    let chapters: Vec<ProbeChapter> = parsed
+        .chapters
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, ch)| {
+            let start_secs: f64 = ch.start_time.as_deref()?.parse().ok()?;
+            let end_secs: f64 = ch.end_time.as_deref()?.parse().ok()?;
+            let name = ch.tags.as_ref().and_then(|t| t.get("title").cloned());
+            Some(ProbeChapter {
+                index: i as i32,
+                start_ticks: seconds_to_ticks(start_secs),
+                end_ticks: seconds_to_ticks(end_secs),
+                name,
+            })
+        })
+        .collect();
+
     Ok(ProbeResult {
         duration_ticks: seconds_to_ticks(duration_secs),
         total_bitrate,
         size,
         streams,
+        chapters,
         container,
     })
 }

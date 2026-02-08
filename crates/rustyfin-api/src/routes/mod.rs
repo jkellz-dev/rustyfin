@@ -1,3 +1,4 @@
+pub mod activity_log;
 pub mod auth;
 pub mod branding;
 pub mod images;
@@ -6,6 +7,7 @@ pub mod libraries;
 pub mod media_info;
 pub mod playback;
 pub mod search;
+pub mod sessions;
 pub mod streaming;
 pub mod system;
 pub mod user_data;

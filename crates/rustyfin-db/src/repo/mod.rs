@@ -1,4 +1,5 @@
 pub mod activity_log;
+pub mod chapters;
 pub mod device_auth;
 pub mod images;
 pub mod libraries;

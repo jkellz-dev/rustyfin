@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     Router,
     extract::FromRef,
@@ -16,6 +18,8 @@ pub struct AppState {
     pub base_url: String,
     pub port: u16,
     pub tmdb_api_key: Option<String>,
+    pub session_manager: Arc<rustyfin_core::session::SessionManager>,
+    pub search_service: Arc<rustyfin_search::SearchService>,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -33,6 +37,10 @@ pub fn build_router(state: AppState) -> Router {
         // ── System (auth required) ──────────────────────────────
         .route("/System/Info", get(system::get_info))
         .route("/System/Stats", get(system::get_stats))
+        .route(
+            "/System/ActivityLog/Entries",
+            get(activity_log::get_log_entries),
+        )
         // ── Startup ─────────────────────────────────────────────
         .route("/Startup/Configuration", get(system::get_startup_config))
         .route("/Startup/Complete", post(system::complete_startup))
@@ -98,6 +106,9 @@ pub fn build_router(state: AppState) -> Router {
         // ── Streaming ───────────────────────────────────────────
         .route("/Videos/{itemId}/stream", get(streaming::stream_video))
         .route("/Audio/{itemId}/stream", get(streaming::stream_audio))
+        // ── Sessions ──────────────────────────────────────────────
+        .route("/Sessions", get(sessions::get_sessions))
+        .route("/Sessions/Logout", post(sessions::logout))
         // ── Playback reporting ──────────────────────────────────
         .route("/Sessions/Playing", post(playback::report_playback_start))
         .route(
