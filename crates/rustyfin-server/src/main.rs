@@ -3,11 +3,14 @@ mod config;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use ipnet::IpNet;
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use rustyfin_api::router::{AppState, build_router};
+use rustyfin_api::router::{AppState, ForwardAuthState, build_router};
+use rustyfin_auth::forward_auth::ForwardAuthHeaders;
+use rustyfin_auth::trusted_proxy::TrustedProxies;
 use rustyfin_core::session::SessionManager;
 use rustyfin_db::pool;
 use rustyfin_search::SearchService;
@@ -66,6 +69,47 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // Build forward auth state from config
+    let forward_auth_config = config.auth.forward_auth.as_ref().map(|fa| {
+        let cidrs: Vec<IpNet> = fa
+            .trusted_proxies
+            .iter()
+            .map(|s| s.parse().expect("CIDR already validated"))
+            .collect();
+        ForwardAuthState {
+            trusted_proxies: TrustedProxies::new(cidrs),
+            headers: ForwardAuthHeaders {
+                user: fa.headers.user.clone(),
+                name: fa.headers.name.clone(),
+                email: fa.headers.email.clone(),
+                groups: fa.headers.groups.clone(),
+            },
+            admin_group: fa.admin_group.clone(),
+        }
+    });
+
+    // Build LDAP config
+    let ldap_config = config
+        .auth
+        .ldap
+        .as_ref()
+        .map(|l| rustyfin_auth::ldap::LdapConfig {
+            url: l.url.clone(),
+            bind_dn: l.bind_dn.clone(),
+            bind_password: l.bind_password.clone(),
+            search_base: l.search_base.clone(),
+            user_filter: l.user_filter.clone(),
+            mail_attr: l.mail_attr.clone(),
+            display_name_attr: l.display_name_attr.clone(),
+            admin_group_dn: l.admin_group_dn.clone(),
+        });
+
+    tracing::info!(
+        "Auth: forward_auth={}, ldaps={}",
+        forward_auth_config.is_some(),
+        ldap_config.is_some()
+    );
+
     // Build application state
     let state = AppState {
         pool: db_pool,
@@ -76,6 +120,8 @@ async fn main() -> anyhow::Result<()> {
         tmdb_api_key: config.metadata.tmdb_api_key,
         session_manager,
         search_service,
+        forward_auth_config,
+        ldap_config,
     };
 
     // Build router with all API routes
@@ -91,7 +137,11 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("Listening on {addr}");
 
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

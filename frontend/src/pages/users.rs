@@ -112,7 +112,7 @@ pub fn Users() -> View {
             }
 
             p(class="text-muted mb-24") {
-                "Users are automatically created when they authenticate through the reverse proxy."
+                "Users are automatically provisioned when they first authenticate."
             }
 
             // Error

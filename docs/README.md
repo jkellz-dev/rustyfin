@@ -48,5 +48,5 @@ cargo run --bin rustyfin
 | 3. Client Compatibility | Done | Image tags, WebSocket, media streams, child counts |
 | 4. Metadata Enrichment | Done | NFO parsing, TMDB/TVDB providers, people/cast |
 | 5. Admin Frontend | Done | Sycamore WASM UI: library CRUD, scan triggers, user management, setup wizard |
-| 6. Transcoding | Planned | ffmpeg HLS output, device profiles, transcode sessions |
-| 7. Polish & Advanced | Planned | Meilisearch integration, session tracking, activity logging, chapters |
+| 6. Polish & Advanced | Done | Meilisearch integration, session tracking, activity logging, chapters |
+| 7. Transcoding | Planned | ffmpeg HLS output, device profiles, transcode sessions |

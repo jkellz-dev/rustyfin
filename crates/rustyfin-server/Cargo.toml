@@ -31,3 +31,4 @@ uuid.workspace = true
 anyhow.workspace = true
 
 toml = "0.8"
+ipnet.workspace = true

@@ -22,3 +22,5 @@ rand.workspace = true
 
 hex = "0.4"
 url = "2"
+ldap3.workspace = true
+ipnet.workspace = true

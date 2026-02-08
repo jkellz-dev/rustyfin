@@ -15,6 +15,7 @@ pub struct UserRow {
     pub audio_language_preference: Option<String>,
     pub subtitle_language_preference: Option<String>,
     pub subtitle_mode: i32,
+    pub is_disabled: bool,
     pub play_default_audio_track: bool,
     pub enable_next_episode_auto_play: bool,
     pub last_login_date: Option<DateTime<Utc>>,
@@ -119,6 +120,47 @@ pub async fn update_policy(
             .bind(id)
             .execute(pool)
             .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// Create or update a user from LDAP authentication.
+/// Uses username as the conflict key (not remote_user_id).
+pub async fn upsert_from_ldap(
+    pool: &PgPool,
+    username: &str,
+    display_name: Option<&str>,
+    email: Option<&str>,
+) -> Result<UserRow, sqlx::Error> {
+    sqlx::query_as::<_, UserRow>(
+        r#"
+        INSERT INTO users (username, display_name, email, last_login_date)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (username) DO UPDATE SET
+            display_name = COALESCE(EXCLUDED.display_name, users.display_name),
+            email = COALESCE(EXCLUDED.email, users.email),
+            last_login_date = NOW(),
+            updated_at = NOW()
+        RETURNING *
+        "#,
+    )
+    .bind(username)
+    .bind(display_name)
+    .bind(email)
+    .fetch_one(pool)
+    .await
+}
+
+/// Update the disabled status of a user.
+pub async fn update_disabled(
+    pool: &PgPool,
+    id: Uuid,
+    is_disabled: bool,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("UPDATE users SET is_disabled = $1, updated_at = NOW() WHERE id = $2")
+        .bind(is_disabled)
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(result.rows_affected() > 0)
 }
 

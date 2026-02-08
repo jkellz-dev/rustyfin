@@ -104,6 +104,11 @@ where
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
+        // Reject disabled users
+        if user.is_disabled {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+
         // Touch session activity
         let _ = sessions::touch(&pool, session.id).await;
 

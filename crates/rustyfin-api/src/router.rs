@@ -9,6 +9,14 @@ use sqlx::PgPool;
 
 use crate::routes::*;
 
+/// Forward auth state bundling trusted proxy list, header config, and admin group.
+#[derive(Debug, Clone)]
+pub struct ForwardAuthState {
+    pub trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies,
+    pub headers: rustyfin_auth::forward_auth::ForwardAuthHeaders,
+    pub admin_group: Option<String>,
+}
+
 /// Shared application state.
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +28,8 @@ pub struct AppState {
     pub tmdb_api_key: Option<String>,
     pub session_manager: Arc<rustyfin_core::session::SessionManager>,
     pub search_service: Arc<rustyfin_search::SearchService>,
+    pub forward_auth_config: Option<ForwardAuthState>,
+    pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
 }
 
 impl FromRef<AppState> for PgPool {
