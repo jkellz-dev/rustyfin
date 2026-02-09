@@ -155,6 +155,64 @@ pub async fn list_by_library(
     .await
 }
 
+/// List top-level items in a library, optionally filtered by item type.
+pub async fn list_top_level_by_library(
+    pool: &PgPool,
+    library_id: Uuid,
+    item_types: &[String],
+    start_index: i64,
+    limit: i64,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    if item_types.is_empty() {
+        sqlx::query_as::<_, MediaItemRow>(
+            "SELECT * FROM media_items WHERE library_id = $1 AND parent_id IS NULL \
+             ORDER BY sort_name, name LIMIT $2 OFFSET $3",
+        )
+        .bind(library_id)
+        .bind(limit)
+        .bind(start_index)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query_as::<_, MediaItemRow>(
+            "SELECT * FROM media_items WHERE library_id = $1 AND parent_id IS NULL \
+             AND item_type = ANY($2) ORDER BY sort_name, name LIMIT $3 OFFSET $4",
+        )
+        .bind(library_id)
+        .bind(item_types)
+        .bind(limit)
+        .bind(start_index)
+        .fetch_all(pool)
+        .await
+    }
+}
+
+/// Count top-level items in a library, optionally filtered by item type.
+pub async fn count_top_level_by_library(
+    pool: &PgPool,
+    library_id: Uuid,
+    item_types: &[String],
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = if item_types.is_empty() {
+        sqlx::query_as(
+            "SELECT COUNT(*) FROM media_items WHERE library_id = $1 AND parent_id IS NULL",
+        )
+        .bind(library_id)
+        .fetch_one(pool)
+        .await?
+    } else {
+        sqlx::query_as(
+            "SELECT COUNT(*) FROM media_items WHERE library_id = $1 AND parent_id IS NULL \
+             AND item_type = ANY($2)",
+        )
+        .bind(library_id)
+        .bind(item_types)
+        .fetch_one(pool)
+        .await?
+    };
+    Ok(row.0)
+}
+
 /// Find latest items added to a library.
 pub async fn latest_by_library(
     pool: &PgPool,

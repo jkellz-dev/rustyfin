@@ -7,7 +7,7 @@ use sycamore::prelude::*;
 use sycamore_router::{HistoryIntegration, Route, Router};
 
 use components::nav::Layout;
-use pages::{dashboard::Dashboard, libraries::Libraries, setup::Setup, users::Users};
+use pages::{dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, users::Users};
 
 #[derive(Route, Clone)]
 enum AppRoutes {
@@ -17,6 +17,8 @@ enum AppRoutes {
     DashboardIndex,
     #[to("/web/libraries")]
     Libraries,
+    #[to("/web/media")]
+    Media,
     #[to("/web/users")]
     Users,
     #[to("/web/setup")]
@@ -42,6 +44,11 @@ fn main() {
                             AppRoutes::Libraries => view! {
                                 Layout {
                                     Libraries {}
+                                }
+                            },
+                            AppRoutes::Media => view! {
+                                Layout {
+                                    Media {}
                                 }
                             },
                             AppRoutes::Users => view! {

@@ -10,6 +10,7 @@ pub fn Layout(children: Children) -> View {
                 div(class="sidebar-nav") {
                     a(href="/web") { "Dashboard" }
                     a(href="/web/libraries") { "Libraries" }
+                    a(href="/web/media") { "Media" }
                     a(href="/web/users") { "Users" }
                 }
             }

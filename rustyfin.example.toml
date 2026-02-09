@@ -1,15 +1,44 @@
-[server]
-port = 8096
-base_url = "https://media.example.com"
-server_name = "Rustyfin"
+# ── Server ────────────────────────────────────────────────
+# [server]
+# port = 8096                              # HTTP listen port
+# base_url = "http://localhost:8096"       # Public URL for links/redirects
+# server_name = "Rustyfin"                 # Display name in API responses
 
+# ── Database ──────────────────────────────────────────────
 [database]
 url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
 
-[media]
-paths = ["/data/media", "/data/archive"]
+# ── Metadata Providers ────────────────────────────────────
+# [metadata]
+# tmdb_api_key = "your-tmdb-api-key"       # TMDB v3 API key for poster/metadata fetching
 
-# Optional: Meilisearch for enhanced search
+# ── Search (optional, falls back to Postgres ILIKE) ──────
 # [search]
 # meilisearch_url = "http://localhost:7700"
-# meilisearch_key = "your-key"
+# meilisearch_key = "your-master-key"
+
+# ── Authentication ────────────────────────────────────────
+# At least one of [auth.forward_auth] or [auth.ldap] must be configured.
+
+# Forward auth: reverse proxy injects identity headers
+[auth.forward_auth]
+trusted_proxies = ["127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+# admin_group = "rustyfin-admins"          # Users with this group are auto-promoted to admin
+
+# Custom header names (defaults shown):
+# [auth.forward_auth.headers]
+# user = "Remote-User"                     # Username header (required)
+# name = "Remote-Name"                     # Display name header
+# email = "Remote-Email"                   # Email header
+# groups = "Remote-Groups"                 # Comma-separated groups header
+
+# LDAPS bind authentication
+# [auth.ldap]
+# url = "ldaps://localhost:636"            # Must be ldaps:// (no STARTTLS)
+# bind_dn = "uid=admin,ou=people,dc=example,dc=com"
+# bind_password = "secret"
+# search_base = "ou=people,dc=example,dc=com"
+# user_filter = "(uid={})"                 # {} is replaced with the username
+# mail_attr = "mail"                       # LDAP attribute for email
+# display_name_attr = "cn"                 # LDAP attribute for display name
+# admin_group_dn = "cn=admins,ou=groups,dc=example,dc=com"  # Members auto-promoted to admin

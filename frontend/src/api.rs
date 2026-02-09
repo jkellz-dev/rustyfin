@@ -3,7 +3,7 @@ use wasm_bindgen::JsValue;
 
 use crate::types::*;
 
-fn get_token() -> Option<String> {
+pub(crate) fn get_token() -> Option<String> {
     web_sys::window()?
         .local_storage()
         .ok()??
@@ -27,7 +27,7 @@ fn auth_header() -> String {
     )
 }
 
-fn base_url() -> String {
+pub(crate) fn base_url() -> String {
     let location = web_sys::window().unwrap().location();
     let origin = location.origin().unwrap_or_default();
     origin
@@ -104,6 +104,24 @@ async fn delete_path(path: &str) -> Result<(), String> {
         return Err(format!("HTTP {}", resp.status()));
     }
     Ok(())
+}
+
+async fn post_empty(path: &str) -> Result<(), String> {
+    let url = format!("{}{path}", base_url());
+    let resp = Request::post(&url)
+        .header("Authorization", &auth_header())
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    if !resp.ok() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    Ok(())
+}
+
+fn url_encode(s: &str) -> String {
+    js_sys::encode_uri_component(s).as_string().unwrap_or_default()
 }
 
 // ── Public API Functions ────────────────────────────────
@@ -198,4 +216,44 @@ pub async fn ensure_authenticated() -> Result<(), String> {
 
     set_token(&result.access_token);
     Ok(())
+}
+
+// ── Media Browsing API ──────────────────────────────────
+
+pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, String> {
+    get_json("/UserViews").await
+}
+
+pub async fn get_items(
+    parent_id: &str,
+    item_types: Option<&str>,
+    start_index: i32,
+    limit: i32,
+    sort_by: &str,
+    sort_order: &str,
+) -> Result<QueryResult<BaseItemDto>, String> {
+    let mut path = format!(
+        "/Items?ParentId={parent_id}&StartIndex={start_index}&Limit={limit}\
+         &SortBy={sort_by}&SortOrder={sort_order}&Recursive=true\
+         &Fields=Overview,Genres,Studios,People,MediaStreams,Chapters,ProviderIds,Path"
+    );
+    if let Some(types) = item_types {
+        path.push_str(&format!("&IncludeItemTypes={types}"));
+    }
+    get_json(&path).await
+}
+
+pub async fn get_item(item_id: &str) -> Result<BaseItemDto, String> {
+    get_json(&format!(
+        "/Items/{item_id}?Fields=Overview,Genres,Studios,People,MediaStreams,Chapters,ProviderIds,Path"
+    )).await
+}
+
+pub async fn refresh_item(item_id: &str) -> Result<(), String> {
+    post_empty(&format!("/Items/{item_id}/Refresh")).await
+}
+
+pub async fn search_hints(term: &str) -> Result<SearchHintResult, String> {
+    let encoded = url_encode(term);
+    get_json(&format!("/Search/Hints?SearchTerm={encoded}&Limit=20")).await
 }

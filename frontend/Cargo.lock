@@ -314,6 +314,7 @@ name = "rustyfin-admin"
 version = "0.1.0"
 dependencies = [
  "gloo-net",
+ "js-sys",
  "serde",
  "serde_json",
  "sycamore",

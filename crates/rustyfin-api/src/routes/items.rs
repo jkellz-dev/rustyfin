@@ -11,7 +11,7 @@ use uuid::Uuid;
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_core::EnrichmentService;
 use rustyfin_db::repo::images::ImageRow;
-use rustyfin_db::repo::{chapters, images, media_items, media_streams, people, user_data};
+use rustyfin_db::repo::{chapters, images, libraries, media_items, media_streams, people, user_data};
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_models::dto::{
     BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, QueryResult, UserItemDataDto,
@@ -204,19 +204,47 @@ pub async fn get_items(
         .map(String::from)
         .collect();
 
-    let items = media_items::list_by_parent(
-        &state.pool,
-        query.parent_id,
-        &item_types,
-        start_index,
-        limit,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // If ParentId matches a library, query top-level items by library_id
+    // (top-level media items have parent_id = NULL but library_id = <library UUID>)
+    let is_library = if let Some(pid) = query.parent_id {
+        libraries::find_by_id(&state.pool, pid)
+            .await
+            .map_err(ApiError::Database)?
+            .is_some()
+    } else {
+        false
+    };
 
-    let total = media_items::count_by_parent(&state.pool, query.parent_id, &item_types)
+    let (items, total) = if is_library {
+        let lib_id = query.parent_id.unwrap();
+        let items = media_items::list_top_level_by_library(
+            &state.pool,
+            lib_id,
+            &item_types,
+            start_index,
+            limit,
+        )
         .await
         .map_err(ApiError::Database)?;
+        let total = media_items::count_top_level_by_library(&state.pool, lib_id, &item_types)
+            .await
+            .map_err(ApiError::Database)?;
+        (items, total)
+    } else {
+        let items = media_items::list_by_parent(
+            &state.pool,
+            query.parent_id,
+            &item_types,
+            start_index,
+            limit,
+        )
+        .await
+        .map_err(ApiError::Database)?;
+        let total = media_items::count_by_parent(&state.pool, query.parent_id, &item_types)
+            .await
+            .map_err(ApiError::Database)?;
+        (items, total)
+    };
 
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
