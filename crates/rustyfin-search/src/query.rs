@@ -40,16 +40,19 @@ pub async fn search(
     search_query.with_query(query);
     search_query.with_limit(limit);
 
-    // Build filter string
-    if let Some(types) = item_type_filter {
-        if !types.is_empty() {
-            let filter_parts: Vec<String> = types
-                .iter()
-                .map(|t| format!("item_type = \"{t}\""))
-                .collect();
-            let filter = filter_parts.join(" OR ");
-            search_query.with_filter(&filter);
+    // Build filter string (must outlive search_query borrow)
+    let filter = item_type_filter.and_then(|types| {
+        if types.is_empty() {
+            return None;
         }
+        let parts: Vec<String> = types
+            .iter()
+            .map(|t| format!("item_type = \"{t}\""))
+            .collect();
+        Some(parts.join(" OR "))
+    });
+    if let Some(ref f) = filter {
+        search_query.with_filter(f);
     }
 
     let results = search_query
