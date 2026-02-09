@@ -38,19 +38,25 @@ const FALLBACK_HTML: &str = r#"<!DOCTYPE html>
 /// Create the frontend router. Serves under `/web` prefix with SPA fallback.
 pub fn router() -> Router {
     Router::new()
+        .route("/favicon.svg", get(serve_favicon))
+        .route("/favicon.ico", get(serve_favicon))
         .route("/web", get(serve_index))
         .route("/web/", get(serve_index))
         .route("/web/{*path}", get(serve_frontend))
 }
 
+async fn serve_favicon() -> Response {
+    serve_file("favicon.svg")
+}
+
 async fn serve_index() -> Response {
-    serve_file("index.html")
+    serve_index_or_fallback()
 }
 
 async fn serve_frontend(uri: Uri) -> Response {
     let path = uri.path().strip_prefix("/web/").unwrap_or(uri.path());
 
-    // Try exact file path first
+    // Try exact file path first (JS, WASM, CSS, etc.)
     if !path.is_empty() {
         let resp = serve_file(path);
         if resp.status() != StatusCode::NOT_FOUND {
@@ -59,7 +65,7 @@ async fn serve_frontend(uri: Uri) -> Response {
     }
 
     // SPA fallback — serve index.html for all non-file routes
-    serve_file("index.html")
+    serve_index_or_fallback()
 }
 
 fn serve_file(path: &str) -> Response {
@@ -73,9 +79,19 @@ fn serve_file(path: &str) -> Response {
             )
                 .into_response()
         }
-        None => {
-            // No embedded assets — show fallback
-            (StatusCode::OK, Html(FALLBACK_HTML)).into_response()
-        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Serve index.html, falling back to a placeholder if the frontend hasn't been built.
+fn serve_index_or_fallback() -> Response {
+    match FrontendAssets::get("index.html") {
+        Some(content) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "text/html")],
+            content.data.to_vec(),
+        )
+            .into_response(),
+        None => (StatusCode::OK, Html(FALLBACK_HTML)).into_response(),
     }
 }

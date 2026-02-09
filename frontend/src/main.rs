@@ -9,7 +9,7 @@ use sycamore_router::{HistoryIntegration, Route, Router};
 use components::nav::Layout;
 use pages::{dashboard::Dashboard, libraries::Libraries, setup::Setup, users::Users};
 
-#[derive(Route)]
+#[derive(Route, Clone)]
 enum AppRoutes {
     #[to("/web")]
     Dashboard,

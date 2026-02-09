@@ -19,6 +19,15 @@ services:
     volumes:
       - meili_data:/meili_data
 
+  caddy:
+    image: caddy:2
+    ports:
+      - "8097:8097"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   pgdata:
   meili_data:

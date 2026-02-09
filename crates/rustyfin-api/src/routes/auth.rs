@@ -36,6 +36,21 @@ pub async fn authenticate_by_name(
         .map(parse_mediabrowser_header)
         .unwrap_or_default();
 
+    tracing::debug!(
+        "AuthenticateByName: connecting_ip={}, forward_auth_configured={}, ldap_configured={}",
+        addr.ip(),
+        state.forward_auth_config.is_some(),
+        state.ldap_config.is_some(),
+    );
+
+    if let Some(ref fa_config) = state.forward_auth_config {
+        let trusted = fa_config.trusted_proxies.is_trusted(&addr.ip());
+        let has_header = forward_auth::extract_identity(&headers, &fa_config.headers).is_some();
+        tracing::debug!(
+            "Forward auth check: ip_trusted={trusted}, remote_user_header_present={has_header}"
+        );
+    }
+
     let is_first_user = users::count(&state.pool)
         .await
         .map_err(ApiError::Database)?

@@ -140,7 +140,7 @@ pub fn Libraries() -> View {
                 h2 { "Add Library" }
                 div(class="form-group") {
                     label { "Name" }
-                    input(type="text", bind:value=name, placeholder="My Movies")
+                    input(r#type="text", bind:value=name, placeholder="My Movies")
                 }
                 div(class="form-group") {
                     label { "Type" }
@@ -153,10 +153,10 @@ pub fn Libraries() -> View {
                 }
                 div(class="form-group") {
                     label { "Path" }
-                    input(type="text", bind:value=path_input, placeholder="/media/movies")
+                    input(r#type="text", bind:value=path_input, placeholder="/media/movies")
                 }
-                button(class="btn btn-primary", on:click=on_create, disabled=*creating.get()) {
-                    (if *creating.get() { "Creating..." } else { "Add Library" })
+                button(class="btn btn-primary", on:click=on_create, disabled=creating.get()) {
+                    (if creating.get() { "Creating..." } else { "Add Library" })
                 }
             }
 
@@ -168,7 +168,7 @@ pub fn Libraries() -> View {
             })
 
             // Libraries table
-            (if *loading.get() {
+            (if loading.get() {
                 view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
             } else if libs.get_clone().is_empty() {
                 view! { div(class="empty-state") { "No libraries yet. Add one above." } }
@@ -189,13 +189,16 @@ pub fn Libraries() -> View {
                                 Indexed(
                                     list=move || items.clone(),
                                     view=move |lib| {
+                                        let name = lib.name.clone();
+                                        let ctype = lib.collection_type.clone().unwrap_or_else(|| "unknown".to_string());
+                                        let locations = lib.locations.join(", ");
                                         let scan_id = lib.item_id.clone();
                                         let del_lib = lib.clone();
                                         view! {
                                             tr {
-                                                td { (lib.name) }
-                                                td { span(class="badge badge-type") { (lib.collection_type.as_deref().unwrap_or("unknown")) } }
-                                                td { (lib.locations.join(", ")) }
+                                                td { (name) }
+                                                td { span(class="badge badge-type") { (ctype) } }
+                                                td { (locations) }
                                                 td {
                                                     div(class="flex-gap") {
                                                         button(class="btn btn-secondary btn-sm",

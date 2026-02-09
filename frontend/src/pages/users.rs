@@ -123,7 +123,7 @@ pub fn Users() -> View {
             })
 
             // Users table
-            (if *loading.get() {
+            (if loading.get() {
                 view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
             } else if users.get_clone().is_empty() {
                 view! { div(class="empty-state") { "No users yet." } }
@@ -144,21 +144,23 @@ pub fn Users() -> View {
                                 Indexed(
                                     list=move || items.clone(),
                                     view=move |user| {
+                                        let name = user.name.clone();
                                         let toggle_id = user.id.clone();
                                         let is_admin = user.policy.is_administrator;
+                                        let last_activity = user.last_activity_date.clone().unwrap_or_else(|| "Never".to_string());
                                         let del_user = user.clone();
                                         view! {
                                             tr {
-                                                td { (user.name) }
+                                                td { (name) }
                                                 td {
-                                                    (if user.policy.is_administrator {
+                                                    (if is_admin {
                                                         view! { span(class="badge badge-admin") { "Admin" } }
                                                     } else {
                                                         view! { span(class="text-muted") { "User" } }
                                                     })
                                                 }
                                                 td(class="text-muted") {
-                                                    (user.last_activity_date.as_deref().unwrap_or("Never"))
+                                                    (last_activity)
                                                 }
                                                 td {
                                                     div(class="flex-gap") {

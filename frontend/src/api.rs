@@ -11,6 +11,15 @@ fn get_token() -> Option<String> {
         .ok()?
 }
 
+fn set_token(token: &str) {
+    if let Some(storage) = web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten()
+    {
+        let _ = storage.set_item("rustyfin_token", token);
+    }
+}
+
 fn auth_header() -> String {
     let token = get_token().unwrap_or_default();
     format!(
@@ -154,4 +163,39 @@ pub async fn update_user_policy(
 
 pub async fn get_startup_config() -> Result<StartupConfiguration, String> {
     get_json("/Startup/Configuration").await
+}
+
+/// Auto-authenticate via forward auth. Calls AuthenticateByName with an empty
+/// body — the reverse proxy injects identity headers, so no credentials needed.
+/// Stores the returned token in localStorage for subsequent API calls.
+pub async fn ensure_authenticated() -> Result<(), String> {
+    if get_token().is_some() {
+        // Already have a token — check if it's still valid
+        match get_json::<serde_json::Value>("/Users/Me").await {
+            Ok(_) => return Ok(()),
+            Err(_) => {} // Token expired, re-auth below
+        }
+    }
+
+    let url = format!("{}/Users/AuthenticateByName", base_url());
+    let resp = Request::post(&url)
+        .header("Authorization", &auth_header())
+        .header("Content-Type", "application/json")
+        .body(JsValue::from_str("{}"))
+        .map_err(|e| format!("Request build error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("Auth request failed: {e}"))?;
+
+    if !resp.ok() {
+        return Err(format!("Authentication failed: HTTP {}", resp.status()));
+    }
+
+    let result: AuthenticationResult = resp
+        .json()
+        .await
+        .map_err(|e| format!("Auth parse error: {e}"))?;
+
+    set_token(&result.access_token);
+    Ok(())
 }

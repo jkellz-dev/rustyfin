@@ -36,7 +36,7 @@ pub fn Setup() -> View {
     });
 
     let on_next = move |_| {
-        step.set(*step.get() + 1);
+        step.set(step.get() + 1);
     };
 
     let on_create_and_scan = move |_| {
@@ -77,19 +77,19 @@ pub fn Setup() -> View {
 
     view! {
         div(class="setup-layout") {
-            (if *checking.get() {
+            (if checking.get() {
                 view! { div(class="loading-container") { span(class="spinner") {} " Checking..." } }
             } else {
                 view! {
                     div(class="setup-container") {
                         // Step indicators
                         div(class="steps") {
-                            div(class=if *step.get() >= 0 { "step active" } else { "step" }) {}
-                            div(class=if *step.get() >= 1 { "step active" } else { "step" }) {}
-                            div(class=if *step.get() >= 2 { "step active" } else { "step" }) {}
+                            div(class=if step.get() >= 0 { "step active" } else { "step" }) {}
+                            div(class=if step.get() >= 1 { "step active" } else { "step" }) {}
+                            div(class=if step.get() >= 2 { "step active" } else { "step" }) {}
                         }
 
-                        (match *step.get() {
+                        (match step.get() {
                             0 => view! {
                                 h1 { "Welcome to Rustyfin" }
                                 p { "Let's set up your media server. You'll add your first library to get started." }
@@ -107,7 +107,7 @@ pub fn Setup() -> View {
 
                                 div(class="form-group") {
                                     label { "Library Name" }
-                                    input(type="text", bind:value=name, placeholder="Movies")
+                                    input(r#type="text", bind:value=name, placeholder="Movies")
                                 }
                                 div(class="form-group") {
                                     label { "Content Type" }
@@ -120,10 +120,10 @@ pub fn Setup() -> View {
                                 }
                                 div(class="form-group") {
                                     label { "Media Folder Path" }
-                                    input(type="text", bind:value=path_input, placeholder="/media/movies")
+                                    input(r#type="text", bind:value=path_input, placeholder="/media/movies")
                                 }
-                                button(class="btn btn-primary", on:click=on_create_and_scan, disabled=*creating.get()) {
-                                    (if *creating.get() { "Creating..." } else { "Add Library & Scan" })
+                                button(class="btn btn-primary", on:click=on_create_and_scan, disabled=creating.get()) {
+                                    (if creating.get() { "Creating..." } else { "Add Library & Scan" })
                                 }
                             },
                             _ => view! {

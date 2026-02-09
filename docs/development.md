@@ -14,14 +14,14 @@
 git clone <repository-url>
 cd rustyfin
 
-# 2. Start dependencies
+# 2. Start dependencies (Postgres, Meilisearch, Caddy auth proxy)
 docker compose up -d
 
 # 3. Build and run
 cargo run --bin rustyfin
 
-# Server starts on http://localhost:8096
-# Admin UI at http://localhost:8096/web
+# 4. Open http://localhost:8097/web (via Caddy, auto-injects auth headers)
+#    Direct API access at http://localhost:8096 (requires manual auth headers)
 ```
 
 ## Build Commands
@@ -82,6 +82,130 @@ rustyfin/
     ├── rustyfin-media/         # Probing & streaming
     └── rustyfin-frontend/      # Asset embedding
 ```
+
+## Authentication During Development
+
+Rustyfin requires at least one auth method. For local development, the easiest approach is forward auth with a Caddy reverse proxy that injects identity headers.
+
+### Dev Auth Setup
+
+The `docker-compose.yml` includes a Caddy container that proxies `localhost:8097` to `localhost:8096`, injecting `Remote-User` and `Remote-Name` headers on every request.
+
+```bash
+# Start all dev services (Postgres, Meilisearch, Caddy)
+docker compose up -d
+
+# Start Rustyfin
+cargo run --bin rustyfin
+```
+
+Then open **http://localhost:8097** (not 8096) — Caddy injects the auth headers automatically.
+
+### How It Works
+
+```
+Browser → localhost:8097 (Caddy) → localhost:8096 (Rustyfin)
+                 │
+                 └── Injects: Remote-User: jonathan
+                              Remote-Name: Jonathan
+```
+
+Caddy is configured in `Caddyfile.dev`:
+
+```
+:8097 {
+    reverse_proxy host.docker.internal:8096 {
+        header_up Remote-User "jonathan"
+        header_up Remote-Name "Jonathan"
+    }
+}
+```
+
+And `rustyfin.toml` trusts the Docker network:
+
+```toml
+[auth.forward_auth]
+trusted_proxies = ["127.0.0.1/32", "::1/128", "172.16.0.0/12"]
+```
+
+### Changing the Dev User
+
+Edit `Caddyfile.dev` to change the username, add email/groups, or simulate admin group membership:
+
+```
+:8097 {
+    reverse_proxy host.docker.internal:8096 {
+        header_up Remote-User "alice"
+        header_up Remote-Name "Alice Smith"
+        header_up Remote-Email "alice@example.com"
+        header_up Remote-Groups "rustyfin-admins,users"
+    }
+}
+```
+
+Then restart Caddy:
+
+```bash
+docker compose restart caddy
+```
+
+### Testing API Endpoints Directly
+
+For API testing without the browser, you can bypass Caddy and send headers directly via curl (localhost is in the trusted proxy list):
+
+```bash
+# Authenticate (creates user + session)
+curl -X POST http://localhost:8096/Users/AuthenticateByName \
+  -H 'Authorization: MediaBrowser Client="curl", Device="dev", DeviceId="dev1", Version="1.0"' \
+  -H 'Remote-User: jonathan' \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+
+# Use the returned AccessToken for subsequent requests
+curl http://localhost:8096/Users/Me \
+  -H 'X-Emby-Token: <token-from-above>'
+```
+
+### Testing LDAPS Locally
+
+To test LDAPS authentication, add LLDAP to `docker-compose.yml`:
+
+```yaml
+  lldap:
+    image: lldap/lldap:latest
+    environment:
+      LLDAP_LDAP_BASE_DN: "dc=example,dc=com"
+      LLDAP_LDAP_USER_PASS: "admin_secret"
+      LLDAP_LDAPS_OPTIONS__ENABLED: "true"
+      LLDAP_LDAPS_OPTIONS__PORT: 6360
+    ports:
+      - "6360:6360"
+      - "17170:17170"  # LLDAP web UI
+```
+
+Add LDAP config to `rustyfin.toml`:
+
+```toml
+[auth.ldap]
+url = "ldaps://localhost:6360"
+bind_dn = "uid=admin,ou=people,dc=example,dc=com"
+bind_password = "admin_secret"
+search_base = "ou=people,dc=example,dc=com"
+user_filter = "(uid={})"
+```
+
+Create test users in the LLDAP web UI at http://localhost:17170, then authenticate:
+
+```bash
+curl -X POST http://localhost:8096/Users/AuthenticateByName \
+  -H 'Authorization: MediaBrowser Client="curl", Device="dev", DeviceId="dev1", Version="1.0"' \
+  -H 'Content-Type: application/json' \
+  -d '{"Username":"testuser","Pw":"testpassword"}'
+```
+
+### Direct Access (Port 8096)
+
+You can also hit Rustyfin directly on port 8096 without Caddy, but you'll need to provide auth headers yourself (e.g., via a browser extension like ModHeader for Firefox/Chrome, or curl).
 
 ## Building the Frontend
 

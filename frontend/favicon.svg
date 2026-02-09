@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Movie screen glow -->
+  <rect x="6" y="2" width="52" height="30" rx="3" fill="#1a1a2e" stroke="#333" stroke-width="1.5"/>
+  <rect x="10" y="5" width="44" height="24" rx="1" fill="#16213e"/>
+  <!-- Film sprocket holes -->
+  <rect x="11" y="7" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="11" y="13" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="11" y="19" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="11" y="25" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="50" y="7" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="50" y="13" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="50" y="19" width="3" height="3" rx="0.5" fill="#333"/>
+  <rect x="50" y="25" width="3" height="3" rx="0.5" fill="#333"/>
+  <!-- Play button on screen -->
+  <polygon points="28,11 28,23 39,17" fill="#f74c00" opacity="0.8"/>
+  <!-- Ferris body -->
+  <ellipse cx="32" cy="50" rx="18" ry="11" fill="#f74c00"/>
+  <!-- Ferris head/shell top -->
+  <ellipse cx="32" cy="44" rx="14" ry="8" fill="#a52b00"/>
+  <!-- Left eye -->
+  <ellipse cx="26" cy="42" rx="4" ry="5" fill="#000"/>
+  <ellipse cx="26.5" cy="41" rx="2" ry="2.8" fill="#fff"/>
+  <!-- Right eye -->
+  <ellipse cx="38" cy="42" rx="4" ry="5" fill="#000"/>
+  <ellipse cx="38.5" cy="41" rx="2" ry="2.8" fill="#fff"/>
+  <!-- Eyes looking up at screen -->
+  <circle cx="26.5" cy="40" r="1" fill="#000"/>
+  <circle cx="38.5" cy="40" r="1" fill="#000"/>
+  <!-- Left claw -->
+  <path d="M12,48 Q8,44 6,48 Q4,52 8,52 Q10,52 14,50" fill="#f74c00" stroke="#a52b00" stroke-width="0.5"/>
+  <!-- Right claw -->
+  <path d="M52,48 Q56,44 58,48 Q60,52 56,52 Q54,52 50,50" fill="#f74c00" stroke="#a52b00" stroke-width="0.5"/>
+  <!-- Smile -->
+  <path d="M26,52 Q32,56 38,52" fill="none" stroke="#a52b00" stroke-width="1" stroke-linecap="round"/>
+</svg>

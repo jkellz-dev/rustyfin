@@ -8,7 +8,7 @@ pub struct SystemInfo {
     pub startup_wizard_completed: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct VirtualFolderInfo {
     pub name: String,
@@ -25,7 +25,7 @@ pub struct CreateLibraryRequest {
     pub paths: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserDto {
     pub name: String,
@@ -34,7 +34,7 @@ pub struct UserDto {
     pub last_activity_date: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserPolicy {
     pub is_administrator: bool,
@@ -58,4 +58,10 @@ pub struct DashboardStats {
 #[serde(rename_all = "PascalCase")]
 pub struct StartupConfiguration {
     pub startup_wizard_completed: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct AuthenticationResult {
+    pub access_token: String,
 }

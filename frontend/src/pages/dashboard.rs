@@ -12,9 +12,16 @@ pub fn Dashboard() -> View {
     let scan_loading = create_signal(false);
     let error: Signal<Option<String>> = create_signal(None);
 
-    // Load data on mount
+    // Auto-authenticate then load data
     spawn_local({
         async move {
+            // Ensure we have a valid session token (auto-login via forward auth)
+            if let Err(e) = api::ensure_authenticated().await {
+                error.set(Some(e));
+                loading.set(false);
+                return;
+            }
+
             let info_result = api::get_system_info().await;
             let stats_result = api::get_dashboard_stats().await;
 
@@ -47,12 +54,12 @@ pub fn Dashboard() -> View {
         div {
             div(class="page-header") {
                 h1 { "Dashboard" }
-                button(class="btn btn-primary", on:click=on_scan_all, disabled=*scan_loading.get()) {
-                    (if *scan_loading.get() { "Scanning..." } else { "Scan All Libraries" })
+                button(class="btn btn-primary", on:click=on_scan_all, disabled=scan_loading.get()) {
+                    (if scan_loading.get() { "Scanning..." } else { "Scan All Libraries" })
                 }
             }
 
-            (if *loading.get() {
+            (if loading.get() {
                 view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
             } else if let Some(err) = error.get_clone() {
                 view! { div(class="card") { p(class="text-muted") { (err) } } }
