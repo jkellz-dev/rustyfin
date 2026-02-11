@@ -218,6 +218,13 @@ pub async fn ensure_authenticated() -> Result<(), String> {
     Ok(())
 }
 
+// ── Environment API ──────────────────────────────────────
+
+pub async fn get_directory_contents(path: &str) -> Result<Vec<FileSystemEntry>, String> {
+    let encoded = url_encode(path);
+    get_json(&format!("/Environment/DirectoryContents?Path={encoded}")).await
+}
+
 // ── Media Browsing API ──────────────────────────────────
 
 pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, String> {

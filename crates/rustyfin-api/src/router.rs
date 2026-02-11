@@ -51,6 +51,11 @@ pub fn build_router(state: AppState) -> Router {
             "/System/ActivityLog/Entries",
             get(activity_log::get_log_entries),
         )
+        // ── Environment ─────────────────────────────────────────
+        .route(
+            "/Environment/DirectoryContents",
+            get(environment::get_directory_contents),
+        )
         // ── Startup ─────────────────────────────────────────────
         .route("/Startup/Configuration", get(system::get_startup_config))
         .route("/Startup/Complete", post(system::complete_startup))

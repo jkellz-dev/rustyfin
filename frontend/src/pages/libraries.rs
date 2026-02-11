@@ -2,7 +2,7 @@ use sycamore::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
-use crate::types::{CreateLibraryRequest, VirtualFolderInfo};
+use crate::types::{CreateLibraryRequest, FileSystemEntry, VirtualFolderInfo};
 
 #[component]
 pub fn Libraries() -> View {
@@ -16,6 +16,26 @@ pub fn Libraries() -> View {
     let collection_type = create_signal("movies".to_string());
     let path_input = create_signal(String::new());
     let creating = create_signal(false);
+
+    // Folder picker state
+    let browse_open = create_signal(false);
+    let browse_path: Signal<String> = create_signal("/".to_string());
+    let browse_entries: Signal<Vec<FileSystemEntry>> = create_signal(Vec::new());
+    let browse_loading = create_signal(false);
+    let browse_error: Signal<Option<String>> = create_signal(None);
+
+    let load_directory = move |dir: String| {
+        browse_loading.set(true);
+        browse_error.set(None);
+        browse_path.set(dir.clone());
+        spawn_local(async move {
+            match api::get_directory_contents(&dir).await {
+                Ok(entries) => browse_entries.set(entries),
+                Err(e) => browse_error.set(Some(e)),
+            }
+            browse_loading.set(false);
+        });
+    };
 
     // Delete modal
     let delete_target: Signal<Option<VirtualFolderInfo>> = create_signal(None);
@@ -131,6 +151,76 @@ pub fn Libraries() -> View {
                 view! {}
             })
 
+            // Folder picker modal
+            (if browse_open.get() {
+                let current_path = browse_path.get_clone();
+                let parent = {
+                    let p = std::path::Path::new(&current_path);
+                    p.parent().map(|pp| pp.to_string_lossy().into_owned()).unwrap_or_else(|| "/".to_string())
+                };
+                view! {
+                    div(class="modal-overlay") {
+                        div(class="modal folder-picker") {
+                            h3 { "Browse Folders" }
+                            div(class="folder-path") { (browse_path.get_clone()) }
+
+                            div(class="folder-actions-top") {
+                                button(class="btn btn-secondary btn-sm", on:click={
+                                    let load_directory = load_directory.clone();
+                                    let parent = parent.clone();
+                                    move |_| load_directory(parent.clone())
+                                }) { "Up" }
+                            }
+
+                            (if browse_loading.get() {
+                                view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                            } else if let Some(err) = browse_error.get_clone() {
+                                view! { div(class="folder-error") { (err) } }
+                            } else if browse_entries.get_clone().is_empty() {
+                                view! { div(class="folder-empty") { "No subdirectories" } }
+                            } else {
+                                let items = browse_entries.get_clone();
+                                view! {
+                                    div(class="folder-list") {
+                                        Indexed(
+                                            list=move || items.clone(),
+                                            view={
+                                                let load_directory = load_directory.clone();
+                                                move |entry| {
+                                                    let entry_path = entry.path.clone();
+                                                    let entry_name = entry.name.clone();
+                                                    let load_directory = load_directory.clone();
+                                                    view! {
+                                                        div(class="folder-item", on:click={
+                                                            let entry_path = entry_path.clone();
+                                                            let load_directory = load_directory.clone();
+                                                            move |_| load_directory(entry_path.clone())
+                                                        }) {
+                                                            span(class="folder-icon") { "\u{1F4C1}" }
+                                                            span { (entry_name) }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            })
+
+                            div(class="modal-actions") {
+                                button(class="btn btn-secondary", on:click=move |_| browse_open.set(false)) { "Cancel" }
+                                button(class="btn btn-primary", on:click=move |_| {
+                                    path_input.set(browse_path.get_clone());
+                                    browse_open.set(false);
+                                }) { "Select" }
+                            }
+                        }
+                    }
+                }
+            } else {
+                view! {}
+            })
+
             div(class="page-header") {
                 h1 { "Libraries" }
             }
@@ -153,7 +243,20 @@ pub fn Libraries() -> View {
                 }
                 div(class="form-group") {
                     label { "Path" }
-                    input(r#type="text", bind:value=path_input, placeholder="/media/movies")
+                    div(class="input-with-button") {
+                        input(r#type="text", bind:value=path_input, placeholder="/media/movies")
+                        button(class="btn btn-secondary", r#type="button", on:click={
+                            let load_directory = load_directory.clone();
+                            move |_| {
+                                browse_open.set(true);
+                                let start = {
+                                    let current = path_input.get_clone();
+                                    if current.is_empty() { "/".to_string() } else { current }
+                                };
+                                load_directory(start);
+                            }
+                        }) { "Browse" }
+                    }
                 }
                 button(class="btn btn-primary", on:click=on_create, disabled=creating.get()) {
                     (if creating.get() { "Creating..." } else { "Add Library" })

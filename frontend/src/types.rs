@@ -68,6 +68,17 @@ pub struct AuthenticationResult {
     pub access_token: String,
 }
 
+// ── File system browsing ─────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct FileSystemEntry {
+    pub name: String,
+    pub path: String,
+    #[serde(rename = "Type")]
+    pub entry_type: String,
+}
+
 // ── Media browsing types ────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]

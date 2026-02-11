@@ -1,6 +1,7 @@
 pub mod activity_log;
 pub mod auth;
 pub mod branding;
+pub mod environment;
 pub mod images;
 pub mod items;
 pub mod libraries;

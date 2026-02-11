@@ -333,6 +333,16 @@ pub struct ChapterInfo {
     pub image_tag: Option<String>,
 }
 
+/// File system entry for directory browsing.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct FileSystemEntryInfo {
+    pub name: String,
+    pub path: String,
+    #[serde(rename = "Type")]
+    pub entry_type: String,
+}
+
 /// Library options.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]

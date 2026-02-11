@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use ipnet::IpNet;
 use tokio::net::TcpListener;
+use axum::response::Redirect;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -128,6 +129,9 @@ async fn main() -> anyhow::Result<()> {
     let app = build_router(state)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());
+
+    // Redirect root to admin UI
+    let app = app.route("/", axum::routing::get(|| async { Redirect::permanent("/web") }));
 
     // Merge frontend routes (/web prefix)
     let app = app.merge(rustyfin_frontend::router());
