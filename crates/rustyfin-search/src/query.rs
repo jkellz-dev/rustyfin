@@ -24,6 +24,8 @@ struct MeiliHit {
     parent_index_number: Option<i32>,
     #[serde(default)]
     runtime_ticks: Option<i64>,
+    #[serde(default)]
+    library_id: Option<String>,
 }
 
 /// Search Meilisearch for items matching a query.
@@ -74,6 +76,7 @@ pub async fn search(
                 index_number: h.index_number,
                 parent_index_number: h.parent_index_number,
                 runtime_ticks: h.runtime_ticks,
+                library_id: h.library_id.and_then(|s| s.parse().ok()),
             }
         })
         .collect())

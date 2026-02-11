@@ -57,6 +57,27 @@ pub async fn touch_updated_at(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error
     Ok(())
 }
 
+/// Update a library's name and paths.
+pub async fn update(
+    pool: &PgPool,
+    id: Uuid,
+    name: &str,
+    paths: &[String],
+) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        r#"
+        UPDATE libraries SET name = $1, paths = $2, updated_at = NOW()
+        WHERE id = $3
+        RETURNING *
+        "#,
+    )
+    .bind(name)
+    .bind(paths)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 /// Delete a library by ID.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM libraries WHERE id = $1")

@@ -10,6 +10,7 @@ pub struct UserRow {
     pub display_name: Option<String>,
     pub email: Option<String>,
     pub is_administrator: bool,
+    pub enable_all_libraries: bool,
     pub remote_user_id: Option<String>,
     pub max_parental_rating: Option<i32>,
     pub audio_language_preference: Option<String>,
@@ -108,18 +109,21 @@ pub async fn count(pool: &PgPool) -> Result<i64, sqlx::Error> {
     Ok(row.0)
 }
 
-/// Update the administrator policy for a user.
+/// Update the administrator and library access policy for a user.
 pub async fn update_policy(
     pool: &PgPool,
     id: Uuid,
     is_administrator: bool,
+    enable_all_libraries: bool,
 ) -> Result<bool, sqlx::Error> {
-    let result =
-        sqlx::query("UPDATE users SET is_administrator = $1, updated_at = NOW() WHERE id = $2")
-            .bind(is_administrator)
-            .bind(id)
-            .execute(pool)
-            .await?;
+    let result = sqlx::query(
+        "UPDATE users SET is_administrator = $1, enable_all_libraries = $2, updated_at = NOW() WHERE id = $3",
+    )
+    .bind(is_administrator)
+    .bind(enable_all_libraries)
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(result.rows_affected() > 0)
 }
 

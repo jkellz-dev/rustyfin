@@ -92,6 +92,10 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(libraries::delete_virtual_folder),
         )
         .route("/Library/Refresh", post(libraries::refresh_library))
+        .route(
+            "/Library/VirtualFolders/Update",
+            post(libraries::update_virtual_folder),
+        )
         // ── Items ───────────────────────────────────────────────
         .route("/Items", get(items::get_items))
         .route("/Items/Latest", get(items::get_latest_items))

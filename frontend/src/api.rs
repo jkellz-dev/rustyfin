@@ -142,6 +142,13 @@ pub async fn create_library(req: &CreateLibraryRequest) -> Result<VirtualFolderI
     post_json_resp("/Library/VirtualFolders", req).await
 }
 
+pub async fn update_library(
+    id: &str,
+    req: &UpdateLibraryRequest,
+) -> Result<VirtualFolderInfo, String> {
+    post_json_resp(&format!("/Library/VirtualFolders/Update?Id={id}"), req).await
+}
+
 pub async fn delete_library(id: &str) -> Result<(), String> {
     delete_path(&format!("/Library/VirtualFolders?Id={id}")).await
 }

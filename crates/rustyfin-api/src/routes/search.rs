@@ -6,7 +6,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::images;
+use rustyfin_db::repo::{images, user_library_access};
 use rustyfin_models::dto::{SearchHint, SearchHintResult};
 
 use crate::error::ApiError;
@@ -28,7 +28,7 @@ pub struct SearchQuery {
 /// `GET /Search/Hints` — Search across all media.
 pub async fn search_hints(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<SearchHintResult>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
@@ -40,11 +40,25 @@ pub async fn search_hints(
             .collect()
     });
 
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?;
+
     let hits = state
         .search_service
         .search(&query.search_term, limit, item_types.as_deref())
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Filter by library access
+    let hits: Vec<_> = hits
+        .into_iter()
+        .filter(|hit| {
+            accessible
+                .as_ref()
+                .is_none_or(|ids| hit.library_id.is_none_or(|lid| ids.contains(&lid)))
+        })
+        .collect();
 
     let mut hints: Vec<SearchHint> = hits
         .into_iter()

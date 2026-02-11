@@ -8,4 +8,5 @@ pub mod media_streams;
 pub mod people;
 pub mod sessions;
 pub mod user_data;
+pub mod user_library_access;
 pub mod users;

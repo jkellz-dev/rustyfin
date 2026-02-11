@@ -11,7 +11,10 @@ use uuid::Uuid;
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_core::EnrichmentService;
 use rustyfin_db::repo::images::ImageRow;
-use rustyfin_db::repo::{chapters, images, libraries, media_items, media_streams, people, user_data};
+use rustyfin_db::repo::{
+    chapters, images, libraries, media_items, media_streams, people, user_data,
+    user_library_access,
+};
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_models::dto::{
     BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, QueryResult, UserItemDataDto,
@@ -204,6 +207,10 @@ pub async fn get_items(
         .map(String::from)
         .collect();
 
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?;
+
     // If ParentId matches a library, query top-level items by library_id
     // (top-level media items have parent_id = NULL but library_id = <library UUID>)
     let is_library = if let Some(pid) = query.parent_id {
@@ -214,6 +221,14 @@ pub async fn get_items(
     } else {
         false
     };
+
+    // Block access to a library the user isn't allowed to see
+    if is_library
+        && let Some(ref allowed) = accessible
+        && !allowed.contains(&query.parent_id.unwrap())
+    {
+        return Err(ApiError::NotFound);
+    }
 
     let (items, total) = if is_library {
         let lib_id = query.parent_id.unwrap();
@@ -244,6 +259,24 @@ pub async fn get_items(
             .await
             .map_err(ApiError::Database)?;
         (items, total)
+    };
+
+    // Filter items by library access for non-library parents
+    let items: Vec<_> = if !is_library && accessible.is_some() {
+        items
+            .into_iter()
+            .filter(|i| {
+                i.library_id
+                    .is_none_or(|lid| accessible.as_ref().unwrap().contains(&lid))
+            })
+            .collect()
+    } else {
+        items
+    };
+    let total = if !is_library && accessible.is_some() {
+        items.len() as i64
+    } else {
+        total
     };
 
     let mut dtos: Vec<BaseItemDto> = items
@@ -310,6 +343,19 @@ pub async fn get_item_by_id(
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
+
+    // Check library access
+    if let Some(lib_id) = item.library_id {
+        let accessible =
+            user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+                .await
+                .map_err(ApiError::Database)?;
+        if let Some(ref allowed) = accessible
+            && !allowed.contains(&lib_id)
+        {
+            return Err(ApiError::NotFound);
+        }
+    }
 
     let mut dto = media_item_to_dto(&item, &state.server_id);
 
@@ -415,10 +461,14 @@ pub async fn get_item_by_id(
 /// `GET /Items/Latest` — Latest additions.
 pub async fn get_latest_items(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<ItemsQuery>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
+
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?;
 
     // If parent_id is provided, get latest from that library
     let items = if let Some(parent_id) = query.parent_id {
@@ -431,6 +481,16 @@ pub async fn get_latest_items(
             .await
             .unwrap_or_default()
     };
+
+    // Filter by library access
+    let items: Vec<_> = items
+        .into_iter()
+        .filter(|i| {
+            accessible
+                .as_ref()
+                .is_none_or(|ids| i.library_id.is_none_or(|lid| ids.contains(&lid)))
+        })
+        .collect();
 
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
@@ -462,6 +522,10 @@ pub async fn get_resume_items(
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(12).min(100);
 
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?;
+
     let resume_data = user_data::get_resume_items(&state.pool, auth.user_id, limit)
         .await
         .map_err(ApiError::Database)?;
@@ -469,6 +533,12 @@ pub async fn get_resume_items(
     let mut dtos = Vec::new();
     for (ud, item_id) in &resume_data {
         if let Ok(Some(item)) = media_items::find_by_id(&state.pool, *item_id).await {
+            // Filter by library access
+            if let Some(ref allowed) = accessible
+                && item.library_id.is_some_and(|lid| !allowed.contains(&lid))
+            {
+                continue;
+            }
             let mut dto = media_item_to_dto(&item, &state.server_id);
             dto.user_data = Some(UserItemDataDto {
                 playback_position_ticks: ud.playback_position_ticks,

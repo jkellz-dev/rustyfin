@@ -23,6 +23,7 @@ struct MeiliMediaItem {
     runtime_ticks: Option<i64>,
     index_number: Option<i32>,
     parent_index_number: Option<i32>,
+    library_id: Option<String>,
 }
 
 /// Ensure the Meilisearch index exists with correct settings.
@@ -47,7 +48,7 @@ pub async fn ensure_index(client: &meilisearch_sdk::client::Client) -> Result<()
 
     // Set filterable attributes
     index
-        .set_filterable_attributes(["item_type", "production_year"])
+        .set_filterable_attributes(["item_type", "production_year", "library_id"])
         .await
         .map_err(|e| e.to_string())?;
 
@@ -75,6 +76,7 @@ pub async fn index_documents(
             runtime_ticks: item.runtime_ticks,
             index_number: item.index_number,
             parent_index_number: item.parent_index_number,
+            library_id: item.library_id.map(|id| id.to_string()),
         })
         .collect();
 

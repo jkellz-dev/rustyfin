@@ -1,8 +1,11 @@
 use sycamore::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
-use crate::types::{CreateLibraryRequest, FileSystemEntry, VirtualFolderInfo};
+use crate::types::{
+    CreateLibraryRequest, FileSystemEntry, UpdateLibraryRequest, VirtualFolderInfo,
+};
 
 #[component]
 pub fn Libraries() -> View {
@@ -11,10 +14,10 @@ pub fn Libraries() -> View {
     let error: Signal<Option<String>> = create_signal(None);
     let toast: Signal<Option<String>> = create_signal(None);
 
-    // Form state
+    // Create form state
     let name = create_signal(String::new());
     let collection_type = create_signal("movies".to_string());
-    let path_input = create_signal(String::new());
+    let path_inputs: Signal<Vec<String>> = create_signal(vec![String::new()]);
     let creating = create_signal(false);
 
     // Folder picker state
@@ -23,6 +26,7 @@ pub fn Libraries() -> View {
     let browse_entries: Signal<Vec<FileSystemEntry>> = create_signal(Vec::new());
     let browse_loading = create_signal(false);
     let browse_error: Signal<Option<String>> = create_signal(None);
+    let browse_target_index: Signal<Option<usize>> = create_signal(None);
 
     let load_directory = move |dir: String| {
         browse_loading.set(true);
@@ -39,6 +43,12 @@ pub fn Libraries() -> View {
 
     // Delete modal
     let delete_target: Signal<Option<VirtualFolderInfo>> = create_signal(None);
+
+    // Edit modal state
+    let edit_target: Signal<Option<VirtualFolderInfo>> = create_signal(None);
+    let edit_name = create_signal(String::new());
+    let edit_paths: Signal<Vec<String>> = create_signal(Vec::new());
+    let edit_saving = create_signal(false);
 
     let load_libs = move || {
         spawn_local({
@@ -57,8 +67,12 @@ pub fn Libraries() -> View {
     let on_create = move |_| {
         let n = name.get_clone();
         let ct = collection_type.get_clone();
-        let p = path_input.get_clone();
-        if n.is_empty() || p.is_empty() {
+        let paths: Vec<String> = path_inputs
+            .get_clone()
+            .into_iter()
+            .filter(|p| !p.is_empty())
+            .collect();
+        if n.is_empty() || paths.is_empty() {
             return;
         }
         creating.set(true);
@@ -67,13 +81,13 @@ pub fn Libraries() -> View {
                 let req = CreateLibraryRequest {
                     name: n,
                     collection_type: ct,
-                    paths: vec![p],
+                    paths,
                 };
                 match api::create_library(&req).await {
                     Ok(lib) => {
                         libs.update(|l| l.push(lib));
                         name.set(String::new());
-                        path_input.set(String::new());
+                        path_inputs.set(vec![String::new()]);
                         toast.set(Some("Library created".to_string()));
                     }
                     Err(e) => error.set(Some(e)),
@@ -112,6 +126,44 @@ pub fn Libraries() -> View {
         }
     };
 
+    let save_edit = move |_| {
+        if let Some(target) = edit_target.get_clone() {
+            let id = target.item_id.clone();
+            let n = edit_name.get_clone();
+            let paths: Vec<String> = edit_paths
+                .get_clone()
+                .into_iter()
+                .filter(|p| !p.is_empty())
+                .collect();
+            if n.is_empty() || paths.is_empty() {
+                return;
+            }
+            edit_saving.set(true);
+            spawn_local({
+                async move {
+                    let req = UpdateLibraryRequest {
+                        name: n,
+                        paths,
+                    };
+                    match api::update_library(&id, &req).await {
+                        Ok(updated_lib) => {
+                            libs.update(|l| {
+                                if let Some(lib) = l.iter_mut().find(|lib| lib.item_id == id) {
+                                    lib.name = updated_lib.name;
+                                    lib.locations = updated_lib.locations;
+                                }
+                            });
+                            edit_target.set(None);
+                            toast.set(Some("Library updated".to_string()));
+                        }
+                        Err(e) => error.set(Some(e)),
+                    }
+                    edit_saving.set(false);
+                }
+            });
+        }
+    };
+
     view! {
         div {
             // Toast
@@ -143,6 +195,88 @@ pub fn Libraries() -> View {
                             div(class="modal-actions") {
                                 button(class="btn btn-secondary", on:click=move |_| delete_target.set(None)) { "Cancel" }
                                 button(class="btn btn-danger", on:click=confirm_delete) { "Delete" }
+                            }
+                        }
+                    }
+                }
+            } else {
+                view! {}
+            })
+
+            // Edit modal
+            (if edit_target.get_clone().is_some() {
+                let current_edit_paths = edit_paths.get_clone();
+                view! {
+                    div(class="modal-overlay") {
+                        div(class="modal") {
+                            h3 { "Edit Library" }
+                            div(class="form-group") {
+                                label { "Name" }
+                                input(r#type="text", bind:value=edit_name)
+                            }
+                            div(class="form-group") {
+                                label { "Paths" }
+                                div(class="path-list") {
+                                    Indexed(
+                                        list=move || current_edit_paths.clone(),
+                                        view={
+                                            let load_directory = load_directory.clone();
+                                            move |path| {
+                                                let idx = edit_paths.get_clone().iter().position(|p| *p == path).unwrap_or(0);
+                                                let path_val = path.clone();
+                                                view! {
+                                                    div(class="path-entry") {
+                                                        input(r#type="text", value=path_val.clone(), on:input={
+                                                            let idx = idx;
+                                                            move |ev: web_sys::Event| {
+                                                                let target = ev.target().unwrap();
+                                                                let input: web_sys::HtmlInputElement = target.unchecked_into();
+                                                                edit_paths.update(|paths| {
+                                                                    if idx < paths.len() {
+                                                                        paths[idx] = input.value();
+                                                                    }
+                                                                });
+                                                            }
+                                                        })
+                                                        button(class="btn btn-secondary btn-sm", r#type="button", on:click={
+                                                            let load_directory = load_directory.clone();
+                                                            let idx = idx;
+                                                            move |_| {
+                                                                browse_target_index.set(Some(idx));
+                                                                browse_open.set(true);
+                                                                let start = {
+                                                                    let paths = edit_paths.get_clone();
+                                                                    let current = paths.get(idx).cloned().unwrap_or_default();
+                                                                    if current.is_empty() { "/".to_string() } else { current }
+                                                                };
+                                                                load_directory(start);
+                                                            }
+                                                        }) { "Browse" }
+                                                        button(class="btn btn-danger btn-sm", r#type="button", on:click={
+                                                            let idx = idx;
+                                                            move |_| {
+                                                                edit_paths.update(|paths| {
+                                                                    if paths.len() > 1 && idx < paths.len() {
+                                                                        paths.remove(idx);
+                                                                    }
+                                                                });
+                                                            }
+                                                        }) { "Remove" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                                button(class="btn btn-secondary btn-sm", r#type="button", on:click=move |_| {
+                                    edit_paths.update(|paths| paths.push(String::new()));
+                                }) { "+ Add Path" }
+                            }
+                            div(class="modal-actions") {
+                                button(class="btn btn-secondary", on:click=move |_| edit_target.set(None)) { "Cancel" }
+                                button(class="btn btn-primary", on:click=save_edit, disabled=edit_saving.get()) {
+                                    (if edit_saving.get() { "Saving..." } else { "Save" })
+                                }
                             }
                         }
                     }
@@ -210,7 +344,24 @@ pub fn Libraries() -> View {
                             div(class="modal-actions") {
                                 button(class="btn btn-secondary", on:click=move |_| browse_open.set(false)) { "Cancel" }
                                 button(class="btn btn-primary", on:click=move |_| {
-                                    path_input.set(browse_path.get_clone());
+                                    let selected_path = browse_path.get_clone();
+                                    if let Some(idx) = browse_target_index.get_clone() {
+                                        // Targeting an edit or create path at a specific index
+                                        if edit_target.get_clone().is_some() {
+                                            edit_paths.update(|paths| {
+                                                if idx < paths.len() {
+                                                    paths[idx] = selected_path;
+                                                }
+                                            });
+                                        } else {
+                                            path_inputs.update(|paths| {
+                                                if idx < paths.len() {
+                                                    paths[idx] = selected_path;
+                                                }
+                                            });
+                                        }
+                                    }
+                                    browse_target_index.set(None);
                                     browse_open.set(false);
                                 }) { "Select" }
                             }
@@ -242,21 +393,66 @@ pub fn Libraries() -> View {
                     }
                 }
                 div(class="form-group") {
-                    label { "Path" }
-                    div(class="input-with-button") {
-                        input(r#type="text", bind:value=path_input, placeholder="/media/movies")
-                        button(class="btn btn-secondary", r#type="button", on:click={
-                            let load_directory = load_directory.clone();
-                            move |_| {
-                                browse_open.set(true);
-                                let start = {
-                                    let current = path_input.get_clone();
-                                    if current.is_empty() { "/".to_string() } else { current }
-                                };
-                                load_directory(start);
+                    label { "Paths" }
+                    div(class="path-list") {
+                        Indexed(
+                            list=move || path_inputs.get_clone(),
+                            view={
+                                let load_directory = load_directory.clone();
+                                move |path| {
+                                    let idx = path_inputs.get_clone().iter().position(|p| *p == path).unwrap_or(0);
+                                    let path_val = path.clone();
+                                    view! {
+                                        div(class="path-entry") {
+                                            input(r#type="text", value=path_val, placeholder="/media/movies", on:input={
+                                                let idx = idx;
+                                                move |ev: web_sys::Event| {
+                                                    let target = ev.target().unwrap();
+                                                    let input: web_sys::HtmlInputElement = target.unchecked_into();
+                                                    path_inputs.update(|paths| {
+                                                        if idx < paths.len() {
+                                                            paths[idx] = input.value();
+                                                        }
+                                                    });
+                                                }
+                                            })
+                                            button(class="btn btn-secondary btn-sm", r#type="button", on:click={
+                                                let load_directory = load_directory.clone();
+                                                let idx = idx;
+                                                move |_| {
+                                                    browse_target_index.set(Some(idx));
+                                                    browse_open.set(true);
+                                                    let start = {
+                                                        let paths = path_inputs.get_clone();
+                                                        let current = paths.get(idx).cloned().unwrap_or_default();
+                                                        if current.is_empty() { "/".to_string() } else { current }
+                                                    };
+                                                    load_directory(start);
+                                                }
+                                            }) { "Browse" }
+                                            (if path_inputs.get_clone().len() > 1 {
+                                                let idx = idx;
+                                                view! {
+                                                    button(class="btn btn-danger btn-sm", r#type="button", on:click=move |_| {
+                                                        path_inputs.update(|paths| {
+                                                            if idx < paths.len() {
+                                                                paths.remove(idx);
+                                                            }
+                                                        });
+                                                    }) { "Remove" }
+                                                }
+                                            } else {
+                                                view! {}
+                                            })
+                                        }
+                                    }
+                                }
                             }
-                        }) { "Browse" }
+                        )
                     }
+                    button(class="btn btn-secondary btn-sm", r#type="button", on:click=move |_| {
+                        path_inputs.update(|paths| paths.push(String::new()));
+                    }) { "+ Add Path" }
                 }
                 button(class="btn btn-primary", on:click=on_create, disabled=creating.get()) {
                     (if creating.get() { "Creating..." } else { "Add Library" })
@@ -297,6 +493,7 @@ pub fn Libraries() -> View {
                                         let locations = lib.locations.join(", ");
                                         let scan_id = lib.item_id.clone();
                                         let del_lib = lib.clone();
+                                        let edit_lib = lib.clone();
                                         view! {
                                             tr {
                                                 td { (name) }
@@ -304,6 +501,16 @@ pub fn Libraries() -> View {
                                                 td { (locations) }
                                                 td {
                                                     div(class="flex-gap") {
+                                                        button(class="btn btn-secondary btn-sm",
+                                                            on:click={
+                                                                let edit_lib = edit_lib.clone();
+                                                                move |_| {
+                                                                    edit_name.set(edit_lib.name.clone());
+                                                                    edit_paths.set(edit_lib.locations.clone());
+                                                                    edit_target.set(Some(edit_lib.clone()));
+                                                                }
+                                                            }
+                                                        ) { "Edit" }
                                                         button(class="btn btn-secondary btn-sm",
                                                             on:click={
                                                                 let scan_id = scan_id.clone();

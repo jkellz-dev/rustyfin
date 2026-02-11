@@ -16,6 +16,7 @@ pub struct SearchHit {
     pub index_number: Option<i32>,
     pub parent_index_number: Option<i32>,
     pub runtime_ticks: Option<i64>,
+    pub library_id: Option<Uuid>,
 }
 
 /// Search error type.
@@ -91,6 +92,7 @@ impl SearchService {
                 index_number: item.index_number,
                 parent_index_number: item.parent_index_number,
                 runtime_ticks: item.runtime_ticks,
+                library_id: item.library_id,
             })
             .collect())
     }

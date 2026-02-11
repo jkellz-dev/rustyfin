@@ -67,6 +67,8 @@ pub struct UserPolicy {
     pub enable_all_devices: bool,
     pub enable_all_channels: bool,
     pub enable_all_folders: bool,
+    #[serde(default)]
+    pub enabled_folders: Vec<String>,
     pub enable_public_sharing: bool,
     pub invalid_login_attempt_count: i32,
     pub login_attempts_before_lockout: i32,
@@ -94,6 +96,7 @@ impl Default for UserPolicy {
             enable_all_devices: true,
             enable_all_channels: true,
             enable_all_folders: true,
+            enabled_folders: Vec::new(),
             enable_public_sharing: true,
             invalid_login_attempt_count: 0,
             login_attempts_before_lockout: -1,

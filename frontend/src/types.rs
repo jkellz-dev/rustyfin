@@ -40,12 +40,29 @@ pub struct UserDto {
 #[serde(rename_all = "PascalCase")]
 pub struct UserPolicy {
     pub is_administrator: bool,
+    #[serde(default = "default_true")]
+    pub enable_all_folders: bool,
+    #[serde(default)]
+    pub enabled_folders: Vec<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UpdateUserPolicyRequest {
     pub is_administrator: bool,
+    pub enable_all_folders: bool,
+    pub enabled_folders: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdateLibraryRequest {
+    pub name: String,
+    pub paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

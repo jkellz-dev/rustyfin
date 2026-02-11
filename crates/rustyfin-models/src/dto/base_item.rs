@@ -297,11 +297,28 @@ pub struct CreateLibraryRequest {
     pub paths: Vec<String>,
 }
 
-/// Request to update user policy (admin status).
+/// Request to update user policy (admin status and library access).
+/// Jellyfin clients send the full UserPolicy object, so all fields are required.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UpdateUserPolicyRequest {
     pub is_administrator: bool,
+    #[serde(default = "default_true")]
+    pub enable_all_folders: bool,
+    #[serde(default)]
+    pub enabled_folders: Vec<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Request to update a library's name and paths.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdateLibraryRequest {
+    pub name: String,
+    pub paths: Vec<String>,
 }
 
 /// Startup configuration response.
