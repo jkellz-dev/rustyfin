@@ -532,6 +532,10 @@ input[type="text"]:focus, select:focus {
     font-size: 2.5em;
 }
 
+.media-poster.square, .media-poster-placeholder.square {
+    aspect-ratio: 1 / 1;
+}
+
 .media-card-title {
     margin-top: 8px;
     font-size: 0.88em;
@@ -595,6 +599,10 @@ input[type="text"]:focus, select:focus {
     justify-content: center;
     font-size: 3em;
 }
+
+.detail-poster.square { width: 220px; }
+.detail-poster.square img { aspect-ratio: 1 / 1; }
+.detail-poster-placeholder.square { aspect-ratio: 1 / 1; }
 
 .detail-meta { flex: 1; min-width: 0; }
 
@@ -697,6 +705,47 @@ input[type="text"]:focus, select:focus {
     color: var(--accent);
     font-variant-numeric: tabular-nums;
     min-width: 60px;
+}
+
+/* ── Tracklist (album detail) ──────────────────────────── */
+.tracklist {
+    display: flex;
+    flex-direction: column;
+}
+
+.track-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9em;
+}
+
+.track-row:last-child { border-bottom: none; }
+.track-row:hover { background: var(--bg-hover); }
+
+.track-num {
+    width: 28px;
+    text-align: right;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.track-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.track-duration {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
 }
 
 /* ── Stream table ──────────────────────────────────────── */

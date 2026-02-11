@@ -15,10 +15,17 @@ static RE_SEASON_FOLDER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(?:Season\s*|Staffel\s*|Saison\s*|S)(\d{1,2})$").unwrap());
 static RE_LEADING_ARTICLE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(the|a|an|der|die|das|le|la|les|el|los|las)\s+").unwrap());
+static RE_TRACK_NUMBER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\d{1,3})(?:\s*[.\-]\s*|\s+)(.+)$").unwrap());
 
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mkv", "mp4", "avi", "m2ts", "ts", "mov", "webm", "wmv", "flv", "mpg", "mpeg", "m4v", "3gp",
     "ogv", "divx", "vob", "iso",
+];
+
+const AUDIO_EXTENSIONS: &[&str] = &[
+    "flac", "mp3", "m4a", "aac", "ogg", "opus", "wav", "wma", "ape", "alac", "aiff", "aif",
+    "dsf", "dff", "wv", "mka",
 ];
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tbn"];
@@ -38,6 +45,12 @@ pub fn is_video_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+}
+
+pub fn is_audio_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
 }
 
 pub fn is_image_file(path: &Path) -> bool {
@@ -129,6 +142,43 @@ pub fn resolve_episode(path: &Path, _series_name: &str) -> Option<ResolvedItem> 
         parent_index_number: Some(season),
         container,
     })
+}
+
+pub fn resolve_audio_track(path: &Path) -> ResolvedItem {
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown");
+    let container = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let (track_num, title) = if let Some(caps) = RE_TRACK_NUMBER.captures(stem) {
+        let num: i32 = caps[1].parse().unwrap_or(0);
+        let title = caps[2].trim().to_string();
+        (Some(num), title)
+    } else {
+        (None, stem.to_string())
+    };
+
+    let sort_name = make_sort_name(&title);
+
+    ResolvedItem {
+        item_type: "Audio".to_string(),
+        title,
+        sort_name,
+        production_year: None,
+        index_number: track_num,
+        parent_index_number: None,
+        container,
+    }
+}
+
+/// Extract a year from an album directory name, e.g. "Album Name (2020)".
+pub fn extract_album_year(name: &str) -> Option<i32> {
+    extract_year(name)
 }
 
 fn parse_episode_numbers(text: &str) -> Option<(i32, i32)> {
@@ -288,5 +338,45 @@ mod tests {
         );
         assert_eq!(clean_title("[GROUP] Movie Name"), "Movie Name");
         assert_eq!(clean_title("Movie_Name"), "Movie Name");
+    }
+
+    #[test]
+    fn test_is_audio_file() {
+        assert!(is_audio_file(Path::new("track.flac")));
+        assert!(is_audio_file(Path::new("song.MP3")));
+        assert!(is_audio_file(Path::new("music.m4a")));
+        assert!(is_audio_file(Path::new("audio.opus")));
+        assert!(!is_audio_file(Path::new("video.mkv")));
+        assert!(!is_audio_file(Path::new("cover.jpg")));
+    }
+
+    #[test]
+    fn test_resolve_audio_track_with_number_dash() {
+        let item = resolve_audio_track(Path::new("/music/Artist/Album/01 - Track Title.flac"));
+        assert_eq!(item.item_type, "Audio");
+        assert_eq!(item.title, "Track Title");
+        assert_eq!(item.index_number, Some(1));
+        assert_eq!(item.container, "flac");
+    }
+
+    #[test]
+    fn test_resolve_audio_track_with_number_dot() {
+        let item = resolve_audio_track(Path::new("/music/Artist/Album/03. Song Name.mp3"));
+        assert_eq!(item.title, "Song Name");
+        assert_eq!(item.index_number, Some(3));
+    }
+
+    #[test]
+    fn test_resolve_audio_track_without_number() {
+        let item = resolve_audio_track(Path::new("/music/Artist/Album/Song Title.flac"));
+        assert_eq!(item.title, "Song Title");
+        assert_eq!(item.index_number, None);
+    }
+
+    #[test]
+    fn test_extract_album_year() {
+        assert_eq!(extract_album_year("Album Name (2020)"), Some(2020));
+        assert_eq!(extract_album_year("Album Name"), None);
+        assert_eq!(extract_album_year("Greatest Hits (1998)"), Some(1998));
     }
 }

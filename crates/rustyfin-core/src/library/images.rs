@@ -46,7 +46,7 @@ fn classify_image(stem_lower: &str, item_stem: &str, path: &str) -> Option<Disco
     // Primary / Poster
     if matches!(
         stem_lower,
-        "poster" | "folder" | "cover" | "default" | "movie" | "show"
+        "poster" | "folder" | "cover" | "default" | "movie" | "show" | "artist" | "front"
     ) || stem_lower == item_stem.to_lowercase()
     {
         return Some(DiscoveredImage {
@@ -105,6 +105,15 @@ fn classify_image(stem_lower: &str, item_stem: &str, path: &str) -> Option<Disco
     if stem_lower == "thumb" || stem_lower == "landscape" {
         return Some(DiscoveredImage {
             image_type: "Thumb".to_string(),
+            path: path.to_string(),
+            image_index: 0,
+        });
+    }
+
+    // Disc art (common in music libraries)
+    if stem_lower == "disc" || stem_lower == "cdart" || stem_lower == "discart" {
+        return Some(DiscoveredImage {
+            image_type: "Disc".to_string(),
             path: path.to_string(),
             image_index: 0,
         });

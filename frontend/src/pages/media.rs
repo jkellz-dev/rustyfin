@@ -76,6 +76,7 @@ fn icon_for_item_type(item_type: &str) -> &'static str {
         "Episode" => "🎞",
         "Audio" => "🎵",
         "MusicAlbum" => "💿",
+        "MusicArtist" => "🎤",
         _ => "📄",
     }
 }
@@ -84,7 +85,7 @@ fn item_types_for_collection(collection_type: Option<&str>) -> Option<&'static s
     match collection_type {
         Some("movies") => Some("Movie"),
         Some("tvshows") => Some("Series"),
-        Some("music") => Some("MusicAlbum"),
+        Some("music") => Some("MusicArtist"),
         _ => None,
     }
 }
@@ -101,6 +102,7 @@ pub fn Media() -> View {
     let total_count = create_signal(0i32);
     let start_index = create_signal(0i32);
     let detail_item: Signal<Option<BaseItemDto>> = create_signal(None);
+    let detail_tracks: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let search_results: Signal<Vec<SearchHint>> = create_signal(Vec::new());
     let breadcrumbs: Signal<Vec<Breadcrumb>> = create_signal(Vec::new());
     let current_parent_id: Signal<Option<String>> = create_signal(None);
@@ -197,12 +199,23 @@ pub fn Media() -> View {
 
     let view_detail = move |item_id: String| {
         detail_loading.set(true);
+        detail_tracks.set(Vec::new());
         current_view.set(MediaView::Detail(item_id.clone()));
         spawn_local({
             let item_id = item_id.clone();
             async move {
                 match api::get_item(&item_id).await {
-                    Ok(item) => detail_item.set(Some(item)),
+                    Ok(item) => {
+                        // For albums, fetch child tracks
+                        if item.item_type == "MusicAlbum" {
+                            if let Ok(result) = api::get_items(
+                                &item.id, None, 0, 500, "IndexNumber", "Ascending",
+                            ).await {
+                                detail_tracks.set(result.items);
+                            }
+                        }
+                        detail_item.set(Some(item));
+                    }
                     Err(e) => error.set(Some(e)),
                 }
                 detail_loading.set(false);
@@ -421,7 +434,7 @@ pub fn Media() -> View {
                                                 let item_for_click = item.clone();
                                                 let child_count = item.child_count;
 
-                                                let display_name = if item_type == "Episode" {
+                                                let display_name = if item_type == "Episode" || item_type == "Audio" {
                                                     if let Some(num) = item.index_number {
                                                         format!("{}. {item_name}", num)
                                                     } else {
@@ -431,11 +444,16 @@ pub fn Media() -> View {
                                                     item_name.clone()
                                                 };
 
+                                                let is_music = matches!(item_type.as_str(), "MusicArtist" | "MusicAlbum" | "Audio");
+                                                let poster_class = if is_music { "media-poster square" } else { "media-poster" };
+                                                let placeholder_class = if is_music { "media-poster-placeholder square" } else { "media-poster-placeholder" };
+
+                                                let is_album = item_type == "MusicAlbum";
                                                 let on_click = move |_| {
-                                                    if is_folder {
-                                                        browse_into(item_for_click.clone());
-                                                    } else {
+                                                    if is_album || !is_folder {
                                                         view_detail(item_id.clone());
+                                                    } else {
+                                                        browse_into(item_for_click.clone());
                                                     }
                                                 };
 
@@ -443,10 +461,10 @@ pub fn Media() -> View {
                                                     div(class="media-card", on:click=on_click) {
                                                         (if has_image {
                                                             let url = img_url.clone();
-                                                            view! { img(class="media-poster", src=url, loading="lazy") }
+                                                            view! { img(class=poster_class, src=url, loading="lazy") }
                                                         } else {
                                                             let icon = icon_for_item_type(&item_type);
-                                                            view! { div(class="media-poster-placeholder") { (icon) } }
+                                                            view! { div(class=placeholder_class) { (icon) } }
                                                         })
                                                         div(class="media-card-title") { (display_name) }
                                                         (if let Some(y) = year {
@@ -512,17 +530,22 @@ pub fn Media() -> View {
                         let has_image = has_primary_image(&item);
                         let img_url = primary_image_url(&item.id);
                         let refresh_id = detail_id.clone();
+                        let detail_item_type = item.item_type.clone();
+                        let is_music_detail = matches!(detail_item_type.as_str(), "MusicArtist" | "MusicAlbum" | "Audio");
+                        let is_album = detail_item_type == "MusicAlbum";
+                        let detail_poster_class = if is_music_detail { "detail-poster square" } else { "detail-poster" };
+                        let detail_placeholder_class = if is_music_detail { "detail-poster-placeholder square" } else { "detail-poster-placeholder" };
 
                         view! {
                             div(class="detail-page") {
                                 div(class="detail-header") {
-                                    div(class="detail-poster") {
+                                    div(class=detail_poster_class) {
                                         (if has_image {
                                             let url = img_url.clone();
                                             view! { img(src=url) }
                                         } else {
                                             let icon = icon_for_item_type(&item.item_type);
-                                            view! { div(class="detail-poster-placeholder") { (icon) } }
+                                            view! { div(class=detail_placeholder_class) { (icon) } }
                                         })
                                     }
                                     div(class="detail-meta") {
@@ -643,6 +666,39 @@ pub fn Media() -> View {
                                     } else {
                                         view! {}
                                     }
+                                })
+
+                                // Tracklist (for albums)
+                                (if is_album {
+                                    let tracks = detail_tracks.get_clone();
+                                    if tracks.is_empty() {
+                                        view! {}
+                                    } else {
+                                        view! {
+                                            div(class="detail-section") {
+                                                h3 { "Tracks" }
+                                                div(class="tracklist") {
+                                                    Indexed(
+                                                        list=move || tracks.clone(),
+                                                        view=move |track: BaseItemDto| {
+                                                            let num_str = track.index_number.map(|n| n.to_string()).unwrap_or_default();
+                                                            let name = track.name.clone();
+                                                            let duration_str = track.runtime_ticks.map(format_runtime).unwrap_or_default();
+                                                            view! {
+                                                                div(class="track-row") {
+                                                                    span(class="track-num") { (num_str) }
+                                                                    span(class="track-name") { (name) }
+                                                                    span(class="track-duration") { (duration_str) }
+                                                                }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    view! {}
                                 })
 
                                 // Media Streams

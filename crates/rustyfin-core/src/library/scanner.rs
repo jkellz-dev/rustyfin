@@ -10,7 +10,8 @@ use rustyfin_media::probe;
 use crate::library::enrichment::EnrichmentService;
 use crate::library::images::discover_images;
 use crate::library::naming::{
-    is_video_file, make_sort_name, parse_season_folder, resolve_episode, resolve_movie,
+    extract_album_year, is_audio_file, is_video_file, make_sort_name, parse_season_folder,
+    resolve_audio_track, resolve_episode, resolve_movie,
 };
 
 pub struct LibraryScanner {
@@ -63,6 +64,9 @@ impl LibraryScanner {
                 }
                 "tvshows" => {
                     self.scan_tvshows(&path, library_id, &mut result).await;
+                }
+                "music" => {
+                    self.scan_music(&path, library_id, &mut result).await;
                 }
                 other => {
                     tracing::warn!("Unknown library type '{other}', skipping");
@@ -363,6 +367,250 @@ impl LibraryScanner {
         }
 
         Ok(())
+    }
+
+    async fn scan_music(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
+        let Ok(entries) = std::fs::read_dir(lib_path) else {
+            return;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let artist_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Unknown Artist")
+                .to_string();
+
+            match self
+                .scan_artist(&path, &artist_name, library_id, result)
+                .await
+            {
+                Ok(()) => {}
+                Err(e) => {
+                    tracing::error!("Error scanning artist '{artist_name}': {e}");
+                    result.errors += 1;
+                }
+            }
+        }
+    }
+
+    async fn scan_artist(
+        &self,
+        artist_dir: &Path,
+        artist_name: &str,
+        library_id: Uuid,
+        result: &mut ScanResult,
+    ) -> anyhow::Result<()> {
+        let artist_id = self
+            .find_or_create_folder(artist_name, "MusicArtist", library_id, None, None)
+            .await?;
+
+        self.replace_images(artist_id, artist_dir).await;
+
+        let Ok(entries) = std::fs::read_dir(artist_dir) else {
+            return Ok(());
+        };
+
+        let mut subdirs = Vec::new();
+        let mut loose_audio = Vec::new();
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                subdirs.push(path);
+            } else if is_audio_file(&path) {
+                loose_audio.push(path);
+            }
+        }
+
+        // Process subdirectories as albums
+        for subdir in &subdirs {
+            let album_name = subdir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Unknown Album")
+                .to_string();
+
+            match self
+                .scan_album(subdir, &album_name, library_id, artist_id, artist_name, result)
+                .await
+            {
+                Ok(()) => {}
+                Err(e) => {
+                    tracing::error!("Error scanning album '{album_name}': {e}");
+                    result.errors += 1;
+                }
+            }
+        }
+
+        // Process loose audio files directly under the artist as a self-titled album
+        if !loose_audio.is_empty() {
+            let album_id = self
+                .find_or_create_folder(artist_name, "MusicAlbum", library_id, Some(artist_id), None)
+                .await?;
+
+            for audio_file in &loose_audio {
+                match self
+                    .ingest_audio_track(audio_file, library_id, artist_id, album_id, artist_name)
+                    .await
+                {
+                    Ok(IngestOutcome::Added) => result.items_added += 1,
+                    Ok(IngestOutcome::Updated) => result.items_updated += 1,
+                    Ok(IngestOutcome::Skipped) => result.items_skipped += 1,
+                    Err(e) => {
+                        tracing::error!("Error ingesting audio {}: {e}", audio_file.display());
+                        result.errors += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn scan_album(
+        &self,
+        album_dir: &Path,
+        album_name: &str,
+        library_id: Uuid,
+        artist_id: Uuid,
+        artist_name: &str,
+        result: &mut ScanResult,
+    ) -> anyhow::Result<()> {
+        let album_year = extract_album_year(album_name);
+
+        let album_id = self
+            .find_or_create_folder(album_name, "MusicAlbum", library_id, Some(artist_id), None)
+            .await?;
+
+        // Set album year if parsed from folder name
+        if let Some(year) = album_year {
+            let meta = media_items::ItemMetadata {
+                overview: None,
+                original_title: None,
+                community_rating: None,
+                critic_rating: None,
+                official_rating: None,
+                genres: None,
+                studios: None,
+                tags: None,
+                premiere_date: None,
+                end_date: None,
+                production_year: Some(year),
+                external_ids: None,
+            };
+            media_items::update_metadata(&self.pool, album_id, &meta)
+                .await
+                .ok();
+        }
+
+        self.replace_images(album_id, album_dir).await;
+
+        let audio_files = collect_audio_files(album_dir).await;
+        for audio_file in audio_files {
+            match self
+                .ingest_audio_track(&audio_file, library_id, artist_id, album_id, artist_name)
+                .await
+            {
+                Ok(IngestOutcome::Added) => result.items_added += 1,
+                Ok(IngestOutcome::Updated) => result.items_updated += 1,
+                Ok(IngestOutcome::Skipped) => result.items_skipped += 1,
+                Err(e) => {
+                    tracing::error!("Error ingesting audio {}: {e}", audio_file.display());
+                    result.errors += 1;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn ingest_audio_track(
+        &self,
+        file_path: &Path,
+        library_id: Uuid,
+        artist_id: Uuid,
+        album_id: Uuid,
+        artist_name: &str,
+    ) -> anyhow::Result<IngestOutcome> {
+        let path_str = file_path.to_string_lossy().to_string();
+        let etag = compute_etag(file_path)?;
+
+        if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
+            if existing.etag.as_deref() == Some(&etag) {
+                return Ok(IngestOutcome::Skipped);
+            }
+
+            let resolved = resolve_audio_track(file_path);
+            let probe_result = probe_file_graceful(file_path).await;
+
+            let item = media_items::NewMediaItem {
+                item_type: resolved.item_type,
+                library_id: Some(library_id),
+                parent_id: Some(album_id),
+                name: resolved.title,
+                sort_name: Some(resolved.sort_name),
+                path: Some(path_str),
+                production_year: None,
+                runtime_ticks: probe_result.as_ref().map(|p| p.duration_ticks),
+                index_number: resolved.index_number,
+                parent_index_number: None,
+                is_folder: false,
+                series_id: Some(artist_id),
+                season_id: Some(album_id),
+                series_name: Some(artist_name.to_string()),
+                season_name: None,
+                container: Some(resolved.container),
+                total_bitrate: probe_result.as_ref().and_then(|p| p.total_bitrate),
+                width: None,
+                height: None,
+                size: probe_result.as_ref().and_then(|p| p.size),
+                etag: Some(etag),
+            };
+
+            let updated = media_items::update(&self.pool, existing.id, &item).await?;
+            self.replace_streams(updated.id, &probe_result).await;
+            self.replace_images(updated.id, file_path).await;
+            return Ok(IngestOutcome::Updated);
+        }
+
+        // New track
+        let resolved = resolve_audio_track(file_path);
+        let probe_result = probe_file_graceful(file_path).await;
+
+        let item = media_items::NewMediaItem {
+            item_type: resolved.item_type,
+            library_id: Some(library_id),
+            parent_id: Some(album_id),
+            name: resolved.title,
+            sort_name: Some(resolved.sort_name),
+            path: Some(path_str),
+            production_year: None,
+            runtime_ticks: probe_result.as_ref().map(|p| p.duration_ticks),
+            index_number: resolved.index_number,
+            parent_index_number: None,
+            is_folder: false,
+            series_id: Some(artist_id),
+            season_id: Some(album_id),
+            series_name: Some(artist_name.to_string()),
+            season_name: None,
+            container: Some(resolved.container),
+            total_bitrate: probe_result.as_ref().and_then(|p| p.total_bitrate),
+            width: None,
+            height: None,
+            size: probe_result.as_ref().and_then(|p| p.size),
+            etag: Some(etag),
+        };
+
+        let inserted = media_items::insert(&self.pool, &item).await?;
+        self.replace_streams(inserted.id, &probe_result).await;
+        self.replace_images(inserted.id, file_path).await;
+        Ok(IngestOutcome::Added)
     }
 
     async fn find_or_create_folder(
@@ -677,6 +925,26 @@ async fn collect_video_files(dir: &Path) -> Vec<PathBuf> {
             let path = entry.path().to_path_buf();
             if path.is_file() && is_video_file(&path) {
                 files.push(path);
+            }
+        }
+        files.sort();
+        files
+    })
+    .await
+    .unwrap_or_default()
+}
+
+async fn collect_audio_files(dir: &Path) -> Vec<PathBuf> {
+    let dir = dir.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let mut files = Vec::new();
+        // Only scan the immediate directory (no recursion into subdirs)
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && is_audio_file(&path) {
+                    files.push(path);
+                }
             }
         }
         files.sort();
