@@ -465,6 +465,98 @@ pub async fn count_all(pool: &PgPool) -> Result<i64, sqlx::Error> {
     Ok(row.0)
 }
 
+/// Distinct genre values, optionally scoped to a parent's library.
+pub async fn distinct_genres(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<String>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(genres) AS genre FROM media_items WHERE library_id = $1 ORDER BY genre",
+        )
+        .bind(pid)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(g,)| g).collect())
+    } else {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(genres) AS genre FROM media_items ORDER BY genre",
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(g,)| g).collect())
+    }
+}
+
+/// Distinct production years, optionally scoped to a parent's library.
+pub async fn distinct_years(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<i32>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        let rows: Vec<(i32,)> = sqlx::query_as(
+            "SELECT DISTINCT production_year FROM media_items WHERE library_id = $1 AND production_year IS NOT NULL ORDER BY production_year",
+        )
+        .bind(pid)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(y,)| y).collect())
+    } else {
+        let rows: Vec<(i32,)> = sqlx::query_as(
+            "SELECT DISTINCT production_year FROM media_items WHERE production_year IS NOT NULL ORDER BY production_year",
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(y,)| y).collect())
+    }
+}
+
+/// Distinct official ratings, optionally scoped to a parent's library.
+pub async fn distinct_official_ratings(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<String>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT official_rating FROM media_items WHERE library_id = $1 AND official_rating IS NOT NULL ORDER BY official_rating",
+        )
+        .bind(pid)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(r,)| r).collect())
+    } else {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT official_rating FROM media_items WHERE official_rating IS NOT NULL ORDER BY official_rating",
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(r,)| r).collect())
+    }
+}
+
+/// Distinct tag values, optionally scoped to a parent's library.
+pub async fn distinct_tags(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<String>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(tags) AS tag FROM media_items WHERE library_id = $1 ORDER BY tag",
+        )
+        .bind(pid)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(t,)| t).collect())
+    } else {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(tags) AS tag FROM media_items ORDER BY tag",
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(t,)| t).collect())
+    }
+}
+
 /// Search items by name (basic ILIKE search).
 pub async fn search_by_name(
     pool: &PgPool,

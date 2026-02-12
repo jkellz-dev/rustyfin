@@ -159,6 +159,81 @@ pub fn build_router(state: AppState) -> Router {
         )
         // ── Search ──────────────────────────────────────────────
         .route("/Search/Hints", get(search::search_hints))
+        // ── Display Preferences ──────────────────────────────────
+        .route(
+            "/DisplayPreferences/{displayPreferencesId}",
+            get(display_preferences::get_display_preferences)
+                .post(display_preferences::update_display_preferences),
+        )
+        // ── TV Shows ─────────────────────────────────────────────
+        .route("/Shows/NextUp", get(shows::get_next_up))
+        .route("/Shows/Upcoming", get(stubs::empty_query_result_auth))
+        .route(
+            "/Shows/{seriesId}/Seasons",
+            get(shows::get_seasons),
+        )
+        .route(
+            "/Shows/{seriesId}/Episodes",
+            get(shows::get_episodes),
+        )
+        // ── Quick Connect ────────────────────────────────────────
+        .route("/QuickConnect/Enabled", get(quick_connect::get_enabled))
+        .route("/QuickConnect/Initiate", post(quick_connect::initiate))
+        .route("/QuickConnect/Connect", get(quick_connect::connect))
+        .route("/QuickConnect/Authorize", post(quick_connect::authorize))
+        // ── Localization ─────────────────────────────────────────
+        .route("/Localization/Cultures", get(localization::get_cultures))
+        .route("/Localization/Countries", get(localization::get_countries))
+        .route(
+            "/Localization/ParentalRatings",
+            get(localization::get_parental_ratings),
+        )
+        .route("/Localization/Options", get(localization::get_options))
+        // ── Configuration ────────────────────────────────────────
+        .route(
+            "/System/Configuration",
+            get(configuration::get_configuration)
+                .post(configuration::update_configuration),
+        )
+        .route(
+            "/System/Configuration/{key}",
+            get(configuration::get_named_configuration)
+                .post(configuration::update_named_configuration),
+        )
+        // ── Filters ──────────────────────────────────────────────
+        .route("/Items/Filters", get(filters::get_filters_legacy))
+        .route("/Items/Filters2", get(filters::get_filters))
+        // ── Stub endpoints ───────────────────────────────────────
+        .route("/Plugins", get(stubs::empty_array))
+        .route("/Packages", get(stubs::empty_array))
+        .route("/Repositories", get(stubs::empty_array))
+        .route(
+            "/Items/{itemId}/Intros",
+            get(stubs::empty_query_result_auth),
+        )
+        .route(
+            "/Items/{itemId}/LocalTrailers",
+            get(stubs::empty_array_auth),
+        )
+        .route(
+            "/Items/{itemId}/SpecialFeatures",
+            get(stubs::empty_array_auth),
+        )
+        .route(
+            "/Items/{itemId}/Similar",
+            get(stubs::empty_query_result_auth),
+        )
+        .route("/Items/Suggestions", get(stubs::empty_query_result_auth))
+        .route("/Movies/Recommendations", get(stubs::empty_array_auth))
+        .route("/Artists", get(stubs::empty_query_result_auth))
+        .route("/Artists/AlbumArtists", get(stubs::empty_query_result_auth))
+        .route("/Genres", get(stubs::empty_query_result_auth))
+        .route("/Studios", get(stubs::empty_query_result_auth))
+        .route("/Persons", get(stubs::empty_query_result_auth))
+        .route(
+            "/Users/{userId}/Suggestions",
+            get(stubs::empty_query_result_auth),
+        )
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))
         // ── State ───────────────────────────────────────────────

@@ -372,3 +372,137 @@ pub struct LibraryOptions {
     pub enable_internet_providers: bool,
     pub save_local_metadata: bool,
 }
+
+/// Display preferences per client/user.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DisplayPreferencesDto {
+    pub id: String,
+    pub client: String,
+    pub sort_by: String,
+    pub sort_order: String,
+    pub index_by: Option<String>,
+    pub remember_indexing: bool,
+    pub remember_sorting: bool,
+    pub scroll_direction: String,
+    pub show_backdrop: bool,
+    pub show_sidebar: bool,
+    pub custom_prefs: HashMap<String, String>,
+}
+
+impl DisplayPreferencesDto {
+    pub fn default_for(id: &str, client: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            client: client.to_string(),
+            sort_by: "SortName".to_string(),
+            sort_order: "Ascending".to_string(),
+            index_by: None,
+            remember_indexing: false,
+            remember_sorting: false,
+            scroll_direction: "Horizontal".to_string(),
+            show_backdrop: true,
+            show_sidebar: true,
+            custom_prefs: HashMap::new(),
+        }
+    }
+}
+
+/// Legacy filter response for `GET /Items/Filters`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct QueryFiltersLegacy {
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub official_ratings: Vec<String>,
+    pub years: Vec<i32>,
+}
+
+/// Name/GUID pair used in filter responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct NameGuidPair {
+    pub name: String,
+    pub id: Uuid,
+}
+
+/// Modern filter response for `GET /Items/Filters2`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct QueryFilters {
+    pub genres: Vec<NameGuidPair>,
+}
+
+/// Culture/language info for localization endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CultureDto {
+    pub name: String,
+    pub display_name: String,
+    pub two_letter_iso_language_name: String,
+    pub three_letter_iso_language_name: String,
+}
+
+/// Country info for localization endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CountryInfo {
+    pub name: String,
+    pub display_name: String,
+    pub two_letter_iso_region_name: String,
+    pub three_letter_iso_region_name: String,
+}
+
+/// Parental rating entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ParentalRating {
+    pub name: String,
+    pub value: i32,
+}
+
+/// Localization option entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LocalizationOption {
+    pub name: String,
+    pub value: String,
+}
+
+/// Server configuration returned by `GET /System/Configuration`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ServerConfiguration {
+    pub is_startup_wizard_completed: bool,
+    #[serde(rename = "EnableUPnP")]
+    pub enable_u_pn_p: bool,
+    pub public_port: u16,
+    pub public_https_port: u16,
+    pub enable_https: bool,
+    pub quick_connect_available: bool,
+    pub enable_remote_access: bool,
+    pub metadata_country_code: String,
+    pub preferred_metadata_language: String,
+    pub library_scan_fanout_concurrency: i32,
+    pub enable_slow_response_warning: bool,
+    pub image_extraction_timeout_ms: i64,
+}
+
+impl ServerConfiguration {
+    pub fn defaults(port: u16) -> Self {
+        Self {
+            is_startup_wizard_completed: true,
+            enable_u_pn_p: false,
+            public_port: port,
+            public_https_port: 8920,
+            enable_https: false,
+            quick_connect_available: false,
+            enable_remote_access: false,
+            metadata_country_code: "US".to_string(),
+            preferred_metadata_language: "en".to_string(),
+            library_scan_fanout_concurrency: 1,
+            enable_slow_response_warning: false,
+            image_extraction_timeout_ms: 0,
+        }
+    }
+}

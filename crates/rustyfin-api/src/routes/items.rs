@@ -45,7 +45,7 @@ pub struct ItemsQuery {
     pub image_type_limit: Option<i32>,
 }
 
-fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
+pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
     // Convert external_ids JSONB to provider_ids HashMap
     let provider_ids = item.external_ids.as_ref().and_then(|v| {
         let obj = v.as_object()?;
@@ -93,7 +93,7 @@ fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseI
     }
 }
 
-struct ImageFields {
+pub(crate) struct ImageFields {
     image_tags: Option<HashMap<String, String>>,
     backdrop_image_tags: Option<Vec<String>>,
     image_blur_hashes: Option<HashMap<String, HashMap<String, String>>>,
@@ -101,7 +101,7 @@ struct ImageFields {
 }
 
 /// Build image-related fields from a slice of `ImageRow`s for a single item.
-fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
+pub(crate) fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
     if item_images.is_empty() {
         return ImageFields {
             image_tags: None,
@@ -170,7 +170,7 @@ fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
 }
 
 /// Apply image fields to a DTO from a pre-grouped image map.
-fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow]) {
+pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow]) {
     let fields = build_image_fields(item_images);
     dto.image_tags = fields.image_tags;
     dto.backdrop_image_tags = fields.backdrop_image_tags;
@@ -179,7 +179,7 @@ fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow]) {
 }
 
 /// Group images by item_id for batch application.
-fn group_images_by_item(all_images: Vec<ImageRow>) -> HashMap<Uuid, Vec<ImageRow>> {
+pub(crate) fn group_images_by_item(all_images: Vec<ImageRow>) -> HashMap<Uuid, Vec<ImageRow>> {
     let mut map: HashMap<Uuid, Vec<ImageRow>> = HashMap::new();
     for img in all_images {
         if let Some(item_id) = img.item_id {
