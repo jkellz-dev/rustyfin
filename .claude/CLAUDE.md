@@ -13,6 +13,7 @@ Rustyfin is a Jellyfin-compatible media server written in Rust. Existing Jellyfi
 - **Frontend**: Sycamore (Rust WASM framework)
 - **Search**: Meilisearch (optional, falls back to Postgres ILIKE)
 - **API compatibility**: All DTOs use PascalCase JSON to match Jellyfin's format
+- **Config boundary**: File-based config (`rustyfin.toml`, env vars) is read-only — the server never writes config files. Database-based config (libraries, users, preferences) is managed through the UI/API. Never cross the boundary: file config is only edited by file, DB config is only edited via UI.
 
 ## Architecture
 
