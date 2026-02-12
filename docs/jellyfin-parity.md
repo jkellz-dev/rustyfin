@@ -16,7 +16,7 @@
 | Transcoding | 0% | No ffmpeg integration |
 | Auth | ~85% | Forward auth + LDAP, device auth unfinished |
 | Users | ~75% | CRUD, preferences, library access; missing ratings & parental enforcement |
-| Libraries | ~75% | Movies, TV, music scanning; missing photo/book |
+| Libraries | ~75% | Movies, TV, music scanning |
 | Sessions | ~70% | Tracking + WebSocket; missing Sync Play & DLNA |
 | Metadata | ~80% | NFO + TMDB; missing TVDB, fanart providers |
 | Admin frontend | ~50% | Dashboard, libraries, users, media browser, setup wizard |
@@ -51,20 +51,23 @@ Full parity but not critical for daily use.
 
 - [ ] **Scheduled library scans** — cron-style recurring scans (config file based)
 - [ ] **File system monitoring** — inotify/fswatch for auto-scan on changes
-- [ ] **DLNA** — UPnP discovery + streaming for smart TVs
-- [ ] **Sync Play** — synchronized playback across multiple clients
 - [ ] **Notifications / webhooks** — push events to external systems (Discord, webhook URLs)
 - [ ] **Music metadata providers** — MusicBrainz for artist bios, album reviews, lyrics
-- [ ] **Photo library scanning** — ingest photos with EXIF metadata, timeline browsing
-- [ ] **Book library scanning** — EPUB/PDF support with cover extraction
 - [ ] **Parental controls enforcement** — filter items by `max_parental_rating` per user
 - [ ] **Advanced search filters** — filter by genre, year range, rating, studio, cast
 - [ ] **TVDB metadata provider** — series/episode enrichment from TheTVDB
 - [ ] **Fanart.tv provider** — additional artwork (clearlogo, disc art, landscape)
 
+## Tier 4: Stretch Goals
+
+- [ ] **DLNA** — UPnP discovery + streaming for smart TVs
+- [ ] **Sync Play** — synchronized playback across multiple clients
+
 ## Not In Scope
 
 - Local password authentication / OIDC — forward auth only
+- Photo library scanning
+- Book library scanning
 - Plugin/extension system
 - Runtime server config mutation — config files are read-only
 - Live TV, DVR, TV tuners
