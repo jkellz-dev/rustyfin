@@ -205,6 +205,7 @@ pub async fn authenticate_by_name(
         is_active: true,
         now_playing_item: None,
         play_state: None,
+        transcoding_info: None,
         supports_remote_control: false,
         server_id: state.server_id.clone(),
     };

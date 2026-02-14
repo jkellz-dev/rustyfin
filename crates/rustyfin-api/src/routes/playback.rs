@@ -47,6 +47,7 @@ pub async fn report_playback_start(
                 body.play_method.clone(),
                 body.audio_stream_index,
                 body.subtitle_stream_index,
+                body.play_session_id.clone(),
             )
             .await;
     }
@@ -108,6 +109,11 @@ pub async fn report_playback_stopped(
             0,
         )
         .await;
+    }
+
+    // Kill any associated transcode job
+    if let Some(ref play_session_id) = body.play_session_id {
+        state.transcode_manager.kill_job(play_session_id).await;
     }
 
     state

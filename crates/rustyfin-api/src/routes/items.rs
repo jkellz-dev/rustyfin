@@ -416,6 +416,11 @@ pub async fn get_item_by_id(
                 protocol: "File".to_string(),
                 media_streams: Some(media_stream_dtos.clone()),
                 e_tag: item.etag.clone(),
+                transcoding_url: None,
+                transcoding_sub_protocol: None,
+                transcoding_container: None,
+                direct_stream_url: None,
+                transcode_reasons: None,
             };
             dto.media_sources = Some(vec![source]);
             dto.media_streams = Some(media_stream_dtos);

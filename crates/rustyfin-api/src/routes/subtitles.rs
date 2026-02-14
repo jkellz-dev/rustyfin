@@ -1,0 +1,125 @@
+use axum::{
+    body::Body,
+    extract::{Path, State},
+    http::{StatusCode, header},
+    response::Response,
+};
+use uuid::Uuid;
+
+use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_db::repo::{media_items, media_streams};
+use rustyfin_media::transcode::subtitles;
+
+use crate::error::ApiError;
+use crate::router::AppState;
+
+/// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt`
+pub async fn get_subtitle_stream(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path((item_id, stream_index)): Path<(Uuid, i32)>,
+) -> Result<Response, ApiError> {
+    serve_subtitle(&state, item_id, stream_index, "vtt").await
+}
+
+/// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt`
+pub async fn get_subtitle_stream_with_source(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path((item_id, _media_source_id, stream_index)): Path<(Uuid, String, i32)>,
+) -> Result<Response, ApiError> {
+    serve_subtitle(&state, item_id, stream_index, "vtt").await
+}
+
+/// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}`
+pub async fn get_subtitle_stream_format(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path((item_id, stream_index, format)): Path<(Uuid, i32, String)>,
+) -> Result<Response, ApiError> {
+    let fmt = subtitles::format_from_extension(&format);
+    serve_subtitle(&state, item_id, stream_index, fmt).await
+}
+
+async fn serve_subtitle(
+    state: &AppState,
+    item_id: Uuid,
+    stream_index: i32,
+    output_format: &str,
+) -> Result<Response, ApiError> {
+    let item = media_items::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    let streams = media_streams::list_by_item(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?;
+
+    // Find the subtitle stream
+    let sub_stream = streams
+        .iter()
+        .find(|s| s.stream_type == "Subtitle" && s.stream_index == stream_index)
+        .ok_or(ApiError::NotFound)?;
+
+    // If external subtitle file, serve directly
+    if sub_stream.is_external {
+        if let Some(ref path) = sub_stream.path {
+            let content = tokio::fs::read_to_string(path)
+                .await
+                .map_err(|_| ApiError::NotFound)?;
+
+            let content_type = subtitles::subtitle_content_type(output_format);
+            return Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .header(header::CACHE_CONTROL, "public, max-age=86400")
+                .body(Body::from(content))
+                .unwrap());
+        }
+    }
+
+    // Embedded subtitle — extract via ffmpeg with caching
+    let input_path = item.path.ok_or(ApiError::NotFound)?;
+    let tm = &state.transcode_manager;
+
+    let cache_path = subtitles::subtitle_cache_path(
+        &tm.temp_base,
+        &item_id.to_string(),
+        stream_index,
+        output_format,
+    );
+
+    // Check cache first
+    if !cache_path.exists() {
+        // Calculate the subtitle index relative to subtitle streams only
+        let sub_relative_index = streams
+            .iter()
+            .filter(|s| s.stream_type == "Subtitle")
+            .position(|s| s.stream_index == stream_index)
+            .unwrap_or(0) as i32;
+
+        subtitles::extract_subtitle(
+            &tm.ffmpeg_path,
+            std::path::Path::new(&input_path),
+            sub_relative_index,
+            &cache_path,
+            output_format,
+        )
+        .await
+        .map_err(|e| ApiError::Internal(format!("subtitle extraction failed: {e}")))?;
+    }
+
+    let content = tokio::fs::read_to_string(&cache_path)
+        .await
+        .map_err(|_| ApiError::Internal("failed to read extracted subtitle".to_string()))?;
+
+    let content_type = subtitles::subtitle_content_type(output_format);
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, "public, max-age=86400")
+        .body(Body::from(content))
+        .unwrap())
+}

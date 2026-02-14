@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{
     Router,
     extract::FromRef,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use sqlx::PgPool;
 
@@ -30,6 +30,7 @@ pub struct AppState {
     pub search_service: Arc<rustyfin_search::SearchService>,
     pub forward_auth_config: Option<ForwardAuthState>,
     pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
+    pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -123,8 +124,67 @@ pub fn build_router(state: AppState) -> Router {
             get(media_info::get_playback_info).post(media_info::post_playback_info),
         )
         // ── Streaming ───────────────────────────────────────────
-        .route("/Videos/{itemId}/stream", get(streaming::stream_video))
-        .route("/Audio/{itemId}/stream", get(streaming::stream_audio))
+        .route(
+            "/Videos/{itemId}/stream",
+            get(streaming::stream_video).head(streaming::head_stream),
+        )
+        .route(
+            "/Videos/{itemId}/stream.{container}",
+            get(streaming::stream_video_container).head(streaming::head_stream_container),
+        )
+        .route(
+            "/Audio/{itemId}/stream",
+            get(streaming::stream_audio).head(streaming::head_stream),
+        )
+        .route(
+            "/Audio/{itemId}/stream.{container}",
+            get(streaming::stream_audio_container).head(streaming::head_stream_container),
+        )
+        // ── HLS Transcoding ───────────────────────────────────────
+        .route(
+            "/Videos/{itemId}/master.m3u8",
+            get(hls::get_master_playlist).head(hls::head_master_playlist),
+        )
+        .route("/Videos/{itemId}/main.m3u8", get(hls::get_variant_playlist))
+        .route(
+            "/Videos/{itemId}/hls1/{playSessionId}/{segmentFile}",
+            get(hls::get_segment),
+        )
+        .route(
+            "/Videos/ActiveEncodings",
+            delete(hls::delete_active_encodings),
+        )
+        // ── Audio HLS Transcoding ────────────────────────────────────
+        .route(
+            "/Audio/{itemId}/master.m3u8",
+            get(hls::get_audio_master_playlist),
+        )
+        .route(
+            "/Audio/{itemId}/main.m3u8",
+            get(hls::get_audio_variant_playlist),
+        )
+        .route(
+            "/Audio/{itemId}/hls1/{playSessionId}/{segmentFile}",
+            get(hls::get_audio_segment),
+        )
+        .route(
+            "/Audio/{itemId}/universal",
+            get(universal_audio::get_universal_audio)
+                .head(universal_audio::get_universal_audio),
+        )
+        // ── Subtitles ─────────────────────────────────────────────
+        .route(
+            "/Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt",
+            get(subtitles::get_subtitle_stream),
+        )
+        .route(
+            "/Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt",
+            get(subtitles::get_subtitle_stream_with_source),
+        )
+        .route(
+            "/Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}",
+            get(subtitles::get_subtitle_stream_format),
+        )
         // ── Sessions ──────────────────────────────────────────────
         .route("/Sessions", get(sessions::get_sessions))
         .route("/Sessions/Logout", post(sessions::logout))

@@ -12,7 +12,7 @@ use rustyfin_models::dto::{PlaybackInfoRequest, PlaybackInfoResponse};
 use crate::error::ApiError;
 use crate::router::AppState;
 
-/// `GET /Items/{itemId}/PlaybackInfo` — Simple playback info.
+/// `GET /Items/{itemId}/PlaybackInfo` — Simple playback info (no device profile).
 pub async fn get_playback_info(
     State(state): State<AppState>,
     _auth: AuthenticatedUser,
@@ -27,7 +27,9 @@ pub async fn get_playback_info(
         .await
         .map_err(ApiError::Database)?;
 
-    Ok(Json(playback_info::build_playback_info(&item, &streams)))
+    Ok(Json(playback_info::build_playback_info(
+        &item, &streams, None,
+    )))
 }
 
 /// `POST /Items/{itemId}/PlaybackInfo` — Full playback info with device profile.
@@ -35,7 +37,7 @@ pub async fn post_playback_info(
     State(state): State<AppState>,
     _auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
-    Json(_body): Json<PlaybackInfoRequest>,
+    Json(body): Json<PlaybackInfoRequest>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
@@ -46,5 +48,9 @@ pub async fn post_playback_info(
         .await
         .map_err(ApiError::Database)?;
 
-    Ok(Json(playback_info::build_playback_info(&item, &streams)))
+    Ok(Json(playback_info::build_playback_info(
+        &item,
+        &streams,
+        Some(&body),
+    )))
 }
