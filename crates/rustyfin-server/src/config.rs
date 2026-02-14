@@ -13,6 +13,8 @@ pub struct Config {
     pub metadata: MetadataConfig,
     #[serde(default)]
     pub auth: AuthConfig,
+    #[serde(default)]
+    pub transcode: Option<TranscodeConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +42,55 @@ pub struct SearchConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct MetadataConfig {
     pub tmdb_api_key: Option<String>,
+}
+
+// ── Transcode configuration ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TranscodeConfig {
+    /// Path to ffmpeg binary (default: "ffmpeg" from PATH)
+    #[serde(default = "default_ffmpeg_path")]
+    pub ffmpeg_path: String,
+    /// Directory for HLS segment output (default: system temp dir)
+    pub temp_dir: Option<String>,
+    /// Hardware acceleration: "none", "qsv", "vaapi", "nvenc" (default: "none")
+    #[serde(default = "default_hw_accel")]
+    pub hardware_acceleration: String,
+    /// Max concurrent transcode jobs (default: 4, 0 = unlimited)
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent: usize,
+    /// Default segment duration in seconds (default: 6)
+    #[serde(default = "default_segment_duration")]
+    pub segment_duration: u32,
+    /// Threads per ffmpeg process (default: 0 = auto)
+    #[serde(default)]
+    pub threads_per_job: u32,
+}
+
+impl Default for TranscodeConfig {
+    fn default() -> Self {
+        Self {
+            ffmpeg_path: default_ffmpeg_path(),
+            temp_dir: None,
+            hardware_acceleration: default_hw_accel(),
+            max_concurrent: default_max_concurrent(),
+            segment_duration: default_segment_duration(),
+            threads_per_job: 0,
+        }
+    }
+}
+
+fn default_ffmpeg_path() -> String {
+    "ffmpeg".to_string()
+}
+fn default_hw_accel() -> String {
+    "none".to_string()
+}
+fn default_max_concurrent() -> usize {
+    4
+}
+fn default_segment_duration() -> u32 {
+    6
 }
 
 // ── Auth configuration ───────────────────────────────────────────────
@@ -180,6 +231,7 @@ impl Config {
                 search: None,
                 metadata: MetadataConfig::default(),
                 auth: AuthConfig::default(),
+                transcode: None,
             }
         };
 
@@ -204,6 +256,7 @@ impl Config {
                     .or(config.metadata.tmdb_api_key),
             },
             auth: Self::apply_auth_env_overrides(config.auth),
+            transcode: config.transcode,
         };
 
         // Validate auth configuration

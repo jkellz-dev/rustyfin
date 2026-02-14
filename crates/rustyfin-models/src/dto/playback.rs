@@ -30,6 +30,51 @@ pub struct PlaybackInfoRequest {
     pub allow_video_stream_copy: Option<bool>,
     pub allow_audio_stream_copy: Option<bool>,
     pub auto_open_live_stream: Option<bool>,
+    pub device_profile: Option<DeviceProfile>,
+}
+
+/// Device profile sent by clients to describe their playback capabilities.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeviceProfile {
+    pub name: Option<String>,
+    pub max_streaming_bitrate: Option<i64>,
+    pub max_static_bitrate: Option<i64>,
+    #[serde(default)]
+    pub direct_play_profiles: Vec<DirectPlayProfile>,
+    #[serde(default)]
+    pub transcoding_profiles: Vec<TranscodingProfile>,
+    #[serde(default)]
+    pub subtitle_profiles: Vec<SubtitleProfile>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DirectPlayProfile {
+    pub container: Option<String>,
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+    #[serde(rename = "Type")]
+    pub profile_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TranscodingProfile {
+    pub container: Option<String>,
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+    pub protocol: Option<String>,
+    #[serde(rename = "Type")]
+    pub profile_type: Option<String>,
+    pub context: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SubtitleProfile {
+    pub format: Option<String>,
+    pub method: Option<String>,
 }
 
 /// Playback start report for `POST /Sessions/Playing`.

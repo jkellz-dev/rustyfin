@@ -189,6 +189,18 @@ pub struct MediaSourceInfo {
     pub media_streams: Option<Vec<MediaStream>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub e_tag: Option<String>,
+
+    // Transcode info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcoding_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcoding_sub_protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcoding_container: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direct_stream_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcode_reasons: Option<Vec<String>>,
 }
 
 /// Individual media stream (video, audio, subtitle track).

@@ -19,3 +19,6 @@ thiserror.workspace = true
 anyhow.workspace = true
 
 tokio-util = { version = "0.7", features = ["io"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
