@@ -36,6 +36,7 @@ pub struct ActivePlayback {
     pub play_method: Option<String>,
     pub audio_stream_index: Option<i32>,
     pub subtitle_stream_index: Option<i32>,
+    pub play_session_id: Option<String>,
 }
 
 impl SessionManager {
@@ -94,6 +95,7 @@ impl SessionManager {
         play_method: Option<String>,
         audio_stream_index: Option<i32>,
         subtitle_stream_index: Option<i32>,
+        play_session_id: Option<String>,
     ) {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(&session_id) {
@@ -108,6 +110,7 @@ impl SessionManager {
                 play_method,
                 audio_stream_index,
                 subtitle_stream_index,
+                play_session_id,
             });
             session.last_activity = Utc::now();
         }

@@ -2103,6 +2103,7 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
+ "libc",
  "rustyfin-db",
  "rustyfin-models",
  "serde",

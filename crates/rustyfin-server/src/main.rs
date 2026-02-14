@@ -14,6 +14,7 @@ use rustyfin_auth::forward_auth::ForwardAuthHeaders;
 use rustyfin_auth::trusted_proxy::TrustedProxies;
 use rustyfin_core::session::SessionManager;
 use rustyfin_db::pool;
+use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_search::SearchService;
 
 #[tokio::main]
@@ -66,6 +67,29 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             if let Err(e) = svc.reindex_all().await {
                 tracing::error!("Initial Meilisearch reindex failed: {e}");
+            }
+        });
+    }
+
+    // Initialize transcode manager
+    let tc = config.transcode.clone().unwrap_or_default();
+    let transcode_manager = Arc::new(TranscodeManager::new(
+        tc.ffmpeg_path,
+        tc.temp_dir,
+        tc.hardware_acceleration,
+        tc.max_concurrent,
+        tc.segment_duration,
+        tc.threads_per_job,
+    ));
+
+    // Spawn background cleanup and throttle task for transcode jobs
+    {
+        let tm = transcode_manager.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                tm.cleanup_stale_jobs().await;
+                tm.throttle_jobs().await;
             }
         });
     }
@@ -123,6 +147,7 @@ async fn main() -> anyhow::Result<()> {
         search_service,
         forward_auth_config,
         ldap_config,
+        transcode_manager,
     };
 
     // Build router with all API routes
