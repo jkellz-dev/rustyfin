@@ -600,6 +600,76 @@ GET /System/Info?ApiKey=a1b2c3d4e5f6
 - **Expiry**: Sessions have an optional `expires_at` timestamp. Expired sessions are rejected with 401.
 - **Deletion**: When a user is deleted, their sessions are cascade-deleted via foreign key
 
+### How Forward Auth Connects to Extractors
+
+Forward auth and the Axum extractors operate at **different stages** of the request lifecycle — they never call each other directly.
+
+**Stage 1 — Login (`POST /Users/AuthenticateByName`):**
+
+```
+Client → Reverse Proxy (Authelia/Authentik/Tailscale)
+                │
+                │ authenticates user, injects headers:
+                │   Remote-User: alice
+                │   Remote-Groups: admin,users
+                │
+                ▼
+         Rustyfin auth.rs
+                │
+                ├─ Check: IP in trusted_proxies? ──── No ──→ Try LDAPS or 401
+                ├─ Extract identity from headers
+                ├─ Upsert user in DB (create on first login)
+                ├─ Auto-promote if groups match admin_group
+                ├─ Create session row → generate random token
+                │
+                └─ Return { access_token: "a1b2c3..." }
+```
+
+The client stores this token for all future requests.
+
+**Stage 2 — Every subsequent request (`FromRequestParts`):**
+
+```
+Client sends: Authorization: MediaBrowser ... Token="a1b2c3..."
+                │
+                ▼
+     AuthenticatedUser::from_request_parts()
+                │
+                ├─ Parse token from header/query param
+                ├─ Look up session in DB (sessions::find_by_token)
+                ├─ Check expiry, load user, reject if disabled
+                ├─ Touch session (update last_activity)
+                │
+                └─ Return AuthenticatedUser { user_id, is_administrator, ... }
+```
+
+At this point, **forward auth is completely irrelevant**. The extractor doesn't know or care how the user originally logged in. Forward auth users and LDAP users look identical once they have a session token.
+
+**Stage 3 — Admin escalation (`AdminUser`):**
+
+`AdminUser` delegates to `AuthenticatedUser` first (all the token/session work), then adds a single check:
+
+- `is_administrator == false` → **403 Forbidden** (not 401)
+
+This layering produces distinct error codes: missing/invalid token → 401, valid token but not admin → 403.
+
+**How admin status flows from forward auth:**
+
+The admin bit is set during login based on group membership. When the reverse proxy sends `Remote-Groups: admin,users` and `admin_group = "admin"` is configured, the login handler calls `users::update_policy(..., is_administrator: true)`. All future `FromRequestParts` calls read that persisted flag from the database — the forward auth headers are never re-checked after login.
+
+**The generic state bound:**
+
+The extractor is generic over any state type that provides a `PgPool`:
+
+```rust
+impl<S> FromRequestParts<S> for AuthenticatedUser
+where
+    PgPool: FromRef<S>,
+    S: Send + Sync,
+```
+
+This means the extractor depends only on the database, not on `AppState` directly. It doesn't need access to config, session managers, or search services. This separation keeps the auth layer decoupled from application concerns.
+
 ### Axum Extractors
 
 #### `AuthenticatedUser`

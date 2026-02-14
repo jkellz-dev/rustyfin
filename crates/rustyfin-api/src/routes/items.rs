@@ -8,7 +8,7 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::EnrichmentService;
 use rustyfin_db::repo::images::ImageRow;
 use rustyfin_db::repo::{
@@ -595,7 +595,7 @@ pub async fn get_user_item_legacy(
 /// `POST /Items/{itemId}/Refresh` — Re-enrich an item's metadata.
 pub async fn refresh_item(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: AdminUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     // Verify item exists

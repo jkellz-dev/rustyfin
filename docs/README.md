@@ -49,4 +49,6 @@ cargo run --bin rustyfin
 | 4. Metadata Enrichment | Done | NFO parsing, TMDB/TVDB providers, people/cast |
 | 5. Admin Frontend | Done | Sycamore WASM UI: library CRUD, scan triggers, user management, setup wizard |
 | 6. Polish & Advanced | Done | Meilisearch integration, session tracking, activity logging, chapters |
+| 6b. API Endpoint Stubs | Done | ~30 stub routes to prevent client 404 breakage |
+| 6c. Auth Audit | Done | Admin vs user authorization aligned with Jellyfin controller annotations |
 | 7. Transcoding | Planned | ffmpeg HLS output, device profiles, transcode sessions |

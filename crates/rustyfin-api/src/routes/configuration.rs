@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
 };
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_models::dto::ServerConfiguration;
 
 use crate::router::AppState;
@@ -19,7 +19,7 @@ pub async fn get_configuration(
 
 /// `POST /System/Configuration` — Accept and discard (config is file-based).
 pub async fn update_configuration(
-    _auth: AuthenticatedUser,
+    _auth: AdminUser,
     _body: String,
 ) -> StatusCode {
     StatusCode::NO_CONTENT
@@ -35,7 +35,7 @@ pub async fn get_named_configuration(
 
 /// `POST /System/Configuration/{key}` — Accept and discard.
 pub async fn update_named_configuration(
-    _auth: AuthenticatedUser,
+    _auth: AdminUser,
     Path(_key): Path<String>,
     _body: String,
 ) -> StatusCode {

@@ -85,7 +85,7 @@ pub struct RefreshLibraryQuery {
 /// `POST /Library/Refresh` — Trigger a library scan.
 pub async fn refresh_library(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    _auth: AdminUser,
     axum::extract::Query(query): axum::extract::Query<RefreshLibraryQuery>,
 ) -> Result<StatusCode, ApiError> {
     let libs = if let Some(id) = query.id {

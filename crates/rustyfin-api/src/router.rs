@@ -204,9 +204,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Items/Filters", get(filters::get_filters_legacy))
         .route("/Items/Filters2", get(filters::get_filters))
         // ── Stub endpoints ───────────────────────────────────────
-        .route("/Plugins", get(stubs::empty_array))
-        .route("/Packages", get(stubs::empty_array))
-        .route("/Repositories", get(stubs::empty_array))
+        .route("/Plugins", get(stubs::empty_array_admin))
+        .route("/Packages", get(stubs::empty_array_admin))
+        .route("/Repositories", get(stubs::empty_array_admin))
         .route(
             "/Items/{itemId}/Intros",
             get(stubs::empty_query_result_auth),

@@ -97,30 +97,30 @@ Meilisearch, session playback tracking, activity logging, chapters, stubs.
 
 ---
 
-## Phase 7 — Admin vs User Authorization Audit
+## Phase 7 — Admin vs User Authorization Audit [DONE]
 
-Systematic pass to enforce admin-only access where needed. The `AdminUser` extractor exists and works; several endpoints just aren't using it yet.
+Systematic pass to enforce admin-only access where needed, aligned with Jellyfin's actual controller annotations (`[Authorize]` vs `[Authorize(Policy = RequiresElevation)]`).
 
-### 7a. Endpoints to tighten (change `AuthenticatedUser` → `AdminUser`)
-- [ ] `POST /Library/Refresh` — only admins should trigger library scans
-- [ ] `POST /Items/{itemId}/Refresh` — only admins should trigger metadata refresh
-- [ ] `GET /Sessions` — admin sees all sessions; regular users should see only their own
-- [ ] `GET /System/Configuration` — admin only
-- [ ] `POST /System/Configuration` — admin only
-- [ ] `GET /System/Configuration/{key}` — admin only
-- [ ] `POST /System/Configuration/{key}` — admin only
+### 7a. Endpoints tightened (change `AuthenticatedUser` → `AdminUser`)
+- [x] `POST /Library/Refresh` — elevated to `AdminUser` (Jellyfin: `RequiresElevation`)
+- [x] `POST /Items/{itemId}/Refresh` — elevated to `AdminUser` (Jellyfin: `RequiresElevation`)
+- [x] `GET /Sessions` — non-admin users now only see their own sessions (admin sees all)
+- [x] `POST /System/Configuration` — elevated to `AdminUser` (Jellyfin: `RequiresElevation`)
+- [x] `POST /System/Configuration/{key}` — elevated to `AdminUser` (Jellyfin: `RequiresElevation`)
+- [x] `GET /System/Configuration` — kept as `AuthenticatedUser` (matches Jellyfin: `Authorize`, not elevated)
+- [x] `GET /System/Configuration/{key}` — kept as `AuthenticatedUser` (matches Jellyfin: `Authorize`, not elevated)
 
-### 7b. Audit new stub endpoints
-- [ ] `GET /DisplayPreferences/{id}` — user-scoped (current auth is fine)
-- [ ] `POST /DisplayPreferences/{id}` — user-scoped (current auth is fine)
-- [ ] Localization endpoints — no auth needed (static data, match Jellyfin behavior)
-- [ ] Quick Connect endpoints — no auth needed (they return disabled/401 anyway)
-- [ ] Filter endpoints — user-scoped (current auth is fine)
-- [ ] Stub endpoints (Plugins, Packages, etc.) — verify which need auth vs public
+### 7b. Stub endpoint audit
+- [x] `GET /DisplayPreferences/{id}` — user-scoped, `AuthenticatedUser` correct (matches Jellyfin)
+- [x] `POST /DisplayPreferences/{id}` — user-scoped, `AuthenticatedUser` correct (matches Jellyfin)
+- [x] Localization endpoints — no auth, correct (Jellyfin: `AllowAnonymous` / `FirstTimeSetupOrDefault`)
+- [x] Quick Connect endpoints — no auth on `/Enabled`, correct (Jellyfin: `AllowAnonymous`)
+- [x] Filter endpoints — user-scoped, `AuthenticatedUser` correct (matches Jellyfin)
+- [x] `GET /Plugins`, `/Packages`, `/Repositories` — elevated to `AdminUser` (Jellyfin: `RequiresElevation`)
 
-### 7c. Longer-term
-- [ ] `GET /Sessions` filtered view — non-admin users see only their own active sessions
-- [ ] Ensure `POST /Users/{userId}/Policy` can only be called by admins (already done, verify)
+### 7c. Additional
+- [x] `GET /Sessions` filtered view — non-admin users see only their own active sessions
+- [x] `POST /Users/{userId}/Policy` — verified already uses `AdminUser`
 - [ ] Consider read-only vs read-write admin distinction (not needed now, note for future)
 
 ---
@@ -428,9 +428,32 @@ Final phase before considering Rustyfin production-ready. Comprehensive quality 
 - [ ] Unit tests for core logic: naming resolution, NFO parsing, TMDB response mapping
 - [ ] Unit tests for auth: MediaBrowser header parsing, token extraction, admin vs user enforcement
 - [ ] Repository tests: media_items CRUD, user_data operations, library access queries (requires test DB)
-- [ ] API integration tests: authenticated requests, admin-gated endpoints return 403 for users, legacy route delegation
 - [ ] DTO serialization tests: verify PascalCase output, optional field omission, edge cases (empty arrays vs null)
 - [ ] Snapshot tests for key API responses (compare against known-good Jellyfin responses)
+
+#### API Integration Test Infrastructure
+Currently no integration tests exist. The extractors hit Postgres directly (`sessions::find_by_token`, `users::find_by_id`), so tests need a real test database.
+
+- [ ] Add `[dev-dependencies]`: `tower` (for `ServiceExt::oneshot`), `hyper` (for test requests)
+- [ ] Test harness: build `AppState` with a test `PgPool` (from `docker compose` Postgres), call `build_router()` directly via `tower::ServiceExt::oneshot` — no network layer needed
+- [ ] Test DB seeding helpers: create user, create session (with token), create library, create media item
+- [ ] Test cleanup: run each test in a transaction that rolls back, or use per-test random schema
+
+#### Auth Integration Tests (Phase 7 verification)
+- [ ] `POST /Library/Refresh` with non-admin token → 403
+- [ ] `POST /Library/Refresh` with admin token → 204
+- [ ] `POST /Items/{itemId}/Refresh` with non-admin token → 403
+- [ ] `POST /System/Configuration` with non-admin token → 403
+- [ ] `POST /System/Configuration/{key}` with non-admin token → 403
+- [ ] `GET /System/Configuration` with non-admin token → 200 (reads stay open)
+- [ ] `GET /Plugins` with non-admin token → 403
+- [ ] `GET /Plugins` with admin token → 200 `[]`
+- [ ] `GET /Sessions` as admin → all sessions returned
+- [ ] `GET /Sessions` as non-admin → only own sessions returned
+- [ ] Request with no token → 401 on auth-required endpoints
+- [ ] Request with expired token → 401
+- [ ] Request with disabled user's token → 401
+- [ ] Legacy routes (`/Users/{userId}/Items`) delegate correctly
 
 ### 14c. Error Handling & Edge Cases
 - [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
@@ -471,7 +494,7 @@ Final phase before considering Rustyfin production-ready. Comprehensive quality 
 | API routes | ~75% | Core + stubs done; aggregation/similar/nextup still stubs |
 | Direct playback | ~95% | HTTP Range, stream metadata, audio/video |
 | Transcoding | 0% | Phase 8 — biggest gap |
-| Auth | ~85% | Forward auth + LDAP + device auth; Quick Connect disabled |
+| Auth | ~90% | Forward auth + LDAP + device auth; admin/user audit done; Quick Connect disabled |
 | Users | ~75% | CRUD, preferences, library access; missing ratings & parental |
 | Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
 | Sessions | ~70% | Tracking + WebSocket; no remote control |
