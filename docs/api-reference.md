@@ -419,7 +419,38 @@ Get playback information for an item.
 
 ### `POST /Items/{itemId}/PlaybackInfo`
 
-Same as GET but accepts a device profile in the request body.
+Same as GET but accepts a device profile in the request body. The server compares the source media against the profile to decide direct play vs transcode.
+
+**Request Body**:
+```json
+{
+  "DeviceProfile": {
+    "DirectPlayProfiles": [
+      { "Container": "mp4,mkv", "VideoCodec": "h264", "AudioCodec": "aac,ac3", "Type": "Video" }
+    ],
+    "TranscodingProfiles": [
+      { "Container": "ts", "VideoCodec": "h264", "AudioCodec": "aac", "Protocol": "hls", "Type": "Video" }
+    ],
+    "SubtitleProfiles": [
+      { "Format": "vtt", "Method": "External" }
+    ],
+    "MaxStreamingBitrate": 20000000
+  }
+}
+```
+
+When transcoding is needed, the response includes:
+```json
+{
+  "MediaSources": [{
+    "SupportsTranscoding": true,
+    "TranscodingUrl": "/Videos/{id}/master.m3u8?PlaySessionId=...&VideoCodec=h264&AudioCodec=aac&...",
+    "TranscodingSubProtocol": "hls",
+    "TranscodingContainer": "ts",
+    "TranscodeReasons": ["VideoCodecNotSupported"]
+  }]
+}
+```
 
 ---
 
@@ -428,6 +459,13 @@ Same as GET but accepts a device profile in the request body.
 ### `GET /Videos/{itemId}/stream`
 
 Direct play a video file. Supports HTTP Range requests for seeking.
+
+**Query Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `static` | bool | If `true`, always direct play |
+| `MediaSourceId` | String | Media source identifier |
+| `PlaySessionId` | String | Playback session identifier |
 
 **Headers**:
 - `Range: bytes=0-` --- standard HTTP Range header
@@ -438,9 +476,124 @@ Direct play a video file. Supports HTTP Range requests for seeking.
 - `Content-Range`: `bytes START-END/TOTAL` (for 206)
 - `Accept-Ranges`: `bytes`
 
-### `GET /Audio/{itemId}/stream`
+### `GET /Videos/{itemId}/stream.{container}`
+
+Same as above with explicit container suffix (e.g., `stream.mp4`, `stream.mkv`).
+
+### `HEAD /Videos/{itemId}/stream` | `HEAD /Videos/{itemId}/stream.{container}`
+
+Stream metadata without body. Returns `Content-Type`, `Content-Length`, `Accept-Ranges` headers.
+
+### `GET /Audio/{itemId}/stream` | `GET /Audio/{itemId}/stream.{container}`
 
 Direct play an audio file. Same Range support as video.
+
+---
+
+## HLS Transcoding
+
+### `GET /Videos/{itemId}/master.m3u8`
+
+HLS master playlist for video transcoding. Requires authentication.
+
+**Query Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `MediaSourceId` | String | Media source identifier |
+| `PlaySessionId` | String | Playback session identifier |
+| `VideoCodec` | String | Target video codec (`h264`, `hevc`) |
+| `AudioCodec` | String | Target audio codec (`aac`, `ac3`) |
+| `MaxStreamingBitrate` | i64 | Max bitrate in bits/sec |
+| `MaxWidth` | i32 | Max output width |
+| `MaxHeight` | i32 | Max output height |
+| `StartTimeTicks` | i64 | Seek position in 100ns ticks |
+| `AudioStreamIndex` | i32 | Audio track index |
+| `SubtitleStreamIndex` | i32 | Subtitle track index |
+| `SubtitleMethod` | String | `Encode` (burn-in) or `External` |
+| `SegmentContainer` | String | `ts` or `mp4` |
+
+**Response** `200 OK` (`application/x-mpegURL`):
+```
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080,CODECS="avc1.640029,mp4a.40.2"
+/Videos/{itemId}/main.m3u8?PlaySessionId=...&...
+```
+
+### `HEAD /Videos/{itemId}/master.m3u8`
+
+Master playlist metadata without body.
+
+### `GET /Videos/{itemId}/main.m3u8`
+
+HLS variant playlist. Triggers ffmpeg if no transcode job is running. Returns segment list.
+
+### `GET /Videos/{itemId}/hls1/{playSessionId}/{segmentFile}`
+
+Serve an HLS segment. Waits for ffmpeg to produce the segment if not yet available.
+
+**Response**: `200 OK` with `Content-Type: video/mp2t` or `video/mp4`.
+
+### `DELETE /Videos/ActiveEncodings`
+
+Kill an active transcode job.
+
+**Query Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `DeviceId` | String | Device to kill transcodes for |
+| `PlaySessionId` | String | Specific session to kill |
+
+**Response**: `204 No Content`
+
+### Audio HLS
+
+Audio equivalents of the above:
+
+- `GET /Audio/{itemId}/master.m3u8` --- Audio HLS master playlist
+- `GET /Audio/{itemId}/main.m3u8` --- Audio HLS variant playlist
+- `GET /Audio/{itemId}/hls1/{playSessionId}/{segmentFile}` --- Audio segment
+
+### `GET /Audio/{itemId}/universal`
+
+Universal audio endpoint. Redirects to HLS transcoding or direct stream based on query parameters.
+
+**Query Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `Container` | String | Requested container format |
+| `AudioCodec` | String | Requested audio codec |
+| `TranscodingProtocol` | String | `hls` for HLS, otherwise direct stream |
+| `MaxStreamingBitrate` | i64 | Max bitrate |
+
+---
+
+## Subtitles
+
+### `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt`
+
+Get a subtitle stream as WebVTT. External subs served directly; embedded subs extracted via ffmpeg.
+
+### `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt`
+
+Same with explicit media source ID.
+
+### `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}`
+
+Get a subtitle stream in the specified format (`vtt`, `srt`, `ass`).
+
+---
+
+## Sessions
+
+### `GET /Sessions`
+
+List active sessions. Requires authentication. Includes transcode status for active transcodes.
+
+### `POST /Sessions/Logout`
+
+End the current session.
+
+**Response**: `204 No Content`
 
 ---
 

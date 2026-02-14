@@ -11,13 +11,13 @@
 
 | Area | Maturity | Notes |
 |------|----------|-------|
-| API routes | ~60% | Core routes exist, device profiles & advanced features missing |
+| API routes | ~75% | Core routes + HLS transcoding + subtitle delivery + stubs |
 | Direct playback | ~95% | HTTP Range, stream metadata, audio/video serving |
-| Transcoding | 0% | No ffmpeg integration |
+| Transcoding | ~80% | ffmpeg HLS pipeline, device profiles, seek, throttling; no ABR |
 | Auth | ~85% | Forward auth + LDAP, device auth unfinished |
 | Users | ~75% | CRUD, preferences, library access; missing ratings & parental enforcement |
 | Libraries | ~75% | Movies, TV, music scanning |
-| Sessions | ~70% | Tracking + WebSocket; missing Sync Play & DLNA |
+| Sessions | ~75% | Tracking + WebSocket + transcode status; missing Sync Play & DLNA |
 | Metadata | ~80% | NFO + TMDB; missing TVDB, fanart providers |
 | Admin frontend | ~50% | Dashboard, libraries, users, media browser, setup wizard |
 | Notifications | ~20% | Activity log exists, no delivery mechanism |
@@ -26,11 +26,11 @@
 
 Blocking — clients won't work properly without these.
 
-- [ ] **Transcoding pipeline** — ffmpeg HLS output, quality tier selection, hardware acceleration (VAAPI/NVENC/QSV)
-- [ ] **Device profiles** — clients send capabilities, server decides direct play vs transcode
-- [ ] **Subtitle delivery** — extraction from containers, SSA/ASS to VTT conversion, burn-in during transcode
-- [ ] **PlaybackInfo completeness** — MediaSources array with TranscodingUrl, DirectStreamUrl, container/codec compatibility
-- [ ] **Missing API endpoint stubs** — clients hit endpoints that 404 and break; need stubs returning safe defaults
+- [x] **Transcoding pipeline** — ffmpeg HLS output, software + optional HW accel (QSV/VAAPI/NVENC), throttling, seek support
+- [x] **Device profiles** — clients send capabilities, server decides direct play vs direct stream vs transcode
+- [x] **Subtitle delivery** — extraction from containers, format conversion, burn-in during transcode
+- [x] **PlaybackInfo completeness** — MediaSources with TranscodingUrl, DirectStreamUrl, TranscodeReasons
+- [x] **Missing API endpoint stubs** — ~30 stub routes returning safe defaults
 
 ## Tier 2: Expected by Clients
 

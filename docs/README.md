@@ -12,7 +12,7 @@ Rustyfin is a Jellyfin-compatible media server written in Rust. Existing Jellyfi
 | [Authentication](authentication.md) | Forward auth, session management, extractors |
 | [Database Schema](database-schema.md) | All tables, columns, indexes, relationships |
 | [Library Scanning](library-scanning.md) | Scanner workflow, file naming, NFO parsing, TMDB |
-| [Streaming & Media](streaming.md) | Media probing, direct play, HTTP Range support |
+| [Streaming & Media](streaming.md) | Media probing, direct play, HTTP Range, HLS transcoding |
 | [Admin Frontend](frontend.md) | Sycamore WASM UI, building, asset embedding |
 | [Development Guide](development.md) | Dev setup, building, testing, project conventions |
 
@@ -51,4 +51,4 @@ cargo run --bin rustyfin
 | 6. Polish & Advanced | Done | Meilisearch integration, session tracking, activity logging, chapters |
 | 6b. API Endpoint Stubs | Done | ~30 stub routes to prevent client 404 breakage |
 | 6c. Auth Audit | Done | Admin vs user authorization aligned with Jellyfin controller annotations |
-| 7. Transcoding | Planned | ffmpeg HLS output, device profiles, transcode sessions |
+| 7. Transcoding | Done | ffmpeg HLS pipeline, device profiles, subtitle delivery, throttling, seek |

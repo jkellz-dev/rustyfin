@@ -1,6 +1,6 @@
 # Streaming & Media
 
-Rustyfin currently supports **direct play** only --- media files are served directly to clients without transcoding. Transcoding support is planned for a future phase.
+Rustyfin supports **direct play** and **HLS transcoding**. Media files are served directly when the client supports the source format; otherwise, ffmpeg transcodes on-the-fly to HLS.
 
 ## Direct Play
 
@@ -270,10 +270,84 @@ Both endpoints return the updated `UserItemDataDto`:
 }
 ```
 
-## Future: Transcoding
+## HLS Transcoding
 
-Planned for Phase 6:
-- FFmpeg-based HLS transcoding pipeline
-- Device profile matching (resolution, codec support)
-- Transcode session management
-- Adaptive bitrate streaming
+When a client's device profile indicates it cannot direct-play the source file (incompatible codec, excessive bitrate, unsupported container), the server transcodes via ffmpeg into HLS segments.
+
+### Decision Flow
+
+1. Client sends `POST /Items/{itemId}/PlaybackInfo` with a `DeviceProfile` (lists supported containers, video/audio codecs, max bitrate)
+2. Server compares source media streams against the profile
+3. Result is one of:
+   - **DirectPlay** — client plays the file as-is
+   - **DirectStream** — remux (copy codecs, change container)
+   - **Transcode** — re-encode video/audio to compatible codecs
+
+The response includes `TranscodingUrl` (pointing to the HLS master playlist) when transcoding is needed.
+
+### HLS Endpoints
+
+```
+GET  /Videos/{itemId}/master.m3u8    — Master playlist (codec/resolution info)
+GET  /Videos/{itemId}/main.m3u8      — Variant playlist (triggers ffmpeg, lists segments)
+GET  /Videos/{itemId}/hls1/{playSessionId}/{segment}.ts  — Individual segment
+HEAD /Videos/{itemId}/master.m3u8    — Metadata only
+
+DELETE /Videos/ActiveEncodings?deviceId=...&playSessionId=...  — Kill a transcode
+```
+
+Audio equivalents exist at `/Audio/{itemId}/master.m3u8`, `/Audio/{itemId}/main.m3u8`, etc.
+
+### Universal Audio
+
+```
+GET /Audio/{itemId}/universal?container=...&audioCodec=...&transcodingProtocol=hls
+```
+
+Routes to either HLS transcoding or direct stream based on compatibility.
+
+### Encoding
+
+**Software (default):**
+- Video: `libx264` (preset `veryfast`, CRF 23) or `libx265` (preset `fast`, CRF 28)
+- Audio: `aac`, `ac3`, `libopus`, `libmp3lame`, or copy
+
+**Hardware (optional, via config):**
+- Intel QSV: `h264_qsv` / `hevc_qsv`
+- VAAPI: `h264_vaapi` / `hevc_vaapi`
+- NVENC: `h264_nvenc` / `hevc_nvenc`
+
+Configure in `rustyfin.toml`:
+```toml
+[transcode]
+ffmpeg_path = "ffmpeg"        # default: from PATH
+hardware_acceleration = "qsv" # "none", "qsv", "vaapi", "nvenc"
+max_concurrent = 4            # 0 = unlimited
+segment_duration = 6          # seconds
+threads_per_job = 0           # 0 = auto
+```
+
+### Throttling & Resource Management
+
+- ffmpeg processes are paused (SIGSTOP) when encoding >120s ahead of playback
+- Resumed (SIGCONT) when buffer drops below 30s or client requests a segment
+- Stale jobs (no segment request in 60s) are automatically killed
+- Background cleanup task runs every 30 seconds
+
+### Seek Support
+
+- Segments already transcoded are served from disk
+- Seeking far ahead restarts ffmpeg with `-ss` at the target position
+- Seeking backward serves existing segments
+
+### Subtitle Delivery
+
+```
+GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt
+GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt
+GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}
+```
+
+- External subtitle files are served directly
+- Embedded subtitles are extracted via ffmpeg and cached on disk
+- Image-based subtitles (PGS, VOBSUB) can be burned in during transcoding
