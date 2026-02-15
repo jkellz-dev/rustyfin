@@ -15,10 +15,13 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     /// Create a rate limiter that allows `requests_per_window` requests per `window_secs` seconds.
+    /// Zero values are clamped to safe defaults (1 request per 1 second).
     pub fn new(requests_per_window: u32, window_secs: u64) -> Self {
-        let quota = Quota::with_period(std::time::Duration::from_secs(window_secs))
-            .expect("valid duration")
-            .allow_burst(NonZeroU32::new(requests_per_window).expect("non-zero rate limit"));
+        let window = window_secs.max(1);
+        let burst = requests_per_window.max(1);
+        let quota = Quota::with_period(std::time::Duration::from_secs(window))
+            .expect("non-zero duration")
+            .allow_burst(NonZeroU32::new(burst).expect("non-zero burst"));
         Self {
             inner: GovRateLimiter::direct(quota),
         }

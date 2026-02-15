@@ -12,7 +12,7 @@ pub struct MetaConfig {
     pub output: OutputConfig,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct TmdbConfig {
     pub api_key: Option<String>,
     #[serde(default = "default_language")]
@@ -24,13 +24,34 @@ pub struct TmdbConfig {
     pub rate_window_secs: u64,
 }
 
-#[derive(Debug, Deserialize, Default)]
+impl Default for TmdbConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            language: default_language(),
+            rate_limit: default_tmdb_rate_limit(),
+            rate_window_secs: default_rate_window(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TvdbConfig {
     pub api_key: Option<String>,
     #[serde(default = "default_tvdb_rate_limit")]
     pub rate_limit: u32,
     #[serde(default = "default_rate_window")]
     pub rate_window_secs: u64,
+}
+
+impl Default for TvdbConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            rate_limit: default_tvdb_rate_limit(),
+            rate_window_secs: default_rate_window(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
