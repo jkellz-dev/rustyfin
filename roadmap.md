@@ -163,39 +163,40 @@ ffmpeg HLS output, device profiles, subtitle delivery, throttling, seek support.
 
 ---
 
-## Phase 9 — Client UX Improvements
+## Phase 9 — Client UX Improvements [DONE]
 
-Endpoints that exist as stubs today but should become real implementations.
+Stubs replaced with real implementations for discovery, navigation, and media management.
 
-### 9a. Next Up & Suggestions
-- [ ] `GET /Shows/NextUp` — real implementation: next unwatched episode per in-progress series
-- [ ] `GET /Items/Suggestions` — surface unwatched items from user's libraries
-- [ ] `GET /Users/{userId}/Suggestions` — same, legacy route
+### 9a. Next Up & Suggestions [DONE]
+- [x] `GET /Shows/NextUp` — real implementation: next unwatched episode per in-progress series
+- [x] `GET /Items/Suggestions` — surface unwatched items from user's libraries
+- [x] `GET /Users/{userId}/Suggestions` — same, legacy route
 
-### 9b. Similar Items
-- [ ] `GET /Items/{itemId}/Similar` — recommend items sharing genres, cast, studios
-- [ ] Scoring algorithm (genre overlap + cast overlap + studio match)
+### 9b. Similar Items [DONE]
+- [x] `GET /Items/{itemId}/Similar` — weighted scoring (genres 3x, studios 2x, tags 1x)
+- [x] `GET /Movies/Recommendations` — similar to recently played movies
 
-### 9c. Browsable Aggregation Endpoints
-- [ ] `GET /Genres` — list genres as browsable items with child counts
-- [ ] `GET /Studios` — list studios as browsable items
-- [ ] `GET /Persons` — list people as browsable items (actor filmographies)
-- [ ] `GET /Artists` / `GET /Artists/AlbumArtists` — music artist browsing
+### 9c. Browsable Aggregation Endpoints [DONE]
+- [x] `GET /Genres` — list genres as browsable items with child counts
+- [x] `GET /Studios` — list studios as browsable items
+- [x] `GET /Persons` — list people as browsable items (actor filmographies)
+- [ ] `GET /Artists` / `GET /Artists/AlbumArtists` — deferred to Phase 10d (needs music tag reading)
 
-### 9d. User Ratings
-- [ ] `POST /UserItems/{itemId}/Rating` — user star ratings (DB schema exists via `user_data.rating`)
-- [ ] `DELETE /UserItems/{itemId}/Rating` — clear rating
+### 9d. User Ratings [DONE]
+- [x] `POST /UserItems/{itemId}/Rating` — user like/dislike (maps to rating 10.0/1.0)
+- [x] `DELETE /UserItems/{itemId}/Rating` — clear rating
+- [x] `likes` computed field on `UserItemDataDto` (rating >= 6.5)
 
-### 9e. Collections & Playlists
-- [ ] Playlist CRUD endpoints (`/Playlists`, `/Playlists/{id}/Items`)
-- [ ] Collection grouping (BoxSet item type)
-- [ ] `POST /Collections` — create collection from selected items
+### 9e. Collections & Playlists [DONE]
+- [x] Playlist CRUD endpoints (`/Playlists`, `/Playlists/{id}/Items`, move, share)
+- [x] Collection grouping (BoxSet item type via `collection_items` table)
+- [x] `POST /Collections` — create collection from selected items (admin only)
 
-### 9f. Image Processing
-- [ ] Image resizing (`?maxWidth=300&quality=90` query params)
-- [ ] Thumbnail generation for large images
-- [ ] Trickplay / BIF file generation for seek preview thumbnails
-- [ ] Chapter image extraction
+### 9f. Image Processing [DONE]
+- [x] Image resizing (`?maxWidth=300&quality=90&format=webp` query params)
+- [x] `fast_image_resize` (SIMD Lanczos3) + SHA256-keyed disk cache
+- [ ] Trickplay / BIF file generation — deferred
+- [ ] Chapter image extraction — deferred
 
 ---
 
@@ -492,11 +493,11 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 
 | Area | Status | Notes |
 |------|--------|-------|
-| API routes | ~75% | Core + stubs done; aggregation/similar/nextup still stubs |
+| API routes | ~85% | Core + stubs done; Phase 9 replaced stubs with real endpoints |
 | Direct playback | ~95% | HTTP Range, stream metadata, audio/video |
 | Transcoding | ~80% | HLS pipeline, device profiles, subtitles, throttling, seek; no ABR |
 | Auth | ~90% | Forward auth + LDAP + device auth; admin/user audit done; Quick Connect disabled |
-| Users | ~75% | CRUD, preferences, library access; missing ratings & parental |
+| Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
 | Metadata | ~80% | NFO + TMDB; missing TVDB, fanart providers |
