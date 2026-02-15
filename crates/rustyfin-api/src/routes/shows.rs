@@ -108,6 +108,7 @@ pub async fn get_seasons(
                     is_favorite: ud.is_favorite,
                     played: ud.played,
                     rating: ud.rating,
+                    likes: ud.rating.map(|r| r >= 6.5),
                     last_played_date: ud.last_played_date,
                     ..Default::default()
                 });
@@ -230,6 +231,7 @@ async fn enrich_episode_dtos(
                     is_favorite: ud.is_favorite,
                     played: ud.played,
                     rating: ud.rating,
+                    likes: ud.rating.map(|r| r >= 6.5),
                     last_played_date: ud.last_played_date,
                     ..Default::default()
                 });

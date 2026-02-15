@@ -217,6 +217,14 @@ pub fn build_router(state: AppState) -> Router {
             "/Users/{userId}/PlayedItems/{itemId}",
             post(user_data::mark_played_legacy).delete(user_data::mark_unplayed_legacy),
         )
+        .route(
+            "/UserItems/{itemId}/Rating",
+            post(user_data::update_rating).delete(user_data::delete_rating),
+        )
+        .route(
+            "/Users/{userId}/Items/{itemId}/Rating",
+            post(user_data::update_rating_legacy).delete(user_data::delete_rating_legacy),
+        )
         // ── Search ──────────────────────────────────────────────
         .route("/Search/Hints", get(search::search_hints))
         // ── Display Preferences ──────────────────────────────────

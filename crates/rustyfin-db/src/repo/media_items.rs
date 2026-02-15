@@ -557,6 +557,94 @@ pub async fn distinct_tags(
     }
 }
 
+/// Get series with recent watch activity for a user, ordered by last played date.
+pub async fn get_active_series(
+    pool: &PgPool,
+    user_id: Uuid,
+    library_id: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<(Uuid, DateTime<Utc>)>, sqlx::Error> {
+    let rows: Vec<(Uuid, DateTime<Utc>)> = sqlx::query_as(
+        r#"
+        SELECT m.series_id, MAX(ud.last_played_date) AS last_activity
+        FROM media_items m
+        JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+        WHERE m.item_type = 'Episode'
+          AND m.series_id IS NOT NULL
+          AND ud.last_played_date IS NOT NULL
+          AND ($2::uuid IS NULL OR m.library_id = $2)
+        GROUP BY m.series_id
+        ORDER BY last_activity DESC
+        LIMIT $3
+        "#,
+    )
+    .bind(user_id)
+    .bind(library_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Get the last watched (played=true) episode in a series for a user.
+pub async fn get_last_watched_episode(
+    pool: &PgPool,
+    user_id: Uuid,
+    series_id: Uuid,
+) -> Result<Option<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        SELECT m.*
+        FROM media_items m
+        JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+        WHERE m.series_id = $2
+          AND m.item_type = 'Episode'
+          AND ud.played = true
+          AND (m.parent_index_number IS NULL OR m.parent_index_number > 0)
+        ORDER BY m.parent_index_number DESC NULLS LAST, m.index_number DESC NULLS LAST
+        LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .bind(series_id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Get the next unwatched episode after a given season/episode position.
+pub async fn get_next_episode(
+    pool: &PgPool,
+    user_id: Uuid,
+    series_id: Uuid,
+    min_season: Option<i32>,
+    min_episode: Option<i32>,
+) -> Result<Option<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        SELECT m.*
+        FROM media_items m
+        LEFT JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+        WHERE m.series_id = $2
+          AND m.item_type = 'Episode'
+          AND (m.parent_index_number IS NULL OR m.parent_index_number > 0)
+          AND (ud.played IS NULL OR ud.played = false)
+          AND (
+            $3::int IS NULL
+            OR m.parent_index_number > $3
+            OR (m.parent_index_number = $3 AND m.index_number > $4)
+          )
+        ORDER BY m.parent_index_number ASC NULLS LAST, m.index_number ASC NULLS LAST
+        LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .bind(series_id)
+    .bind(min_season)
+    .bind(min_episode)
+    .fetch_optional(pool)
+    .await
+}
+
 /// Search items by name (basic ILIKE search).
 pub async fn search_by_name(
     pool: &PgPool,

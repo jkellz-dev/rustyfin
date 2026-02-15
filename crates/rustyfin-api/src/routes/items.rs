@@ -321,6 +321,7 @@ pub async fn get_items(
                     is_favorite: ud.is_favorite,
                     played: ud.played,
                     rating: ud.rating,
+                    likes: ud.rating.map(|r| r >= 6.5),
                     last_played_date: ud.last_played_date,
                     ..Default::default()
                 });
@@ -455,6 +456,7 @@ pub async fn get_item_by_id(
             is_favorite: ud.is_favorite,
             played: ud.played,
             rating: ud.rating,
+            likes: ud.rating.map(|r| r >= 6.5),
             last_played_date: ud.last_played_date,
             ..Default::default()
         });
@@ -551,6 +553,7 @@ pub async fn get_resume_items(
                 is_favorite: ud.is_favorite,
                 played: ud.played,
                 rating: ud.rating,
+                likes: ud.rating.map(|r| r >= 6.5),
                 last_played_date: ud.last_played_date,
                 ..Default::default()
             });

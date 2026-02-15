@@ -1,7 +1,8 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
+use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
@@ -10,6 +11,12 @@ use rustyfin_models::dto::UserItemDataDto;
 
 use crate::error::ApiError;
 use crate::router::AppState;
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct RatingParams {
+    pub likes: Option<bool>,
+}
 
 /// `POST /UserFavoriteItems/{itemId}` — Mark as favorite.
 pub async fn mark_favorite(
@@ -95,6 +102,46 @@ pub async fn mark_unplayed_legacy(
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     mark_unplayed(state, auth, Path(item_id)).await
+}
+
+pub async fn update_rating(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+    Query(params): Query<RatingParams>,
+) -> Result<Json<UserItemDataDto>, ApiError> {
+    let ud = user_data::set_rating(&state.pool, auth.user_id, item_id, params.likes)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(to_dto(&ud)))
+}
+
+pub async fn delete_rating(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+) -> Result<Json<UserItemDataDto>, ApiError> {
+    let ud = user_data::set_rating(&state.pool, auth.user_id, item_id, None)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(to_dto(&ud)))
+}
+
+pub async fn update_rating_legacy(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
+    query: Query<RatingParams>,
+) -> Result<Json<UserItemDataDto>, ApiError> {
+    update_rating(state, auth, Path(item_id), query).await
+}
+
+pub async fn delete_rating_legacy(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<UserItemDataDto>, ApiError> {
+    delete_rating(state, auth, Path(item_id)).await
 }
 
 fn to_dto(ud: &user_data::UserDataRow) -> UserItemDataDto {
