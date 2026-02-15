@@ -9,62 +9,33 @@ use rustyfin_common::nfo::{
     NfoMetadata, find_episode_nfo, find_movie_nfo, find_series_nfo, parse_episode_nfo,
     parse_movie_nfo, parse_series_nfo,
 };
-use rustyfin_common::tmdb::TmdbClient;
 
 pub struct EnrichmentService {
     pool: PgPool,
-    tmdb: Option<TmdbClient>,
 }
 
 impl EnrichmentService {
-    pub fn new(pool: PgPool, tmdb_api_key: Option<String>) -> Self {
-        let tmdb = tmdb_api_key.filter(|k| !k.is_empty()).map(TmdbClient::new);
-        Self { pool, tmdb }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
     }
 
-    /// Enrich a movie item with metadata from NFO or TMDB.
+    /// Enrich a movie item with metadata from NFO.
     pub async fn enrich_movie(
         &self,
         item_id: Uuid,
         video_path: &Path,
-        title: &str,
-        year: Option<i32>,
+        _title: &str,
+        _year: Option<i32>,
     ) {
-        // Try NFO first
         let meta = find_movie_nfo(video_path).and_then(|p| parse_movie_nfo(&p));
-
-        let meta = match meta {
-            Some(m) => m,
-            None => {
-                // Fall back to TMDB
-                match &self.tmdb {
-                    Some(client) => match client.search_movie(title, year).await {
-                        Some(m) => m,
-                        None => return,
-                    },
-                    None => return,
-                }
-            }
-        };
-
+        let Some(meta) = meta else { return };
         self.apply_metadata(item_id, &meta).await;
     }
 
-    /// Enrich a series item with metadata from NFO or TMDB.
-    pub async fn enrich_series(&self, item_id: Uuid, series_dir: &Path, series_name: &str) {
+    /// Enrich a series item with metadata from NFO.
+    pub async fn enrich_series(&self, item_id: Uuid, series_dir: &Path, _series_name: &str) {
         let meta = find_series_nfo(series_dir).and_then(|p| parse_series_nfo(&p));
-
-        let meta = match meta {
-            Some(m) => m,
-            None => match &self.tmdb {
-                Some(client) => match client.search_series(series_name).await {
-                    Some(m) => m,
-                    None => return,
-                },
-                None => return,
-            },
-        };
-
+        let Some(meta) = meta else { return };
         self.apply_metadata(item_id, &meta).await;
     }
 

@@ -613,9 +613,8 @@ pub async fn refresh_item(
         .ok_or(ApiError::NotFound)?;
 
     let pool = state.pool.clone();
-    let tmdb_key = state.tmdb_api_key.clone();
     tokio::spawn(async move {
-        let service = EnrichmentService::new(pool, tmdb_key);
+        let service = EnrichmentService::new(pool);
         service.refresh_item(item_id).await;
     });
 

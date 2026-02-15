@@ -1,0 +1,21 @@
+[package]
+name = "rustyfin-meta"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rustyfin-meta"
+path = "src/main.rs"
+
+[dependencies]
+rustyfin-common.workspace = true
+clap.workspace = true
+tokio.workspace = true
+serde.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+reqwest.workspace = true
+walkdir.workspace = true
+anyhow.workspace = true

@@ -836,3 +836,58 @@ pub async fn get_active_series_or_movies(
     .await?;
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
+
+/// List artist items with optional search and album-artist-only filtering.
+pub async fn list_artists(
+    pool: &PgPool,
+    search: Option<&str>,
+    start_index: i64,
+    limit: i64,
+    album_artists_only: bool,
+) -> Result<(Vec<MediaItemRow>, i64), sqlx::Error> {
+    let mut base_where = "item_type = 'MusicArtist'".to_string();
+    if album_artists_only {
+        base_where.push_str(
+            " AND id IN (SELECT DISTINCT parent_id FROM media_items WHERE item_type = 'MusicAlbum' AND parent_id IS NOT NULL)",
+        );
+    }
+    if let Some(term) = search {
+        base_where.push_str(&format!(
+            " AND LOWER(name) LIKE '%{}%'",
+            term.to_lowercase().replace('\'', "''")
+        ));
+    }
+    let count_sql = format!("SELECT COUNT(*) FROM media_items WHERE {base_where}");
+    let total: (i64,) = sqlx::query_as(&count_sql).fetch_one(pool).await?;
+    let list_sql = format!(
+        "SELECT * FROM media_items WHERE {base_where} ORDER BY sort_name, name LIMIT $1 OFFSET $2"
+    );
+    let rows = sqlx::query_as::<_, MediaItemRow>(&list_sql)
+        .bind(limit)
+        .bind(start_index)
+        .fetch_all(pool)
+        .await?;
+    Ok((rows, total.0))
+}
+
+/// Count albums belonging to an artist.
+pub async fn count_albums_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i32, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM media_items WHERE parent_id = $1 AND item_type = 'MusicAlbum'",
+    )
+    .bind(artist_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0 as i32)
+}
+
+/// Count songs belonging to an artist (via series_id).
+pub async fn count_songs_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i32, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM media_items WHERE item_type = 'Audio' AND series_id = $1",
+    )
+    .bind(artist_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0 as i32)
+}
