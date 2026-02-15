@@ -17,7 +17,7 @@ These are **not** on the roadmap — they are intentional exclusions:
 
 9 crates, Axum router, database layer, forward auth, HTTP Range streaming.
 
-- [x] Workspace with `rustyfin-server`, `rustyfin-api`, `rustyfin-auth`, `rustyfin-core`, `rustyfin-db`, `rustyfin-models`, `rustyfin-search`, `rustyfin-media`, `rustyfin-frontend`
+- [x] Workspace with `rustyfin-server`, `rustyfin-api`, `rustyfin-auth`, `rustyfin-core`, `rustyfin-db`, `rustyfin-models`, `rustyfin-search`, `rustyfin-media`, `rustyfin-frontend`, `rustyfin-common`, `rustyfin-meta`
 - [x] PostgreSQL via sqlx with runtime migrations (12 tables)
 - [x] Forward auth header parsing + MediaBrowser token auth
 - [x] `AuthenticatedUser` / `AdminUser` extractors
@@ -180,7 +180,7 @@ Stubs replaced with real implementations for discovery, navigation, and media ma
 - [x] `GET /Genres` — list genres as browsable items with child counts
 - [x] `GET /Studios` — list studios as browsable items
 - [x] `GET /Persons` — list people as browsable items (actor filmographies)
-- [ ] `GET /Artists` / `GET /Artists/AlbumArtists` — deferred to Phase 10d (needs music tag reading)
+- [x] `GET /Artists` / `GET /Artists/AlbumArtists` — real DB queries with child counts (implemented in Phase 10d)
 
 ### 9d. User Ratings [DONE]
 - [x] `POST /UserItems/{itemId}/Rating` — user like/dislike (maps to rating 10.0/1.0)
@@ -214,42 +214,48 @@ Stubs replaced with real implementations for discovery, navigation, and media ma
 - [ ] Webhook delivery for events (item added, playback started, scan complete)
 - [ ] Configurable webhook URLs in `rustyfin.toml`
 
-### 10d. Additional Metadata Providers
+### 10d. Metadata Providers & `rustyfin-meta` CLI [PARTIALLY DONE]
 
 **TV & Film — design principle:**
 
-The server process never writes to disk. It reads NFO files and sidecar images during library scans and imports them into the DB. A separate **`rustyfin-meta` CLI tool** handles the write side: querying TMDB/TVDB, writing NFO files, downloading artwork to disk. Users run it manually, via cron, or as a pre-scan step. This keeps the server as a read-only consumer of the media library.
+The server process never writes to disk. It reads NFO files and sidecar images during library scans and imports them into the DB. A separate **`rustyfin` CLI tool** (crate: `rustyfin-meta`, binary: `rustyfin`) handles the write side: querying TMDB/TVDB, writing NFO files, downloading artwork to disk. Users run it manually, via cron, or as a pre-scan step. This keeps the server as a read-only consumer of the media library.
 
-**`rustyfin-meta` CLI tool:**
-- [ ] New crate: `crates/rustyfin-meta/` (standalone binary, shares models with server where useful)
-- [ ] `rustyfin-meta scan <path>` — walk a media directory, identify movies/series/episodes with missing or incomplete NFO files
-- [ ] `rustyfin-meta fetch <path>` — query providers and write NFO files + download sidecar images for items missing metadata
-- [ ] `rustyfin-meta fetch --dry-run` — show what would be fetched/written without touching disk
-- [ ] TMDB provider — movie and series lookup, write `movie.nfo`, `tvshow.nfo`, episode NFOs
-- [ ] TVDB provider — series/episode enrichment as alternative/supplement to TMDB
+**Shared code extraction (`rustyfin-common` crate) [DONE]:**
+- [x] New crate: `crates/rustyfin-common/` — naming, NFO, TMDB, TVDB, image discovery, music tags, artwork download (no DB dependency)
+- [x] `rustyfin-core` depends on `rustyfin-common` (DB-free code extracted)
+- [x] `rustyfin-meta` depends on `rustyfin-common` (no DB dependency)
+
+**`rustyfin` CLI tool (binary: `rustyfin`, crate: `rustyfin-meta`) [DONE]:**
+- [x] New crate: `crates/rustyfin-meta/` (standalone binary, shares `rustyfin-common` with server)
+- [x] `rustyfin scan <path>` — walk a media directory, identify movies/series/episodes with missing or incomplete NFO files
+- [x] `rustyfin fetch <path>` — query providers and write NFO files + download sidecar images for items missing metadata
+- [x] `rustyfin --dry-run` — show what would be fetched/written without touching disk
+- [x] TMDB provider — movie and series lookup, write `movie.nfo`, `tvshow.nfo`, episode NFOs
+- [x] TVDB provider — series/episode enrichment as alternative/supplement to TMDB
 - [ ] Fanart.tv provider — download clearlogo, disc art, landscape artwork as sidecar images
-- [ ] NFO writer — generate Kodi/Jellyfin-compatible NFO XML (same format the server already parses)
-- [ ] Sidecar image downloader — poster.jpg, fanart.jpg, banner.jpg alongside media files
+- [x] NFO writer — generate Kodi/Jellyfin-compatible NFO XML (same format the server already parses)
+- [x] Sidecar image downloader — poster.jpg, fanart.jpg, banner.jpg alongside media files
 - [ ] Rate-limited worker queue — metered fetches per provider (TMDB: 40 req/10s, TVDB: per their limits)
 - [ ] Interactive mode — prompt user to confirm matches before writing (for ambiguous titles)
-- [ ] Config via `rustyfin-meta.toml` or CLI flags (API keys, provider priority, output format)
+- [x] Config via `rustyfin-meta.toml` or CLI flags (API keys, provider priority, output format)
 
-**Server-side changes:**
-- [ ] Remove TMDB fetching from server's `EnrichmentService` (server becomes read-only for metadata)
-- [ ] `POST /Items/{itemId}/Refresh` triggers a rescan of the item's NFO/images from disk, not a provider fetch
-- [ ] Document the workflow: `rustyfin-meta fetch /media/movies && curl -X POST server/Library/Refresh`
+**Server-side changes [DONE]:**
+- [x] Remove TMDB fetching from server's `EnrichmentService` (server becomes read-only for metadata)
+- [x] `POST /Items/{itemId}/Refresh` triggers a rescan of the item's NFO/images from disk, not a provider fetch
+- [ ] Document the workflow: `rustyfin fetch /media/movies && curl -X POST server/Library/Refresh`
 
 **Music metadata pipeline:**
 
-Embedded tags (ID3v2, Vorbis comments, FLAC tags) are the primary source of truth for the server. The server never fetches metadata itself — it reads tags and any NFO/sidecar files written by `rustyfin-meta`. External providers are only queried by the CLI when key fields are missing (artist image, album art, artist bio).
+Embedded tags (ID3v2, Vorbis comments, FLAC tags) are the primary source of truth for the server. The server never fetches metadata itself — it reads tags and any NFO/sidecar files written by `rustyfin`. External providers are only queried by the CLI when key fields are missing (artist image, album art, artist bio).
 
-**Server-side (read-only):**
-- [ ] Tag reader — extract metadata from MP3 (ID3v2), FLAC (Vorbis comments), M4A (iTunes atoms), OGG
-- [ ] Tag-to-model mapping: artist, album artist, album, track name, track number, disc number, year, genre, album art (embedded image)
-- [ ] Read music NFO sidecar files written by `rustyfin-meta` (artist.nfo, album.nfo)
+**Server-side music (read-only) [DONE]:**
+- [x] Tag reader — extract metadata from MP3 (ID3v2), FLAC (Vorbis comments), M4A (iTunes atoms), OGG — via `lofty` crate
+- [x] Tag-to-model mapping: artist, album artist, album, track name, track number, disc number, year, genre, album art (embedded image)
+- [ ] Read music NFO sidecar files written by `rustyfin` (artist.nfo, album.nfo)
 - [ ] Read sidecar images (artist.jpg, cover.jpg, folder.jpg)
+- [x] `GET /Artists` / `GET /Artists/AlbumArtists` — real DB queries with child counts
 
-**`rustyfin-meta` CLI — music providers:**
+**`rustyfin` CLI — music providers:**
 - [ ] Gap detection — scan audio tags, identify what's missing (no embedded album art, no artist image, empty artist bio)
 - [ ] MusicBrainz provider — artist bios, album metadata, release group lookups, cover art via Cover Art Archive
 - [ ] Discogs provider — artist images, album art, label info, genre/style enrichment
@@ -264,7 +270,7 @@ For users who want unlimited lookups with no rate limits and full offline capabi
 - [ ] Docker Compose service: MusicBrainz server + Postgres, seeded from full dump
 - [ ] Init script: download latest full dump from metabrainz.org, import into Postgres
 - [ ] Daily update job: fetch and apply incremental replication packets (MusicBrainz publishes daily diffs)
-- [ ] `rustyfin-meta` config: `musicbrainz_url` — point at local instance instead of public API
+- [ ] `rustyfin` config: `musicbrainz_url` — point at local instance instead of public API
 - [ ] No rate limiting needed when querying local instance
 - [ ] Reference: MusicBrainz server source at `/home/jonathan/src/musicbrainz-server/`
 - [ ] Documentation: storage requirements (~30 GB for full dump), update cadence, Docker resource needs
@@ -500,7 +506,7 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
-| Metadata | ~80% | NFO + TMDB; missing TVDB, fanart providers |
+| Metadata | ~85% | NFO + TMDB + TVDB; `rustyfin` CLI for offline metadata; missing fanart.tv, MusicBrainz, Discogs |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~70% | Meilisearch + fallback; no advanced filters |
 | Notifications | ~20% | Activity log only; no webhooks |
