@@ -740,6 +740,77 @@ pub async fn find_similar(
     .await
 }
 
+/// Count items per type that have a specific genre, optionally scoped to a library.
+pub async fn count_items_with_genre(
+    pool: &PgPool,
+    genre: &str,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        sqlx::query_as(
+            r#"SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(genres) AND library_id = $2 GROUP BY item_type"#,
+        )
+        .bind(genre)
+        .bind(pid)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query_as(
+            r#"SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(genres) GROUP BY item_type"#,
+        )
+        .bind(genre)
+        .fetch_all(pool)
+        .await
+    }
+}
+
+/// Distinct studio values, optionally scoped to a library.
+pub async fn distinct_studios(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<String>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(studios) AS studio FROM media_items WHERE library_id = $1 ORDER BY studio",
+        )
+        .bind(pid)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(s,)| s).collect())
+    } else {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(studios) AS studio FROM media_items ORDER BY studio",
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(s,)| s).collect())
+    }
+}
+
+/// Count items per type that have a specific studio, optionally scoped to a library.
+pub async fn count_items_with_studio(
+    pool: &PgPool,
+    studio: &str,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    if let Some(pid) = parent_id {
+        sqlx::query_as(
+            "SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(studios) AND library_id = $2 GROUP BY item_type",
+        )
+        .bind(studio)
+        .bind(pid)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query_as(
+            "SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(studios) GROUP BY item_type",
+        )
+        .bind(studio)
+        .fetch_all(pool)
+        .await
+    }
+}
+
 /// Get recently active series or movies for a user, ordered by last played date.
 pub async fn get_active_series_or_movies(
     pool: &PgPool,

@@ -102,6 +102,76 @@ pub async fn delete_links_by_item(pool: &PgPool, item_id: Uuid) -> Result<(), sq
     Ok(())
 }
 
+/// List people with optional type filtering, search, and pagination.
+pub async fn list_people(
+    pool: &PgPool,
+    person_types: &[String],
+    exclude_person_types: &[String],
+    search_term: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<PersonRow>, sqlx::Error> {
+    sqlx::query_as::<_, PersonRow>(
+        r#"
+        SELECT * FROM people
+        WHERE ($1::text[] = '{}' OR person_type = ANY($1))
+          AND ($2::text[] = '{}' OR person_type != ALL($2))
+          AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
+        ORDER BY name
+        LIMIT $4 OFFSET $5
+        "#,
+    )
+    .bind(person_types)
+    .bind(exclude_person_types)
+    .bind(search_term)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+/// Count people matching the given filters.
+pub async fn count_people(
+    pool: &PgPool,
+    person_types: &[String],
+    exclude_person_types: &[String],
+    search_term: Option<&str>,
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        r#"
+        SELECT COUNT(*) FROM people
+        WHERE ($1::text[] = '{}' OR person_type = ANY($1))
+          AND ($2::text[] = '{}' OR person_type != ALL($2))
+          AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
+        "#,
+    )
+    .bind(person_types)
+    .bind(exclude_person_types)
+    .bind(search_term)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
+/// Count items by type that a person appears in.
+pub async fn count_items_by_person(
+    pool: &PgPool,
+    person_id: Uuid,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT mi.item_type, COUNT(*) AS cnt
+        FROM media_items mi
+        JOIN media_item_people mip ON mip.item_id = mi.id
+        WHERE mip.person_id = $1
+        GROUP BY mi.item_type
+        "#,
+    )
+    .bind(person_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Get people associated with a media item.
 pub async fn list_by_item(
     pool: &PgPool,

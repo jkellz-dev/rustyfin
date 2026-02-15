@@ -119,6 +119,16 @@ pub struct BaseItemDto {
     // Child count for folders
     #[serde(skip_serializing_if = "Option::is_none")]
     pub child_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub movie_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub episode_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub song_count: Option<i32>,
 
     // Playback access
     #[serde(skip_serializing_if = "Option::is_none")]

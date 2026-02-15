@@ -295,9 +295,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Movies/Recommendations", get(similar::get_recommendations))
         .route("/Artists", get(stubs::empty_query_result_auth))
         .route("/Artists/AlbumArtists", get(stubs::empty_query_result_auth))
-        .route("/Genres", get(stubs::empty_query_result_auth))
-        .route("/Studios", get(stubs::empty_query_result_auth))
-        .route("/Persons", get(stubs::empty_query_result_auth))
+        .route("/Genres", get(genres::get_genres))
+        .route("/Studios", get(studios::get_studios))
+        .route("/Persons", get(persons::get_persons))
         .route(
             "/Users/{userId}/Suggestions",
             get(suggestions::get_suggestions),
