@@ -2951,9 +2951,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "quick-xml",
  "regex",
- "reqwest",
  "rustyfin-common",
  "rustyfin-db",
  "rustyfin-media",
