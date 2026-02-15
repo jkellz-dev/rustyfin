@@ -1,0 +1,13 @@
+[package]
+name = "rustyfin-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+chrono.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+quick-xml.workspace = true
+tracing.workspace = true

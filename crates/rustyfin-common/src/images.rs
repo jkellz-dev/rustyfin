@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::library::naming::is_image_file;
+use crate::naming::is_image_file;
 
 #[derive(Debug, Clone)]
 pub struct DiscoveredImage {

@@ -9,6 +9,7 @@ members = [
     "crates/rustyfin-search",
     "crates/rustyfin-media",
     "crates/rustyfin-frontend",
+    "crates/rustyfin-common",
 ]
 exclude = ["frontend"]
 resolver = "2"
@@ -28,6 +29,7 @@ rustyfin-models = { path = "crates/rustyfin-models" }
 rustyfin-search = { path = "crates/rustyfin-search", features = ["meilisearch"] }
 rustyfin-media = { path = "crates/rustyfin-media" }
 rustyfin-frontend = { path = "crates/rustyfin-frontend" }
+rustyfin-common = { path = "crates/rustyfin-common" }
 
 # Server
 axum = { version = "0.8", features = ["ws"] }

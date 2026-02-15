@@ -8,8 +8,8 @@ use rustyfin_db::repo::{chapters, images as images_repo, libraries, media_items,
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
-use crate::library::images::discover_images;
-use crate::library::naming::{
+use rustyfin_common::images::discover_images;
+use rustyfin_common::naming::{
     extract_album_year, is_audio_file, is_video_file, make_sort_name, parse_season_folder,
     resolve_audio_track, resolve_episode, resolve_movie,
 };

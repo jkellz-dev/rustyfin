@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::nfo::{NfoMetadata, NfoPerson};
+use crate::nfo::{NfoMetadata, NfoPerson};
 
 const TMDB_BASE_URL: &str = "https://api.themoviedb.org/3";
 

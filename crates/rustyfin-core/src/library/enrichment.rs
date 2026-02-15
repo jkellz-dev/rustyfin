@@ -5,11 +5,11 @@ use uuid::Uuid;
 
 use rustyfin_db::repo::{media_items, people};
 
-use super::nfo::{
+use rustyfin_common::nfo::{
     NfoMetadata, find_episode_nfo, find_movie_nfo, find_series_nfo, parse_episode_nfo,
     parse_movie_nfo, parse_series_nfo,
 };
-use super::tmdb::TmdbClient;
+use rustyfin_common::tmdb::TmdbClient;
 
 pub struct EnrichmentService {
     pool: PgPool,

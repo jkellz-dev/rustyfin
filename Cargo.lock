@@ -2659,6 +2659,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustyfin-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "quick-xml",
+ "regex",
+ "reqwest",
+ "serde",
+ "tracing",
+]
+
+[[package]]
 name = "rustyfin-core"
 version = "0.1.0"
 dependencies = [
@@ -2667,6 +2679,7 @@ dependencies = [
  "quick-xml",
  "regex",
  "reqwest",
+ "rustyfin-common",
  "rustyfin-db",
  "rustyfin-media",
  "rustyfin-models",
