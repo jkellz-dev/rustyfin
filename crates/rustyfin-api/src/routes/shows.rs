@@ -17,11 +17,14 @@ use crate::router::AppState;
 #[serde(rename_all = "PascalCase")]
 pub struct NextUpQuery {
     pub user_id: Option<Uuid>,
+    pub series_id: Option<Uuid>,
+    pub parent_id: Option<Uuid>,
     pub start_index: Option<i64>,
     pub limit: Option<i64>,
     pub fields: Option<String>,
     pub enable_images: Option<bool>,
     pub enable_user_data: Option<bool>,
+    pub enable_rewatching: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -46,12 +49,127 @@ pub struct EpisodesQuery {
     pub enable_user_data: Option<bool>,
 }
 
-/// `GET /Shows/NextUp` — Next unwatched episode per series (stub: returns empty).
+/// `GET /Shows/NextUp` — Next unwatched episode per series.
 pub async fn get_next_up(
-    _auth: AuthenticatedUser,
-    Query(_query): Query<NextUpQuery>,
-) -> Json<QueryResult<BaseItemDto>> {
-    Json(QueryResult::empty())
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Query(query): Query<NextUpQuery>,
+) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    let limit = query.limit.unwrap_or(20).min(100);
+    let start = query.start_index.unwrap_or(0);
+
+    // If filtering to a single series, just find its next episode
+    if let Some(series_id) = query.series_id {
+        let next = find_next_for_series(&state, &auth, series_id).await?;
+        let episodes: Vec<_> = next.into_iter().collect();
+        let total = episodes.len() as i32;
+        let mut dtos: Vec<BaseItemDto> = episodes
+            .iter()
+            .map(|item| media_item_to_dto(item, &state.server_id))
+            .collect();
+        enrich_next_up_dtos(&state, &auth, &episodes, &mut dtos, &query).await;
+        return Ok(Json(QueryResult::new(dtos, total)));
+    }
+
+    // Find all series with recent activity
+    let fetch_limit = (start + limit + 10) as i64;
+    let active_series = media_items::get_active_series(
+        &state.pool,
+        auth.user_id,
+        query.parent_id,
+        fetch_limit,
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    // For each series, find the next episode
+    let mut next_episodes = Vec::new();
+    for (series_id, _last_played) in &active_series {
+        if let Some(episode) = find_next_for_series(&state, &auth, *series_id).await? {
+            next_episodes.push(episode);
+        }
+    }
+
+    let total = next_episodes.len() as i32;
+
+    // Apply pagination
+    let start_idx = start as usize;
+    let end_idx = (start_idx + limit as usize).min(next_episodes.len());
+    let page = if start_idx < next_episodes.len() {
+        &next_episodes[start_idx..end_idx]
+    } else {
+        &[]
+    };
+
+    let mut dtos: Vec<BaseItemDto> = page
+        .iter()
+        .map(|item| media_item_to_dto(item, &state.server_id))
+        .collect();
+
+    let items_ref: Vec<_> = page.to_vec();
+    enrich_next_up_dtos(&state, &auth, &items_ref, &mut dtos, &query).await;
+
+    let mut result = QueryResult::new(dtos, total);
+    result.start_index = start as i32;
+    Ok(Json(result))
+}
+
+async fn find_next_for_series(
+    state: &AppState,
+    auth: &AuthenticatedUser,
+    series_id: Uuid,
+) -> Result<Option<media_items::MediaItemRow>, ApiError> {
+    let last_watched = media_items::get_last_watched_episode(&state.pool, auth.user_id, series_id)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let (min_season, min_episode) = if let Some(ref ep) = last_watched {
+        (ep.parent_index_number, ep.index_number)
+    } else {
+        (None, None)
+    };
+
+    media_items::get_next_episode(&state.pool, auth.user_id, series_id, min_season, min_episode)
+        .await
+        .map_err(ApiError::Database)
+}
+
+async fn enrich_next_up_dtos(
+    state: &AppState,
+    auth: &AuthenticatedUser,
+    items: &[media_items::MediaItemRow],
+    dtos: &mut [BaseItemDto],
+    query: &NextUpQuery,
+) {
+    let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
+    if !item_ids.is_empty() {
+        let all_images = images::list_by_items(&state.pool, &item_ids)
+            .await
+            .unwrap_or_default();
+        let images_map = group_images_by_item(all_images);
+        for dto in dtos.iter_mut() {
+            if let Some(item_images) = images_map.get(&dto.id) {
+                apply_images_to_dto(dto, item_images);
+            }
+        }
+    }
+
+    if query.enable_user_data.unwrap_or(true) {
+        for dto in dtos.iter_mut() {
+            if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, dto.id).await {
+                dto.user_data = Some(UserItemDataDto {
+                    playback_position_ticks: ud.playback_position_ticks,
+                    play_count: ud.play_count,
+                    is_favorite: ud.is_favorite,
+                    played: ud.played,
+                    rating: ud.rating,
+                    likes: ud.rating.map(|r| r >= 6.5),
+                    last_played_date: ud.last_played_date,
+                    ..Default::default()
+                });
+            }
+        }
+    }
 }
 
 /// `GET /Shows/{seriesId}/Seasons` — List seasons for a series.
