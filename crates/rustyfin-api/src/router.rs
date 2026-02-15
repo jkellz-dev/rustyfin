@@ -289,10 +289,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/Items/{itemId}/Similar",
-            get(stubs::empty_query_result_auth),
+            get(similar::get_similar),
         )
-        .route("/Items/Suggestions", get(stubs::empty_query_result_auth))
-        .route("/Movies/Recommendations", get(stubs::empty_array_auth))
+        .route("/Items/Suggestions", get(suggestions::get_suggestions))
+        .route("/Movies/Recommendations", get(similar::get_recommendations))
         .route("/Artists", get(stubs::empty_query_result_auth))
         .route("/Artists/AlbumArtists", get(stubs::empty_query_result_auth))
         .route("/Genres", get(stubs::empty_query_result_auth))
@@ -300,7 +300,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Persons", get(stubs::empty_query_result_auth))
         .route(
             "/Users/{userId}/Suggestions",
-            get(stubs::empty_query_result_auth),
+            get(suggestions::get_suggestions),
         )
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))

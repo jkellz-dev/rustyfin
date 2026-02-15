@@ -645,6 +645,37 @@ pub async fn get_next_episode(
     .await
 }
 
+/// Get random unplayed items for suggestions.
+pub async fn get_random_items(
+    pool: &PgPool,
+    user_id: Uuid,
+    item_types: &[String],
+    library_ids: &[Uuid],
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        SELECT m.*
+        FROM media_items m
+        LEFT JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+        WHERE m.is_folder = false
+          AND (ud.played IS NULL OR ud.played = false)
+          AND ($2::text[] = '{}' OR m.item_type = ANY($2))
+          AND ($3::uuid[] = '{}' OR m.library_id = ANY($3))
+        ORDER BY RANDOM()
+        LIMIT $4 OFFSET $5
+        "#,
+    )
+    .bind(user_id)
+    .bind(item_types)
+    .bind(library_ids)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
 /// Search items by name (basic ILIKE search).
 pub async fn search_by_name(
     pool: &PgPool,
@@ -659,4 +690,78 @@ pub async fn search_by_name(
     .bind(limit)
     .fetch_all(pool)
     .await
+}
+
+/// Find similar items based on shared genres, studios, and tags.
+pub async fn find_similar(
+    pool: &PgPool,
+    item_id: Uuid,
+    item_type: &str,
+    limit: i64,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        WITH source AS (
+            SELECT genres, studios, tags FROM media_items WHERE id = $1
+        )
+        SELECT m.*
+        FROM media_items m, source s
+        WHERE m.id != $1
+          AND m.item_type = $2
+          AND m.is_folder = false
+          AND (
+            (m.genres IS NOT NULL AND s.genres IS NOT NULL AND m.genres && s.genres)
+            OR (m.studios IS NOT NULL AND s.studios IS NOT NULL AND m.studios && s.studios)
+            OR (m.tags IS NOT NULL AND s.tags IS NOT NULL AND m.tags && s.tags)
+          )
+        ORDER BY (
+            COALESCE(
+                3.0 * array_length(ARRAY(
+                    SELECT unnest(m.genres) INTERSECT SELECT unnest(s.genres)
+                ), 1)::float8 / NULLIF(array_length(s.genres, 1)::float8, 0),
+                0
+            ) +
+            CASE WHEN m.studios IS NOT NULL AND s.studios IS NOT NULL AND m.studios && s.studios
+                 THEN 2.0 ELSE 0 END +
+            COALESCE(
+                1.0 * array_length(ARRAY(
+                    SELECT unnest(m.tags) INTERSECT SELECT unnest(s.tags)
+                ), 1)::float8 / NULLIF(array_length(s.tags, 1)::float8, 0),
+                0
+            )
+        ) DESC, RANDOM()
+        LIMIT $3
+        "#,
+    )
+    .bind(item_id)
+    .bind(item_type)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
+/// Get recently active series or movies for a user, ordered by last played date.
+pub async fn get_active_series_or_movies(
+    pool: &PgPool,
+    user_id: Uuid,
+    item_type: &str,
+    limit: i64,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        r#"
+        SELECT m.id
+        FROM media_items m
+        JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+        WHERE m.item_type = $2
+          AND ud.last_played_date IS NOT NULL
+        ORDER BY ud.last_played_date DESC
+        LIMIT $3
+        "#,
+    )
+    .bind(user_id)
+    .bind(item_type)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
 }
