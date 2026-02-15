@@ -22,7 +22,10 @@ pub async fn get_display_preferences(
     Query(query): Query<DisplayPreferencesQuery>,
 ) -> Json<DisplayPreferencesDto> {
     let client = query.client.as_deref().unwrap_or("emby");
-    Json(DisplayPreferencesDto::default_for(&display_prefs_id, client))
+    Json(DisplayPreferencesDto::default_for(
+        &display_prefs_id,
+        client,
+    ))
 }
 
 /// `POST /DisplayPreferences/{displayPreferencesId}` — Accept and discard (no persistence).

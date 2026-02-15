@@ -69,16 +69,11 @@ pub async fn get_sessions(
             && pb.play_method.as_deref() == Some("Transcode")
             && let Some(ref psid) = pb.play_session_id
         {
-            let pos = state
-                .transcode_manager
-                .get_transcoding_position(psid)
-                .await;
+            let pos = state.transcode_manager.get_transcoding_position(psid).await;
 
             pos.map(|position_ticks| {
                 let completion = if pb.position_ticks > 0 {
-                    Some(
-                        (position_ticks as f64 / pb.position_ticks as f64 * 100.0).min(100.0),
-                    )
+                    Some((position_ticks as f64 / pb.position_ticks as f64 * 100.0).min(100.0))
                 } else {
                     None
                 };

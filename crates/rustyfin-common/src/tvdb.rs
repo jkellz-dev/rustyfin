@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 use crate::nfo::{NfoMetadata, NfoPerson};
+use crate::tmdb::SearchResult;
 
 const TVDB_BASE_URL: &str = "https://api4.thetvdb.com/v4";
 
@@ -70,6 +71,48 @@ impl TvdbClient {
         self.fetch_series_details(&tvdb_id, &token).await
     }
 
+    /// Search TVDB for series, returning all results for disambiguation.
+    pub async fn search_series_results(&self, title: &str) -> Vec<SearchResult> {
+        let Some(token) = self.ensure_token().await else {
+            return vec![];
+        };
+        let url = format!(
+            "{TVDB_BASE_URL}/search?query={}&type=series",
+            urlencoded(title)
+        );
+
+        let Ok(resp) = self.client.get(&url).bearer_auth(&token).send().await else {
+            return vec![];
+        };
+        let Ok(data) = resp.json::<TvdbSearchResponse>().await else {
+            return vec![];
+        };
+
+        let Some(results) = data.data else {
+            return vec![];
+        };
+
+        results
+            .iter()
+            .filter_map(|r| {
+                let id_str = r.tvdb_id.as_ref()?;
+                let id: i64 = id_str.parse().ok()?;
+                Some(SearchResult {
+                    id,
+                    title: r.name.clone().unwrap_or_else(|| "(untitled)".to_string()),
+                    year: r.year.as_deref().and_then(|y| y.parse().ok()),
+                    overview: r.overview.clone(),
+                })
+            })
+            .collect()
+    }
+
+    /// Fetch series details by TVDB ID (public — used for direct ID lookup).
+    pub async fn fetch_series_by_id(&self, id: &str) -> Option<NfoMetadata> {
+        let token = self.ensure_token().await?;
+        self.fetch_series_details(id, &token).await
+    }
+
     /// Fetch extended series details by TVDB ID.
     async fn fetch_series_details(&self, id: &str, token: &str) -> Option<NfoMetadata> {
         let url = format!("{TVDB_BASE_URL}/series/{id}/extended");
@@ -109,6 +152,9 @@ struct TvdbSearchResponse {
 #[derive(Deserialize)]
 struct TvdbSearchResult {
     tvdb_id: Option<String>,
+    name: Option<String>,
+    year: Option<String>,
+    overview: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -157,11 +203,7 @@ fn series_to_metadata(d: TvdbSeriesDetail) -> NfoMetadata {
     let mut meta = NfoMetadata {
         title: d.name,
         overview: d.overview,
-        genres: d
-            .genres
-            .into_iter()
-            .filter_map(|g| g.name)
-            .collect(),
+        genres: d.genres.into_iter().filter_map(|g| g.name).collect(),
         studios: d
             .original_network
             .and_then(|n| n.name)

@@ -1,33 +1,43 @@
 use std::path::Path;
 
-use rustyfin_common::artwork::download_image;
+use rustyfin_common::artwork::download_image_with_options;
 use rustyfin_common::naming;
 use rustyfin_common::nfo;
+use rustyfin_common::rate_limit::RateLimiter;
 use rustyfin_common::tmdb::TmdbClient;
 use rustyfin_common::tvdb::TvdbClient;
 
 use crate::config::MetaConfig;
+use crate::scan::{disambiguate, rename_folder_with_provider_id};
 
 pub async fn fetch_metadata(
     path: &Path,
     media_type: &str,
     config: &MetaConfig,
     dry_run: bool,
+    auto_mode: bool,
 ) -> anyhow::Result<()> {
     match media_type {
-        "movie" => fetch_movie(path, config, dry_run).await,
-        "series" => fetch_series(path, config, dry_run).await,
+        "movie" => fetch_movie(path, config, dry_run, auto_mode).await,
+        "series" => fetch_series(path, config, dry_run, auto_mode).await,
         other => anyhow::bail!("Unknown media type: {other}. Use: movie, series"),
     }
 }
 
-async fn fetch_movie(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow::Result<()> {
+async fn fetch_movie(
+    path: &Path,
+    config: &MetaConfig,
+    dry_run: bool,
+    auto_mode: bool,
+) -> anyhow::Result<()> {
     let Some(tmdb_key) = config.tmdb.api_key.as_ref() else {
         anyhow::bail!("TMDB API key required for movie metadata. Set [tmdb] api_key in config.");
     };
 
     let tmdb = TmdbClient::new(tmdb_key.clone());
     let http = reqwest::Client::new();
+    let limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
+    let skip_existing = !config.output.overwrite_existing;
 
     // Determine title and year: if path is a file, use resolve_movie; if directory, use dir name
     let (title, year, target_dir) = if path.is_file() {
@@ -64,10 +74,38 @@ async fn fetch_movie(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow:
         return Ok(());
     }
 
-    let meta = tmdb
-        .search_movie(&title, year)
-        .await
-        .ok_or_else(|| anyhow::anyhow!("No TMDB results for '{title}'"))?;
+    // Check folder name for provider ID
+    let folder_name = target_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    let provider_id = naming::extract_provider_id(folder_name);
+
+    let meta = if let Some(ref pid) = provider_id
+        && pid.provider == "tmdb"
+    {
+        let id: i64 = pid.id.parse().unwrap_or(0);
+        limiter.wait().await;
+        tmdb.fetch_movie_by_id(id).await
+    } else {
+        limiter.wait().await;
+        let results = tmdb.search_movie_results(&title, year).await;
+        if let Some(chosen) = disambiguate(&results, &title, auto_mode) {
+            limiter.wait().await;
+            let meta = tmdb.fetch_movie_by_id(chosen.id).await;
+
+            // Rename folder with provider ID
+            if meta.is_some() && provider_id.is_none() {
+                rename_folder_with_provider_id(&target_dir, "tmdb", &chosen.id.to_string());
+            }
+
+            meta
+        } else {
+            None
+        }
+    };
+
+    let meta = meta.ok_or_else(|| anyhow::anyhow!("No TMDB results for '{title}'"))?;
 
     tracing::info!(
         "Found: {} ({})",
@@ -92,14 +130,14 @@ async fn fetch_movie(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow:
     if config.output.download_artwork {
         if let Some(ref url) = meta.poster_url {
             let poster_path = target_dir.join("poster.jpg");
-            match download_image(&http, url, &poster_path).await {
+            match download_image_with_options(&http, url, &poster_path, skip_existing).await {
                 Ok(()) => tracing::info!("Downloaded poster"),
                 Err(e) => tracing::error!("Failed to download poster: {e}"),
             }
         }
         if let Some(ref url) = meta.backdrop_url {
             let fanart_path = target_dir.join("fanart.jpg");
-            match download_image(&http, url, &fanart_path).await {
+            match download_image_with_options(&http, url, &fanart_path, skip_existing).await {
                 Ok(()) => tracing::info!("Downloaded fanart"),
                 Err(e) => tracing::error!("Failed to download fanart: {e}"),
             }
@@ -109,7 +147,12 @@ async fn fetch_movie(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow:
     Ok(())
 }
 
-async fn fetch_series(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow::Result<()> {
+async fn fetch_series(
+    path: &Path,
+    config: &MetaConfig,
+    dry_run: bool,
+    auto_mode: bool,
+) -> anyhow::Result<()> {
     if !path.is_dir() {
         anyhow::bail!("Series path must be a directory: {}", path.display());
     }
@@ -120,6 +163,7 @@ async fn fetch_series(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow
         .unwrap_or("Unknown")
         .to_string();
 
+    let clean_name = naming::clean_title(&series_name);
     tracing::info!("Fetching series metadata for '{}'", series_name);
 
     if dry_run {
@@ -144,21 +188,65 @@ async fn fetch_series(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow
         );
     }
 
-    // Try TMDB first, then TVDB
-    let meta = if let Some(ref tmdb_client) = tmdb {
-        tmdb_client.search_series(&series_name).await
-    } else {
-        None
-    };
+    let tmdb_limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
+    let tvdb_limiter = RateLimiter::new(config.tvdb.rate_limit, config.tvdb.rate_window_secs);
+    let skip_existing = !config.output.overwrite_existing;
 
-    let meta = if meta.is_none() {
+    // Check folder name for provider ID
+    let provider_id = naming::extract_provider_id(&series_name);
+
+    let meta = if let Some(ref pid) = provider_id
+        && pid.provider == "tmdb"
+    {
+        if let Some(ref tmdb_client) = tmdb {
+            let id: i64 = pid.id.parse().unwrap_or(0);
+            tmdb_limiter.wait().await;
+            tmdb_client.fetch_series_by_id(id).await
+        } else {
+            None
+        }
+    } else if let Some(ref pid) = provider_id
+        && pid.provider == "tvdb"
+    {
         if let Some(ref tvdb_client) = tvdb {
-            tvdb_client.search_series(&series_name).await
+            tvdb_limiter.wait().await;
+            tvdb_client.fetch_series_by_id(&pid.id).await
         } else {
             None
         }
     } else {
-        meta
+        // Search TMDB first, then TVDB
+        let mut found = None;
+
+        if let Some(ref tmdb_client) = tmdb {
+            tmdb_limiter.wait().await;
+            let results = tmdb_client.search_series_results(&clean_name).await;
+            if let Some(chosen) = disambiguate(&results, &clean_name, auto_mode) {
+                tmdb_limiter.wait().await;
+                let meta = tmdb_client.fetch_series_by_id(chosen.id).await;
+                if meta.is_some() && provider_id.is_none() {
+                    rename_folder_with_provider_id(path, "tmdb", &chosen.id.to_string());
+                }
+                found = meta;
+            }
+        }
+
+        if found.is_none()
+            && let Some(ref tvdb_client) = tvdb
+        {
+            tvdb_limiter.wait().await;
+            let results = tvdb_client.search_series_results(&clean_name).await;
+            if let Some(chosen) = disambiguate(&results, &clean_name, auto_mode) {
+                tvdb_limiter.wait().await;
+                let meta = tvdb_client.fetch_series_by_id(&chosen.id.to_string()).await;
+                if meta.is_some() && provider_id.is_none() {
+                    rename_folder_with_provider_id(path, "tvdb", &chosen.id.to_string());
+                }
+                found = meta;
+            }
+        }
+
+        found
     };
 
     let meta = meta.ok_or_else(|| anyhow::anyhow!("No results for series '{series_name}'"))?;
@@ -184,14 +272,14 @@ async fn fetch_series(path: &Path, config: &MetaConfig, dry_run: bool) -> anyhow
     if config.output.download_artwork {
         if let Some(ref url) = meta.poster_url {
             let poster_path = path.join("poster.jpg");
-            match download_image(&http, url, &poster_path).await {
+            match download_image_with_options(&http, url, &poster_path, skip_existing).await {
                 Ok(()) => tracing::info!("Downloaded poster"),
                 Err(e) => tracing::error!("Failed to download poster: {e}"),
             }
         }
         if let Some(ref url) = meta.backdrop_url {
             let fanart_path = path.join("fanart.jpg");
-            match download_image(&http, url, &fanart_path).await {
+            match download_image_with_options(&http, url, &fanart_path, skip_existing).await {
                 Ok(()) => tracing::info!("Downloaded fanart"),
                 Err(e) => tracing::error!("Failed to download fanart: {e}"),
             }

@@ -19,7 +19,10 @@ pub fn build_ffmpeg_args(params: &StreamParams) -> Vec<String> {
     }
 
     // 4. Input
-    args.extend(["-i".to_string(), params.input_path.to_string_lossy().to_string()]);
+    args.extend([
+        "-i".to_string(),
+        params.input_path.to_string_lossy().to_string(),
+    ]);
 
     // 5. Stream mapping
     args.extend(build_stream_mapping(params));
@@ -212,14 +215,8 @@ fn build_scale_filter(params: &StreamParams) -> Vec<String> {
                 "scale=min({w},iw):min({h},ih):force_original_aspect_ratio=decrease:force_divisible_by=2"
             ),
         ],
-        (Some(w), None) => vec![
-            "-vf".to_string(),
-            format!("scale=min({w},iw):-2"),
-        ],
-        (None, Some(h)) => vec![
-            "-vf".to_string(),
-            format!("scale=-2:min({h},ih)"),
-        ],
+        (Some(w), None) => vec!["-vf".to_string(), format!("scale=min({w},iw):-2")],
+        (None, Some(h)) => vec!["-vf".to_string(), format!("scale=-2:min({h},ih)")],
         (None, None) => vec![],
     }
 }
@@ -340,10 +337,7 @@ fn build_common_output_args() -> Vec<String> {
 pub fn build_hls_args(params: &StreamParams) -> Vec<String> {
     let mut args = vec!["-f".to_string(), "hls".to_string()];
 
-    args.extend([
-        "-hls_time".to_string(),
-        params.segment_duration.to_string(),
-    ]);
+    args.extend(["-hls_time".to_string(), params.segment_duration.to_string()]);
 
     match params.segment_format {
         SegmentFormat::MpegTs => {
@@ -565,9 +559,11 @@ mod tests {
             .filter(|(_, a)| a.as_str() == "-vf")
             .map(|(i, _)| &args[i + 1])
             .collect();
-        assert!(vf_args
-            .iter()
-            .any(|a| a.contains("scale=min(1920,iw):min(1080,ih)")));
+        assert!(
+            vf_args
+                .iter()
+                .any(|a| a.contains("scale=min(1920,iw):min(1080,ih)"))
+        );
     }
 
     #[test]

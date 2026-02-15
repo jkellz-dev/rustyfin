@@ -10,6 +10,15 @@ pub struct TmdbClient {
     client: reqwest::Client,
 }
 
+/// A search result from TMDB containing enough info for disambiguation.
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub id: i64,
+    pub title: String,
+    pub year: Option<i32>,
+    pub overview: Option<String>,
+}
+
 impl TmdbClient {
     pub fn new(api_key: String) -> Self {
         Self {
@@ -28,6 +37,55 @@ impl TmdbClient {
     pub async fn search_series(&self, title: &str) -> Option<NfoMetadata> {
         let search = self.search_tv_id(title).await?;
         self.fetch_tv_details(search.id).await
+    }
+
+    /// Search TMDB for movies, returning all results for disambiguation.
+    pub async fn search_movie_results(&self, title: &str, year: Option<i32>) -> Vec<SearchResult> {
+        let mut url = format!(
+            "{TMDB_BASE_URL}/search/movie?api_key={}&query={}",
+            self.api_key,
+            urlencoded(title)
+        );
+        if let Some(y) = year {
+            url.push_str(&format!("&year={y}"));
+        }
+
+        let Ok(resp) = self.client.get(&url).send().await else {
+            return vec![];
+        };
+        let Ok(data) = resp.json::<TmdbSearchResponse>().await else {
+            return vec![];
+        };
+
+        data.results.iter().map(|r| r.to_search_result()).collect()
+    }
+
+    /// Search TMDB for TV series, returning all results for disambiguation.
+    pub async fn search_series_results(&self, title: &str) -> Vec<SearchResult> {
+        let url = format!(
+            "{TMDB_BASE_URL}/search/tv?api_key={}&query={}",
+            self.api_key,
+            urlencoded(title)
+        );
+
+        let Ok(resp) = self.client.get(&url).send().await else {
+            return vec![];
+        };
+        let Ok(data) = resp.json::<TmdbSearchResponse>().await else {
+            return vec![];
+        };
+
+        data.results.iter().map(|r| r.to_search_result()).collect()
+    }
+
+    /// Fetch movie details by TMDB ID (public -- used for direct ID lookup).
+    pub async fn fetch_movie_by_id(&self, id: i64) -> Option<NfoMetadata> {
+        self.fetch_movie_details(id).await
+    }
+
+    /// Fetch TV series details by TMDB ID (public -- used for direct ID lookup).
+    pub async fn fetch_series_by_id(&self, id: i64) -> Option<NfoMetadata> {
+        self.fetch_tv_details(id).await
     }
 
     async fn search_movie_id(&self, title: &str, year: Option<i32>) -> Option<TmdbSearchResult> {
@@ -93,6 +151,37 @@ struct TmdbSearchResponse {
 #[derive(Deserialize)]
 struct TmdbSearchResult {
     id: i64,
+    // Movie fields
+    title: Option<String>,
+    release_date: Option<String>,
+    // TV fields (different JSON keys)
+    name: Option<String>,
+    first_air_date: Option<String>,
+    // Shared
+    overview: Option<String>,
+}
+
+impl TmdbSearchResult {
+    fn to_search_result(&self) -> SearchResult {
+        let title = self
+            .title
+            .clone()
+            .or_else(|| self.name.clone())
+            .unwrap_or_else(|| "(untitled)".to_string());
+        let date_str = self
+            .release_date
+            .as_deref()
+            .or(self.first_air_date.as_deref());
+        let year = date_str
+            .and_then(|s| s.get(..4))
+            .and_then(|y| y.parse().ok());
+        SearchResult {
+            id: self.id,
+            title,
+            year,
+            overview: self.overview.clone(),
+        }
+    }
 }
 
 #[derive(Deserialize)]

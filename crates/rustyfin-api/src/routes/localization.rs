@@ -119,32 +119,95 @@ pub async fn get_countries() -> Json<Vec<CountryInfo>> {
 /// `GET /Localization/ParentalRatings` — US MPAA + TV ratings.
 pub async fn get_parental_ratings() -> Json<Vec<ParentalRating>> {
     Json(vec![
-        ParentalRating { name: "G".into(), value: 1 },
-        ParentalRating { name: "PG".into(), value: 5 },
-        ParentalRating { name: "PG-13".into(), value: 7 },
-        ParentalRating { name: "R".into(), value: 9 },
-        ParentalRating { name: "NC-17".into(), value: 10 },
-        ParentalRating { name: "TV-Y".into(), value: 1 },
-        ParentalRating { name: "TV-Y7".into(), value: 3 },
-        ParentalRating { name: "TV-G".into(), value: 4 },
-        ParentalRating { name: "TV-PG".into(), value: 5 },
-        ParentalRating { name: "TV-14".into(), value: 7 },
-        ParentalRating { name: "TV-MA".into(), value: 9 },
+        ParentalRating {
+            name: "G".into(),
+            value: 1,
+        },
+        ParentalRating {
+            name: "PG".into(),
+            value: 5,
+        },
+        ParentalRating {
+            name: "PG-13".into(),
+            value: 7,
+        },
+        ParentalRating {
+            name: "R".into(),
+            value: 9,
+        },
+        ParentalRating {
+            name: "NC-17".into(),
+            value: 10,
+        },
+        ParentalRating {
+            name: "TV-Y".into(),
+            value: 1,
+        },
+        ParentalRating {
+            name: "TV-Y7".into(),
+            value: 3,
+        },
+        ParentalRating {
+            name: "TV-G".into(),
+            value: 4,
+        },
+        ParentalRating {
+            name: "TV-PG".into(),
+            value: 5,
+        },
+        ParentalRating {
+            name: "TV-14".into(),
+            value: 7,
+        },
+        ParentalRating {
+            name: "TV-MA".into(),
+            value: 9,
+        },
     ])
 }
 
 /// `GET /Localization/Options` — Language options.
 pub async fn get_options() -> Json<Vec<LocalizationOption>> {
     Json(vec![
-        LocalizationOption { name: "English (United States)".into(), value: "en-US".into() },
-        LocalizationOption { name: "Français".into(), value: "fr".into() },
-        LocalizationOption { name: "Deutsch".into(), value: "de".into() },
-        LocalizationOption { name: "Español".into(), value: "es".into() },
-        LocalizationOption { name: "日本語".into(), value: "ja".into() },
-        LocalizationOption { name: "Português (Brasil)".into(), value: "pt-BR".into() },
-        LocalizationOption { name: "中文 (简体)".into(), value: "zh-CN".into() },
-        LocalizationOption { name: "한국어".into(), value: "ko".into() },
-        LocalizationOption { name: "Italiano".into(), value: "it".into() },
-        LocalizationOption { name: "Русский".into(), value: "ru".into() },
+        LocalizationOption {
+            name: "English (United States)".into(),
+            value: "en-US".into(),
+        },
+        LocalizationOption {
+            name: "Français".into(),
+            value: "fr".into(),
+        },
+        LocalizationOption {
+            name: "Deutsch".into(),
+            value: "de".into(),
+        },
+        LocalizationOption {
+            name: "Español".into(),
+            value: "es".into(),
+        },
+        LocalizationOption {
+            name: "日本語".into(),
+            value: "ja".into(),
+        },
+        LocalizationOption {
+            name: "Português (Brasil)".into(),
+            value: "pt-BR".into(),
+        },
+        LocalizationOption {
+            name: "中文 (简体)".into(),
+            value: "zh-CN".into(),
+        },
+        LocalizationOption {
+            name: "한국어".into(),
+            value: "ko".into(),
+        },
+        LocalizationOption {
+            name: "Italiano".into(),
+            value: "it".into(),
+        },
+        LocalizationOption {
+            name: "Русский".into(),
+            value: "ru".into(),
+        },
     ])
 }

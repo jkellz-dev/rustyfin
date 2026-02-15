@@ -6,8 +6,9 @@ use uuid::Uuid;
 use rustyfin_db::repo::{media_items, people};
 
 use rustyfin_common::nfo::{
-    NfoMetadata, find_episode_nfo, find_movie_nfo, find_series_nfo, parse_episode_nfo,
-    parse_movie_nfo, parse_series_nfo,
+    NfoMetadata, find_album_nfo, find_artist_nfo, find_episode_nfo, find_movie_nfo,
+    find_series_nfo, parse_album_nfo, parse_artist_nfo, parse_episode_nfo, parse_movie_nfo,
+    parse_series_nfo,
 };
 
 pub struct EnrichmentService {
@@ -47,6 +48,20 @@ impl EnrichmentService {
         self.apply_metadata(item_id, &meta).await;
     }
 
+    /// Enrich a music artist item with metadata from NFO.
+    pub async fn enrich_artist(&self, item_id: Uuid, artist_dir: &Path) {
+        let meta = find_artist_nfo(artist_dir).and_then(|p| parse_artist_nfo(&p));
+        let Some(meta) = meta else { return };
+        self.apply_metadata(item_id, &meta).await;
+    }
+
+    /// Enrich a music album item with metadata from NFO.
+    pub async fn enrich_album(&self, item_id: Uuid, album_dir: &Path) {
+        let meta = find_album_nfo(album_dir).and_then(|p| parse_album_nfo(&p));
+        let Some(meta) = meta else { return };
+        self.apply_metadata(item_id, &meta).await;
+    }
+
     /// Re-enrich an item by loading it from DB and dispatching by type.
     pub async fn refresh_item(&self, item_id: Uuid) {
         let item = match media_items::find_by_id(&self.pool, item_id).await {
@@ -77,6 +92,27 @@ impl EnrichmentService {
             "Episode" => {
                 if let Some(ref path) = item.path {
                     self.enrich_episode(item_id, Path::new(path)).await;
+                }
+            }
+            "MusicArtist" => {
+                if let Ok(children) =
+                    media_items::list_by_parent(&self.pool, Some(item_id), &[], 0, 1).await
+                    && let Some(child) = children.first()
+                    && let Some(ref child_path) = child.path
+                    && let Some(artist_dir) =
+                        Path::new(child_path).parent().and_then(|p| p.parent())
+                {
+                    self.enrich_artist(item_id, artist_dir).await;
+                }
+            }
+            "MusicAlbum" => {
+                if let Ok(children) =
+                    media_items::list_by_parent(&self.pool, Some(item_id), &[], 0, 1).await
+                    && let Some(child) = children.first()
+                    && let Some(ref child_path) = child.path
+                    && let Some(album_dir) = Path::new(child_path).parent()
+                {
+                    self.enrich_album(item_id, album_dir).await;
                 }
             }
             _ => {}

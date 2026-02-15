@@ -19,3 +19,4 @@ tracing-subscriber.workspace = true
 reqwest.workspace = true
 walkdir.workspace = true
 anyhow.workspace = true
+dialoguer.workspace = true

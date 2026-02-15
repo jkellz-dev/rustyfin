@@ -64,14 +64,9 @@ pub async fn get_recommendations(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
-    let recent = media_items::get_active_series_or_movies(
-        &state.pool,
-        auth.user_id,
-        "Movie",
-        5,
-    )
-    .await
-    .unwrap_or_default();
+    let recent = media_items::get_active_series_or_movies(&state.pool, auth.user_id, "Movie", 5)
+        .await
+        .unwrap_or_default();
 
     let mut all_similar = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();

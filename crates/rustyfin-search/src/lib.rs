@@ -39,9 +39,8 @@ pub struct SearchService {
 impl SearchService {
     pub fn new(pool: PgPool, _meili_url: Option<&str>, _meili_key: Option<&str>) -> Self {
         #[cfg(feature = "meilisearch")]
-        let meili_client = _meili_url.and_then(|url| {
-            meilisearch_sdk::client::Client::new(url, _meili_key).ok()
-        });
+        let meili_client =
+            _meili_url.and_then(|url| meilisearch_sdk::client::Client::new(url, _meili_key).ok());
 
         Self {
             pool,

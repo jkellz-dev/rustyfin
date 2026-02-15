@@ -18,10 +18,7 @@ pub async fn get_configuration(
 }
 
 /// `POST /System/Configuration` — Accept and discard (config is file-based).
-pub async fn update_configuration(
-    _auth: AdminUser,
-    _body: String,
-) -> StatusCode {
+pub async fn update_configuration(_auth: AdminUser, _body: String) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 

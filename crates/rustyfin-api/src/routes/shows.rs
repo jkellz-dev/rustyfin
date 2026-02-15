@@ -73,14 +73,10 @@ pub async fn get_next_up(
 
     // Find all series with recent activity
     let fetch_limit = (start + limit + 10) as i64;
-    let active_series = media_items::get_active_series(
-        &state.pool,
-        auth.user_id,
-        query.parent_id,
-        fetch_limit,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let active_series =
+        media_items::get_active_series(&state.pool, auth.user_id, query.parent_id, fetch_limit)
+            .await
+            .map_err(ApiError::Database)?;
 
     // For each series, find the next episode
     let mut next_episodes = Vec::new();
@@ -129,9 +125,15 @@ async fn find_next_for_series(
         (None, None)
     };
 
-    media_items::get_next_episode(&state.pool, auth.user_id, series_id, min_season, min_episode)
-        .await
-        .map_err(ApiError::Database)
+    media_items::get_next_episode(
+        &state.pool,
+        auth.user_id,
+        series_id,
+        min_season,
+        min_episode,
+    )
+    .await
+    .map_err(ApiError::Database)
 }
 
 async fn enrich_next_up_dtos(
@@ -277,15 +279,10 @@ pub async fn get_episodes(
 
         let mut all_episodes = Vec::new();
         for season in &seasons {
-            let eps = media_items::list_by_parent(
-                &state.pool,
-                Some(season.id),
-                &episode_types,
-                0,
-                500,
-            )
-            .await
-            .unwrap_or_default();
+            let eps =
+                media_items::list_by_parent(&state.pool, Some(season.id), &episode_types, 0, 500)
+                    .await
+                    .unwrap_or_default();
             all_episodes.extend(eps);
         }
 
@@ -300,9 +297,10 @@ pub async fn get_episodes(
         return Ok(Json(QueryResult::new(dtos, total)));
     };
 
-    let items = media_items::list_by_parent(&state.pool, Some(parent_id), &episode_types, start, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let items =
+        media_items::list_by_parent(&state.pool, Some(parent_id), &episode_types, start, limit)
+            .await
+            .map_err(ApiError::Database)?;
     let total = media_items::count_by_parent(&state.pool, Some(parent_id), &episode_types)
         .await
         .map_err(ApiError::Database)?;

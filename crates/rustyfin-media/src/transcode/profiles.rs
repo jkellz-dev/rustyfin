@@ -74,11 +74,7 @@ pub fn decide_play_method(
         .find(|s| s.stream_type == "Audio" && s.is_default)
         .or_else(|| streams.iter().find(|s| s.stream_type == "Audio"));
 
-    let source_container = source
-        .container
-        .as_deref()
-        .unwrap_or("")
-        .to_lowercase();
+    let source_container = source.container.as_deref().unwrap_or("").to_lowercase();
     let source_video_codec = video_stream
         .and_then(|s| s.codec.as_deref())
         .unwrap_or("")
@@ -172,9 +168,10 @@ pub fn decide_play_method(
 
     // Check direct stream (remux): codecs are OK but container isn't
     if enable_direct_stream != Some(false) {
-        let only_container_issue = reasons.iter().all(|r| {
-            matches!(r, TranscodeReason::ContainerNotSupported)
-        }) && !reasons.is_empty();
+        let only_container_issue = reasons
+            .iter()
+            .all(|r| matches!(r, TranscodeReason::ContainerNotSupported))
+            && !reasons.is_empty();
 
         if only_container_issue {
             let target_container = profile
@@ -218,16 +215,15 @@ pub fn decide_play_method(
             .map_or(true, |t| t.eq_ignore_ascii_case("Video"))
     });
 
-    let (target_video, target_audio, target_container) =
-        if let Some(tp) = transcode_profile {
-            (
-                tp.video_codec.clone().unwrap_or_else(|| "h264".to_string()),
-                tp.audio_codec.clone().unwrap_or_else(|| "aac".to_string()),
-                tp.container.clone(),
-            )
-        } else {
-            ("h264".to_string(), "aac".to_string(), None)
-        };
+    let (target_video, target_audio, target_container) = if let Some(tp) = transcode_profile {
+        (
+            tp.video_codec.clone().unwrap_or_else(|| "h264".to_string()),
+            tp.audio_codec.clone().unwrap_or_else(|| "aac".to_string()),
+            tp.container.clone(),
+        )
+    } else {
+        ("h264".to_string(), "aac".to_string(), None)
+    };
 
     TranscodeDecision {
         play_method: PlayMethod::Transcode,
@@ -372,9 +368,11 @@ mod tests {
 
         let decision = decide_play_method(&source, &streams, &profile, None, None, None);
         assert_eq!(decision.play_method, PlayMethod::Transcode);
-        assert!(decision
-            .reasons
-            .contains(&TranscodeReason::VideoCodecNotSupported));
+        assert!(
+            decision
+                .reasons
+                .contains(&TranscodeReason::VideoCodecNotSupported)
+        );
     }
 
     #[test]
@@ -386,9 +384,11 @@ mod tests {
 
         let decision = decide_play_method(&source, &streams, &profile, None, None, None);
         assert_eq!(decision.play_method, PlayMethod::DirectStream);
-        assert!(decision
-            .reasons
-            .contains(&TranscodeReason::ContainerNotSupported));
+        assert!(
+            decision
+                .reasons
+                .contains(&TranscodeReason::ContainerNotSupported)
+        );
     }
 
     #[test]
@@ -400,9 +400,11 @@ mod tests {
 
         let decision = decide_play_method(&source, &streams, &profile, None, None, None);
         assert_eq!(decision.play_method, PlayMethod::Transcode);
-        assert!(decision
-            .reasons
-            .contains(&TranscodeReason::VideoBitrateTooHigh));
+        assert!(
+            decision
+                .reasons
+                .contains(&TranscodeReason::VideoBitrateTooHigh)
+        );
     }
 
     #[test]
@@ -413,9 +415,11 @@ mod tests {
 
         let decision = decide_play_method(&source, &streams, &profile, None, None, None);
         assert_eq!(decision.play_method, PlayMethod::Transcode);
-        assert!(decision
-            .reasons
-            .contains(&TranscodeReason::AudioCodecNotSupported));
+        assert!(
+            decision
+                .reasons
+                .contains(&TranscodeReason::AudioCodecNotSupported)
+        );
     }
 
     #[test]
@@ -424,8 +428,7 @@ mod tests {
         let streams = vec![make_video_stream("h264"), make_audio_stream("aac")];
         let profile = make_profile_h264_aac_mp4();
 
-        let decision =
-            decide_play_method(&source, &streams, &profile, Some(false), None, None);
+        let decision = decide_play_method(&source, &streams, &profile, Some(false), None, None);
         assert_eq!(decision.play_method, PlayMethod::Transcode);
     }
 
@@ -447,8 +450,7 @@ mod tests {
         let profile = DeviceProfile::default();
 
         // Direct stream disabled → falls to transcode
-        let decision =
-            decide_play_method(&source, &streams, &profile, None, Some(false), None);
+        let decision = decide_play_method(&source, &streams, &profile, None, Some(false), None);
         assert_eq!(decision.play_method, PlayMethod::Transcode);
     }
 

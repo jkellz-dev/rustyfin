@@ -73,7 +73,8 @@ pub async fn authenticate_by_name(
 
         // First user becomes admin
         if is_first_user {
-            let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
+            let _ =
+                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
         }
 
         // Auto-admin from groups
@@ -81,7 +82,8 @@ pub async fn authenticate_by_name(
             && identity.groups.iter().any(|g| g == admin_group)
             && !user.is_administrator
         {
-            let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
+            let _ =
+                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
         }
 
         user
@@ -128,12 +130,14 @@ pub async fn authenticate_by_name(
 
         // First user becomes admin
         if is_first_user {
-            let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
+            let _ =
+                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
         }
 
         // Auto-admin from LDAP group membership
         if ldap_result.is_admin && !user.is_administrator {
-            let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
+            let _ =
+                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
         }
 
         user

@@ -95,25 +95,13 @@ pub fn build_playback_info(
                     "/Videos/{}/stream?static=true&mediaSourceId={}",
                     item.id, item.id
                 ));
-                apply_transcode_urls(
-                    &mut source,
-                    item.id,
-                    &play_session_id,
-                    &decision,
-                    request,
-                );
+                apply_transcode_urls(&mut source, item.id, &play_session_id, &decision, request);
             }
             PlayMethod::Transcode => {
                 source.supports_direct_play = false;
                 source.supports_direct_stream = false;
                 source.supports_transcoding = true;
-                apply_transcode_urls(
-                    &mut source,
-                    item.id,
-                    &play_session_id,
-                    &decision,
-                    request,
-                );
+                apply_transcode_urls(&mut source, item.id, &play_session_id, &decision, request);
             }
         }
     }
@@ -133,18 +121,9 @@ fn apply_transcode_urls(
     decision: &crate::transcode::profiles::TranscodeDecision,
     request: Option<&PlaybackInfoRequest>,
 ) {
-    let video_codec = decision
-        .target_video_codec
-        .as_deref()
-        .unwrap_or("h264");
-    let audio_codec = decision
-        .target_audio_codec
-        .as_deref()
-        .unwrap_or("aac");
-    let container = decision
-        .target_container
-        .as_deref()
-        .unwrap_or("ts");
+    let video_codec = decision.target_video_codec.as_deref().unwrap_or("h264");
+    let audio_codec = decision.target_audio_codec.as_deref().unwrap_or("aac");
+    let container = decision.target_container.as_deref().unwrap_or("ts");
 
     let mut url = format!(
         "/Videos/{item_id}/master.m3u8\

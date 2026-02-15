@@ -63,15 +63,9 @@ pub async fn get_master_playlist(
 
     let video_codec = parse_video_codec(params.video_codec.as_deref());
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
-    let play_session_id = params
-        .play_session_id
-        .as_deref()
-        .unwrap_or("unknown");
+    let play_session_id = params.play_session_id.as_deref().unwrap_or("unknown");
     let item_id_string = item_id.to_string();
-    let media_source_id = params
-        .media_source_id
-        .as_deref()
-        .unwrap_or(&item_id_string);
+    let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
 
     // Build extra query string for passthrough
     let mut extra_qs = String::new();
@@ -98,7 +92,9 @@ pub async fn get_master_playlist(
         item_id,
         video_codec,
         audio_codec,
-        params.max_streaming_bitrate.or(item.total_bitrate.map(|b| b as i64)),
+        params
+            .max_streaming_bitrate
+            .or(item.total_bitrate.map(|b| b as i64)),
         video_stream.and_then(|s| s.width),
         video_stream.and_then(|s| s.height),
         play_session_id,
@@ -194,9 +190,9 @@ pub async fn get_variant_playlist(
     let playlist_path = output_dir.join("playlist.m3u8");
 
     // Wait for playlist file (ffmpeg may still be starting)
-    let playlist_content = wait_and_read_file(&playlist_path, 30).await.map_err(|_| {
-        ApiError::Internal("timeout waiting for transcode playlist".to_string())
-    })?;
+    let playlist_content = wait_and_read_file(&playlist_path, 30)
+        .await
+        .map_err(|_| ApiError::Internal("timeout waiting for transcode playlist".to_string()))?;
 
     let rewritten = rewrite_variant_playlist(&playlist_content, item_id, &play_session_id);
 
@@ -245,10 +241,7 @@ async fn get_segment_inner(
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
 
-    let seg_duration = tm
-        .get_segment_duration(play_session_id)
-        .await
-        .unwrap_or(6);
+    let seg_duration = tm.get_segment_duration(play_session_id).await.unwrap_or(6);
     let segment_start_ticks = segment_id as i64 * seg_duration as i64 * 10_000_000;
 
     let current_pos = tm
@@ -273,14 +266,16 @@ async fn get_segment_inner(
     }
 
     // Wait for segment file to appear (up to 30 seconds)
-    let content = wait_and_read_file_bytes(&segment_path, 30).await.map_err(|_| {
-        warn!(
-            play_session_id = %play_session_id,
-            segment = %segment_file,
-            "timeout waiting for segment"
-        );
-        ApiError::NotFound
-    })?;
+    let content = wait_and_read_file_bytes(&segment_path, 30)
+        .await
+        .map_err(|_| {
+            warn!(
+                play_session_id = %play_session_id,
+                segment = %segment_file,
+                "timeout waiting for segment"
+            );
+            ApiError::NotFound
+        })?;
 
     tm.touch_job(play_session_id).await;
 
@@ -324,9 +319,7 @@ pub async fn delete_active_encodings(
 }
 
 /// `HEAD /Videos/{itemId}/master.m3u8`
-pub async fn head_master_playlist(
-    _auth: AuthenticatedUser,
-) -> Response {
+pub async fn head_master_playlist(_auth: AuthenticatedUser) -> Response {
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/x-mpegURL")
@@ -349,15 +342,9 @@ pub async fn get_audio_master_playlist(
         .ok_or(ApiError::NotFound)?;
 
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
-    let play_session_id = params
-        .play_session_id
-        .as_deref()
-        .unwrap_or("unknown");
+    let play_session_id = params.play_session_id.as_deref().unwrap_or("unknown");
     let item_id_string = item_id.to_string();
-    let media_source_id = params
-        .media_source_id
-        .as_deref()
-        .unwrap_or(&item_id_string);
+    let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
 
     let mut extra_qs = String::new();
     if let Some(ref ac) = params.audio_codec {
@@ -525,12 +512,8 @@ async fn serve_segment(path: &std::path::Path) -> Result<Response, ApiError> {
 }
 
 /// Wait for a text file to appear and read its contents.
-async fn wait_and_read_file(
-    path: &std::path::Path,
-    timeout_secs: u64,
-) -> Result<String, ()> {
-    let deadline = tokio::time::Instant::now()
-        + std::time::Duration::from_secs(timeout_secs);
+async fn wait_and_read_file(path: &std::path::Path, timeout_secs: u64) -> Result<String, ()> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
         if path.exists() {
@@ -554,8 +537,7 @@ async fn wait_and_read_file_bytes(
     path: &std::path::Path,
     timeout_secs: u64,
 ) -> Result<Vec<u8>, ()> {
-    let deadline = tokio::time::Instant::now()
-        + std::time::Duration::from_secs(timeout_secs);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
         if path.exists() {

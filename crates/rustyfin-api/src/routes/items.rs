@@ -12,8 +12,7 @@ use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::EnrichmentService;
 use rustyfin_db::repo::images::ImageRow;
 use rustyfin_db::repo::{
-    chapters, images, libraries, media_items, media_streams, people, user_data,
-    user_library_access,
+    chapters, images, libraries, media_items, media_streams, people, user_data, user_library_access,
 };
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_models::dto::{
@@ -347,10 +346,9 @@ pub async fn get_item_by_id(
 
     // Check library access
     if let Some(lib_id) = item.library_id {
-        let accessible =
-            user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-                .await
-                .map_err(ApiError::Database)?;
+        let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+            .await
+            .map_err(ApiError::Database)?;
         if let Some(ref allowed) = accessible
             && !allowed.contains(&lib_id)
         {

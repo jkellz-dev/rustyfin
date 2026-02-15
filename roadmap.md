@@ -235,8 +235,10 @@ The server process never writes to disk. It reads NFO files and sidecar images d
 - [ ] Fanart.tv provider — download clearlogo, disc art, landscape artwork as sidecar images
 - [x] NFO writer — generate Kodi/Jellyfin-compatible NFO XML (same format the server already parses)
 - [x] Sidecar image downloader — poster.jpg, fanart.jpg, banner.jpg alongside media files
-- [ ] Rate-limited worker queue — metered fetches per provider (TMDB: 40 req/10s, TVDB: per their limits)
-- [ ] Interactive mode — prompt user to confirm matches before writing (for ambiguous titles)
+- [x] Rate-limited worker queue — `governor`-based per-provider rate limiting (TMDB: 40 req/10s, TVDB: 20 req/10s, configurable)
+- [x] Interactive mode — `dialoguer` disambiguation prompt with `--auto` flag for scripted/cron use
+- [x] Provider ID extraction from folder names (`[tmdbid-N]`, `[tvdbid-N]`) — skip search when ID present, embed ID after match
+- [x] Artwork download retry logic (3 attempts, exponential backoff, skip-existing check)
 - [x] Config via `rustyfin-meta.toml` or CLI flags (API keys, provider priority, output format)
 
 **Server-side changes [DONE]:**
@@ -251,8 +253,8 @@ Embedded tags (ID3v2, Vorbis comments, FLAC tags) are the primary source of trut
 **Server-side music (read-only) [DONE]:**
 - [x] Tag reader — extract metadata from MP3 (ID3v2), FLAC (Vorbis comments), M4A (iTunes atoms), OGG — via `lofty` crate
 - [x] Tag-to-model mapping: artist, album artist, album, track name, track number, disc number, year, genre, album art (embedded image)
-- [ ] Read music NFO sidecar files written by `rustyfin` (artist.nfo, album.nfo)
-- [ ] Read sidecar images (artist.jpg, cover.jpg, folder.jpg)
+- [x] Read music NFO sidecar files written by `rustyfin` (artist.nfo, album.nfo)
+- [x] Read sidecar images (artist.jpg, cover.jpg, folder.jpg)
 - [x] `GET /Artists` / `GET /Artists/AlbumArtists` — real DB queries with child counts
 
 **`rustyfin` CLI — music providers:**
@@ -292,120 +294,18 @@ For users who want unlimited lookups with no rate limits and full offline capabi
 
 ---
 
-## Phase 11 — UI Polish & Interactivity
-
-Comprehensive UX pass across the admin UI and client-facing interactions. The admin UI works but lacks the feedback, validation, and polish needed for daily use.
-
-### 11a. Dashboard Improvements
-- [ ] Activity log viewer (backend at `/System/ActivityLog/Entries` already exists, wire to UI)
-- [ ] Active sessions / "now playing" widget (backend at `/Sessions` exists)
-- [ ] Library cards show item counts and last scan time
-- [ ] Recent additions widget (latest items added across libraries)
-- [ ] System health indicators (DB connection, Meilisearch status, disk usage)
-
-### 11b. Real-Time Feedback
-- [ ] Scan progress tracking (backend: track scan progress per library, expose via API or WebSocket)
-- [ ] WebSocket broadcasts for scan started/completed/failed events
-- [ ] WebSocket broadcasts for new items added during scan
-- [ ] Admin notification when scan errors occur (e.g. unreadable files, failed probes)
-- [ ] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request)
-- [ ] Toast for error states, not just success (network errors, 403s, validation failures)
-
-### 11c. Form Validation & Error Handling
-- [ ] Library name: empty check, duplicate name detection
-- [ ] Library paths: empty path check, duplicate path across libraries
-- [ ] Folder picker: permission denied handling, error recovery with retry
-- [ ] User-friendly error messages (not raw HTTP status codes)
-- [ ] Retry buttons on failed network requests
-- [ ] Graceful degradation (if one API call fails, don't blank the whole page)
-- [ ] Request deduplication (prevent double-submit on button clicks)
-
-### 11d. Media Browser Polish
-- [ ] Sorting controls (by name, date added, year, rating)
-- [ ] Filtering by genre, year, rating, item type
-- [ ] Grid/list view toggle
-- [ ] Watched/unwatched badges on posters
-- [ ] Playback progress bars on in-progress items
-- [ ] Bulk operations (select multiple items for refresh, mark played/unplayed)
-- [ ] Cast member links (click person → filtered view of their items)
-- [ ] Search filters (scope by type: movies, series, music, episodes)
-
-### 11e. User Management Polish
-- [ ] Humanized timestamps ("2 hours ago" instead of raw ISO dates)
-- [ ] Sorting and filtering user list
-- [ ] Per-user device list and session history
-- [ ] "Kick session" button (terminate an active session)
-- [ ] Per-user playback history view
-
-### 11f. Accessibility
-- [ ] ARIA attributes on interactive elements (`aria-label`, `aria-describedby`, `aria-live`)
-- [ ] Keyboard navigation (tab order, Escape to close modals, arrow keys in folder picker)
-- [ ] Focus management (modal open → focus first input, modal close → restore focus)
-- [ ] Screen reader announcements for page loads, errors, toast notifications
-- [ ] Skip-to-content link
-- [ ] Alt text for poster images
-- [ ] `@media (prefers-reduced-motion)` support
-
-### 11g. Frontend Infrastructure
-- [ ] Request cancellation on navigation (AbortController)
-- [ ] Client-side caching (avoid re-fetching on back navigation)
-- [ ] Skeleton loaders instead of spinners for content areas
-- [ ] Loading state consolidation (page-level spinner, not per-component)
-- [ ] Structured error types in API client (not just strings)
-- [ ] Optimistic updates where safe (e.g. toggle favorite immediately, reconcile on response)
-
----
-
-## Phase 12 — Documentation, Branding & Website
-
-Comprehensive docs, a design book for consistent branding, and a public project website.
-
-### 12a. Design Book
-- [ ] Logo and wordmark (Rustyfin identity — colors, typography, icon)
-- [ ] Color palette (primary, secondary, accent, dark/light variants)
-- [ ] Typography choices (headings, body, monospace for code/config)
-- [ ] Tone and voice guidelines (documentation writing style)
-- [ ] Component patterns (buttons, cards, alerts — shared across admin UI and website)
-- [ ] Favicon, social preview image (Open Graph), README badge
-
-### 12b. Project Documentation
-- [ ] Getting started guide (install, configure `rustyfin.toml`, connect a client)
-- [ ] Configuration reference (all `rustyfin.toml` options, env vars, defaults)
-- [ ] Architecture overview (crate map, request lifecycle, auth flow)
-- [ ] API compatibility guide (which Jellyfin endpoints are supported, stubs vs real)
-- [ ] Deployment guide (Docker, systemd, reverse proxy setup with Caddy/nginx/Traefik)
-- [ ] Client compatibility matrix (tested clients, known issues per client)
-- [ ] Migration guide from Jellyfin (what transfers, what doesn't)
-- [ ] Contributing guide (dev setup, project structure, PR conventions)
-
-### 12c. Website
-- [ ] Choose static site generator (Zola preferred, evaluate alternatives)
-- [ ] Site structure: landing page, docs, roadmap, changelog
-- [ ] Hosting on GitHub Pages or Cloudflare Pages (CI-driven deploy)
-- [ ] Apply design book branding to site theme
-- [ ] Docs integration (either in-repo markdown rendered by site generator, or separate docs site)
-- [ ] Changelog / release notes page (auto-generated or manually curated)
-
-### 12d. In-Repo Documentation
-- [ ] README overhaul (align with design book, badges, quick start)
-- [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
-- [ ] Crate-level `//!` doc comments for each crate in the workspace
-- [ ] Inline doc comments for public API surfaces (models, repos, auth extractors)
-
----
-
-## Phase 13 — Hardening, Testing & Parity Review
+## Phase 11 — Hardening, Testing & Parity Review
 
 Final phase before considering Rustyfin production-ready. Comprehensive quality pass across the entire codebase.
 
-### 13a. Jellyfin Parity Audit
+### 11a. Jellyfin Parity Audit
 - [ ] Systematic endpoint comparison against Jellyfin's controllers (`/home/jonathan/src/jellyfin/Jellyfin.Api/Controllers/`)
 - [ ] Document every remaining 404 that clients hit — prioritize by client (web, iOS/Infuse, Apple TV)
 - [ ] Verify response shapes match Jellyfin exactly (field names, nullability, default values)
 - [ ] Test with each major client end-to-end: Jellyfin Web, Infuse, Swiftfin, Jellyfin Media Player
 - [ ] Identify and stub any remaining undiscovered endpoints
 
-### 13b. Automated Test Suite
+### 11b. Automated Test Suite
 - [ ] Unit tests for core logic: naming resolution, NFO parsing, TMDB response mapping
 - [ ] Unit tests for auth: MediaBrowser header parsing, token extraction, admin vs user enforcement
 - [ ] Repository tests: media_items CRUD, user_data operations, library access queries (requires test DB)
@@ -436,7 +336,7 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 - [ ] Request with disabled user's token → 401
 - [ ] Legacy routes (`/Users/{userId}/Items`) delegate correctly
 
-### 13c. Error Handling & Edge Cases
+### 11c. Error Handling & Edge Cases
 - [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
 - [ ] Verify 404 vs 403 vs 401 is correct for all auth failure modes
 - [ ] Handle malformed UUIDs in path params gracefully (400, not 500)
@@ -444,7 +344,7 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 - [ ] Database connection pool exhaustion behavior (graceful degradation)
 - [ ] Large library stress: 10k+ items, deeply nested seasons/episodes
 
-### 13d. Load & Performance Testing
+### 11d. Load & Performance Testing
 - [ ] Benchmark: `/Items` query with 1k, 10k, 50k items in DB
 - [ ] Benchmark: concurrent streaming sessions (direct play, no transcode)
 - [ ] Benchmark: library scan time for large libraries (1k, 10k files)
@@ -452,19 +352,121 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 - [ ] Profile memory usage under sustained load
 - [ ] Identify and fix N+1 query patterns (user_data per-item in loops)
 
-### 13e. Security Review
+### 11e. Security Review
 - [ ] Audit all path parameters for injection (path traversal in streaming, image serving)
 - [ ] Verify library access enforcement on every item-returning endpoint
 - [ ] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked)
 - [ ] Rate limiting on auth endpoints
 - [ ] Review CORS / header configuration
 
-### 13f. CI Pipeline
+### 11f. CI Pipeline
 - [ ] GitHub Actions workflow: `cargo fmt --check`, `cargo clippy`, `cargo test`
 - [ ] Integration test job with Postgres service container
 - [ ] Optional Meilisearch service container for search tests
 - [ ] Binary build artifacts (Linux x86_64, aarch64)
 - [ ] Container image build (Docker/OCI)
+
+---
+
+## Phase 12 — UI Polish & Interactivity
+
+Comprehensive UX pass across the admin UI and client-facing interactions. The admin UI works but lacks the feedback, validation, and polish needed for daily use.
+
+### 12a. Dashboard Improvements
+- [ ] Activity log viewer (backend at `/System/ActivityLog/Entries` already exists, wire to UI)
+- [ ] Active sessions / "now playing" widget (backend at `/Sessions` exists)
+- [ ] Library cards show item counts and last scan time
+- [ ] Recent additions widget (latest items added across libraries)
+- [ ] System health indicators (DB connection, Meilisearch status, disk usage)
+
+### 12b. Real-Time Feedback
+- [ ] Scan progress tracking (backend: track scan progress per library, expose via API or WebSocket)
+- [ ] WebSocket broadcasts for scan started/completed/failed events
+- [ ] WebSocket broadcasts for new items added during scan
+- [ ] Admin notification when scan errors occur (e.g. unreadable files, failed probes)
+- [ ] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request)
+- [ ] Toast for error states, not just success (network errors, 403s, validation failures)
+
+### 12c. Form Validation & Error Handling
+- [ ] Library name: empty check, duplicate name detection
+- [ ] Library paths: empty path check, duplicate path across libraries
+- [ ] Folder picker: permission denied handling, error recovery with retry
+- [ ] User-friendly error messages (not raw HTTP status codes)
+- [ ] Retry buttons on failed network requests
+- [ ] Graceful degradation (if one API call fails, don't blank the whole page)
+- [ ] Request deduplication (prevent double-submit on button clicks)
+
+### 12d. Media Browser Polish
+- [ ] Sorting controls (by name, date added, year, rating)
+- [ ] Filtering by genre, year, rating, item type
+- [ ] Grid/list view toggle
+- [ ] Watched/unwatched badges on posters
+- [ ] Playback progress bars on in-progress items
+- [ ] Bulk operations (select multiple items for refresh, mark played/unplayed)
+- [ ] Cast member links (click person → filtered view of their items)
+- [ ] Search filters (scope by type: movies, series, music, episodes)
+
+### 12e. User Management Polish
+- [ ] Humanized timestamps ("2 hours ago" instead of raw ISO dates)
+- [ ] Sorting and filtering user list
+- [ ] Per-user device list and session history
+- [ ] "Kick session" button (terminate an active session)
+- [ ] Per-user playback history view
+
+### 12f. Accessibility
+- [ ] ARIA attributes on interactive elements (`aria-label`, `aria-describedby`, `aria-live`)
+- [ ] Keyboard navigation (tab order, Escape to close modals, arrow keys in folder picker)
+- [ ] Focus management (modal open → focus first input, modal close → restore focus)
+- [ ] Screen reader announcements for page loads, errors, toast notifications
+- [ ] Skip-to-content link
+- [ ] Alt text for poster images
+- [ ] `@media (prefers-reduced-motion)` support
+
+### 12g. Frontend Infrastructure
+- [ ] Request cancellation on navigation (AbortController)
+- [ ] Client-side caching (avoid re-fetching on back navigation)
+- [ ] Skeleton loaders instead of spinners for content areas
+- [ ] Loading state consolidation (page-level spinner, not per-component)
+- [ ] Structured error types in API client (not just strings)
+- [ ] Optimistic updates where safe (e.g. toggle favorite immediately, reconcile on response)
+
+---
+
+## Phase 13 — Documentation, Branding & Website
+
+Comprehensive docs, a design book for consistent branding, and a public project website.
+
+### 13a. Design Book
+- [ ] Logo and wordmark (Rustyfin identity — colors, typography, icon)
+- [ ] Color palette (primary, secondary, accent, dark/light variants)
+- [ ] Typography choices (headings, body, monospace for code/config)
+- [ ] Tone and voice guidelines (documentation writing style)
+- [ ] Component patterns (buttons, cards, alerts — shared across admin UI and website)
+- [ ] Favicon, social preview image (Open Graph), README badge
+
+### 13b. Project Documentation
+- [ ] Getting started guide (install, configure `rustyfin.toml`, connect a client)
+- [ ] Configuration reference (all `rustyfin.toml` options, env vars, defaults)
+- [ ] Architecture overview (crate map, request lifecycle, auth flow)
+- [ ] API compatibility guide (which Jellyfin endpoints are supported, stubs vs real)
+- [ ] Deployment guide (Docker, systemd, reverse proxy setup with Caddy/nginx/Traefik)
+- [ ] Client compatibility matrix (tested clients, known issues per client)
+- [ ] Migration guide from Jellyfin (what transfers, what doesn't)
+- [ ] Contributing guide (dev setup, project structure, PR conventions)
+
+### 13c. Website
+- [ ] Choose static site generator (Zola preferred, evaluate alternatives)
+- [ ] Site structure: landing page, docs, roadmap, changelog
+- [ ] Hosting on GitHub Pages or Cloudflare Pages (CI-driven deploy)
+- [ ] Apply design book branding to site theme
+- [ ] Docs integration (either in-repo markdown rendered by site generator, or separate docs site)
+- [ ] Changelog / release notes page (auto-generated or manually curated)
+
+### 13d. In-Repo Documentation
+- [ ] README overhaul (align with design book, badges, quick start)
+- [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
+- [ ] Crate-level `//!` doc comments for each crate in the workspace
+- [ ] Inline doc comments for public API surfaces (models, repos, auth extractors)
 
 ---
 
@@ -506,7 +508,7 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
-| Metadata | ~85% | NFO + TMDB + TVDB; `rustyfin` CLI for offline metadata; missing fanart.tv, MusicBrainz, Discogs |
+| Metadata | ~90% | NFO + TMDB + TVDB; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO support; missing fanart.tv, MusicBrainz, Discogs |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~70% | Meilisearch + fallback; no advanced filters |
 | Notifications | ~20% | Activity log only; no webhooks |

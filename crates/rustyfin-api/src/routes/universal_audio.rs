@@ -41,15 +41,9 @@ pub async fn get_universal_audio(
 
     if protocol.eq_ignore_ascii_case("hls") {
         // Redirect to audio HLS master playlist
-        let play_session_id = params
-            .play_session_id
-            .as_deref()
-            .unwrap_or("unknown");
+        let play_session_id = params.play_session_id.as_deref().unwrap_or("unknown");
         let item_id_string = item_id.to_string();
-        let media_source_id = params
-            .media_source_id
-            .as_deref()
-            .unwrap_or(&item_id_string);
+        let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
 
         let mut url = format!(
             "/Audio/{item_id}/master.m3u8?PlaySessionId={play_session_id}&MediaSourceId={media_source_id}"

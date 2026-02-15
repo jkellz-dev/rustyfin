@@ -3,9 +3,9 @@ mod config;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::response::Redirect;
 use ipnet::IpNet;
 use tokio::net::TcpListener;
-use axum::response::Redirect;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -137,13 +137,12 @@ async fn main() -> anyhow::Result<()> {
 
     // Image cache directory
     let image_cache_dir = std::path::PathBuf::from(
-        std::env::var("RUSTYFIN_IMAGE_CACHE_DIR")
-            .unwrap_or_else(|_| {
-                std::env::temp_dir()
-                    .join("rustyfin-image-cache")
-                    .to_string_lossy()
-                    .into_owned()
-            }),
+        std::env::var("RUSTYFIN_IMAGE_CACHE_DIR").unwrap_or_else(|_| {
+            std::env::temp_dir()
+                .join("rustyfin-image-cache")
+                .to_string_lossy()
+                .into_owned()
+        }),
     );
     if !image_cache_dir.exists() {
         std::fs::create_dir_all(&image_cache_dir)?;
@@ -172,7 +171,10 @@ async fn main() -> anyhow::Result<()> {
         .layer(CorsLayer::permissive());
 
     // Redirect root to admin UI
-    let app = app.route("/", axum::routing::get(|| async { Redirect::permanent("/web") }));
+    let app = app.route(
+        "/",
+        axum::routing::get(|| async { Redirect::permanent("/web") }),
+    );
 
     // Merge frontend routes (/web prefix)
     let app = app.merge(rustyfin_frontend::router());

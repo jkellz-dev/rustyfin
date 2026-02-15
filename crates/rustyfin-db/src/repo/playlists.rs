@@ -89,12 +89,11 @@ pub async fn add_items(
     playlist_id: Uuid,
     item_ids: &[Uuid],
 ) -> Result<(), sqlx::Error> {
-    let max_order: (Option<i32>,) = sqlx::query_as(
-        "SELECT MAX(sort_order) FROM playlist_items WHERE playlist_id = $1",
-    )
-    .bind(playlist_id)
-    .fetch_one(pool)
-    .await?;
+    let max_order: (Option<i32>,) =
+        sqlx::query_as("SELECT MAX(sort_order) FROM playlist_items WHERE playlist_id = $1")
+            .bind(playlist_id)
+            .fetch_one(pool)
+            .await?;
     let mut order = max_order.0.unwrap_or(-1) + 1;
 
     for item_id in item_ids {
@@ -147,12 +146,10 @@ pub async fn get_shares(
     pool: &PgPool,
     playlist_id: Uuid,
 ) -> Result<Vec<PlaylistShareRow>, sqlx::Error> {
-    sqlx::query_as::<_, PlaylistShareRow>(
-        "SELECT * FROM playlist_shares WHERE playlist_id = $1",
-    )
-    .bind(playlist_id)
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, PlaylistShareRow>("SELECT * FROM playlist_shares WHERE playlist_id = $1")
+        .bind(playlist_id)
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn set_share(

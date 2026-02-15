@@ -40,12 +40,7 @@ impl TranscodeJob {
             }
 
             // Wait up to 5 seconds for graceful exit
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                process.wait(),
-            )
-            .await
-            {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), process.wait()).await {
                 Ok(Ok(status)) => {
                     info!(
                         play_session_id = %self.play_session_id,

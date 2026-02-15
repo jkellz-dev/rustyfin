@@ -548,11 +548,10 @@ pub async fn distinct_tags(
         .await?;
         Ok(rows.into_iter().map(|(t,)| t).collect())
     } else {
-        let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT unnest(tags) AS tag FROM media_items ORDER BY tag",
-        )
-        .fetch_all(pool)
-        .await?;
+        let rows: Vec<(String,)> =
+            sqlx::query_as("SELECT DISTINCT unnest(tags) AS tag FROM media_items ORDER BY tag")
+                .fetch_all(pool)
+                .await?;
         Ok(rows.into_iter().map(|(t,)| t).collect())
     }
 }

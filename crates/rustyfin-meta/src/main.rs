@@ -8,12 +8,18 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser)]
-#[command(name = "rustyfin", about = "Metadata fetcher for Rustyfin media libraries")]
+#[command(
+    name = "rustyfin",
+    about = "Metadata fetcher for Rustyfin media libraries"
+)]
 struct Cli {
     #[arg(long, default_value = "rustyfin-meta.toml")]
     config: PathBuf,
     #[arg(long)]
     dry_run: bool,
+    /// Skip interactive prompts and auto-select first result
+    #[arg(long)]
+    auto: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -50,14 +56,18 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Scan { path, library_type } => {
             tracing::info!("Scanning {} as '{}'", path.display(), library_type);
-            let stats = scan::scan_directory(&path, &library_type, &config, cli.dry_run).await?;
+            let stats =
+                scan::scan_directory(&path, &library_type, &config, cli.dry_run, cli.auto).await?;
             tracing::info!(
                 "Done: scanned={}, fetched={}, skipped={}, errors={}",
-                stats.scanned, stats.fetched, stats.skipped, stats.errors
+                stats.scanned,
+                stats.fetched,
+                stats.skipped,
+                stats.errors
             );
         }
         Command::Fetch { path, media_type } => {
-            fetch::fetch_metadata(&path, &media_type, &config, cli.dry_run).await?;
+            fetch::fetch_metadata(&path, &media_type, &config, cli.dry_run, cli.auto).await?;
         }
     }
     Ok(())

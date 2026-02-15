@@ -171,8 +171,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/Audio/{itemId}/universal",
-            get(universal_audio::get_universal_audio)
-                .head(universal_audio::get_universal_audio),
+            get(universal_audio::get_universal_audio).head(universal_audio::get_universal_audio),
         )
         // ── Subtitles ─────────────────────────────────────────────
         .route(
@@ -238,14 +237,8 @@ pub fn build_router(state: AppState) -> Router {
         // ── TV Shows ─────────────────────────────────────────────
         .route("/Shows/NextUp", get(shows::get_next_up))
         .route("/Shows/Upcoming", get(stubs::empty_query_result_auth))
-        .route(
-            "/Shows/{seriesId}/Seasons",
-            get(shows::get_seasons),
-        )
-        .route(
-            "/Shows/{seriesId}/Episodes",
-            get(shows::get_episodes),
-        )
+        .route("/Shows/{seriesId}/Seasons", get(shows::get_seasons))
+        .route("/Shows/{seriesId}/Episodes", get(shows::get_episodes))
         // ── Quick Connect ────────────────────────────────────────
         .route("/QuickConnect/Enabled", get(quick_connect::get_enabled))
         .route("/QuickConnect/Initiate", post(quick_connect::initiate))
@@ -262,8 +255,7 @@ pub fn build_router(state: AppState) -> Router {
         // ── Configuration ────────────────────────────────────────
         .route(
             "/System/Configuration",
-            get(configuration::get_configuration)
-                .post(configuration::update_configuration),
+            get(configuration::get_configuration).post(configuration::update_configuration),
         )
         .route(
             "/System/Configuration/{key}",
@@ -289,10 +281,7 @@ pub fn build_router(state: AppState) -> Router {
             "/Items/{itemId}/SpecialFeatures",
             get(stubs::empty_array_auth),
         )
-        .route(
-            "/Items/{itemId}/Similar",
-            get(similar::get_similar),
-        )
+        .route("/Items/{itemId}/Similar", get(similar::get_similar))
         .route("/Items/Suggestions", get(suggestions::get_suggestions))
         .route("/Movies/Recommendations", get(similar::get_recommendations))
         .route("/Artists", get(artists::get_artists))
@@ -320,8 +309,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Collections", post(collections::create_collection))
         .route(
             "/Collections/{collectionId}/Items",
-            post(collections::add_collection_items)
-                .delete(collections::remove_collection_items),
+            post(collections::add_collection_items).delete(collections::remove_collection_items),
         )
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))

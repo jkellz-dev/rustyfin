@@ -412,6 +412,7 @@ impl LibraryScanner {
             .await?;
 
         self.replace_images(artist_id, artist_dir).await;
+        self.enrichment.enrich_artist(artist_id, artist_dir).await;
 
         let Ok(entries) = std::fs::read_dir(artist_dir) else {
             return Ok(());
@@ -438,7 +439,14 @@ impl LibraryScanner {
                 .to_string();
 
             match self
-                .scan_album(subdir, &album_name, library_id, artist_id, artist_name, result)
+                .scan_album(
+                    subdir,
+                    &album_name,
+                    library_id,
+                    artist_id,
+                    artist_name,
+                    result,
+                )
                 .await
             {
                 Ok(()) => {}
@@ -490,6 +498,7 @@ impl LibraryScanner {
             .await?;
 
         self.replace_images(album_id, album_dir).await;
+        self.enrichment.enrich_album(album_id, album_dir).await;
 
         let audio_files = collect_audio_files(album_dir).await;
 
@@ -576,9 +585,7 @@ impl LibraryScanner {
             .as_ref()
             .and_then(|t| t.track_number.map(|n| n as i32))
             .or(resolved.index_number);
-        let disc_num = tags
-            .as_ref()
-            .and_then(|t| t.disc_number.map(|n| n as i32));
+        let disc_num = tags.as_ref().and_then(|t| t.disc_number.map(|n| n as i32));
         let year = tags.as_ref().and_then(|t| t.year);
 
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {

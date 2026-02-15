@@ -17,6 +17,8 @@ static RE_LEADING_ARTICLE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(the|a|an|der|die|das|le|la|les|el|los|las)\s+").unwrap());
 static RE_TRACK_NUMBER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\d{1,3})(?:\s*[.\-]\s*|\s+)(.+)$").unwrap());
+static RE_PROVIDER_ID: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[(?i)(tmdbid|tvdbid)-(\d+)\]").unwrap());
 
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mkv", "mp4", "avi", "m2ts", "ts", "mov", "webm", "wmv", "flv", "mpg", "mpeg", "m4v", "3gp",
@@ -24,11 +26,17 @@ const VIDEO_EXTENSIONS: &[&str] = &[
 ];
 
 const AUDIO_EXTENSIONS: &[&str] = &[
-    "flac", "mp3", "m4a", "aac", "ogg", "opus", "wav", "wma", "ape", "alac", "aiff", "aif",
-    "dsf", "dff", "wv", "mka",
+    "flac", "mp3", "m4a", "aac", "ogg", "opus", "wav", "wma", "ape", "alac", "aiff", "aif", "dsf",
+    "dff", "wv", "mka",
 ];
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tbn"];
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProviderId {
+    pub provider: String, // "tmdb" or "tvdb"
+    pub id: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct ResolvedItem {
@@ -179,6 +187,31 @@ pub fn resolve_audio_track(path: &Path) -> ResolvedItem {
 /// Extract a year from an album directory name, e.g. "Album Name (2020)".
 pub fn extract_album_year(name: &str) -> Option<i32> {
     extract_year(name)
+}
+
+/// Extract a provider ID from a folder/file name, e.g. `[tmdbid-123456]` or `[tvdbid-654321]`.
+pub fn extract_provider_id(name: &str) -> Option<ProviderId> {
+    let caps = RE_PROVIDER_ID.captures(name)?;
+    let provider = match caps[1].to_lowercase().as_str() {
+        "tmdbid" => "tmdb",
+        "tvdbid" => "tvdb",
+        _ => return None,
+    };
+    Some(ProviderId {
+        provider: provider.to_string(),
+        id: caps[2].to_string(),
+    })
+}
+
+/// Return a new name with the provider ID embedded, e.g. `"Movie (2022)"` -> `"Movie (2022) [tmdbid-123]"`.
+/// If the name already contains this provider ID, returns `None`.
+pub fn embed_provider_id(name: &str, provider: &str, id: &str) -> Option<String> {
+    let tag = format!("[{}id-{}]", provider, id);
+    if name.contains(&tag) {
+        return None;
+    }
+    let cleaned = RE_PROVIDER_ID.replace_all(name, "").trim().to_string();
+    Some(format!("{cleaned} {tag}"))
 }
 
 fn parse_episode_numbers(text: &str) -> Option<(i32, i32)> {
@@ -378,5 +411,63 @@ mod tests {
         assert_eq!(extract_album_year("Album Name (2020)"), Some(2020));
         assert_eq!(extract_album_year("Album Name"), None);
         assert_eq!(extract_album_year("Greatest Hits (1998)"), Some(1998));
+    }
+
+    #[test]
+    fn test_extract_provider_id_tmdb() {
+        let result = extract_provider_id("Zen Grogu and Dust Bunnies (2022) [tmdbid-1044343]");
+        assert_eq!(
+            result,
+            Some(ProviderId {
+                provider: "tmdb".to_string(),
+                id: "1044343".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_extract_provider_id_tvdb() {
+        let result = extract_provider_id("Breaking Bad (2008) [tvdbid-81189]");
+        assert_eq!(
+            result,
+            Some(ProviderId {
+                provider: "tvdb".to_string(),
+                id: "81189".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_extract_provider_id_none() {
+        assert_eq!(extract_provider_id("Movie Name (2020)"), None);
+        assert_eq!(extract_provider_id("Movie [GROUP]"), None);
+    }
+
+    #[test]
+    fn test_extract_provider_id_case_insensitive() {
+        let result = extract_provider_id("Movie [TMDBid-12345]");
+        assert_eq!(
+            result,
+            Some(ProviderId {
+                provider: "tmdb".to_string(),
+                id: "12345".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_embed_provider_id() {
+        assert_eq!(
+            embed_provider_id("Movie (2022)", "tmdb", "123"),
+            Some("Movie (2022) [tmdbid-123]".to_string())
+        );
+    }
+
+    #[test]
+    fn test_embed_provider_id_already_present() {
+        assert_eq!(
+            embed_provider_id("Movie (2022) [tmdbid-123]", "tmdb", "123"),
+            None
+        );
     }
 }

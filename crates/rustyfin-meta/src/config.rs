@@ -18,11 +18,19 @@ pub struct TmdbConfig {
     #[serde(default = "default_language")]
     #[allow(dead_code)]
     pub language: String,
+    #[serde(default = "default_tmdb_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_rate_window")]
+    pub rate_window_secs: u64,
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct TvdbConfig {
     pub api_key: Option<String>,
+    #[serde(default = "default_tvdb_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_rate_window")]
+    pub rate_window_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +59,18 @@ fn default_language() -> String {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_tmdb_rate_limit() -> u32 {
+    40
+}
+
+fn default_tvdb_rate_limit() -> u32 {
+    20
+}
+
+fn default_rate_window() -> u64 {
+    10
 }
 
 impl MetaConfig {

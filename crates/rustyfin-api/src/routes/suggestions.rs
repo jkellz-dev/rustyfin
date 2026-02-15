@@ -39,16 +39,10 @@ pub async fn get_suggestions(
         .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
-    let items = media_items::get_random_items(
-        &state.pool,
-        auth.user_id,
-        &item_types,
-        &[],
-        limit,
-        offset,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let items =
+        media_items::get_random_items(&state.pool, auth.user_id, &item_types, &[], limit, offset)
+            .await
+            .map_err(ApiError::Database)?;
 
     let total = items.len() as i32;
     let mut dtos: Vec<BaseItemDto> = items

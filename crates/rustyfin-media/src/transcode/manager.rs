@@ -71,7 +71,10 @@ impl TranscodeManager {
     ) -> anyhow::Result<String> {
         // Check concurrency limit
         if self.at_capacity().await {
-            bail!("transcode concurrency limit reached ({} active)", self.max_concurrent);
+            bail!(
+                "transcode concurrency limit reached ({} active)",
+                self.max_concurrent
+            );
         }
 
         // Kill any existing job for this session
@@ -181,11 +184,8 @@ impl TranscodeManager {
                     use tokio::io::AsyncWriteExt;
                     let _ = stdin.write_all(b"q").await;
                 }
-                let _ = tokio::time::timeout(
-                    std::time::Duration::from_secs(3),
-                    process.wait(),
-                )
-                .await;
+                let _ =
+                    tokio::time::timeout(std::time::Duration::from_secs(3), process.wait()).await;
                 let _ = process.kill().await;
             }
             if let Some(timer) = job.kill_timer.take() {

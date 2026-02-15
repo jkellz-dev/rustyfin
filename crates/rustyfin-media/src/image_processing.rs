@@ -104,8 +104,7 @@ fn resize_and_save(
     resizer.resize(
         &src_image,
         &mut dst_image,
-        &fr::ResizeOptions::new()
-            .resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3)),
+        &fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3)),
     )?;
 
     let result_buf = image::RgbaImage::from_raw(dst_w, dst_h, dst_image.into_vec())
