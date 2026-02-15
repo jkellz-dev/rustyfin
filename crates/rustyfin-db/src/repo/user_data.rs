@@ -109,6 +109,30 @@ pub async fn set_played(
     .await
 }
 
+/// Set or clear user rating for an item.
+pub async fn set_rating(
+    pool: &PgPool,
+    user_id: Uuid,
+    item_id: Uuid,
+    likes: Option<bool>,
+) -> Result<UserDataRow, sqlx::Error> {
+    let rating: Option<f64> = likes.map(|l| if l { 10.0 } else { 1.0 });
+
+    sqlx::query_as::<_, UserDataRow>(
+        r#"
+        INSERT INTO user_data (user_id, item_id, rating)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, item_id) DO UPDATE SET rating = EXCLUDED.rating
+        RETURNING *
+        "#,
+    )
+    .bind(user_id)
+    .bind(item_id)
+    .bind(rating)
+    .fetch_one(pool)
+    .await
+}
+
 /// Get resume items (items with playback position) for a user.
 pub async fn get_resume_items(
     pool: &PgPool,

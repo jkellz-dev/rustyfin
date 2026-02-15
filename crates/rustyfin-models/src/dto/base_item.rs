@@ -144,6 +144,8 @@ pub struct UserItemDataDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub likes: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played_date: Option<DateTime<Utc>>,
     pub unplayed_item_count: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]

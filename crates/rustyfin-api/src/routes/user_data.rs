@@ -98,12 +98,14 @@ pub async fn mark_unplayed_legacy(
 }
 
 fn to_dto(ud: &user_data::UserDataRow) -> UserItemDataDto {
+    const MIN_LIKE_VALUE: f64 = 6.5;
     UserItemDataDto {
         playback_position_ticks: ud.playback_position_ticks,
         play_count: ud.play_count,
         is_favorite: ud.is_favorite,
         played: ud.played,
         rating: ud.rating,
+        likes: ud.rating.map(|r| r >= MIN_LIKE_VALUE),
         last_played_date: ud.last_played_date,
         ..Default::default()
     }
