@@ -157,7 +157,7 @@ async fn scan_movies(
 
         // Skip if NFO already exists and we're not overwriting
         if !config.output.overwrite_existing && find_movie_nfo(file_path).is_some() {
-            tracing::debug!("Skipping {} (NFO exists)", file_path.display());
+            tracing::info!("Skipping {} (NFO exists)", file_path.display());
             stats.skipped += 1;
             continue;
         }
@@ -311,7 +311,7 @@ async fn scan_tvshows(
 
         // Skip if tvshow.nfo already exists and we're not overwriting
         if !config.output.overwrite_existing && find_series_nfo(&series_dir).is_some() {
-            tracing::debug!("Skipping '{}' (tvshow.nfo exists)", series_name);
+            tracing::info!("Skipping '{}' (tvshow.nfo exists)", series_name);
             stats.skipped += 1;
             continue;
         }
@@ -490,8 +490,8 @@ async fn scan_music(
             .any(|name| album_dir.join(name).is_file());
 
             if has_cover {
-                tracing::debug!(
-                    "Skipping '{}/{}' (cover art exists)",
+                tracing::info!(
+                    "Album: '{}/{}' - cover art exists, skipping",
                     artist_name,
                     album_name
                 );
@@ -521,11 +521,11 @@ async fn scan_music(
                     );
                     stats.fetched += 1;
                 } else {
-                    tracing::debug!("  No embedded art in {}", audio_entry.path().display());
+                    tracing::warn!("  No embedded art in {}", audio_entry.path().display());
                     stats.errors += 1;
                 }
             } else {
-                tracing::debug!("  No audio files found in album directory");
+                tracing::warn!("  No audio files found in album directory");
                 stats.errors += 1;
             }
         }
