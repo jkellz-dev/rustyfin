@@ -441,7 +441,7 @@ async fn scan_tvshows(
 
 async fn scan_music(
     path: &Path,
-    _config: &MetaConfig,
+    config: &MetaConfig,
     dry_run: bool,
     _auto_mode: bool,
 ) -> anyhow::Result<ScanStats> {
@@ -452,84 +452,140 @@ async fn scan_music(
         errors: 0,
     };
 
-    // Walk Artist/Album structure
-    // path/Artist/Album/<audio files>
+    let overwrite = config.output.overwrite_existing;
+
     let Ok(artist_entries) = std::fs::read_dir(path) else {
         anyhow::bail!("Cannot read directory: {}", path.display());
     };
 
-    for artist_entry in artist_entries.flatten() {
-        if !artist_entry.path().is_dir() {
-            continue;
+    let mut artist_dirs: Vec<_> = artist_entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .collect();
+    artist_dirs.sort_by_key(|e| e.file_name());
+
+    for artist_entry in &artist_dirs {
+        let artist_dir = artist_entry.path();
+        let artist_name = artist_entry.file_name().to_string_lossy().to_string();
+
+        tracing::info!("Artist: '{}'", artist_name);
+
+        // ── artist.nfo ──────────────────────────────────────────
+        let artist_nfo_path = artist_dir.join("artist.nfo");
+        if !overwrite && artist_nfo_path.is_file() {
+            tracing::info!("  artist.nfo exists, skipping");
+        } else if config.output.write_nfo && !dry_run {
+            // Gather genre from first audio file we can find under this artist
+            let artist_genre = find_first_audio_tags(&artist_dir)
+                .and_then(|t| t.genre);
+
+            let meta = nfo::NfoMetadata {
+                title: Some(artist_name.clone()),
+                genres: artist_genre.into_iter().collect(),
+                ..Default::default()
+            };
+            match nfo::write_artist_nfo(&artist_nfo_path, &meta) {
+                Ok(()) => tracing::info!("  Wrote artist.nfo"),
+                Err(e) => {
+                    tracing::error!("  Failed to write artist.nfo: {e}");
+                    stats.errors += 1;
+                }
+            }
         }
 
-        let Ok(album_entries) = std::fs::read_dir(artist_entry.path()) else {
+        // ── Albums ──────────────────────────────────────────────
+        let Ok(album_entries) = std::fs::read_dir(&artist_dir) else {
             continue;
         };
 
-        for album_entry in album_entries.flatten() {
+        let mut album_dirs: Vec<_> = album_entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .collect();
+        album_dirs.sort_by_key(|e| e.file_name());
+
+        for album_entry in &album_dirs {
             let album_dir = album_entry.path();
-            if !album_dir.is_dir() {
-                continue;
-            }
+            let album_name = album_entry.file_name().to_string_lossy().to_string();
             stats.scanned += 1;
 
-            let album_name = album_entry.file_name().to_string_lossy().to_string();
-            let artist_name = artist_entry.file_name().to_string_lossy().to_string();
+            tracing::info!("  Album: '{}'", album_name);
 
-            // Check if cover art already exists
-            let has_cover = [
-                "cover.jpg",
-                "cover.png",
-                "folder.jpg",
-                "folder.png",
-                "front.jpg",
-                "front.png",
-            ]
-            .iter()
-            .any(|name| album_dir.join(name).is_file());
+            // Read tags from first audio file in the album
+            let tags = find_first_audio_tags(&album_dir);
 
-            if has_cover {
-                tracing::info!(
-                    "Album: '{}/{}' - cover art exists, skipping",
-                    artist_name,
-                    album_name
-                );
-                stats.skipped += 1;
+            // ── album.nfo ───────────────────────────────────────
+            let album_nfo_path = album_dir.join("album.nfo");
+            if !overwrite && album_nfo_path.is_file() {
+                tracing::info!("    album.nfo exists, skipping");
+            } else if config.output.write_nfo && !dry_run {
+                let year = tags.as_ref().and_then(|t| t.year);
+                let genre = tags.as_ref().and_then(|t| t.genre.clone());
+                let tag_artist = tags
+                    .as_ref()
+                    .and_then(|t| t.album_artist.clone().or(t.artist.clone()));
+
+                let meta = nfo::NfoMetadata {
+                    title: Some(album_name.clone()),
+                    artist_name: tag_artist,
+                    production_year: year,
+                    genres: genre.into_iter().collect(),
+                    ..Default::default()
+                };
+                match nfo::write_album_nfo(&album_nfo_path, &meta) {
+                    Ok(()) => {
+                        tracing::info!("    Wrote album.nfo");
+                        stats.fetched += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!("    Failed to write album.nfo: {e}");
+                        stats.errors += 1;
+                    }
+                }
+            }
+
+            // ── Cover art extraction ────────────────────────────
+            if !config.output.download_artwork {
                 continue;
             }
 
-            tracing::info!("Album: '{}/{}' - no cover art", artist_name, album_name);
+            let has_cover = ["cover.jpg", "cover.png", "folder.jpg", "folder.png", "front.jpg", "front.png"]
+                .iter()
+                .any(|name| album_dir.join(name).is_file());
 
-            if dry_run {
-                stats.fetched += 1;
-                continue;
-            }
+            if has_cover && !overwrite {
+                tracing::info!("    Cover art exists, skipping");
+            } else if !dry_run {
+                let first_audio = WalkDir::new(&album_dir)
+                    .max_depth(1)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .find(|e| e.file_type().is_file() && is_audio_file(e.path()));
 
-            // Find first audio file with embedded art and extract it
-            let first_audio = WalkDir::new(&album_dir)
-                .max_depth(1)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .find(|e| e.file_type().is_file() && is_audio_file(e.path()));
-
-            if let Some(audio_entry) = first_audio {
-                if music_tags::extract_cover_art(audio_entry.path(), &album_dir).is_some() {
-                    tracing::info!(
-                        "  Extracted cover art from {}",
-                        audio_entry.path().display()
-                    );
-                    stats.fetched += 1;
+                if let Some(audio_entry) = first_audio {
+                    if music_tags::extract_cover_art(audio_entry.path(), &album_dir).is_some() {
+                        tracing::info!("    Extracted cover art from {}", audio_entry.file_name().to_string_lossy());
+                        stats.fetched += 1;
+                    } else {
+                        tracing::info!("    No embedded cover art found");
+                    }
                 } else {
-                    tracing::warn!("  No embedded art in {}", audio_entry.path().display());
+                    tracing::warn!("    No audio files found in album directory");
                     stats.errors += 1;
                 }
-            } else {
-                tracing::warn!("  No audio files found in album directory");
-                stats.errors += 1;
             }
         }
     }
 
     Ok(stats)
+}
+
+/// Find the first audio file under a directory and read its tags.
+fn find_first_audio_tags(dir: &Path) -> Option<music_tags::AudioTags> {
+    let first = WalkDir::new(dir)
+        .max_depth(2)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .find(|e| e.file_type().is_file() && is_audio_file(e.path()))?;
+    music_tags::read_tags(first.path())
 }
