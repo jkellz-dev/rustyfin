@@ -11,3 +11,6 @@ regex.workspace = true
 reqwest.workspace = true
 quick-xml.workspace = true
 tracing.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+lofty.workspace = true

@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+use crate::artwork::tmdb_image_url;
 use crate::nfo::{NfoMetadata, NfoPerson};
 
 const TMDB_BASE_URL: &str = "https://api.themoviedb.org/3";
@@ -107,6 +108,8 @@ struct TmdbMovieDetail {
     release_date: Option<String>,
     imdb_id: Option<String>,
     id: i64,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
     credits: Option<TmdbCredits>,
 }
 
@@ -123,6 +126,8 @@ struct TmdbTvDetail {
     first_air_date: Option<String>,
     last_air_date: Option<String>,
     id: i64,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
     credits: Option<TmdbCredits>,
     external_ids: Option<TmdbExternalIds>,
 }
@@ -182,6 +187,14 @@ fn movie_detail_to_metadata(d: TmdbMovieDetail) -> NfoMetadata {
             .and_then(|y| y.parse().ok()),
         tmdb_id: Some(d.id.to_string()),
         imdb_id: d.imdb_id,
+        poster_url: d
+            .poster_path
+            .as_deref()
+            .map(|p| tmdb_image_url(p, "original")),
+        backdrop_url: d
+            .backdrop_path
+            .as_deref()
+            .map(|p| tmdb_image_url(p, "original")),
         ..Default::default()
     };
 
@@ -208,6 +221,14 @@ fn tv_detail_to_metadata(d: TmdbTvDetail) -> NfoMetadata {
             .and_then(|s| s.get(..4))
             .and_then(|y| y.parse().ok()),
         tmdb_id: Some(d.id.to_string()),
+        poster_url: d
+            .poster_path
+            .as_deref()
+            .map(|p| tmdb_image_url(p, "original")),
+        backdrop_url: d
+            .backdrop_path
+            .as_deref()
+            .map(|p| tmdb_image_url(p, "original")),
         ..Default::default()
     };
 
