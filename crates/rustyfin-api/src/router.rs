@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
@@ -31,6 +32,7 @@ pub struct AppState {
     pub forward_auth_config: Option<ForwardAuthState>,
     pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
     pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
+    pub image_cache_dir: PathBuf,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -301,6 +303,25 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/Users/{userId}/Suggestions",
             get(suggestions::get_suggestions),
+        )
+        // ── Playlists ──────────────────────────────────────────────
+        .route("/Playlists", post(playlists::create_playlist))
+        .route(
+            "/Playlists/{playlistId}/Items",
+            get(playlists::get_playlist_items)
+                .post(playlists::add_playlist_items)
+                .delete(playlists::remove_playlist_items),
+        )
+        .route(
+            "/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}",
+            post(playlists::move_playlist_item),
+        )
+        // ── Collections ────────────────────────────────────────────
+        .route("/Collections", post(collections::create_collection))
+        .route(
+            "/Collections/{collectionId}/Items",
+            post(collections::add_collection_items)
+                .delete(collections::remove_collection_items),
         )
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))

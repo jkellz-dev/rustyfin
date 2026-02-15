@@ -130,6 +130,10 @@ pub struct BaseItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub song_count: Option<i32>,
 
+    // Playlist item ID (entry ID within a playlist)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playlist_item_id: Option<String>,
+
     // Playback access
     #[serde(skip_serializing_if = "Option::is_none")]
     pub play_access: Option<String>,

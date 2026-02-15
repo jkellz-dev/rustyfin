@@ -135,6 +135,21 @@ async fn main() -> anyhow::Result<()> {
         ldap_config.is_some()
     );
 
+    // Image cache directory
+    let image_cache_dir = std::path::PathBuf::from(
+        std::env::var("RUSTYFIN_IMAGE_CACHE_DIR")
+            .unwrap_or_else(|_| {
+                std::env::temp_dir()
+                    .join("rustyfin-image-cache")
+                    .to_string_lossy()
+                    .into_owned()
+            }),
+    );
+    if !image_cache_dir.exists() {
+        std::fs::create_dir_all(&image_cache_dir)?;
+    }
+    tracing::info!("Image cache directory: {}", image_cache_dir.display());
+
     // Build application state
     let state = AppState {
         pool: db_pool,
@@ -148,6 +163,7 @@ async fn main() -> anyhow::Result<()> {
         forward_auth_config,
         ldap_config,
         transcode_manager,
+        image_cache_dir,
     };
 
     // Build router with all API routes

@@ -1,6 +1,7 @@
 pub mod activity_log;
 pub mod auth;
 pub mod branding;
+pub mod collections;
 pub mod configuration;
 pub mod display_preferences;
 pub mod environment;
@@ -14,6 +15,7 @@ pub mod localization;
 pub mod media_info;
 pub mod persons;
 pub mod playback;
+pub mod playlists;
 pub mod quick_connect;
 pub mod search;
 pub mod sessions;
