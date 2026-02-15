@@ -196,6 +196,24 @@ fn build_external_ids(meta: &NfoMetadata) -> Option<serde_json::Value> {
     if let Some(ref id) = meta.imdb_id {
         ids.insert("Imdb".to_string(), serde_json::Value::String(id.clone()));
     }
+    if let Some(ref id) = meta.musicbrainz_artist_id {
+        ids.insert(
+            "MusicBrainzArtist".to_string(),
+            serde_json::Value::String(id.clone()),
+        );
+    }
+    if let Some(ref id) = meta.musicbrainz_album_id {
+        ids.insert(
+            "MusicBrainzAlbum".to_string(),
+            serde_json::Value::String(id.clone()),
+        );
+    }
+    if let Some(ref id) = meta.musicbrainz_release_group_id {
+        ids.insert(
+            "MusicBrainzReleaseGroup".to_string(),
+            serde_json::Value::String(id.clone()),
+        );
+    }
     if ids.is_empty() {
         None
     } else {

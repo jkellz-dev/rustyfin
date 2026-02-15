@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default)]
 pub struct NfoMetadata {
     pub title: Option<String>,
+    pub sort_name: Option<String>,
     pub original_title: Option<String>,
     pub overview: Option<String>,
     pub genres: Vec<String>,
@@ -21,6 +22,10 @@ pub struct NfoMetadata {
     pub tvdb_id: Option<String>,
     pub imdb_id: Option<String>,
     pub musicbrainz_artist_id: Option<String>,
+    pub musicbrainz_album_id: Option<String>,
+    pub musicbrainz_release_group_id: Option<String>,
+    pub album_type: Option<String>,
+    pub artist_name: Option<String>,
     /// Transient: artwork URL for poster (not serialized to NFO XML).
     pub poster_url: Option<String>,
     /// Transient: artwork URL for backdrop (not serialized to NFO XML).
@@ -362,6 +367,7 @@ fn episode_nfo_to_metadata(nfo: EpisodeNfo) -> NfoMetadata {
 fn artist_nfo_to_metadata(nfo: ArtistNfo) -> NfoMetadata {
     NfoMetadata {
         title: nfo.name,
+        sort_name: nfo.sortname,
         overview: nfo.biography,
         genres: nfo.genre,
         musicbrainz_artist_id: nfo.musicbrainz_artist_id,
@@ -382,10 +388,14 @@ fn artist_nfo_to_metadata(nfo: ArtistNfo) -> NfoMetadata {
 fn album_nfo_to_metadata(nfo: AlbumNfo) -> NfoMetadata {
     let mut meta = NfoMetadata {
         title: nfo.title,
+        artist_name: nfo.artist_name,
         overview: nfo.review,
         genres: nfo.genre,
         production_year: nfo.year,
         studios: nfo.label.into_iter().collect(),
+        musicbrainz_album_id: nfo.musicbrainz_album_id,
+        musicbrainz_release_group_id: nfo.musicbrainz_release_group_id,
+        album_type: nfo.album_type,
         ..Default::default()
     };
 
@@ -422,6 +432,10 @@ fn apply_unique_ids(ids: &[NfoUniqueId], meta: &mut NfoMetadata) {
             "tvdb" => meta.tvdb_id = Some(val.clone()),
             "imdb" => meta.imdb_id = Some(val.clone()),
             "musicbrainzartist" => meta.musicbrainz_artist_id = Some(val.clone()),
+            "musicbrainzalbum" => meta.musicbrainz_album_id = Some(val.clone()),
+            "musicbrainzreleasegroup" => {
+                meta.musicbrainz_release_group_id = Some(val.clone())
+            }
             _ => {}
         }
     }
@@ -535,8 +549,15 @@ struct WriteArtistNfo {
 #[serde(rename = "album")]
 struct WriteAlbumNfo {
     title: Option<String>,
+    #[serde(rename = "artistdesc", skip_serializing_if = "Option::is_none")]
+    artist_name: Option<String>,
     #[serde(rename = "musicbrainzalbumid", skip_serializing_if = "Option::is_none")]
     musicbrainz_album_id: Option<String>,
+    #[serde(
+        rename = "musicbrainzreleasegroupid",
+        skip_serializing_if = "Option::is_none"
+    )]
+    musicbrainz_release_group_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     year: Option<i32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -545,6 +566,8 @@ struct WriteAlbumNfo {
     label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     review: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    album_type: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -631,7 +654,7 @@ pub fn write_episode_nfo(
 pub fn write_artist_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn std::error::Error>> {
     let nfo = WriteArtistNfo {
         name: meta.title.clone(),
-        sortname: None,
+        sortname: meta.sort_name.clone(),
         musicbrainz_artist_id: meta.musicbrainz_artist_id.clone(),
         biography: meta.overview.clone(),
         genre: meta.genres.clone(),
@@ -647,11 +670,14 @@ pub fn write_artist_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn s
 pub fn write_album_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn std::error::Error>> {
     let nfo = WriteAlbumNfo {
         title: meta.title.clone(),
-        musicbrainz_album_id: None,
+        artist_name: meta.artist_name.clone(),
+        musicbrainz_album_id: meta.musicbrainz_album_id.clone(),
+        musicbrainz_release_group_id: meta.musicbrainz_release_group_id.clone(),
         year: meta.production_year,
         genre: meta.genres.clone(),
         label: meta.studios.first().cloned(),
         review: meta.overview.clone(),
+        album_type: meta.album_type.clone(),
     };
 
     let xml = quick_xml::se::to_string(&nfo)?;
@@ -685,6 +711,18 @@ fn build_write_unique_ids(meta: &NfoMetadata) -> Vec<WriteUniqueId> {
     if let Some(ref mb) = meta.musicbrainz_artist_id {
         ids.push(WriteUniqueId {
             id_type: "musicbrainzartist".to_string(),
+            value: mb.clone(),
+        });
+    }
+    if let Some(ref mb) = meta.musicbrainz_album_id {
+        ids.push(WriteUniqueId {
+            id_type: "musicbrainzalbum".to_string(),
+            value: mb.clone(),
+        });
+    }
+    if let Some(ref mb) = meta.musicbrainz_release_group_id {
+        ids.push(WriteUniqueId {
+            id_type: "musicbrainzreleasegroup".to_string(),
             value: mb.clone(),
         });
     }
