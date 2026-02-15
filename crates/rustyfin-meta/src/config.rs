@@ -16,6 +16,7 @@ pub struct MetaConfig {
 pub struct TmdbConfig {
     pub api_key: Option<String>,
     #[serde(default = "default_language")]
+    #[allow(dead_code)]
     pub language: String,
 }
 

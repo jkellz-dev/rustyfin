@@ -18,7 +18,7 @@ cd rustyfin
 docker compose up -d
 
 # 3. Build and run
-cargo run --bin rustyfin
+cargo run --bin rustyfin-server
 
 # 4. Open http://localhost:8097/web (via Caddy, auto-injects auth headers)
 #    Direct API access at http://localhost:8096 (requires manual auth headers)
@@ -29,7 +29,7 @@ cargo run --bin rustyfin
 ```bash
 cargo build                  # Debug build (all workspace crates)
 cargo build --release        # Release build
-cargo run --bin rustyfin     # Build and run the server
+cargo run --bin rustyfin-server     # Build and run the server
 cargo test                   # Run all tests
 cargo test <test_name>       # Run a specific test
 cargo clippy                 # Lint all crates
@@ -58,7 +58,7 @@ If not using Docker:
 ```bash
 createdb rustyfin
 export DATABASE_URL="postgres://user:pass@localhost/rustyfin"
-cargo run --bin rustyfin     # Migrations run automatically
+cargo run --bin rustyfin-server     # Migrations run automatically
 ```
 
 ## Project Structure
@@ -96,7 +96,7 @@ The `docker-compose.yml` includes a Caddy container that proxies `localhost:8097
 docker compose up -d
 
 # Start Rustyfin
-cargo run --bin rustyfin
+cargo run --bin rustyfin-server
 ```
 
 Then open **http://localhost:8097** (not 8096) — Caddy injects the auth headers automatically.
@@ -364,13 +364,13 @@ Current test coverage focuses on filename parsing in `rustyfin-core`:
 
 ```bash
 # Verbose logging
-RUST_LOG=trace cargo run --bin rustyfin
+RUST_LOG=trace cargo run --bin rustyfin-server
 
 # Specific module
-RUST_LOG=rustyfin_core::library::scanner=trace cargo run --bin rustyfin
+RUST_LOG=rustyfin_core::library::scanner=trace cargo run --bin rustyfin-server
 
 # SQL queries
-RUST_LOG=sqlx=debug cargo run --bin rustyfin
+RUST_LOG=sqlx=debug cargo run --bin rustyfin-server
 ```
 
 ### Database

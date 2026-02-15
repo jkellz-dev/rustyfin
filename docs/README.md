@@ -24,7 +24,7 @@ docker compose up -d
 
 # Build and run
 cargo build
-cargo run --bin rustyfin
+cargo run --bin rustyfin-server
 
 # Server starts on http://localhost:8096
 # Admin UI at http://localhost:8096/web

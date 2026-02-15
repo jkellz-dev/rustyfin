@@ -27,7 +27,8 @@ crates/
 ├── rustyfin-models/    # Shared types, DTOs, API response models
 ├── rustyfin-search/    # Meilisearch integration (optional feature)
 ├── rustyfin-media/     # Media file probing, streaming, direct play
-└── rustyfin-frontend/  # Sycamore WASM frontend (embedded static assets)
+├── rustyfin-frontend/  # Sycamore WASM frontend (embedded static assets)
+└── rustyfin-common/    # Shared code (naming, NFO, TMDB/TVDB, image discovery, music tags)
 ```
 
 ## Build & Test Commands
@@ -39,7 +40,7 @@ cargo test <test_name>   # Run a single test by name
 cargo clippy             # Lint
 cargo fmt                # Format code
 cargo fmt -- --check     # Check formatting without modifying
-cargo run --bin rustyfin # Run the server
+cargo run --bin rustyfin-server # Run the server
 ```
 
 ## Dev Environment

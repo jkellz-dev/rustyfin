@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser)]
-#[command(name = "rustyfin-meta", about = "Metadata fetcher for Rustyfin media libraries")]
+#[command(name = "rustyfin", about = "Metadata fetcher for Rustyfin media libraries")]
 struct Cli {
     #[arg(long, default_value = "rustyfin-meta.toml")]
     config: PathBuf,
