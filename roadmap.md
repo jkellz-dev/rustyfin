@@ -292,45 +292,18 @@ For users who want unlimited lookups with no rate limits and full offline capabi
 
 ---
 
-## Phase 11 — Stretch Goals
-
-### 11a. DLNA
-- [ ] UPnP device discovery (SSDP)
-- [ ] DLNA media server profile
-- [ ] Streaming to smart TVs and DLNA renderers
-
-### 11b. Sync Play
-- [ ] Synchronized playback across multiple clients
-- [ ] Session group management (create/join/leave)
-- [ ] Playback state synchronization (play, pause, seek broadcast)
-
-### 11c. Custom Theming
-Theming is file-based config (not DB), consistent with the config boundary. Themes are defined as YAML files with structured keys, compiled to CSS at startup and served via `/Branding/Css`.
-
-- [ ] `theme_path` in `rustyfin.toml` — path to a YAML theme file
-- [ ] `login_disclaimer` in `rustyfin.toml` — text shown on client login screens
-- [ ] YAML schema with explicit knobs: `colors.primary`, `colors.background`, `colors.surface`, `colors.text`, `colors.accent`, `typography.font_family`, `typography.heading_font`, `borders.radius`, `spacing.card_gap`, etc.
-- [ ] Compile YAML theme to CSS custom properties at startup
-- [ ] `GET /Branding/Css` serves the compiled CSS (works with Jellyfin web client out of the box)
-- [ ] `GET /Branding/Configuration` populates `login_disclaimer` from config
-- [ ] Apply same compiled CSS to Sycamore admin UI (inject via `<style>` tag at runtime)
-- [ ] Bundled example theme files shipped in repo (`themes/dark.yaml`, `themes/oled.yaml`, `themes/light.yaml`)
-- [ ] Theme file validation on startup (warn on unknown keys, error on invalid values)
-
----
-
-## Phase 12 — UI Polish & Interactivity
+## Phase 11 — UI Polish & Interactivity
 
 Comprehensive UX pass across the admin UI and client-facing interactions. The admin UI works but lacks the feedback, validation, and polish needed for daily use.
 
-### 12a. Dashboard Improvements
+### 11a. Dashboard Improvements
 - [ ] Activity log viewer (backend at `/System/ActivityLog/Entries` already exists, wire to UI)
 - [ ] Active sessions / "now playing" widget (backend at `/Sessions` exists)
 - [ ] Library cards show item counts and last scan time
 - [ ] Recent additions widget (latest items added across libraries)
 - [ ] System health indicators (DB connection, Meilisearch status, disk usage)
 
-### 12b. Real-Time Feedback
+### 11b. Real-Time Feedback
 - [ ] Scan progress tracking (backend: track scan progress per library, expose via API or WebSocket)
 - [ ] WebSocket broadcasts for scan started/completed/failed events
 - [ ] WebSocket broadcasts for new items added during scan
@@ -338,7 +311,7 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 - [ ] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request)
 - [ ] Toast for error states, not just success (network errors, 403s, validation failures)
 
-### 12c. Form Validation & Error Handling
+### 11c. Form Validation & Error Handling
 - [ ] Library name: empty check, duplicate name detection
 - [ ] Library paths: empty path check, duplicate path across libraries
 - [ ] Folder picker: permission denied handling, error recovery with retry
@@ -347,7 +320,7 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 - [ ] Graceful degradation (if one API call fails, don't blank the whole page)
 - [ ] Request deduplication (prevent double-submit on button clicks)
 
-### 12d. Media Browser Polish
+### 11d. Media Browser Polish
 - [ ] Sorting controls (by name, date added, year, rating)
 - [ ] Filtering by genre, year, rating, item type
 - [ ] Grid/list view toggle
@@ -357,14 +330,14 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 - [ ] Cast member links (click person → filtered view of their items)
 - [ ] Search filters (scope by type: movies, series, music, episodes)
 
-### 12e. User Management Polish
+### 11e. User Management Polish
 - [ ] Humanized timestamps ("2 hours ago" instead of raw ISO dates)
 - [ ] Sorting and filtering user list
 - [ ] Per-user device list and session history
 - [ ] "Kick session" button (terminate an active session)
 - [ ] Per-user playback history view
 
-### 12f. Accessibility
+### 11f. Accessibility
 - [ ] ARIA attributes on interactive elements (`aria-label`, `aria-describedby`, `aria-live`)
 - [ ] Keyboard navigation (tab order, Escape to close modals, arrow keys in folder picker)
 - [ ] Focus management (modal open → focus first input, modal close → restore focus)
@@ -373,7 +346,7 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 - [ ] Alt text for poster images
 - [ ] `@media (prefers-reduced-motion)` support
 
-### 12g. Frontend Infrastructure
+### 11g. Frontend Infrastructure
 - [ ] Request cancellation on navigation (AbortController)
 - [ ] Client-side caching (avoid re-fetching on back navigation)
 - [ ] Skeleton loaders instead of spinners for content areas
@@ -383,11 +356,11 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 
 ---
 
-## Phase 13 — Documentation, Branding & Website
+## Phase 12 — Documentation, Branding & Website
 
 Comprehensive docs, a design book for consistent branding, and a public project website.
 
-### 13a. Design Book
+### 12a. Design Book
 - [ ] Logo and wordmark (Rustyfin identity — colors, typography, icon)
 - [ ] Color palette (primary, secondary, accent, dark/light variants)
 - [ ] Typography choices (headings, body, monospace for code/config)
@@ -395,7 +368,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Component patterns (buttons, cards, alerts — shared across admin UI and website)
 - [ ] Favicon, social preview image (Open Graph), README badge
 
-### 13b. Project Documentation
+### 12b. Project Documentation
 - [ ] Getting started guide (install, configure `rustyfin.toml`, connect a client)
 - [ ] Configuration reference (all `rustyfin.toml` options, env vars, defaults)
 - [ ] Architecture overview (crate map, request lifecycle, auth flow)
@@ -405,7 +378,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Migration guide from Jellyfin (what transfers, what doesn't)
 - [ ] Contributing guide (dev setup, project structure, PR conventions)
 
-### 13c. Website
+### 12c. Website
 - [ ] Choose static site generator (Zola preferred, evaluate alternatives)
 - [ ] Site structure: landing page, docs, roadmap, changelog
 - [ ] Hosting on GitHub Pages or Cloudflare Pages (CI-driven deploy)
@@ -413,7 +386,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Docs integration (either in-repo markdown rendered by site generator, or separate docs site)
 - [ ] Changelog / release notes page (auto-generated or manually curated)
 
-### 13d. In-Repo Documentation
+### 12d. In-Repo Documentation
 - [ ] README overhaul (align with design book, badges, quick start)
 - [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
 - [ ] Crate-level `//!` doc comments for each crate in the workspace
@@ -421,18 +394,18 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 ---
 
-## Phase 14 — Hardening, Testing & Parity Review
+## Phase 13 — Hardening, Testing & Parity Review
 
 Final phase before considering Rustyfin production-ready. Comprehensive quality pass across the entire codebase.
 
-### 14a. Jellyfin Parity Audit
+### 13a. Jellyfin Parity Audit
 - [ ] Systematic endpoint comparison against Jellyfin's controllers (`/home/jonathan/src/jellyfin/Jellyfin.Api/Controllers/`)
 - [ ] Document every remaining 404 that clients hit — prioritize by client (web, iOS/Infuse, Apple TV)
 - [ ] Verify response shapes match Jellyfin exactly (field names, nullability, default values)
 - [ ] Test with each major client end-to-end: Jellyfin Web, Infuse, Swiftfin, Jellyfin Media Player
 - [ ] Identify and stub any remaining undiscovered endpoints
 
-### 14b. Automated Test Suite
+### 13b. Automated Test Suite
 - [ ] Unit tests for core logic: naming resolution, NFO parsing, TMDB response mapping
 - [ ] Unit tests for auth: MediaBrowser header parsing, token extraction, admin vs user enforcement
 - [ ] Repository tests: media_items CRUD, user_data operations, library access queries (requires test DB)
@@ -463,7 +436,7 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 - [ ] Request with disabled user's token → 401
 - [ ] Legacy routes (`/Users/{userId}/Items`) delegate correctly
 
-### 14c. Error Handling & Edge Cases
+### 13c. Error Handling & Edge Cases
 - [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
 - [ ] Verify 404 vs 403 vs 401 is correct for all auth failure modes
 - [ ] Handle malformed UUIDs in path params gracefully (400, not 500)
@@ -471,7 +444,7 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 - [ ] Database connection pool exhaustion behavior (graceful degradation)
 - [ ] Large library stress: 10k+ items, deeply nested seasons/episodes
 
-### 14d. Load & Performance Testing
+### 13d. Load & Performance Testing
 - [ ] Benchmark: `/Items` query with 1k, 10k, 50k items in DB
 - [ ] Benchmark: concurrent streaming sessions (direct play, no transcode)
 - [ ] Benchmark: library scan time for large libraries (1k, 10k files)
@@ -479,19 +452,46 @@ Currently no integration tests exist. The extractors hit Postgres directly (`ses
 - [ ] Profile memory usage under sustained load
 - [ ] Identify and fix N+1 query patterns (user_data per-item in loops)
 
-### 14e. Security Review
+### 13e. Security Review
 - [ ] Audit all path parameters for injection (path traversal in streaming, image serving)
 - [ ] Verify library access enforcement on every item-returning endpoint
 - [ ] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked)
 - [ ] Rate limiting on auth endpoints
 - [ ] Review CORS / header configuration
 
-### 14f. CI Pipeline
+### 13f. CI Pipeline
 - [ ] GitHub Actions workflow: `cargo fmt --check`, `cargo clippy`, `cargo test`
 - [ ] Integration test job with Postgres service container
 - [ ] Optional Meilisearch service container for search tests
 - [ ] Binary build artifacts (Linux x86_64, aarch64)
 - [ ] Container image build (Docker/OCI)
+
+---
+
+## Phase 14 — Stretch Goals
+
+### 14a. DLNA
+- [ ] UPnP device discovery (SSDP)
+- [ ] DLNA media server profile
+- [ ] Streaming to smart TVs and DLNA renderers
+
+### 14b. Sync Play
+- [ ] Synchronized playback across multiple clients
+- [ ] Session group management (create/join/leave)
+- [ ] Playback state synchronization (play, pause, seek broadcast)
+
+### 14c. Custom Theming
+Theming is file-based config (not DB), consistent with the config boundary. Themes are defined as YAML files with structured keys, compiled to CSS at startup and served via `/Branding/Css`.
+
+- [ ] `theme_path` in `rustyfin.toml` — path to a YAML theme file
+- [ ] `login_disclaimer` in `rustyfin.toml` — text shown on client login screens
+- [ ] YAML schema with explicit knobs: `colors.primary`, `colors.background`, `colors.surface`, `colors.text`, `colors.accent`, `typography.font_family`, `typography.heading_font`, `borders.radius`, `spacing.card_gap`, etc.
+- [ ] Compile YAML theme to CSS custom properties at startup
+- [ ] `GET /Branding/Css` serves the compiled CSS (works with Jellyfin web client out of the box)
+- [ ] `GET /Branding/Configuration` populates `login_disclaimer` from config
+- [ ] Apply same compiled CSS to Sycamore admin UI (inject via `<style>` tag at runtime)
+- [ ] Bundled example theme files shipped in repo (`themes/dark.yaml`, `themes/oled.yaml`, `themes/light.yaml`)
+- [ ] Theme file validation on startup (warn on unknown keys, error on invalid values)
 
 ---
 
