@@ -599,9 +599,9 @@ async fn scan_music(
                 title: Some(artist_name.clone()),
                 genres: first_tags
                     .as_ref()
-                    .and_then(|t| t.genre.clone())
-                    .into_iter()
-                    .collect(),
+                    .and_then(|t| t.genre.as_deref())
+                    .map(music_tags::split_genres)
+                    .unwrap_or_default(),
                 musicbrainz_artist_id: first_tags
                     .as_ref()
                     .and_then(|t| t.musicbrainz_artist_id.clone()),
@@ -755,9 +755,9 @@ async fn scan_music(
                     production_year: tags.as_ref().and_then(|t| t.year),
                     genres: tags
                         .as_ref()
-                        .and_then(|t| t.genre.clone())
-                        .into_iter()
-                        .collect(),
+                        .and_then(|t| t.genre.as_deref())
+                        .map(music_tags::split_genres)
+                        .unwrap_or_default(),
                     musicbrainz_album_id: tags
                         .as_ref()
                         .and_then(|t| t.musicbrainz_album_id.clone()),

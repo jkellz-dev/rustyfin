@@ -111,6 +111,17 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
     })
 }
 
+/// Split a genre string on common delimiters (`;`, `/`, `,`, `\0`) into
+/// individual genres, trimming whitespace.
+pub fn split_genres(genre: &str) -> Vec<String> {
+    genre
+        .split([';', '/', ',', '\0'])
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect()
+}
+
 pub fn extract_cover_art(audio_path: &Path, output_path: &Path) -> Option<()> {
     use lofty::file::TaggedFileExt;
     use lofty::picture::MimeType;
