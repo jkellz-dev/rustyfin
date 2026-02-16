@@ -11,7 +11,7 @@ use crate::library::enrichment::EnrichmentService;
 use rustyfin_common::images::discover_images;
 use rustyfin_common::music_tags;
 use rustyfin_common::naming::{
-    extract_album_year, is_audio_file, is_video_file, make_sort_name, parse_season_folder,
+    is_audio_file, is_video_file, make_sort_name, parse_season_folder,
     resolve_audio_track, resolve_episode, resolve_movie,
 };
 
@@ -491,8 +491,6 @@ impl LibraryScanner {
         artist_name: &str,
         result: &mut ScanResult,
     ) -> anyhow::Result<()> {
-        let album_year = extract_album_year(album_name);
-
         let album_id = self
             .find_or_create_folder(album_name, "MusicAlbum", library_id, Some(artist_id), None)
             .await?;
@@ -501,52 +499,6 @@ impl LibraryScanner {
         self.enrichment.enrich_album(album_id, album_dir).await;
 
         let audio_files = collect_audio_files(album_dir).await;
-
-        // Read tags from the first track to set album-level metadata (year, genre)
-        if let Some(first_audio) = audio_files.first() {
-            if let Some(first_tags) = music_tags::read_tags(first_audio) {
-                let meta = media_items::ItemMetadata {
-                    overview: None,
-                    original_title: None,
-                    community_rating: None,
-                    critic_rating: None,
-                    official_rating: None,
-                    genres: first_tags
-                        .genre
-                        .as_deref()
-                        .map(music_tags::split_genres)
-                        .filter(|v| !v.is_empty()),
-                    studios: None,
-                    tags: None,
-                    premiere_date: None,
-                    end_date: None,
-                    production_year: first_tags.year.or(album_year),
-                    external_ids: None,
-                };
-                media_items::update_metadata(&self.pool, album_id, &meta)
-                    .await
-                    .ok();
-            }
-        } else if let Some(year) = album_year {
-            // No audio files found but we have a year from the folder name
-            let meta = media_items::ItemMetadata {
-                overview: None,
-                original_title: None,
-                community_rating: None,
-                critic_rating: None,
-                official_rating: None,
-                genres: None,
-                studios: None,
-                tags: None,
-                premiere_date: None,
-                end_date: None,
-                production_year: Some(year),
-                external_ids: None,
-            };
-            media_items::update_metadata(&self.pool, album_id, &meta)
-                .await
-                .ok();
-        }
 
         for audio_file in &audio_files {
             match self
@@ -627,31 +579,6 @@ impl LibraryScanner {
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
 
-            if let Some(ref t) = tags
-                && let Some(ref genre) = t.genre
-            {
-                let genres = music_tags::split_genres(genre);
-                if !genres.is_empty() {
-                    let meta = media_items::ItemMetadata {
-                        overview: None,
-                        original_title: None,
-                        community_rating: None,
-                        critic_rating: None,
-                        official_rating: None,
-                        genres: Some(genres),
-                        studios: None,
-                        tags: None,
-                        premiere_date: None,
-                        end_date: None,
-                        production_year: None,
-                        external_ids: None,
-                    };
-                    media_items::update_metadata(&self.pool, updated.id, &meta)
-                        .await
-                        .ok();
-                }
-            }
-
             return Ok(IngestOutcome::Updated);
         }
 
@@ -685,31 +612,6 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
-
-        if let Some(ref t) = tags
-            && let Some(ref genre) = t.genre
-        {
-            let genres = music_tags::split_genres(genre);
-            if !genres.is_empty() {
-                let meta = media_items::ItemMetadata {
-                    overview: None,
-                    original_title: None,
-                    community_rating: None,
-                    critic_rating: None,
-                    official_rating: None,
-                    genres: Some(genres),
-                    studios: None,
-                    tags: None,
-                    premiere_date: None,
-                    end_date: None,
-                    production_year: None,
-                    external_ids: None,
-                };
-                media_items::update_metadata(&self.pool, inserted.id, &meta)
-                    .await
-                    .ok();
-            }
-        }
 
         Ok(IngestOutcome::Added)
     }
