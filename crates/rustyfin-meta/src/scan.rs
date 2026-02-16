@@ -475,13 +475,17 @@ async fn scan_music(
         if !overwrite && artist_nfo_path.is_file() {
             tracing::info!("  artist.nfo exists, skipping");
         } else if config.output.write_nfo && !dry_run {
-            // Gather genre from first audio file we can find under this artist
-            let artist_genre = find_first_audio_tags(&artist_dir)
-                .and_then(|t| t.genre);
+            // Gather genre + MusicBrainz ID from first audio file under this artist
+            let first_tags = find_first_audio_tags(&artist_dir);
+            let artist_genre = first_tags.as_ref().and_then(|t| t.genre.clone());
+            let mb_artist_id = first_tags
+                .as_ref()
+                .and_then(|t| t.musicbrainz_artist_id.clone());
 
             let meta = nfo::NfoMetadata {
                 title: Some(artist_name.clone()),
                 genres: artist_genre.into_iter().collect(),
+                musicbrainz_artist_id: mb_artist_id,
                 ..Default::default()
             };
             match nfo::write_artist_nfo(&artist_nfo_path, &meta) {
@@ -530,6 +534,21 @@ async fn scan_music(
                     artist_name: tag_artist,
                     production_year: year,
                     genres: genre.into_iter().collect(),
+                    musicbrainz_album_id: tags
+                        .as_ref()
+                        .and_then(|t| t.musicbrainz_album_id.clone()),
+                    musicbrainz_release_group_id: tags
+                        .as_ref()
+                        .and_then(|t| t.musicbrainz_release_group_id.clone()),
+                    musicbrainz_artist_id: tags
+                        .as_ref()
+                        .and_then(|t| t.musicbrainz_artist_id.clone()),
+                    album_type: tags.as_ref().and_then(|t| t.album_type.clone()),
+                    studios: tags
+                        .as_ref()
+                        .and_then(|t| t.label.clone())
+                        .into_iter()
+                        .collect(),
                     ..Default::default()
                 };
                 match nfo::write_album_nfo(&album_nfo_path, &meta) {
