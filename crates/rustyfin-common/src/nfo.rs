@@ -31,6 +31,11 @@ pub struct NfoMetadata {
     /// Transient: artwork URL for backdrop (not serialized to NFO XML).
     pub backdrop_url: Option<String>,
     pub people: Vec<NfoPerson>,
+    pub formed: Option<String>,
+    pub disbanded: Option<String>,
+    pub artist_type: Option<String>,
+    pub country: Option<String>,
+    pub disambiguation: Option<String>,
 }
 
 #[derive(Debug)]
@@ -543,6 +548,16 @@ struct WriteArtistNfo {
     biography: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     genre: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    formed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disbanded: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    artist_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    country: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disambiguation: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -658,6 +673,11 @@ pub fn write_artist_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn s
         musicbrainz_artist_id: meta.musicbrainz_artist_id.clone(),
         biography: meta.overview.clone(),
         genre: meta.genres.clone(),
+        formed: meta.formed.clone(),
+        disbanded: meta.disbanded.clone(),
+        artist_type: meta.artist_type.clone(),
+        country: meta.country.clone(),
+        disambiguation: meta.disambiguation.clone(),
     };
 
     let xml = quick_xml::se::to_string(&nfo)?;
