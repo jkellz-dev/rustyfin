@@ -511,7 +511,11 @@ impl LibraryScanner {
                     community_rating: None,
                     critic_rating: None,
                     official_rating: None,
-                    genres: first_tags.genre.map(|g| vec![g]),
+                    genres: first_tags
+                        .genre
+                        .as_deref()
+                        .map(music_tags::split_genres)
+                        .filter(|v| !v.is_empty()),
                     studios: None,
                     tags: None,
                     premiere_date: None,
@@ -626,23 +630,26 @@ impl LibraryScanner {
             if let Some(ref t) = tags
                 && let Some(ref genre) = t.genre
             {
-                let meta = media_items::ItemMetadata {
-                    overview: None,
-                    original_title: None,
-                    community_rating: None,
-                    critic_rating: None,
-                    official_rating: None,
-                    genres: Some(vec![genre.clone()]),
-                    studios: None,
-                    tags: None,
-                    premiere_date: None,
-                    end_date: None,
-                    production_year: None,
-                    external_ids: None,
-                };
-                media_items::update_metadata(&self.pool, updated.id, &meta)
-                    .await
-                    .ok();
+                let genres = music_tags::split_genres(genre);
+                if !genres.is_empty() {
+                    let meta = media_items::ItemMetadata {
+                        overview: None,
+                        original_title: None,
+                        community_rating: None,
+                        critic_rating: None,
+                        official_rating: None,
+                        genres: Some(genres),
+                        studios: None,
+                        tags: None,
+                        premiere_date: None,
+                        end_date: None,
+                        production_year: None,
+                        external_ids: None,
+                    };
+                    media_items::update_metadata(&self.pool, updated.id, &meta)
+                        .await
+                        .ok();
+                }
             }
 
             return Ok(IngestOutcome::Updated);
@@ -682,23 +689,26 @@ impl LibraryScanner {
         if let Some(ref t) = tags
             && let Some(ref genre) = t.genre
         {
-            let meta = media_items::ItemMetadata {
-                overview: None,
-                original_title: None,
-                community_rating: None,
-                critic_rating: None,
-                official_rating: None,
-                genres: Some(vec![genre.clone()]),
-                studios: None,
-                tags: None,
-                premiere_date: None,
-                end_date: None,
-                production_year: None,
-                external_ids: None,
-            };
-            media_items::update_metadata(&self.pool, inserted.id, &meta)
-                .await
-                .ok();
+            let genres = music_tags::split_genres(genre);
+            if !genres.is_empty() {
+                let meta = media_items::ItemMetadata {
+                    overview: None,
+                    original_title: None,
+                    community_rating: None,
+                    critic_rating: None,
+                    official_rating: None,
+                    genres: Some(genres),
+                    studios: None,
+                    tags: None,
+                    premiere_date: None,
+                    end_date: None,
+                    production_year: None,
+                    external_ids: None,
+                };
+                media_items::update_metadata(&self.pool, inserted.id, &meta)
+                    .await
+                    .ok();
+            }
         }
 
         Ok(IngestOutcome::Added)
