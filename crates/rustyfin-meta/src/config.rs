@@ -109,6 +109,7 @@ pub struct FanartConfig {
     #[serde(default = "default_max_backdrops")]
     pub max_backdrops: usize,
     #[serde(default = "default_max_per_type")]
+    #[allow(dead_code)]
     pub max_per_type: usize,
 }
 

@@ -52,12 +52,41 @@ pub async fn scan_directory(
 
     match library_type {
         "movies" => {
-            scan_movies(path, tmdb.as_ref(), fanart.as_ref(), fanart_limiter.as_ref(), config, dry_run, auto_mode).await
+            scan_movies(
+                path,
+                tmdb.as_ref(),
+                fanart.as_ref(),
+                fanart_limiter.as_ref(),
+                config,
+                dry_run,
+                auto_mode,
+            )
+            .await
         }
         "tvshows" => {
-            scan_tvshows(path, tmdb.as_ref(), tvdb.as_ref(), fanart.as_ref(), fanart_limiter.as_ref(), config, dry_run, auto_mode).await
+            scan_tvshows(
+                path,
+                tmdb.as_ref(),
+                tvdb.as_ref(),
+                fanart.as_ref(),
+                fanart_limiter.as_ref(),
+                config,
+                dry_run,
+                auto_mode,
+            )
+            .await
         }
-        "music" => scan_music(path, fanart.as_ref(), fanart_limiter.as_ref(), config, dry_run, auto_mode).await,
+        "music" => {
+            scan_music(
+                path,
+                fanart.as_ref(),
+                fanart_limiter.as_ref(),
+                config,
+                dry_run,
+                auto_mode,
+            )
+            .await
+        }
         other => anyhow::bail!("Unknown library type: {other}. Use: movies, tvshows, music"),
     }
 }
@@ -271,14 +300,21 @@ async fn scan_movies(
                     }
 
                     // Fanart.tv supplementary artwork
-                    if let Some(fanart_client) = fanart {
-                        if let Some(ref tmdb_id) = meta.tmdb_id {
-                            if let Some(limiter) = fanart_limiter {
-                                limiter.wait().await;
-                            }
-                            let fanart_images = fanart_client.fetch_movie_images(tmdb_id).await;
-                            download_fanart_images(&http, &fanart_images, parent, skip_existing, &config.fanart).await;
+                    if let Some(fanart_client) = fanart
+                        && let Some(ref tmdb_id) = meta.tmdb_id
+                    {
+                        if let Some(limiter) = fanart_limiter {
+                            limiter.wait().await;
                         }
+                        let fanart_images = fanart_client.fetch_movie_images(tmdb_id).await;
+                        download_fanart_images(
+                            &http,
+                            &fanart_images,
+                            parent,
+                            skip_existing,
+                            &config.fanart,
+                        )
+                        .await;
                     }
                 }
 
@@ -294,6 +330,7 @@ async fn scan_movies(
     Ok(stats)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn scan_tvshows(
     path: &Path,
     tmdb: Option<&TmdbClient>,
@@ -445,14 +482,21 @@ async fn scan_tvshows(
                     }
 
                     // Fanart.tv supplementary artwork
-                    if let Some(fanart_client) = fanart {
-                        if let Some(ref tvdb_id) = meta.tvdb_id {
-                            if let Some(limiter) = fanart_limiter {
-                                limiter.wait().await;
-                            }
-                            let fanart_images = fanart_client.fetch_show_images(tvdb_id).await;
-                            download_fanart_images(&http, &fanart_images, &series_dir, skip_existing, &config.fanart).await;
+                    if let Some(fanart_client) = fanart
+                        && let Some(ref tvdb_id) = meta.tvdb_id
+                    {
+                        if let Some(limiter) = fanart_limiter {
+                            limiter.wait().await;
                         }
+                        let fanart_images = fanart_client.fetch_show_images(tvdb_id).await;
+                        download_fanart_images(
+                            &http,
+                            &fanart_images,
+                            &series_dir,
+                            skip_existing,
+                            &config.fanart,
+                        )
+                        .await;
                     }
                 }
 
@@ -511,11 +555,12 @@ async fn scan_music(
         let token_file = expand_tilde(&config.discogs.token_file);
         let token_path = Path::new(&token_file);
         dc.load_tokens(token_path);
-        if !dc.is_authenticated() && !auto_mode {
-            if let Err(e) = dc.authenticate(token_path).await {
-                tracing::error!("Discogs authentication failed: {e}");
-                discogs_client = None;
-            }
+        if !dc.is_authenticated()
+            && !auto_mode
+            && let Err(e) = dc.authenticate(token_path).await
+        {
+            tracing::error!("Discogs authentication failed: {e}");
+            discogs_client = None;
         }
     }
 
@@ -575,15 +620,15 @@ async fn scan_music(
                     limiter.wait().await;
                 }
                 let results = mb_client.search_artist(&artist_name).await;
-                if let Some(chosen) = disambiguate(&results, &artist_name, auto_mode) {
-                    if let Some(ref mbid) = chosen.mbid {
-                        if let Some(ref limiter) = mb_limiter {
-                            limiter.wait().await;
-                        }
-                        if let Some(mb_meta) = mb_client.fetch_artist(mbid).await {
-                            tracing::info!("  Enriched artist from MusicBrainz (search)");
-                            merge_metadata(&mut artist_meta, &mb_meta);
-                        }
+                if let Some(chosen) = disambiguate(&results, &artist_name, auto_mode)
+                    && let Some(ref mbid) = chosen.mbid
+                {
+                    if let Some(ref limiter) = mb_limiter {
+                        limiter.wait().await;
+                    }
+                    if let Some(mb_meta) = mb_client.fetch_artist(mbid).await {
+                        tracing::info!("  Enriched artist from MusicBrainz (search)");
+                        merge_metadata(&mut artist_meta, &mb_meta);
                     }
                 }
             }
@@ -597,40 +642,44 @@ async fn scan_music(
             }
 
             // Fanart.tv artist artwork
-            if config.output.download_artwork && !dry_run {
-                if let Some(fanart_client) = fanart {
-                    if let Some(ref mbid) = artist_meta.musicbrainz_artist_id {
-                        if let Some(limiter) = fanart_limiter {
-                            limiter.wait().await;
-                        }
-                        let fanart_images = fanart_client.fetch_artist_images(mbid).await;
-                        let skip = !overwrite;
-                        download_fanart_images(&http, &fanart_images, &artist_dir, skip, &config.fanart).await;
-                    }
+            if config.output.download_artwork
+                && !dry_run
+                && let Some(fanart_client) = fanart
+                && let Some(ref mbid) = artist_meta.musicbrainz_artist_id
+            {
+                if let Some(limiter) = fanart_limiter {
+                    limiter.wait().await;
                 }
+                let fanart_images = fanart_client.fetch_artist_images(mbid).await;
+                let skip = !overwrite;
+                download_fanart_images(&http, &fanart_images, &artist_dir, skip, &config.fanart)
+                    .await;
             }
 
             // Discogs: artist images (if none from fanart.tv)
-            if config.output.download_artwork && !dry_run {
-                if let Some(ref discogs) = discogs_client {
-                    let has_artist_image = artist_dir.join("artist.jpg").is_file()
-                        || artist_dir.join("folder.jpg").is_file();
-                    if !has_artist_image || overwrite {
+            if config.output.download_artwork
+                && !dry_run
+                && let Some(ref discogs) = discogs_client
+            {
+                let has_artist_image = artist_dir.join("artist.jpg").is_file()
+                    || artist_dir.join("folder.jpg").is_file();
+                if !has_artist_image || overwrite {
+                    if let Some(ref limiter) = discogs_limiter {
+                        limiter.wait().await;
+                    }
+                    let results = discogs.search_artist(&artist_name).await;
+                    if let Some(chosen) = results.first() {
                         if let Some(ref limiter) = discogs_limiter {
                             limiter.wait().await;
                         }
-                        let results = discogs.search_artist(&artist_name).await;
-                        if let Some(chosen) = results.first() {
-                            if let Some(ref limiter) = discogs_limiter {
-                                limiter.wait().await;
-                            }
-                            let image_urls = discogs.fetch_artist_image_urls(chosen.id).await;
-                            if let Some(url) = image_urls.first() {
-                                let output = artist_dir.join("artist.jpg");
-                                let skip = !overwrite && output.is_file();
-                                match download_image_with_options(&http, url, &output, skip).await {
-                                    Ok(()) => tracing::info!("  Downloaded artist image from Discogs"),
-                                    Err(e) => tracing::warn!("  Failed to download Discogs artist image: {e}"),
+                        let image_urls = discogs.fetch_artist_image_urls(chosen.id).await;
+                        if let Some(url) = image_urls.first() {
+                            let output = artist_dir.join("artist.jpg");
+                            let skip = !overwrite && output.is_file();
+                            match download_image_with_options(&http, url, &output, skip).await {
+                                Ok(()) => tracing::info!("  Downloaded artist image from Discogs"),
+                                Err(e) => {
+                                    tracing::warn!("  Failed to download Discogs artist image: {e}")
                                 }
                             }
                         }
@@ -642,8 +691,7 @@ async fn scan_music(
             if artist_meta.overview.is_none() {
                 tracing::warn!("  Gap: artist '{}' has no biography", artist_name);
             }
-            if !artist_dir.join("artist.jpg").is_file()
-                && !artist_dir.join("folder.jpg").is_file()
+            if !artist_dir.join("artist.jpg").is_file() && !artist_dir.join("folder.jpg").is_file()
             {
                 tracing::warn!("  Gap: artist '{}' has no artist image", artist_name);
             }
@@ -743,70 +791,57 @@ async fn scan_music(
                     .iter()
                     .any(|name| album_dir.join(name).is_file());
 
-                    if !has_cover || overwrite {
-                        if let Some(ref rgid) = mb_rg_id {
-                            if let Some(cover_url) =
-                                mb_client.fetch_cover_art_url(rgid).await
-                            {
-                                let cover_path = album_dir.join("cover.jpg");
-                                let skip = !overwrite && cover_path.is_file();
-                                if let Err(e) = download_image_with_options(
-                                    &http,
-                                    &cover_url,
-                                    &cover_path,
-                                    skip,
-                                )
-                                .await
-                                {
-                                    tracing::warn!(
-                                        "    Failed to download cover: {e}"
-                                    );
-                                } else if !skip {
-                                    tracing::info!(
-                                        "    Downloaded cover from Cover Art Archive"
-                                    );
-                                }
-                            }
+                    if (!has_cover || overwrite)
+                        && let Some(ref rgid) = mb_rg_id
+                        && let Some(cover_url) = mb_client.fetch_cover_art_url(rgid).await
+                    {
+                        let cover_path = album_dir.join("cover.jpg");
+                        let skip = !overwrite && cover_path.is_file();
+                        if let Err(e) =
+                            download_image_with_options(&http, &cover_url, &cover_path, skip).await
+                        {
+                            tracing::warn!("    Failed to download cover: {e}");
+                        } else if !skip {
+                            tracing::info!("    Downloaded cover from Cover Art Archive");
                         }
                     }
 
                     // Fanart.tv album artwork (disc art, etc.)
-                    if let Some(fanart_client) = fanart {
-                        if let Some(ref rgid) = album_meta.musicbrainz_release_group_id {
-                            if let Some(limiter) = fanart_limiter {
-                                limiter.wait().await;
-                            }
-                            let fanart_images = fanart_client.fetch_album_images(rgid).await;
-                            let skip = !overwrite;
-                            download_fanart_images(&http, &fanart_images, &album_dir, skip, &config.fanart).await;
+                    if let Some(fanart_client) = fanart
+                        && let Some(ref rgid) = album_meta.musicbrainz_release_group_id
+                    {
+                        if let Some(limiter) = fanart_limiter {
+                            limiter.wait().await;
                         }
+                        let fanart_images = fanart_client.fetch_album_images(rgid).await;
+                        let skip = !overwrite;
+                        download_fanart_images(
+                            &http,
+                            &fanart_images,
+                            &album_dir,
+                            skip,
+                            &config.fanart,
+                        )
+                        .await;
                     }
 
                     // Discogs: label/genre enrichment if still missing
-                    if let Some(ref discogs) = discogs_client {
-                        if album_meta.studios.is_empty() {
+                    if let Some(ref discogs) = discogs_client
+                        && album_meta.studios.is_empty()
+                    {
+                        if let Some(ref limiter) = discogs_limiter {
+                            limiter.wait().await;
+                        }
+                        let artist_for_search =
+                            album_meta.artist_name.as_deref().unwrap_or(&artist_name);
+                        let results = discogs.search_release(&album_name, artist_for_search).await;
+                        if let Some(chosen) = results.first() {
                             if let Some(ref limiter) = discogs_limiter {
                                 limiter.wait().await;
                             }
-                            let artist_for_search = album_meta
-                                .artist_name
-                                .as_deref()
-                                .unwrap_or(&artist_name);
-                            let results = discogs
-                                .search_release(&album_name, artist_for_search)
-                                .await;
-                            if let Some(chosen) = results.first() {
-                                if let Some(ref limiter) = discogs_limiter {
-                                    limiter.wait().await;
-                                }
-                                if let Some(release_meta) =
-                                    discogs.fetch_release(chosen.id).await
-                                {
-                                    merge_metadata(&mut album_meta, &release_meta);
-                                    tracing::info!(
-                                        "    Enriched album from Discogs"
-                                    );
-                                }
+                            if let Some(release_meta) = discogs.fetch_release(chosen.id).await {
+                                merge_metadata(&mut album_meta, &release_meta);
+                                tracing::info!("    Enriched album from Discogs");
                             }
                         }
                     }
@@ -863,22 +898,16 @@ async fn scan_music(
                             .max_depth(1)
                             .into_iter()
                             .filter_map(|e| e.ok())
-                            .find(|e| {
-                                e.file_type().is_file() && is_audio_file(e.path())
-                            });
+                            .find(|e| e.file_type().is_file() && is_audio_file(e.path()));
 
-                        if let Some(audio_entry) = first_audio {
-                            if music_tags::extract_cover_art(
-                                audio_entry.path(),
-                                &album_dir,
-                            )
-                            .is_some()
-                            {
-                                tracing::info!(
-                                    "    Extracted cover art from {}",
-                                    audio_entry.file_name().to_string_lossy()
-                                );
-                            }
+                        if let Some(audio_entry) = first_audio
+                            && music_tags::extract_cover_art(audio_entry.path(), &album_dir)
+                                .is_some()
+                        {
+                            tracing::info!(
+                                "    Extracted cover art from {}",
+                                audio_entry.file_name().to_string_lossy()
+                            );
                         }
                     }
                 }
@@ -987,10 +1016,10 @@ fn merge_metadata(target: &mut nfo::NfoMetadata, source: &nfo::NfoMetadata) {
 }
 
 fn expand_tilde(path: &str) -> String {
-    if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return format!("{}/{rest}", home.to_string_lossy());
-        }
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Some(home) = std::env::var_os("HOME")
+    {
+        return format!("{}/{rest}", home.to_string_lossy());
     }
     path.to_string()
 }
