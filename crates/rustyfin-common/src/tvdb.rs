@@ -102,6 +102,7 @@ impl TvdbClient {
                     title: r.name.clone().unwrap_or_else(|| "(untitled)".to_string()),
                     year: r.year.as_deref().and_then(|y| y.parse().ok()),
                     overview: r.overview.clone(),
+                    mbid: None,
                 })
             })
             .collect()

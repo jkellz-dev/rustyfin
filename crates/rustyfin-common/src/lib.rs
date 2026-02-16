@@ -1,6 +1,7 @@
 pub mod artwork;
 pub mod images;
 pub mod music_tags;
+pub mod musicbrainz;
 pub mod naming;
 pub mod nfo;
 pub mod rate_limit;

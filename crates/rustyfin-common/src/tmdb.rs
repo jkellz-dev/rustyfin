@@ -10,13 +10,15 @@ pub struct TmdbClient {
     client: reqwest::Client,
 }
 
-/// A search result from TMDB containing enough info for disambiguation.
+/// A search result from TMDB/TVDB/MusicBrainz containing enough info for disambiguation.
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     pub id: i64,
     pub title: String,
     pub year: Option<i32>,
     pub overview: Option<String>,
+    /// MusicBrainz ID (string UUID), `None` for TMDB/TVDB results.
+    pub mbid: Option<String>,
 }
 
 impl TmdbClient {
@@ -180,6 +182,7 @@ impl TmdbSearchResult {
             title,
             year,
             overview: self.overview.clone(),
+            mbid: None,
         }
     }
 }
