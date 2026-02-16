@@ -9,6 +9,12 @@ pub struct MetaConfig {
     #[serde(default)]
     pub tvdb: TvdbConfig,
     #[serde(default)]
+    pub musicbrainz: MusicBrainzConfig,
+    #[serde(default)]
+    pub fanart: FanartConfig,
+    #[serde(default)]
+    pub discogs: DiscogsConfig,
+    #[serde(default)]
     pub output: OutputConfig,
 }
 
@@ -74,6 +80,74 @@ impl Default for OutputConfig {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MusicBrainzConfig {
+    pub base_url: Option<String>,
+    #[serde(default = "default_mb_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_mb_rate_window")]
+    pub rate_window_secs: u64,
+}
+
+impl Default for MusicBrainzConfig {
+    fn default() -> Self {
+        Self {
+            base_url: None,
+            rate_limit: default_mb_rate_limit(),
+            rate_window_secs: default_mb_rate_window(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FanartConfig {
+    pub api_key: Option<String>,
+    #[serde(default = "default_fanart_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_rate_window")]
+    pub rate_window_secs: u64,
+    #[serde(default = "default_max_backdrops")]
+    pub max_backdrops: usize,
+    #[serde(default = "default_max_per_type")]
+    pub max_per_type: usize,
+}
+
+impl Default for FanartConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            rate_limit: default_fanart_rate_limit(),
+            rate_window_secs: default_rate_window(),
+            max_backdrops: default_max_backdrops(),
+            max_per_type: default_max_per_type(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DiscogsConfig {
+    pub consumer_key: Option<String>,
+    pub consumer_secret: Option<String>,
+    #[serde(default = "default_discogs_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_discogs_rate_window")]
+    pub rate_window_secs: u64,
+    #[serde(default = "default_token_file")]
+    pub token_file: String,
+}
+
+impl Default for DiscogsConfig {
+    fn default() -> Self {
+        Self {
+            consumer_key: None,
+            consumer_secret: None,
+            rate_limit: default_discogs_rate_limit(),
+            rate_window_secs: default_discogs_rate_window(),
+            token_file: default_token_file(),
+        }
+    }
+}
+
 fn default_language() -> String {
     "en-US".to_string()
 }
@@ -90,8 +164,40 @@ fn default_tvdb_rate_limit() -> u32 {
     20
 }
 
+fn default_mb_rate_limit() -> u32 {
+    1
+}
+
+fn default_mb_rate_window() -> u64 {
+    1
+}
+
+fn default_fanart_rate_limit() -> u32 {
+    10
+}
+
 fn default_rate_window() -> u64 {
     10
+}
+
+fn default_max_backdrops() -> usize {
+    5
+}
+
+fn default_max_per_type() -> usize {
+    1
+}
+
+fn default_discogs_rate_limit() -> u32 {
+    60
+}
+
+fn default_discogs_rate_window() -> u64 {
+    60
+}
+
+fn default_token_file() -> String {
+    "~/.config/rustyfin/discogs_tokens.json".to_string()
 }
 
 impl MetaConfig {
