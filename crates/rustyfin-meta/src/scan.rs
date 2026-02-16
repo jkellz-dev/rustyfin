@@ -3,6 +3,7 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 use rustyfin_common::artwork::download_image_with_options;
+use rustyfin_common::fanart::FanartClient;
 use rustyfin_common::music_tags;
 use rustyfin_common::musicbrainz::MusicBrainzClient;
 use rustyfin_common::naming::{self, is_audio_file, is_video_file};
@@ -37,21 +38,25 @@ pub async fn scan_directory(
         .api_key
         .as_ref()
         .map(|key| TvdbClient::new(key.clone()));
+    let fanart = config
+        .fanart
+        .api_key
+        .as_ref()
+        .map(|key| FanartClient::new(key.clone()));
+    let fanart_limiter = config
+        .fanart
+        .api_key
+        .as_ref()
+        .map(|_| RateLimiter::new(config.fanart.rate_limit, config.fanart.rate_window_secs));
 
     match library_type {
-        "movies" => scan_movies(path, tmdb.as_ref(), config, dry_run, auto_mode).await,
-        "tvshows" => {
-            scan_tvshows(
-                path,
-                tmdb.as_ref(),
-                tvdb.as_ref(),
-                config,
-                dry_run,
-                auto_mode,
-            )
-            .await
+        "movies" => {
+            scan_movies(path, tmdb.as_ref(), fanart.as_ref(), fanart_limiter.as_ref(), config, dry_run, auto_mode).await
         }
-        "music" => scan_music(path, config, dry_run, auto_mode).await,
+        "tvshows" => {
+            scan_tvshows(path, tmdb.as_ref(), tvdb.as_ref(), fanart.as_ref(), fanart_limiter.as_ref(), config, dry_run, auto_mode).await
+        }
+        "music" => scan_music(path, fanart.as_ref(), fanart_limiter.as_ref(), config, dry_run, auto_mode).await,
         other => anyhow::bail!("Unknown library type: {other}. Use: movies, tvshows, music"),
     }
 }
@@ -132,6 +137,8 @@ pub(crate) fn rename_folder_with_provider_id(dir: &Path, provider: &str, id: &st
 async fn scan_movies(
     path: &Path,
     tmdb: Option<&TmdbClient>,
+    fanart: Option<&FanartClient>,
+    fanart_limiter: Option<&RateLimiter>,
     config: &MetaConfig,
     dry_run: bool,
     auto_mode: bool,
@@ -261,6 +268,17 @@ async fn scan_movies(
                             tracing::info!("  Downloaded fanart");
                         }
                     }
+
+                    // Fanart.tv supplementary artwork
+                    if let Some(fanart_client) = fanart {
+                        if let Some(ref tmdb_id) = meta.tmdb_id {
+                            if let Some(limiter) = fanart_limiter {
+                                limiter.wait().await;
+                            }
+                            let fanart_images = fanart_client.fetch_movie_images(tmdb_id).await;
+                            download_fanart_images(&http, &fanart_images, parent, skip_existing, &config.fanart).await;
+                        }
+                    }
                 }
 
                 stats.fetched += 1;
@@ -279,6 +297,8 @@ async fn scan_tvshows(
     path: &Path,
     tmdb: Option<&TmdbClient>,
     tvdb: Option<&TvdbClient>,
+    fanart: Option<&FanartClient>,
+    fanart_limiter: Option<&RateLimiter>,
     config: &MetaConfig,
     dry_run: bool,
     auto_mode: bool,
@@ -422,6 +442,17 @@ async fn scan_tvshows(
                             tracing::info!("  Downloaded fanart");
                         }
                     }
+
+                    // Fanart.tv supplementary artwork
+                    if let Some(fanart_client) = fanart {
+                        if let Some(ref tvdb_id) = meta.tvdb_id {
+                            if let Some(limiter) = fanart_limiter {
+                                limiter.wait().await;
+                            }
+                            let fanart_images = fanart_client.fetch_show_images(tvdb_id).await;
+                            download_fanart_images(&http, &fanart_images, &series_dir, skip_existing, &config.fanart).await;
+                        }
+                    }
                 }
 
                 stats.fetched += 1;
@@ -442,6 +473,8 @@ async fn scan_tvshows(
 
 async fn scan_music(
     path: &Path,
+    fanart: Option<&FanartClient>,
+    fanart_limiter: Option<&RateLimiter>,
     config: &MetaConfig,
     dry_run: bool,
     auto_mode: bool,
@@ -536,6 +569,20 @@ async fn scan_music(
                 Err(e) => {
                     tracing::error!("  Failed to write artist.nfo: {e}");
                     stats.errors += 1;
+                }
+            }
+
+            // Fanart.tv artist artwork
+            if config.output.download_artwork && !dry_run {
+                if let Some(fanart_client) = fanart {
+                    if let Some(ref mbid) = artist_meta.musicbrainz_artist_id {
+                        if let Some(limiter) = fanart_limiter {
+                            limiter.wait().await;
+                        }
+                        let fanart_images = fanart_client.fetch_artist_images(mbid).await;
+                        let skip = !overwrite;
+                        download_fanart_images(&http, &fanart_images, &artist_dir, skip, &config.fanart).await;
+                    }
                 }
             }
         }
@@ -657,6 +704,18 @@ async fn scan_music(
                             }
                         }
                     }
+
+                    // Fanart.tv album artwork (disc art, etc.)
+                    if let Some(fanart_client) = fanart {
+                        if let Some(ref rgid) = album_meta.musicbrainz_release_group_id {
+                            if let Some(limiter) = fanart_limiter {
+                                limiter.wait().await;
+                            }
+                            let fanart_images = fanart_client.fetch_album_images(rgid).await;
+                            let skip = !overwrite;
+                            download_fanart_images(&http, &fanart_images, &album_dir, skip, &config.fanart).await;
+                        }
+                    }
                 }
             } else {
                 // Still try to extract embedded cover art even if not writing NFO
@@ -711,6 +770,32 @@ fn find_first_audio_tags(dir: &Path) -> Option<music_tags::AudioTags> {
         .filter_map(|e| e.ok())
         .find(|e| e.file_type().is_file() && is_audio_file(e.path()))?;
     music_tags::read_tags(first.path())
+}
+
+async fn download_fanart_images(
+    http: &reqwest::Client,
+    images: &[rustyfin_common::fanart::FanartImage],
+    dir: &Path,
+    skip_existing: bool,
+    config: &crate::config::FanartConfig,
+) {
+    let mut backdrop_count = 0usize;
+    for img in images {
+        if img.image_type == "Backdrop" {
+            backdrop_count += 1;
+            if backdrop_count > config.max_backdrops {
+                continue;
+            }
+        }
+        let output_path = dir.join(&img.sidecar_name);
+        if skip_existing && output_path.is_file() {
+            continue;
+        }
+        match download_image_with_options(http, &img.url, &output_path, skip_existing).await {
+            Ok(()) => tracing::info!("    Downloaded {} -> {}", img.image_type, img.sidecar_name),
+            Err(e) => tracing::warn!("    Failed to download {}: {e}", img.sidecar_name),
+        }
+    }
 }
 
 /// Merge `source` into `target`, filling only fields that are `None`/empty in `target`.
