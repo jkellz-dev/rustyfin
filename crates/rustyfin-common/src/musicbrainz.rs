@@ -97,11 +97,7 @@ impl MusicBrainzClient {
     }
 
     /// Search for a release group (album) by album title and artist name.
-    pub async fn search_release_group(
-        &self,
-        album: &str,
-        artist: &str,
-    ) -> Vec<SearchResult> {
+    pub async fn search_release_group(&self, album: &str, artist: &str) -> Vec<SearchResult> {
         let url = format!(
             "{}/release-group?query=release:\"{}\" AND artist:\"{}\"&fmt=json&limit=10",
             self.base_url,
@@ -188,19 +184,9 @@ impl MusicBrainzClient {
 
     /// Fetch the front cover art URL from the Cover Art Archive.
     pub async fn fetch_cover_art_url(&self, release_group_mbid: &str) -> Option<String> {
-        let url = format!(
-            "https://coverartarchive.org/release-group/{release_group_mbid}"
-        );
+        let url = format!("https://coverartarchive.org/release-group/{release_group_mbid}");
 
-        let caa: CaaResponse = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .ok()?
-            .json()
-            .await
-            .ok()?;
+        let caa: CaaResponse = self.client.get(&url).send().await.ok()?.json().await.ok()?;
 
         caa.images
             .into_iter()

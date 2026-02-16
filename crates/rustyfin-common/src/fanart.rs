@@ -39,13 +39,7 @@ impl FanartClient {
         extract_images(&body, "moviedisc", "Disc", "disc.png", &mut images);
         extract_images(&body, "moviebanner", "Banner", "banner.jpg", &mut images);
         extract_images(&body, "moviethumb", "Thumb", "landscape.jpg", &mut images);
-        extract_images(
-            &body,
-            "hdmovieclearart",
-            "Art",
-            "clearart.png",
-            &mut images,
-        );
+        extract_images(&body, "hdmovieclearart", "Art", "clearart.png", &mut images);
         extract_backdrop_images(&body, "moviebackground", &mut images);
         images
     }
@@ -92,20 +86,8 @@ impl FanartClient {
         let mut images = Vec::new();
         extract_images(&body, "hdmusiclogo", "Logo", "logo.png", &mut images);
         extract_images(&body, "musiclogo", "Logo", "logo.png", &mut images);
-        extract_images(
-            &body,
-            "artistthumb",
-            "Primary",
-            "artist.jpg",
-            &mut images,
-        );
-        extract_images(
-            &body,
-            "musicbanner",
-            "Banner",
-            "banner.jpg",
-            &mut images,
-        );
+        extract_images(&body, "artistthumb", "Primary", "artist.jpg", &mut images);
+        extract_images(&body, "musicbanner", "Banner", "banner.jpg", &mut images);
         extract_backdrop_images(&body, "artistbackground", &mut images);
         images
     }
@@ -124,7 +106,13 @@ impl FanartClient {
         let mut images = Vec::new();
         if let Some(albums) = body.get("albums").and_then(|a| a.as_object()) {
             for (_album_id, album_data) in albums {
-                extract_images(album_data, "albumcover", "Primary", "cover.jpg", &mut images);
+                extract_images(
+                    album_data,
+                    "albumcover",
+                    "Primary",
+                    "cover.jpg",
+                    &mut images,
+                );
                 extract_images(album_data, "cdart", "Disc", "disc.png", &mut images);
             }
         }

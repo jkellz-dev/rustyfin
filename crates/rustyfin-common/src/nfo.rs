@@ -438,9 +438,7 @@ fn apply_unique_ids(ids: &[NfoUniqueId], meta: &mut NfoMetadata) {
             "imdb" => meta.imdb_id = Some(val.clone()),
             "musicbrainzartist" => meta.musicbrainz_artist_id = Some(val.clone()),
             "musicbrainzalbum" => meta.musicbrainz_album_id = Some(val.clone()),
-            "musicbrainzreleasegroup" => {
-                meta.musicbrainz_release_group_id = Some(val.clone())
-            }
+            "musicbrainzreleasegroup" => meta.musicbrainz_release_group_id = Some(val.clone()),
             _ => {}
         }
     }

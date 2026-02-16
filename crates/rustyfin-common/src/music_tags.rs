@@ -44,16 +44,13 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
         None
     };
 
-    let get_u32 = |keys: &[ItemKey]| -> Option<u32> {
-        get(keys).and_then(|s| s.parse::<u32>().ok())
-    };
+    let get_u32 =
+        |keys: &[ItemKey]| -> Option<u32> { get(keys).and_then(|s| s.parse::<u32>().ok()) };
 
     Some(AudioTags {
         title: tag.title().map(|s| s.to_string()),
         artist: tag.artist().map(|s| s.to_string()),
-        album_artist: tag
-            .get_string(&ItemKey::AlbumArtist)
-            .map(|s| s.to_string()),
+        album_artist: tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string()),
         album: tag.album().map(|s| s.to_string()),
         track_number: tag.track(),
         disc_number: tag.disk(),
@@ -87,20 +84,21 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
             ItemKey::Unknown("ORIGINALDATE".to_string()),
             ItemKey::Unknown("ORIGINALYEAR".to_string()),
         ]),
-        total_tracks: tag.track_total().or_else(|| get_u32(&[
-            ItemKey::TrackTotal,
-            ItemKey::Unknown("TOTALTRACKS".to_string()),
-            ItemKey::Unknown("TRACKTOTAL".to_string()),
-        ])),
-        total_discs: tag.disk_total().or_else(|| get_u32(&[
-            ItemKey::DiscTotal,
-            ItemKey::Unknown("TOTALDISCS".to_string()),
-            ItemKey::Unknown("DISCTOTAL".to_string()),
-        ])),
-        barcode: get(&[
-            ItemKey::Barcode,
-            ItemKey::Unknown("BARCODE".to_string()),
-        ]),
+        total_tracks: tag.track_total().or_else(|| {
+            get_u32(&[
+                ItemKey::TrackTotal,
+                ItemKey::Unknown("TOTALTRACKS".to_string()),
+                ItemKey::Unknown("TRACKTOTAL".to_string()),
+            ])
+        }),
+        total_discs: tag.disk_total().or_else(|| {
+            get_u32(&[
+                ItemKey::DiscTotal,
+                ItemKey::Unknown("TOTALDISCS".to_string()),
+                ItemKey::Unknown("DISCTOTAL".to_string()),
+            ])
+        }),
+        barcode: get(&[ItemKey::Barcode, ItemKey::Unknown("BARCODE".to_string())]),
         catalog_number: get(&[
             ItemKey::CatalogNumber,
             ItemKey::Unknown("CATALOGNUMBER".to_string()),
@@ -109,9 +107,7 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
             ItemKey::Unknown("RELEASESTATUS".to_string()),
             ItemKey::Unknown("MUSICBRAINZ_ALBUMSTATUS".to_string()),
         ]),
-        release_country: get(&[
-            ItemKey::Unknown("RELEASECOUNTRY".to_string()),
-        ]),
+        release_country: get(&[ItemKey::Unknown("RELEASECOUNTRY".to_string())]),
     })
 }
 

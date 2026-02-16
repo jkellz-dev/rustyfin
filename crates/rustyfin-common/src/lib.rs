@@ -1,4 +1,5 @@
 pub mod artwork;
+pub mod discogs;
 pub mod fanart;
 pub mod images;
 pub mod music_tags;
