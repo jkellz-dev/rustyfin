@@ -4,6 +4,7 @@ use walkdir::WalkDir;
 
 use rustyfin_common::artwork::download_image_with_options;
 use rustyfin_common::music_tags;
+use rustyfin_common::musicbrainz::MusicBrainzClient;
 use rustyfin_common::naming::{self, is_audio_file, is_video_file};
 use rustyfin_common::nfo::{self, find_movie_nfo, find_series_nfo};
 use rustyfin_common::rate_limit::RateLimiter;
@@ -443,7 +444,7 @@ async fn scan_music(
     path: &Path,
     config: &MetaConfig,
     dry_run: bool,
-    _auto_mode: bool,
+    auto_mode: bool,
 ) -> anyhow::Result<ScanStats> {
     let mut stats = ScanStats {
         scanned: 0,
@@ -453,6 +454,17 @@ async fn scan_music(
     };
 
     let overwrite = config.output.overwrite_existing;
+
+    let mb_client = MusicBrainzClient::new(config.musicbrainz.base_url.clone());
+    let mb_limiter = if mb_client.is_local {
+        None
+    } else {
+        Some(RateLimiter::new(
+            config.musicbrainz.rate_limit,
+            config.musicbrainz.rate_window_secs,
+        ))
+    };
+    let http = reqwest::Client::new();
 
     let Ok(artist_entries) = std::fs::read_dir(path) else {
         anyhow::bail!("Cannot read directory: {}", path.display());
@@ -475,20 +487,51 @@ async fn scan_music(
         if !overwrite && artist_nfo_path.is_file() {
             tracing::info!("  artist.nfo exists, skipping");
         } else if config.output.write_nfo && !dry_run {
-            // Gather genre + MusicBrainz ID from first audio file under this artist
             let first_tags = find_first_audio_tags(&artist_dir);
-            let artist_genre = first_tags.as_ref().and_then(|t| t.genre.clone());
             let mb_artist_id = first_tags
                 .as_ref()
                 .and_then(|t| t.musicbrainz_artist_id.clone());
 
-            let meta = nfo::NfoMetadata {
+            let mut artist_meta = nfo::NfoMetadata {
                 title: Some(artist_name.clone()),
-                genres: artist_genre.into_iter().collect(),
-                musicbrainz_artist_id: mb_artist_id,
+                genres: first_tags
+                    .as_ref()
+                    .and_then(|t| t.genre.clone())
+                    .into_iter()
+                    .collect(),
+                musicbrainz_artist_id: mb_artist_id.clone(),
                 ..Default::default()
             };
-            match nfo::write_artist_nfo(&artist_nfo_path, &meta) {
+
+            // Enrich from MusicBrainz
+            if let Some(ref mbid) = mb_artist_id {
+                if let Some(ref limiter) = mb_limiter {
+                    limiter.wait().await;
+                }
+                if let Some(mb_meta) = mb_client.fetch_artist(mbid).await {
+                    tracing::info!("  Enriched artist from MusicBrainz (direct MBID)");
+                    merge_metadata(&mut artist_meta, &mb_meta);
+                }
+            } else {
+                // Search and disambiguate
+                if let Some(ref limiter) = mb_limiter {
+                    limiter.wait().await;
+                }
+                let results = mb_client.search_artist(&artist_name).await;
+                if let Some(chosen) = disambiguate(&results, &artist_name, auto_mode) {
+                    if let Some(ref mbid) = chosen.mbid {
+                        if let Some(ref limiter) = mb_limiter {
+                            limiter.wait().await;
+                        }
+                        if let Some(mb_meta) = mb_client.fetch_artist(mbid).await {
+                            tracing::info!("  Enriched artist from MusicBrainz (search)");
+                            merge_metadata(&mut artist_meta, &mb_meta);
+                        }
+                    }
+                }
+            }
+
+            match nfo::write_artist_nfo(&artist_nfo_path, &artist_meta) {
                 Ok(()) => tracing::info!("  Wrote artist.nfo"),
                 Err(e) => {
                     tracing::error!("  Failed to write artist.nfo: {e}");
@@ -528,8 +571,11 @@ async fn scan_music(
                 let tag_artist = tags
                     .as_ref()
                     .and_then(|t| t.album_artist.clone().or(t.artist.clone()));
+                let mb_rg_id = tags
+                    .as_ref()
+                    .and_then(|t| t.musicbrainz_release_group_id.clone());
 
-                let meta = nfo::NfoMetadata {
+                let mut album_meta = nfo::NfoMetadata {
                     title: Some(album_name.clone()),
                     artist_name: tag_artist,
                     production_year: year,
@@ -537,9 +583,7 @@ async fn scan_music(
                     musicbrainz_album_id: tags
                         .as_ref()
                         .and_then(|t| t.musicbrainz_album_id.clone()),
-                    musicbrainz_release_group_id: tags
-                        .as_ref()
-                        .and_then(|t| t.musicbrainz_release_group_id.clone()),
+                    musicbrainz_release_group_id: mb_rg_id.clone(),
                     musicbrainz_artist_id: tags
                         .as_ref()
                         .and_then(|t| t.musicbrainz_artist_id.clone()),
@@ -551,7 +595,19 @@ async fn scan_music(
                         .collect(),
                     ..Default::default()
                 };
-                match nfo::write_album_nfo(&album_nfo_path, &meta) {
+
+                // Enrich from MusicBrainz release group
+                if let Some(ref rgid) = mb_rg_id {
+                    if let Some(ref limiter) = mb_limiter {
+                        limiter.wait().await;
+                    }
+                    if let Some(mb_meta) = mb_client.fetch_release_group(rgid).await {
+                        tracing::info!("    Enriched album from MusicBrainz");
+                        merge_metadata(&mut album_meta, &mb_meta);
+                    }
+                }
+
+                match nfo::write_album_nfo(&album_nfo_path, &album_meta) {
                     Ok(()) => {
                         tracing::info!("    Wrote album.nfo");
                         stats.fetched += 1;
@@ -561,36 +617,84 @@ async fn scan_music(
                         stats.errors += 1;
                     }
                 }
-            }
 
-            // ── Cover art extraction ────────────────────────────
-            if !config.output.download_artwork {
-                continue;
-            }
+                // Download cover from Cover Art Archive if available
+                if config.output.download_artwork && !dry_run {
+                    let has_cover = [
+                        "cover.jpg",
+                        "cover.png",
+                        "folder.jpg",
+                        "folder.png",
+                        "front.jpg",
+                        "front.png",
+                    ]
+                    .iter()
+                    .any(|name| album_dir.join(name).is_file());
 
-            let has_cover = ["cover.jpg", "cover.png", "folder.jpg", "folder.png", "front.jpg", "front.png"]
-                .iter()
-                .any(|name| album_dir.join(name).is_file());
-
-            if has_cover && !overwrite {
-                tracing::info!("    Cover art exists, skipping");
-            } else if !dry_run {
-                let first_audio = WalkDir::new(&album_dir)
-                    .max_depth(1)
-                    .into_iter()
-                    .filter_map(|e| e.ok())
-                    .find(|e| e.file_type().is_file() && is_audio_file(e.path()));
-
-                if let Some(audio_entry) = first_audio {
-                    if music_tags::extract_cover_art(audio_entry.path(), &album_dir).is_some() {
-                        tracing::info!("    Extracted cover art from {}", audio_entry.file_name().to_string_lossy());
-                        stats.fetched += 1;
-                    } else {
-                        tracing::info!("    No embedded cover art found");
+                    if !has_cover || overwrite {
+                        if let Some(ref rgid) = mb_rg_id {
+                            if let Some(cover_url) =
+                                mb_client.fetch_cover_art_url(rgid).await
+                            {
+                                let cover_path = album_dir.join("cover.jpg");
+                                let skip = !overwrite && cover_path.is_file();
+                                if let Err(e) = download_image_with_options(
+                                    &http,
+                                    &cover_url,
+                                    &cover_path,
+                                    skip,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        "    Failed to download cover: {e}"
+                                    );
+                                } else if !skip {
+                                    tracing::info!(
+                                        "    Downloaded cover from Cover Art Archive"
+                                    );
+                                }
+                            }
+                        }
                     }
-                } else {
-                    tracing::warn!("    No audio files found in album directory");
-                    stats.errors += 1;
+                }
+            } else {
+                // Still try to extract embedded cover art even if not writing NFO
+                if config.output.download_artwork && !dry_run {
+                    let has_cover = [
+                        "cover.jpg",
+                        "cover.png",
+                        "folder.jpg",
+                        "folder.png",
+                        "front.jpg",
+                        "front.png",
+                    ]
+                    .iter()
+                    .any(|name| album_dir.join(name).is_file());
+
+                    if !has_cover || overwrite {
+                        let first_audio = WalkDir::new(&album_dir)
+                            .max_depth(1)
+                            .into_iter()
+                            .filter_map(|e| e.ok())
+                            .find(|e| {
+                                e.file_type().is_file() && is_audio_file(e.path())
+                            });
+
+                        if let Some(audio_entry) = first_audio {
+                            if music_tags::extract_cover_art(
+                                audio_entry.path(),
+                                &album_dir,
+                            )
+                            .is_some()
+                            {
+                                tracing::info!(
+                                    "    Extracted cover art from {}",
+                                    audio_entry.file_name().to_string_lossy()
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -607,4 +711,65 @@ fn find_first_audio_tags(dir: &Path) -> Option<music_tags::AudioTags> {
         .filter_map(|e| e.ok())
         .find(|e| e.file_type().is_file() && is_audio_file(e.path()))?;
     music_tags::read_tags(first.path())
+}
+
+/// Merge `source` into `target`, filling only fields that are `None`/empty in `target`.
+fn merge_metadata(target: &mut nfo::NfoMetadata, source: &nfo::NfoMetadata) {
+    if target.sort_name.is_none() {
+        target.sort_name.clone_from(&source.sort_name);
+    }
+    if target.overview.is_none() {
+        target.overview.clone_from(&source.overview);
+    }
+    if target.genres.is_empty() {
+        target.genres.clone_from(&source.genres);
+    }
+    if target.musicbrainz_artist_id.is_none() {
+        target
+            .musicbrainz_artist_id
+            .clone_from(&source.musicbrainz_artist_id);
+    }
+    if target.musicbrainz_album_id.is_none() {
+        target
+            .musicbrainz_album_id
+            .clone_from(&source.musicbrainz_album_id);
+    }
+    if target.musicbrainz_release_group_id.is_none() {
+        target
+            .musicbrainz_release_group_id
+            .clone_from(&source.musicbrainz_release_group_id);
+    }
+    if target.formed.is_none() {
+        target.formed.clone_from(&source.formed);
+    }
+    if target.disbanded.is_none() {
+        target.disbanded.clone_from(&source.disbanded);
+    }
+    if target.artist_type.is_none() {
+        target.artist_type.clone_from(&source.artist_type);
+    }
+    if target.country.is_none() {
+        target.country.clone_from(&source.country);
+    }
+    if target.disambiguation.is_none() {
+        target.disambiguation.clone_from(&source.disambiguation);
+    }
+    if target.album_type.is_none() {
+        target.album_type.clone_from(&source.album_type);
+    }
+    if target.production_year.is_none() {
+        target.production_year = source.production_year;
+    }
+    if target.artist_name.is_none() {
+        target.artist_name.clone_from(&source.artist_name);
+    }
+    if target.studios.is_empty() {
+        target.studios.clone_from(&source.studios);
+    }
+    if target.poster_url.is_none() {
+        target.poster_url.clone_from(&source.poster_url);
+    }
+    if target.backdrop_url.is_none() {
+        target.backdrop_url.clone_from(&source.backdrop_url);
+    }
 }
