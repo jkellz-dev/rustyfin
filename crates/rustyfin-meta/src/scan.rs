@@ -637,6 +637,19 @@ async fn scan_music(
                     }
                 }
             }
+
+            // Gap detection: artist
+            if artist_meta.overview.is_none() {
+                tracing::warn!("  Gap: artist '{}' has no biography", artist_name);
+            }
+            if !artist_dir.join("artist.jpg").is_file()
+                && !artist_dir.join("folder.jpg").is_file()
+            {
+                tracing::warn!("  Gap: artist '{}' has no artist image", artist_name);
+            }
+            if artist_meta.musicbrainz_artist_id.is_none() {
+                tracing::warn!("  Gap: artist '{}' has no MusicBrainz ID", artist_name);
+            }
         }
 
         // ── Albums ──────────────────────────────────────────────
@@ -797,6 +810,39 @@ async fn scan_music(
                             }
                         }
                     }
+                }
+
+                // Gap detection: album
+                let has_cover_final = [
+                    "cover.jpg",
+                    "cover.png",
+                    "folder.jpg",
+                    "folder.png",
+                    "front.jpg",
+                    "front.png",
+                ]
+                .iter()
+                .any(|name| album_dir.join(name).is_file());
+                if !has_cover_final {
+                    let has_embedded = tags.as_ref().is_some_and(|t| t.has_embedded_art);
+                    if !has_embedded {
+                        tracing::warn!("    Gap: album '{}' has no cover art", album_name);
+                    }
+                }
+                if album_meta.musicbrainz_release_group_id.is_none() {
+                    tracing::warn!(
+                        "    Gap: album '{}' has no MusicBrainz release group ID",
+                        album_name
+                    );
+                }
+                if album_meta.studios.is_empty() {
+                    tracing::warn!("    Gap: album '{}' has no label info", album_name);
+                }
+                if tags.as_ref().is_some_and(|t| t.genre.is_none()) {
+                    tracing::warn!("    Gap: album '{}' missing genre tag", album_name);
+                }
+                if tags.as_ref().is_some_and(|t| t.year.is_none()) {
+                    tracing::warn!("    Gap: album '{}' missing year tag", album_name);
                 }
             } else {
                 // Still try to extract embedded cover art even if not writing NFO
