@@ -1,0 +1,49 @@
+# Self-hosted MusicBrainz instance for unlimited metadata lookups.
+# See README.md for setup instructions.
+#
+# This wraps the official musicbrainz-docker project.
+# First-time setup requires importing a full database dump (~30 GB download).
+
+services:
+  db:
+    image: postgres:16
+    volumes:
+      - musicbrainz-pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: musicbrainz
+      POSTGRES_PASSWORD: musicbrainz
+      POSTGRES_DB: musicbrainz_db
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    restart: unless-stopped
+
+  musicbrainz:
+    image: metabrainz/musicbrainz-server:latest
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - redis
+      - search
+    environment:
+      MUSICBRAINZ_BASE_URL: "http://localhost:5000"
+      MUSICBRAINZ_DB_HOST: db
+      MUSICBRAINZ_DB_NAME: musicbrainz_db
+      MUSICBRAINZ_DB_USER: musicbrainz
+      MUSICBRAINZ_DB_PASSWORD: musicbrainz
+      MUSICBRAINZ_REDIS_HOST: redis
+      MUSICBRAINZ_SEARCH_HOST: search
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  search:
+    image: metabrainz/mb-solr:latest
+    restart: unless-stopped
+
+volumes:
+  musicbrainz-pgdata:
