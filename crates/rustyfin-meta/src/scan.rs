@@ -3,6 +3,7 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 use rustyfin_common::artwork::download_image_with_options;
+use rustyfin_common::discogs::DiscogsClient;
 use rustyfin_common::fanart::FanartClient;
 use rustyfin_common::music_tags;
 use rustyfin_common::musicbrainz::MusicBrainzClient;
@@ -499,6 +500,29 @@ async fn scan_music(
     };
     let http = reqwest::Client::new();
 
+    let mut discogs_client = config
+        .discogs
+        .consumer_key
+        .as_ref()
+        .zip(config.discogs.consumer_secret.as_ref())
+        .map(|(key, secret)| DiscogsClient::new(key.clone(), secret.clone()));
+
+    if let Some(ref mut dc) = discogs_client {
+        let token_file = expand_tilde(&config.discogs.token_file);
+        let token_path = Path::new(&token_file);
+        dc.load_tokens(token_path);
+        if !dc.is_authenticated() && !auto_mode {
+            if let Err(e) = dc.authenticate(token_path).await {
+                tracing::error!("Discogs authentication failed: {e}");
+                discogs_client = None;
+            }
+        }
+    }
+
+    let discogs_limiter = discogs_client
+        .as_ref()
+        .map(|_| RateLimiter::new(config.discogs.rate_limit, config.discogs.rate_window_secs));
+
     let Ok(artist_entries) = std::fs::read_dir(path) else {
         anyhow::bail!("Cannot read directory: {}", path.display());
     };
@@ -582,6 +606,34 @@ async fn scan_music(
                         let fanart_images = fanart_client.fetch_artist_images(mbid).await;
                         let skip = !overwrite;
                         download_fanart_images(&http, &fanart_images, &artist_dir, skip, &config.fanart).await;
+                    }
+                }
+            }
+
+            // Discogs: artist images (if none from fanart.tv)
+            if config.output.download_artwork && !dry_run {
+                if let Some(ref discogs) = discogs_client {
+                    let has_artist_image = artist_dir.join("artist.jpg").is_file()
+                        || artist_dir.join("folder.jpg").is_file();
+                    if !has_artist_image || overwrite {
+                        if let Some(ref limiter) = discogs_limiter {
+                            limiter.wait().await;
+                        }
+                        let results = discogs.search_artist(&artist_name).await;
+                        if let Some(chosen) = results.first() {
+                            if let Some(ref limiter) = discogs_limiter {
+                                limiter.wait().await;
+                            }
+                            let image_urls = discogs.fetch_artist_image_urls(chosen.id).await;
+                            if let Some(url) = image_urls.first() {
+                                let output = artist_dir.join("artist.jpg");
+                                let skip = !overwrite && output.is_file();
+                                match download_image_with_options(&http, url, &output, skip).await {
+                                    Ok(()) => tracing::info!("  Downloaded artist image from Discogs"),
+                                    Err(e) => tracing::warn!("  Failed to download Discogs artist image: {e}"),
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -714,6 +766,35 @@ async fn scan_music(
                             let fanart_images = fanart_client.fetch_album_images(rgid).await;
                             let skip = !overwrite;
                             download_fanart_images(&http, &fanart_images, &album_dir, skip, &config.fanart).await;
+                        }
+                    }
+
+                    // Discogs: label/genre enrichment if still missing
+                    if let Some(ref discogs) = discogs_client {
+                        if album_meta.studios.is_empty() {
+                            if let Some(ref limiter) = discogs_limiter {
+                                limiter.wait().await;
+                            }
+                            let artist_for_search = album_meta
+                                .artist_name
+                                .as_deref()
+                                .unwrap_or(&artist_name);
+                            let results = discogs
+                                .search_release(&album_name, artist_for_search)
+                                .await;
+                            if let Some(chosen) = results.first() {
+                                if let Some(ref limiter) = discogs_limiter {
+                                    limiter.wait().await;
+                                }
+                                if let Some(release_meta) =
+                                    discogs.fetch_release(chosen.id).await
+                                {
+                                    merge_metadata(&mut album_meta, &release_meta);
+                                    tracing::info!(
+                                        "    Enriched album from Discogs"
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -857,4 +938,13 @@ fn merge_metadata(target: &mut nfo::NfoMetadata, source: &nfo::NfoMetadata) {
     if target.backdrop_url.is_none() {
         target.backdrop_url.clone_from(&source.backdrop_url);
     }
+}
+
+fn expand_tilde(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return format!("{}/{rest}", home.to_string_lossy());
+        }
+    }
+    path.to_string()
 }
