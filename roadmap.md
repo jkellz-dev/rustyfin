@@ -435,11 +435,60 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 
 ---
 
-## Phase 13 — Documentation, Branding & Website
+## Phase 13 — Admin UI Streaming
+
+Embedded media player in the Sycamore admin UI for playing video and music directly in the browser. The backend already supports direct play (HTTP Range), HLS transcoding, and playback session reporting — this phase wires the frontend to those capabilities.
+
+### 13a. Video Player
+
+- [ ] HTML5 `<video>` element component with Sycamore bindings (`web-sys` interop)
+- [ ] HLS.js integration via `wasm-bindgen` / inline JS — attach to `<video>` for transcoded streams
+- [ ] Direct play path: set `<video src>` to `/Videos/{itemId}/stream` when container is natively supported (MP4/WebM)
+- [ ] Transcode path: feed `/Videos/{itemId}/master.m3u8` to HLS.js when direct play isn't possible
+- [ ] `POST /Items/{itemId}/PlaybackInfo` call to determine play method (DirectPlay vs Transcode)
+- [ ] Player controls: play/pause, seek bar, volume, fullscreen
+- [ ] Time display (current position / total duration, converted from 100ns ticks)
+- [ ] Resume support: start playback from `user_data.playback_position_ticks` if present
+
+### 13b. Audio Player
+
+- [ ] Persistent audio player bar (stays visible during navigation, doesn't interrupt on page change)
+- [ ] HTML5 `<audio>` element with direct play (`/Audio/{itemId}/stream`)
+- [ ] HLS fallback for transcoded audio (`/Audio/{itemId}/master.m3u8`)
+- [ ] Album/playlist queue: play full album tracklist, next/previous track
+- [ ] Track info display (title, artist, album art thumbnail)
+- [ ] Progress bar with seek
+
+### 13c. Subtitle & Audio Track Selection
+
+- [ ] Subtitle track picker (from `MediaStreams` where `stream_type == "Subtitle"`)
+- [ ] Audio track picker (from `MediaStreams` where `stream_type == "Audio"`)
+- [ ] External subtitle rendering (WebVTT via `<track>` element)
+- [ ] Restart transcode with different audio/subtitle indices when selection changes
+
+### 13d. Playback Session Reporting
+
+- [ ] `POST /Sessions/Playing` on playback start (item_id, play_session_id, play_method)
+- [ ] `POST /Sessions/Playing/Progress` on periodic interval (~10s) with position_ticks, is_paused
+- [ ] `POST /Sessions/Playing/Stopped` on playback end or navigation away
+- [ ] Mark item as played when playback reaches ~90% of runtime
+- [ ] Update resume position in user_data for partial playback
+
+### 13e. Media Page Integration
+
+- [ ] Play button on media items (grid view and detail view)
+- [ ] Player opens in-page (not a separate route) — overlay or dedicated player area
+- [ ] Chapter markers on video seek bar (clickable to jump)
+- [ ] "Continue Watching" section on dashboard (items with resume position)
+- [ ] Keyboard shortcuts: space (play/pause), left/right arrows (seek ±10s), M (mute), F (fullscreen)
+
+---
+
+## Phase 14 — Documentation, Branding & Website
 
 Comprehensive docs, a design book for consistent branding, and a public project website.
 
-### 13a. Design Book
+### 14a. Design Book
 - [ ] Logo and wordmark (Rustyfin identity — colors, typography, icon)
 - [ ] Color palette (primary, secondary, accent, dark/light variants)
 - [ ] Typography choices (headings, body, monospace for code/config)
@@ -447,7 +496,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Component patterns (buttons, cards, alerts — shared across admin UI and website)
 - [ ] Favicon, social preview image (Open Graph), README badge
 
-### 13b. Project Documentation
+### 14b. Project Documentation
 - [ ] Getting started guide (install, configure `rustyfin.toml`, connect a client)
 - [ ] Configuration reference (all `rustyfin.toml` options, env vars, defaults)
 - [ ] Architecture overview (crate map, request lifecycle, auth flow)
@@ -457,7 +506,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Migration guide from Jellyfin (what transfers, what doesn't)
 - [ ] Contributing guide (dev setup, project structure, PR conventions)
 
-### 13c. Website
+### 14c. Website
 - [ ] Choose static site generator (Zola preferred, evaluate alternatives)
 - [ ] Site structure: landing page, docs, roadmap, changelog
 - [ ] Hosting on GitHub Pages or Cloudflare Pages (CI-driven deploy)
@@ -465,7 +514,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Docs integration (either in-repo markdown rendered by site generator, or separate docs site)
 - [ ] Changelog / release notes page (auto-generated or manually curated)
 
-### 13d. In-Repo Documentation
+### 14d. In-Repo Documentation
 - [ ] README overhaul (align with design book, badges, quick start)
 - [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
 - [ ] Crate-level `//!` doc comments for each crate in the workspace
@@ -473,19 +522,19 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 ---
 
-## Phase 14 — Stretch Goals
+## Phase 15 — Stretch Goals
 
-### 14a. DLNA
+### 15a. DLNA
 - [ ] UPnP device discovery (SSDP)
 - [ ] DLNA media server profile
 - [ ] Streaming to smart TVs and DLNA renderers
 
-### 14b. Sync Play
+### 15b. Sync Play
 - [ ] Synchronized playback across multiple clients
 - [ ] Session group management (create/join/leave)
 - [ ] Playback state synchronization (play, pause, seek broadcast)
 
-### 14c. Custom Theming
+### 15c. Custom Theming
 Theming is file-based config (not DB), consistent with the config boundary. Themes are defined as YAML files with structured keys, compiled to CSS at startup and served via `/Branding/Css`.
 
 - [ ] `theme_path` in `rustyfin.toml` — path to a YAML theme file
