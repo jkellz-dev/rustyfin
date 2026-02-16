@@ -248,22 +248,25 @@ The server process never writes to disk. It reads NFO files and sidecar images d
 
 **Music metadata pipeline:**
 
-Embedded tags (ID3v2, Vorbis comments, FLAC tags) are the primary source of truth for the server. The server never fetches metadata itself — it reads tags and any NFO/sidecar files written by `rustyfin`. External providers are only queried by the CLI when key fields are missing (artist image, album art, artist bio).
+NFO sidecar files (written by `rustyfin` CLI) are the source of truth for album/artist metadata (genres, year, overview, ratings, external IDs). The server reads NFOs during library scans and imports them into the DB. For individual tracks, the server reads embedded audio tags (title, track number, disc number) since there are no per-track NFOs. External providers are only queried by the CLI when key fields are missing (artist bio, album art, genre).
 
 **Server-side music (read-only) [DONE]:**
-- [x] Tag reader — extract metadata from MP3 (ID3v2), FLAC (Vorbis comments), M4A (iTunes atoms), OGG — via `lofty` crate
-- [x] Tag-to-model mapping: artist, album artist, album, track name, track number, disc number, year, genre, album art (embedded image)
+- [x] Track-level tag reader — extract title, track number, disc number, year from MP3 (ID3v2), FLAC (Vorbis comments), M4A (iTunes atoms), OGG — via `lofty` crate
+- [x] Album/artist metadata from NFO files only (genres, overview, ratings, external IDs) — no direct tag reading for album-level data
 - [x] Read music NFO sidecar files written by `rustyfin` (artist.nfo, album.nfo)
 - [x] Read sidecar images (artist.jpg, cover.jpg, folder.jpg)
 - [x] `GET /Artists` / `GET /Artists/AlbumArtists` — real DB queries with child counts
 
-**`rustyfin` CLI — music providers:**
-- [ ] Gap detection — scan audio tags, identify what's missing (no embedded album art, no artist image, empty artist bio)
-- [ ] MusicBrainz provider — artist bios, album metadata, release group lookups, cover art via Cover Art Archive
+**`rustyfin` CLI — music providers [PARTIALLY DONE]:**
+- [x] Music scan — read audio tags, merge with existing NFOs, enrich missing fields from providers, write back
+- [x] MusicBrainz provider — artist bios (overview, country, formed date), album metadata (genres, type, label), release group lookups
+- [x] Write music NFO files (artist.nfo, album.nfo) from tags + provider data
+- [x] Rate-limited worker queue — governor-based MusicBrainz rate limiting (1 req/sec, configurable)
+- [x] Provider priority: embedded tags → existing NFO → MusicBrainz (first with data wins, don't overwrite existing)
+- [x] Genre splitting — multi-genre tags (`;`, `/`, `,` delimited) split into separate entries
+- [ ] MusicBrainz Cover Art Archive — download album art via CAA API
 - [ ] Discogs provider — artist images, album art, label info, genre/style enrichment
-- [ ] Write music NFO files (artist.nfo, album.nfo) and download sidecar images to disk
-- [ ] Rate-limited worker queue — metered fetches per provider (MusicBrainz: 1 req/sec, Discogs: 60 req/min with auth token)
-- [ ] Provider priority: embedded tags → MusicBrainz → Discogs (first with data wins, don't overwrite existing)
+- [ ] Fanart.tv provider — artist backgrounds, album disc art
 
 **Self-hosted MusicBrainz (opt-in):**
 
@@ -508,7 +511,7 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
-| Metadata | ~90% | NFO + TMDB + TVDB; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO support; missing fanart.tv, MusicBrainz, Discogs |
+| Metadata | ~92% | NFO + TMDB + TVDB + MusicBrainz; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); missing fanart.tv, Discogs, Cover Art Archive |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~70% | Meilisearch + fallback; no advanced filters |
 | Notifications | ~20% | Activity log only; no webhooks |
