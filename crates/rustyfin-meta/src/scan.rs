@@ -734,8 +734,9 @@ async fn scan_music(
 
             tracing::info!("  Album: '{}'", album_name);
 
-            // Read tags from first audio file in the album
-            let tags = find_first_audio_tags(&album_dir);
+            // Read tags from all audio files in the album
+            let all_track_tags = collect_album_tracks(&album_dir);
+            let tags = all_track_tags.first().map(|(_, t)| t);
 
             // ── album.nfo ───────────────────────────────────────
             let album_nfo_path = album_dir.join("album.nfo");
@@ -747,32 +748,42 @@ async fn scan_music(
                     None
                 };
 
+                // Build track listing from all audio files
+                let nfo_tracks: Vec<nfo::NfoTrack> = all_track_tags
+                    .iter()
+                    .map(|(filename, t)| nfo::NfoTrack {
+                        title: t
+                            .title
+                            .clone()
+                            .unwrap_or_else(|| filename.replace('.', " ")),
+                        position: t.track_number.map(|n| n as i32),
+                        disc: t.disc_number.map(|n| n as i32),
+                        duration: None, // ffprobe would be needed; skip for now
+                        file: Some(filename.clone()),
+                    })
+                    .collect();
+
                 let tag_meta = nfo::NfoMetadata {
                     title: Some(album_name.clone()),
                     artist_name: tags
-                        .as_ref()
                         .and_then(|t| t.album_artist.clone().or(t.artist.clone())),
-                    production_year: tags.as_ref().and_then(|t| t.year),
+                    production_year: tags.and_then(|t| t.year),
                     genres: tags
-                        .as_ref()
                         .and_then(|t| t.genre.as_deref())
                         .map(music_tags::split_genres)
                         .unwrap_or_default(),
                     musicbrainz_album_id: tags
-                        .as_ref()
                         .and_then(|t| t.musicbrainz_album_id.clone()),
                     musicbrainz_release_group_id: tags
-                        .as_ref()
                         .and_then(|t| t.musicbrainz_release_group_id.clone()),
                     musicbrainz_artist_id: tags
-                        .as_ref()
                         .and_then(|t| t.musicbrainz_artist_id.clone()),
-                    album_type: tags.as_ref().and_then(|t| t.album_type.clone()),
+                    album_type: tags.and_then(|t| t.album_type.clone()),
                     studios: tags
-                        .as_ref()
                         .and_then(|t| t.label.clone())
                         .into_iter()
                         .collect(),
+                    tracks: nfo_tracks,
                     ..Default::default()
                 };
 
@@ -911,7 +922,7 @@ async fn scan_music(
                 .iter()
                 .any(|name| album_dir.join(name).is_file());
                 if !has_cover_final {
-                    let has_embedded = tags.as_ref().is_some_and(|t| t.has_embedded_art);
+                    let has_embedded = tags.is_some_and(|t| t.has_embedded_art);
                     if !has_embedded {
                         tracing::warn!("    Gap: album '{}' has no cover art", album_name);
                     }
@@ -925,10 +936,10 @@ async fn scan_music(
                 if album_meta.studios.is_empty() {
                     tracing::warn!("    Gap: album '{}' has no label info", album_name);
                 }
-                if tags.as_ref().is_some_and(|t| t.genre.is_none()) {
+                if tags.is_some_and(|t| t.genre.is_none()) {
                     tracing::warn!("    Gap: album '{}' missing genre tag", album_name);
                 }
-                if tags.as_ref().is_some_and(|t| t.year.is_none()) {
+                if tags.is_some_and(|t| t.year.is_none()) {
                     tracing::warn!("    Gap: album '{}' missing year tag", album_name);
                 }
             }
@@ -946,6 +957,31 @@ fn find_first_audio_tags(dir: &Path) -> Option<music_tags::AudioTags> {
         .filter_map(|e| e.ok())
         .find(|e| e.file_type().is_file() && is_audio_file(e.path()))?;
     music_tags::read_tags(first.path())
+}
+
+/// Collect tags from all audio files in an album directory.
+/// Returns `(filename, tags)` pairs sorted by track number then filename.
+fn collect_album_tracks(dir: &Path) -> Vec<(String, music_tags::AudioTags)> {
+    let mut tracks: Vec<(String, music_tags::AudioTags)> = WalkDir::new(dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file() && is_audio_file(e.path()))
+        .filter_map(|e| {
+            let filename = e.file_name().to_string_lossy().to_string();
+            let tags = music_tags::read_tags(e.path())?;
+            Some((filename, tags))
+        })
+        .collect();
+
+    tracks.sort_by(|a, b| {
+        a.1.disc_number
+            .cmp(&b.1.disc_number)
+            .then(a.1.track_number.cmp(&b.1.track_number))
+            .then(a.0.cmp(&b.0))
+    });
+
+    tracks
 }
 
 async fn download_fanart_images(
@@ -1032,6 +1068,10 @@ fn merge_metadata(target: &mut nfo::NfoMetadata, source: &nfo::NfoMetadata) {
     }
     if target.backdrop_url.is_none() {
         target.backdrop_url.clone_from(&source.backdrop_url);
+    }
+    // Tracks always come from the current scan (audio tags) — overwrite existing
+    if !source.tracks.is_empty() {
+        target.tracks.clone_from(&source.tracks);
     }
 }
 

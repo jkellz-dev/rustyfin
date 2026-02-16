@@ -36,6 +36,7 @@ pub struct NfoMetadata {
     pub artist_type: Option<String>,
     pub country: Option<String>,
     pub disambiguation: Option<String>,
+    pub tracks: Vec<NfoTrack>,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,16 @@ pub struct NfoPerson {
     pub person_type: String,
     pub role: Option<String>,
     pub sort_order: Option<i32>,
+}
+
+/// Track entry within an album NFO (Rustyfin extension — ignored by Kodi).
+#[derive(Debug, Clone, Default)]
+pub struct NfoTrack {
+    pub title: String,
+    pub position: Option<i32>,
+    pub disc: Option<i32>,
+    pub duration: Option<f64>,
+    pub file: Option<String>,
 }
 
 // ── XML structures for deserialization ───────────────────────────
@@ -139,6 +150,17 @@ struct AlbumNfo {
     ratings: Option<NfoRatings>,
     #[serde(rename = "type")]
     album_type: Option<String>,
+    #[serde(default)]
+    track: Vec<AlbumNfoTrack>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AlbumNfoTrack {
+    title: Option<String>,
+    position: Option<i32>,
+    disc: Option<i32>,
+    duration: Option<f64>,
+    file: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -391,6 +413,18 @@ fn artist_nfo_to_metadata(nfo: ArtistNfo) -> NfoMetadata {
 }
 
 fn album_nfo_to_metadata(nfo: AlbumNfo) -> NfoMetadata {
+    let tracks = nfo
+        .track
+        .into_iter()
+        .map(|t| NfoTrack {
+            title: t.title.unwrap_or_default(),
+            position: t.position,
+            disc: t.disc,
+            duration: t.duration,
+            file: t.file,
+        })
+        .collect();
+
     let mut meta = NfoMetadata {
         title: nfo.title,
         artist_name: nfo.artist_name,
@@ -401,6 +435,7 @@ fn album_nfo_to_metadata(nfo: AlbumNfo) -> NfoMetadata {
         musicbrainz_album_id: nfo.musicbrainz_album_id,
         musicbrainz_release_group_id: nfo.musicbrainz_release_group_id,
         album_type: nfo.album_type,
+        tracks,
         ..Default::default()
     };
 
@@ -581,6 +616,21 @@ struct WriteAlbumNfo {
     review: Option<String>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     album_type: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    track: Vec<WriteAlbumTrack>,
+}
+
+#[derive(Serialize)]
+struct WriteAlbumTrack {
+    title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    position: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disc: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -686,6 +736,18 @@ pub fn write_artist_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn s
 
 /// Write album metadata to an NFO file.
 pub fn write_album_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn std::error::Error>> {
+    let tracks = meta
+        .tracks
+        .iter()
+        .map(|t| WriteAlbumTrack {
+            title: t.title.clone(),
+            position: t.position,
+            disc: t.disc,
+            duration: t.duration,
+            file: t.file.clone(),
+        })
+        .collect();
+
     let nfo = WriteAlbumNfo {
         title: meta.title.clone(),
         artist_name: meta.artist_name.clone(),
@@ -696,6 +758,7 @@ pub fn write_album_nfo(path: &Path, meta: &NfoMetadata) -> Result<(), Box<dyn st
         label: meta.studios.first().cloned(),
         review: meta.overview.clone(),
         album_type: meta.album_type.clone(),
+        track: tracks,
     };
 
     let xml = quick_xml::se::to_string(&nfo)?;

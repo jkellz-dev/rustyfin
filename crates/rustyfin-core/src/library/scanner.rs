@@ -465,7 +465,7 @@ impl LibraryScanner {
 
             for audio_file in &loose_audio {
                 match self
-                    .ingest_audio_track(audio_file, library_id, artist_id, album_id, artist_name)
+                    .ingest_audio_track(audio_file, library_id, artist_id, album_id, artist_name, None)
                     .await
                 {
                     Ok(IngestOutcome::Added) => result.items_added += 1,
@@ -498,11 +498,36 @@ impl LibraryScanner {
         self.replace_images(album_id, album_dir).await;
         self.enrichment.enrich_album(album_id, album_dir).await;
 
+        // Build track lookup from album NFO (filename → track metadata)
+        let nfo_tracks = rustyfin_common::nfo::find_album_nfo(album_dir)
+            .and_then(|p| rustyfin_common::nfo::parse_album_nfo(&p))
+            .map(|meta| meta.tracks)
+            .unwrap_or_default();
+
+        let track_map: std::collections::HashMap<String, &rustyfin_common::nfo::NfoTrack> =
+            nfo_tracks
+                .iter()
+                .filter_map(|t| t.file.as_ref().map(|f| (f.clone(), t)))
+                .collect();
+
         let audio_files = collect_audio_files(album_dir).await;
 
         for audio_file in &audio_files {
+            let filename = audio_file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            let nfo_track = track_map.get(filename).copied();
+
             match self
-                .ingest_audio_track(audio_file, library_id, artist_id, album_id, artist_name)
+                .ingest_audio_track(
+                    audio_file,
+                    library_id,
+                    artist_id,
+                    album_id,
+                    artist_name,
+                    nfo_track,
+                )
                 .await
             {
                 Ok(IngestOutcome::Added) => result.items_added += 1,
@@ -525,24 +550,36 @@ impl LibraryScanner {
         artist_id: Uuid,
         album_id: Uuid,
         artist_name: &str,
+        nfo_track: Option<&rustyfin_common::nfo::NfoTrack>,
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
         let etag = compute_etag(file_path)?;
 
-        // Try reading tags, fall back to filename parsing
-        let tags = music_tags::read_tags(file_path);
+        // Prefer NFO track data, fall back to audio tags, then filename parsing
         let resolved = resolve_audio_track(file_path);
 
-        let title = tags
-            .as_ref()
-            .and_then(|t| t.title.clone())
-            .unwrap_or(resolved.title.clone());
-        let track_num = tags
-            .as_ref()
-            .and_then(|t| t.track_number.map(|n| n as i32))
-            .or(resolved.index_number);
-        let disc_num = tags.as_ref().and_then(|t| t.disc_number.map(|n| n as i32));
-        let year = tags.as_ref().and_then(|t| t.year);
+        let (title, track_num, disc_num, year) = if let Some(nfo) = nfo_track {
+            (
+                nfo.title.clone(),
+                nfo.position,
+                nfo.disc,
+                None, // year is album-level, not per-track
+            )
+        } else {
+            // No NFO track entry — fall back to audio tags
+            let tags = music_tags::read_tags(file_path);
+            let title = tags
+                .as_ref()
+                .and_then(|t| t.title.clone())
+                .unwrap_or(resolved.title.clone());
+            let track_num = tags
+                .as_ref()
+                .and_then(|t| t.track_number.map(|n| n as i32))
+                .or(resolved.index_number);
+            let disc_num = tags.as_ref().and_then(|t| t.disc_number.map(|n| n as i32));
+            let year = tags.as_ref().and_then(|t| t.year);
+            (title, track_num, disc_num, year)
+        };
 
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
