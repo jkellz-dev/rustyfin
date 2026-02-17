@@ -232,7 +232,7 @@ The server process never writes to disk. It reads NFO files and sidecar images d
 - [x] `rustyfin --dry-run` — show what would be fetched/written without touching disk
 - [x] TMDB provider — movie and series lookup, write `movie.nfo`, `tvshow.nfo`, episode NFOs
 - [x] TVDB provider — series/episode enrichment as alternative/supplement to TMDB
-- [ ] Fanart.tv provider — download clearlogo, disc art, landscape artwork as sidecar images
+- [x] Fanart.tv provider — download clearlogo, disc art, landscape artwork as sidecar images
 - [x] NFO writer — generate Kodi/Jellyfin-compatible NFO XML (same format the server already parses)
 - [x] Sidecar image downloader — poster.jpg, fanart.jpg, banner.jpg alongside media files
 - [x] Rate-limited worker queue — `governor`-based per-provider rate limiting (TMDB: 40 req/10s, TVDB: 20 req/10s, configurable)
@@ -244,7 +244,7 @@ The server process never writes to disk. It reads NFO files and sidecar images d
 **Server-side changes [DONE]:**
 - [x] Remove TMDB fetching from server's `EnrichmentService` (server becomes read-only for metadata)
 - [x] `POST /Items/{itemId}/Refresh` triggers a rescan of the item's NFO/images from disk, not a provider fetch
-- [ ] Document the workflow: `rustyfin fetch /media/movies && curl -X POST server/Library/Refresh`
+- [x] Document the workflow: `rustyfin fetch /media/movies && curl -X POST server/Library/Refresh`
 
 **Music metadata pipeline:**
 
@@ -257,16 +257,16 @@ NFO sidecar files (written by `rustyfin` CLI) are the source of truth for album/
 - [x] Read sidecar images (artist.jpg, cover.jpg, folder.jpg)
 - [x] `GET /Artists` / `GET /Artists/AlbumArtists` — real DB queries with child counts
 
-**`rustyfin` CLI — music providers [PARTIALLY DONE]:**
+**`rustyfin` CLI — music providers [DONE]:**
 - [x] Music scan — read audio tags, merge with existing NFOs, enrich missing fields from providers, write back
 - [x] MusicBrainz provider — artist bios (overview, country, formed date), album metadata (genres, type, label), release group lookups
 - [x] Write music NFO files (artist.nfo, album.nfo) from tags + provider data
 - [x] Rate-limited worker queue — governor-based MusicBrainz rate limiting (1 req/sec, configurable)
 - [x] Provider priority: embedded tags → existing NFO → MusicBrainz (first with data wins, don't overwrite existing)
 - [x] Genre splitting — multi-genre tags (`;`, `/`, `,` delimited) split into separate entries
-- [ ] MusicBrainz Cover Art Archive — download album art via CAA API
-- [ ] Discogs provider — artist images, album art, label info, genre/style enrichment
-- [ ] Fanart.tv provider — artist backgrounds, album disc art
+- [x] MusicBrainz Cover Art Archive — download album art via CAA API
+- [x] Discogs provider — artist images, album art, label info, genre/style enrichment
+- [x] Fanart.tv provider — artist backgrounds, album disc art
 
 **Self-hosted MusicBrainz (opt-in):**
 
