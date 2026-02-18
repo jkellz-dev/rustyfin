@@ -11,6 +11,35 @@ use rustyfin_models::dto::{
 use crate::error::ApiError;
 use crate::router::AppState;
 
+/// `GET /Library/Schedules` — Return configured scan schedules (admin only).
+pub async fn get_schedules(
+    State(state): State<AppState>,
+    _auth: AdminUser,
+) -> Json<serde_json::Value> {
+    Json(state.scan_schedules.clone())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdateScanScheduleRequest {
+    pub scan_schedule: Option<String>,
+}
+
+/// `POST /Library/VirtualFolders/{id}/ScanSchedule` — Update a library's scan schedule (admin only).
+pub async fn update_scan_schedule(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+    Json(req): Json<UpdateScanScheduleRequest>,
+) -> Result<StatusCode, ApiError> {
+    libraries::update_scan_schedule(&state.pool, id, req.scan_schedule.as_deref())
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `GET /UserViews` — Get library root views (new route).
 /// Filters libraries based on per-user access settings.
 pub async fn get_user_views(
@@ -70,6 +99,7 @@ pub async fn get_virtual_folders(
             item_id: lib.id.to_string(),
             primary_image_item_id: None,
             library_options: LibraryOptions::default(),
+            scan_schedule: lib.scan_schedule.clone(),
         })
         .collect();
 
@@ -100,6 +130,34 @@ pub async fn refresh_library(
             .map_err(ApiError::Database)?
     };
 
+    // Filter out libraries already being scanned
+    let mut libs_to_scan = Vec::new();
+    {
+        let in_flight = state.scan_in_flight.read().await;
+        for lib in libs {
+            if in_flight.contains(&lib.id) {
+                tracing::info!(
+                    "Skipping manual scan for '{}' — already in flight",
+                    lib.name
+                );
+            } else {
+                libs_to_scan.push(lib);
+            }
+        }
+    }
+
+    if libs_to_scan.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    // Mark all as in-flight before spawning
+    {
+        let mut in_flight = state.scan_in_flight.write().await;
+        for lib in &libs_to_scan {
+            in_flight.insert(lib.id);
+        }
+    }
+
     let pool = state.pool.clone();
 
     let _ = activity_log::insert(
@@ -114,12 +172,14 @@ pub async fn refresh_library(
     .await;
 
     let search_service = state.search_service.clone();
+    let scan_in_flight = state.scan_in_flight.clone();
     tokio::spawn(async move {
         let scanner = LibraryScanner::new(pool.clone());
-        for lib in libs {
+        for lib in libs_to_scan {
             if let Err(e) = scanner.scan(lib.id, &lib.paths).await {
                 tracing::error!("Scan failed for library {}: {e}", lib.id);
             }
+            scan_in_flight.write().await.remove(&lib.id);
         }
         let _ = activity_log::insert(
             &pool,
@@ -132,7 +192,6 @@ pub async fn refresh_library(
         )
         .await;
 
-        // Reindex search after scan
         if let Err(e) = search_service.reindex_all().await {
             tracing::error!("Search reindex failed: {e}");
         }
@@ -169,6 +228,7 @@ pub async fn create_virtual_folder(
         item_id: lib.id.to_string(),
         primary_image_item_id: None,
         library_options: LibraryOptions::default(),
+        scan_schedule: lib.scan_schedule,
     }))
 }
 
@@ -214,6 +274,7 @@ pub async fn update_virtual_folder(
         item_id: lib.id.to_string(),
         primary_image_item_id: None,
         library_options: LibraryOptions::default(),
+        scan_schedule: lib.scan_schedule,
     }))
 }
 

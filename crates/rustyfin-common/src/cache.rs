@@ -2,8 +2,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// A simple disk-backed JSON cache with TTL based on file mtime.
 pub struct DiskCache {

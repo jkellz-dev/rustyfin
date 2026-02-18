@@ -1,17 +1,23 @@
 mod config;
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::response::Redirect;
 use ipnet::IpNet;
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use rustyfin_api::router::{AppState, ForwardAuthState, build_router};
 use rustyfin_auth::forward_auth::ForwardAuthHeaders;
 use rustyfin_auth::trusted_proxy::TrustedProxies;
+use rustyfin_core::library::scheduler::{
+    self, LibraryScanScheduleConfig, SearchReindexScheduleConfig,
+};
+use rustyfin_core::library::tasks::SearchReindexTask;
 use rustyfin_core::session::SessionManager;
 use rustyfin_db::pool;
 use rustyfin_media::transcode::TranscodeManager;
@@ -61,16 +67,6 @@ async fn main() -> anyhow::Result<()> {
             .and_then(|s| s.meilisearch_key.as_deref()),
     ));
 
-    // Trigger background reindex if Meilisearch is available
-    if search_service.is_meilisearch_available() {
-        let svc = search_service.clone();
-        tokio::spawn(async move {
-            if let Err(e) = svc.reindex_all().await {
-                tracing::error!("Initial Meilisearch reindex failed: {e}");
-            }
-        });
-    }
-
     // Initialize transcode manager
     let tc = config.transcode.clone().unwrap_or_default();
     let transcode_manager = Arc::new(TranscodeManager::new(
@@ -92,6 +88,61 @@ async fn main() -> anyhow::Result<()> {
                 tm.throttle_jobs().await;
             }
         });
+    }
+
+    // Initialize scan in-flight tracking (shared between scheduler and manual scans)
+    let scan_in_flight = Arc::new(RwLock::new(HashSet::<uuid::Uuid>::new()));
+
+    // Initialize task scheduler
+    if config.tasks.enabled {
+        let raw_schedules: std::collections::HashMap<String, (String, Option<u64>)> = config
+            .tasks
+            .schedules
+            .iter()
+            .map(|(k, v)| (k.clone(), (v.cron.clone(), v.jitter_seconds)))
+            .collect();
+
+        let scheduler_config = scheduler::parse_scheduler_config(
+            config.tasks.enabled,
+            config.tasks.run_on_startup,
+            config.tasks.jitter_seconds,
+            &raw_schedules,
+            LibraryScanScheduleConfig {
+                default_schedule: config.tasks.library_scan.default_schedule.clone(),
+                library_schedules: config.tasks.library_scan.library_schedules.clone(),
+            },
+            SearchReindexScheduleConfig {
+                schedule: config.tasks.search_reindex.schedule.clone(),
+                jitter_seconds: config.tasks.search_reindex.jitter_seconds,
+            },
+        )?;
+
+        let task_scheduler = Arc::new(rustyfin_core::TaskScheduler::new(
+            scheduler_config,
+            db_pool.clone(),
+            scan_in_flight.clone(),
+        ));
+
+        task_scheduler.validate()?;
+
+        task_scheduler
+            .register(
+                config.tasks.search_reindex.schedule.clone(),
+                Arc::new(SearchReindexTask::new(search_service.clone())),
+            )
+            .await;
+
+        tokio::spawn({
+            let sched = task_scheduler.clone();
+            async move { sched.run().await }
+        });
+
+        tracing::info!(
+            "Task scheduler enabled with {} schedule(s)",
+            config.tasks.schedules.len()
+        );
+    } else {
+        tracing::info!("Task scheduler disabled");
     }
 
     // Build forward auth state from config
@@ -149,6 +200,15 @@ async fn main() -> anyhow::Result<()> {
     }
     tracing::info!("Image cache directory: {}", image_cache_dir.display());
 
+    // Build scan schedules JSON for the /Library/Schedules endpoint
+    let scan_schedules = {
+        let mut map = serde_json::Map::new();
+        for (name, entry) in &config.tasks.schedules {
+            map.insert(name.clone(), serde_json::Value::String(entry.cron.clone()));
+        }
+        serde_json::json!({ "Schedules": serde_json::Value::Object(map) })
+    };
+
     // Build application state
     let state = AppState {
         pool: db_pool,
@@ -163,6 +223,8 @@ async fn main() -> anyhow::Result<()> {
         ldap_config,
         transcode_manager,
         image_cache_dir,
+        scan_in_flight,
+        scan_schedules,
     };
 
     // Build router with all API routes

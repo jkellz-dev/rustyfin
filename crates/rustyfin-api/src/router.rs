@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -7,6 +8,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use sqlx::PgPool;
+use tokio::sync::RwLock;
 
 use crate::routes::*;
 
@@ -33,6 +35,8 @@ pub struct AppState {
     pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
     pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
     pub image_cache_dir: PathBuf,
+    pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
+    pub scan_schedules: serde_json::Value,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -95,6 +99,11 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(libraries::delete_virtual_folder),
         )
         .route("/Library/Refresh", post(libraries::refresh_library))
+        .route("/Library/Schedules", get(libraries::get_schedules))
+        .route(
+            "/Library/VirtualFolders/{id}/ScanSchedule",
+            post(libraries::update_scan_schedule),
+        )
         .route(
             "/Library/VirtualFolders/Update",
             post(libraries::update_virtual_folder),

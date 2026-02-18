@@ -25,7 +25,12 @@
       "WebFetch(domain:www.discogs.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:docs.linuxserver.io)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck:*)",
+      "mcp__vectorcode__ls",
+      "mcp__vectorcode__files_ls",
+      "mcp__vectorcode__files_rm",
+      "mcp__vectorcode__query",
+      "mcp__vectorcode__vectorise"
     ]
   }
 }

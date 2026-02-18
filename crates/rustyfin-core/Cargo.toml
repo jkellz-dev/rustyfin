@@ -21,3 +21,7 @@ anyhow.workspace = true
 walkdir.workspace = true
 regex.workspace = true
 rustyfin-media.workspace = true
+cron.workspace = true
+rand.workspace = true
+async-trait.workspace = true
+rustyfin-search.workspace = true

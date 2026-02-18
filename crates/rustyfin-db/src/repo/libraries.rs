@@ -8,6 +8,7 @@ pub struct LibraryRow {
     pub name: String,
     pub library_type: String,
     pub paths: Vec<String>,
+    pub scan_schedule: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -85,4 +86,23 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
         .execute(pool)
         .await?;
     Ok(result.rows_affected() > 0)
+}
+
+/// Update a library's scan schedule override.
+pub async fn update_scan_schedule(
+    pool: &PgPool,
+    id: Uuid,
+    schedule: Option<&str>,
+) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        r#"
+        UPDATE libraries SET scan_schedule = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING *
+        "#,
+    )
+    .bind(schedule)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
 }

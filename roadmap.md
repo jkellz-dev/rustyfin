@@ -202,26 +202,26 @@ Stubs replaced with real implementations for discovery, navigation, and media ma
 
 ## Phase 10 — Operational Features
 
-### 10a. Task Scheduler & Scheduled Scans
+### 10a. Task Scheduler & Scheduled Scans [DONE]
 
 Generic `ScheduledTask` trait with a single background scheduler loop. Library scanning is the first task implementation; future maintenance tasks plug into the same system.
 
-**Task scheduler (generic):**
-- [ ] `ScheduledTask` trait (`name()`, `run()`) in `rustyfin-core`
-- [ ] `TaskScheduler` — single `tokio::spawn` loop, cron-based firing, jitter, in-flight tracking
-- [ ] `[tasks]` config section: named schedules (cron expressions), per-schedule jitter with global default
-- [ ] `run_on_startup` — fire all tasks immediately on boot to cover missed runs during downtime
-- [ ] Graceful degradation — unknown schedule names fall back to default with warning; missing default is startup error
+**Task scheduler (generic) [DONE]:**
+- [x] `ScheduledTask` trait (`name()`, `run()`) in `rustyfin-core`
+- [x] `TaskScheduler` — single `tokio::spawn` loop, cron-based firing, jitter, in-flight tracking
+- [x] `[tasks]` config section: named schedules (cron expressions), per-schedule jitter with global default
+- [x] `run_on_startup` — fire all tasks immediately on boot to cover missed runs during downtime
+- [x] Graceful degradation — unknown schedule names fall back to default with warning; missing default is startup error
 
-**Library scan task:**
-- [ ] `LibraryScanTask` — one task per library, dynamically resolved from DB each tick cycle
-- [ ] Per-library schedule overrides: DB column (`scan_schedule`), config mapping (`library_schedules`), default fallback
-- [ ] Shared `in_flight` set on `AppState` — prevents double-scanning from both scheduled and manual triggers
-- [ ] `GET /Library/Schedules` — returns named schedules for admin UI dropdown
-- [ ] DB migration: `ALTER TABLE libraries ADD COLUMN scan_schedule TEXT`
+**Library scan task [DONE]:**
+- [x] `LibraryScanTask` — one task per library, dynamically resolved from DB each tick cycle
+- [x] Per-library schedule overrides: DB column (`scan_schedule`), config mapping (`library_schedules`), default fallback
+- [x] Shared `in_flight` set on `AppState` — prevents double-scanning from both scheduled and manual triggers
+- [x] `GET /Library/Schedules` — returns named schedules for admin UI dropdown
+- [x] DB migration: `ALTER TABLE libraries ADD COLUMN scan_schedule TEXT`
 
-**Search reindex task:**
-- [ ] `SearchReindexTask` — registered statically at startup on a named schedule
+**Search reindex task [DONE]:**
+- [x] `SearchReindexTask` — registered statically at startup on a named schedule
 
 **Future maintenance tasks (implement when needed):**
 - [ ] Activity log pruning (delete entries older than N days)
@@ -582,7 +582,7 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Transcoding | ~80% | HLS pipeline, device profiles, subtitles, throttling, seek; no ABR |
 | Auth | ~90% | Forward auth + LDAP + device auth; admin/user audit done; Quick Connect disabled |
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
-| Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
+| Libraries | ~90% | Movies, TV, music scanning; cron-based scheduled scans with per-library overrides |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
 | Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |

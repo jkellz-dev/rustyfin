@@ -3,10 +3,10 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 use rustyfin_common::artwork::download_image_with_options;
+use rustyfin_common::cache::DiskCache;
 use rustyfin_common::discogs::DiscogsClient;
 use rustyfin_common::fanart::FanartClient;
 use rustyfin_common::music_tags;
-use rustyfin_common::cache::DiskCache;
 use rustyfin_common::musicbrainz::MusicBrainzClient;
 use rustyfin_common::naming::{self, is_audio_file, is_video_file};
 use rustyfin_common::nfo::{self, find_movie_nfo, find_series_nfo};
@@ -79,15 +79,7 @@ pub async fn scan_directory(
             )
             .await
         }
-        "music" => {
-            scan_music(
-                path,
-                fanart.as_ref(),
-                fanart_limiter.as_ref(),
-                opts,
-            )
-            .await
-        }
+        "music" => scan_music(path, fanart.as_ref(), fanart_limiter.as_ref(), opts).await,
         other => anyhow::bail!("Unknown library type: {other}. Use: movies, tvshows, music"),
     }
 }
@@ -779,24 +771,18 @@ async fn scan_music(
 
                 let tag_meta = nfo::NfoMetadata {
                     title: Some(album_name.clone()),
-                    artist_name: tags
-                        .and_then(|t| t.album_artist.clone().or(t.artist.clone())),
+                    artist_name: tags.and_then(|t| t.album_artist.clone().or(t.artist.clone())),
                     production_year: tags.and_then(|t| t.year),
                     genres: tags
                         .and_then(|t| t.genre.as_deref())
                         .map(music_tags::split_genres)
                         .unwrap_or_default(),
-                    musicbrainz_album_id: tags
-                        .and_then(|t| t.musicbrainz_album_id.clone()),
+                    musicbrainz_album_id: tags.and_then(|t| t.musicbrainz_album_id.clone()),
                     musicbrainz_release_group_id: tags
                         .and_then(|t| t.musicbrainz_release_group_id.clone()),
-                    musicbrainz_artist_id: tags
-                        .and_then(|t| t.musicbrainz_artist_id.clone()),
+                    musicbrainz_artist_id: tags.and_then(|t| t.musicbrainz_artist_id.clone()),
                     album_type: tags.and_then(|t| t.album_type.clone()),
-                    studios: tags
-                        .and_then(|t| t.label.clone())
-                        .into_iter()
-                        .collect(),
+                    studios: tags.and_then(|t| t.label.clone()).into_iter().collect(),
                     tracks: nfo_tracks,
                     ..Default::default()
                 };

@@ -11,8 +11,8 @@ use crate::library::enrichment::EnrichmentService;
 use rustyfin_common::images::discover_images;
 use rustyfin_common::music_tags;
 use rustyfin_common::naming::{
-    is_audio_file, is_video_file, make_sort_name, parse_season_folder,
-    resolve_audio_track, resolve_episode, resolve_movie,
+    is_audio_file, is_video_file, make_sort_name, parse_season_folder, resolve_audio_track,
+    resolve_episode, resolve_movie,
 };
 
 pub struct LibraryScanner {
@@ -465,7 +465,14 @@ impl LibraryScanner {
 
             for audio_file in &loose_audio {
                 match self
-                    .ingest_audio_track(audio_file, library_id, artist_id, album_id, artist_name, None)
+                    .ingest_audio_track(
+                        audio_file,
+                        library_id,
+                        artist_id,
+                        album_id,
+                        artist_name,
+                        None,
+                    )
                     .await
                 {
                     Ok(IngestOutcome::Added) => result.items_added += 1,

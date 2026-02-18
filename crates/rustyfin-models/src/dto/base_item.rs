@@ -314,6 +314,8 @@ pub struct VirtualFolderInfo {
     pub item_id: String,
     pub primary_image_item_id: Option<String>,
     pub library_options: LibraryOptions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scan_schedule: Option<String>,
 }
 
 /// Request to create a new library.

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 /// Rustyfin server configuration, loaded from TOML and/or environment variables.
@@ -15,6 +17,8 @@ pub struct Config {
     pub auth: AuthConfig,
     #[serde(default)]
     pub transcode: Option<TranscodeConfig>,
+    #[serde(default)]
+    pub tasks: TasksConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -182,6 +186,101 @@ fn default_display_name_attr() -> String {
     "cn".to_string()
 }
 
+// ── Task scheduler configuration ─────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TasksConfig {
+    #[serde(default = "default_tasks_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_run_on_startup")]
+    pub run_on_startup: bool,
+    #[serde(default = "default_jitter_seconds")]
+    pub jitter_seconds: u64,
+    #[serde(default)]
+    pub schedules: HashMap<String, ScheduleEntry>,
+    #[serde(default)]
+    pub library_scan: LibraryScanConfig,
+    #[serde(default)]
+    pub search_reindex: SearchReindexConfig,
+}
+
+impl Default for TasksConfig {
+    fn default() -> Self {
+        let mut schedules = HashMap::new();
+        schedules.insert(
+            "daily".to_string(),
+            ScheduleEntry {
+                cron: "0 0 3 * * * *".to_string(),
+                jitter_seconds: None,
+            },
+        );
+        Self {
+            enabled: true,
+            run_on_startup: true,
+            jitter_seconds: 300,
+            schedules,
+            library_scan: LibraryScanConfig::default(),
+            search_reindex: SearchReindexConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScheduleEntry {
+    pub cron: String,
+    pub jitter_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LibraryScanConfig {
+    #[serde(default = "default_library_scan_schedule")]
+    pub default_schedule: String,
+    #[serde(default)]
+    pub library_schedules: HashMap<String, String>,
+}
+
+impl Default for LibraryScanConfig {
+    fn default() -> Self {
+        Self {
+            default_schedule: default_library_scan_schedule(),
+            library_schedules: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchReindexConfig {
+    #[serde(default = "default_search_reindex_schedule")]
+    pub schedule: String,
+    #[serde(default)]
+    pub jitter_seconds: Option<u64>,
+}
+
+impl Default for SearchReindexConfig {
+    fn default() -> Self {
+        Self {
+            schedule: default_search_reindex_schedule(),
+            jitter_seconds: Some(0),
+        }
+    }
+}
+
+fn default_tasks_enabled() -> bool {
+    true
+}
+fn default_run_on_startup() -> bool {
+    true
+}
+fn default_jitter_seconds() -> u64 {
+    300
+}
+fn default_library_scan_schedule() -> String {
+    "daily".to_string()
+}
+fn default_search_reindex_schedule() -> String {
+    "daily".to_string()
+}
+
 // ── Defaults ─────────────────────────────────────────────────────────
 
 fn default_server() -> ServerConfig {
@@ -232,6 +331,7 @@ impl Config {
                 metadata: MetadataConfig::default(),
                 auth: AuthConfig::default(),
                 transcode: None,
+                tasks: TasksConfig::default(),
             }
         };
 
@@ -257,6 +357,7 @@ impl Config {
             },
             auth: Self::apply_auth_env_overrides(config.auth),
             transcode: config.transcode,
+            tasks: config.tasks,
         };
 
         // Validate auth configuration

@@ -139,8 +139,7 @@ impl MusicBrainzClient {
     pub async fn search_release_group(&self, album: &str, artist: &str) -> Vec<SearchResult> {
         let cache_key = DiskCache::hash_key(&format!("{album}||{artist}"));
         if let Some(ref cache) = self.cache
-            && let Some(cached) =
-                cache.get::<Vec<SearchResult>>("release_group_search", &cache_key)
+            && let Some(cached) = cache.get::<Vec<SearchResult>>("release_group_search", &cache_key)
         {
             tracing::debug!("Cache hit: release group search '{album}' by '{artist}'");
             return cached;

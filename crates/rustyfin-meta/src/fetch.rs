@@ -21,10 +21,7 @@ pub async fn fetch_metadata(
     }
 }
 
-async fn fetch_movie(
-    path: &Path,
-    opts: &ScanOpts<'_>,
-) -> anyhow::Result<()> {
+async fn fetch_movie(path: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<()> {
     let config = opts.config;
     let dry_run = opts.dry_run;
     let auto_mode = opts.auto_mode;
@@ -145,10 +142,7 @@ async fn fetch_movie(
     Ok(())
 }
 
-async fn fetch_series(
-    path: &Path,
-    opts: &ScanOpts<'_>,
-) -> anyhow::Result<()> {
+async fn fetch_series(path: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<()> {
     let config = opts.config;
     let dry_run = opts.dry_run;
     let auto_mode = opts.auto_mode;
