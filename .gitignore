@@ -44,3 +44,5 @@ rustyfin.toml
 Caddyfile.dev
 
 *.local.*
+
+.vectorcode/
