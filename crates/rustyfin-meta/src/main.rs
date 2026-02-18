@@ -20,6 +20,9 @@ struct Cli {
     /// Skip interactive prompts and auto-select first result
     #[arg(long)]
     auto: bool,
+    /// Skip reading from cache (still writes to cache)
+    #[arg(long)]
+    no_cache: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -52,12 +55,17 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     let config = config::MetaConfig::load(&cli.config)?;
+    let opts = scan::ScanOpts {
+        config: &config,
+        dry_run: cli.dry_run,
+        auto_mode: cli.auto,
+        no_cache: cli.no_cache,
+    };
 
     match cli.command {
         Command::Scan { path, library_type } => {
             tracing::info!("Scanning {} as '{}'", path.display(), library_type);
-            let stats =
-                scan::scan_directory(&path, &library_type, &config, cli.dry_run, cli.auto).await?;
+            let stats = scan::scan_directory(&path, &library_type, &opts).await?;
             tracing::info!(
                 "Done: scanned={}, fetched={}, skipped={}, errors={}",
                 stats.scanned,
@@ -67,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
             );
         }
         Command::Fetch { path, media_type } => {
-            fetch::fetch_metadata(&path, &media_type, &config, cli.dry_run, cli.auto).await?;
+            fetch::fetch_metadata(&path, &media_type, &opts).await?;
         }
     }
     Ok(())

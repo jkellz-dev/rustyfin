@@ -87,6 +87,10 @@ pub struct MusicBrainzConfig {
     pub rate_limit: u32,
     #[serde(default = "default_mb_rate_window")]
     pub rate_window_secs: u64,
+    #[serde(default = "default_mb_cache_dir")]
+    pub cache_dir: String,
+    #[serde(default = "default_mb_cache_ttl")]
+    pub cache_ttl_days: u32,
 }
 
 impl Default for MusicBrainzConfig {
@@ -95,6 +99,8 @@ impl Default for MusicBrainzConfig {
             base_url: None,
             rate_limit: default_mb_rate_limit(),
             rate_window_secs: default_mb_rate_window(),
+            cache_dir: default_mb_cache_dir(),
+            cache_ttl_days: default_mb_cache_ttl(),
         }
     }
 }
@@ -171,6 +177,14 @@ fn default_mb_rate_limit() -> u32 {
 
 fn default_mb_rate_window() -> u64 {
     1
+}
+
+fn default_mb_cache_dir() -> String {
+    "~/.cache/rustyfin/musicbrainz".to_string()
+}
+
+fn default_mb_cache_ttl() -> u32 {
+    30
 }
 
 fn default_fanart_rate_limit() -> u32 {

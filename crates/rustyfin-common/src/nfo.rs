@@ -4,7 +4,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Shared metadata struct returned by both NFO parsing and TMDB lookups.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct NfoMetadata {
     pub title: Option<String>,
     pub sort_name: Option<String>,
@@ -39,7 +39,7 @@ pub struct NfoMetadata {
     pub tracks: Vec<NfoTrack>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NfoPerson {
     pub name: String,
     pub person_type: String,
@@ -48,7 +48,7 @@ pub struct NfoPerson {
 }
 
 /// Track entry within an album NFO (Rustyfin extension — ignored by Kodi).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NfoTrack {
     pub title: String,
     pub position: Option<i32>,

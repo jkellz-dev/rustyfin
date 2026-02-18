@@ -214,7 +214,7 @@ Stubs replaced with real implementations for discovery, navigation, and media ma
 - [ ] Webhook delivery for events (item added, playback started, scan complete)
 - [ ] Configurable webhook URLs in `rustyfin.toml`
 
-### 10d. Metadata Providers & `rustyfin-meta` CLI [PARTIALLY DONE]
+### 10d. Metadata Providers & `rustyfin-meta` CLI [DONE]
 
 **TV & Film — design principle:**
 
@@ -272,13 +272,13 @@ NFO sidecar files (written by `rustyfin` CLI) are the source of truth for album/
 
 For users who want unlimited lookups with no rate limits and full offline capability. MusicBrainz publishes full Postgres dumps at https://metabrainz.org/datasets/postgres-dumps#musicbrainz. We run a dockerized MusicBrainz server (`/home/jonathan/src/musicbrainz-server/`) backed by these dumps, with a job to pull daily incremental updates.
 
-- [ ] Docker Compose service: MusicBrainz server + Postgres, seeded from full dump
-- [ ] Init script: download latest full dump from metabrainz.org, import into Postgres
-- [ ] Daily update job: fetch and apply incremental replication packets (MusicBrainz publishes daily diffs)
-- [ ] `rustyfin` config: `musicbrainz_url` — point at local instance instead of public API
-- [ ] No rate limiting needed when querying local instance
-- [ ] Reference: MusicBrainz server source at `/home/jonathan/src/musicbrainz-server/`
-- [ ] Documentation: storage requirements (~30 GB for full dump), update cadence, Docker resource needs
+- [x] Docker Compose service: MusicBrainz server + Postgres, seeded from full dump
+- [x] Init script: download latest full dump from metabrainz.org, import into Postgres
+- [x] Daily update job: fetch and apply incremental replication packets (MusicBrainz publishes daily diffs)
+- [x] `rustyfin` config: `musicbrainz_url` — point at local instance instead of public API
+- [x] No rate limiting needed when querying local instance
+- [x] Reference: MusicBrainz server source at `/home/jonathan/src/musicbrainz-server/`
+- [x] Documentation: storage requirements (~30 GB for full dump), update cadence, Docker resource needs
 
 ### 10e. Parental Controls
 - [ ] `max_parental_rating` per user policy
@@ -560,7 +560,7 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~80% | Movies, TV, music scanning; no scheduled/auto scans |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
-| Metadata | ~92% | NFO + TMDB + TVDB + MusicBrainz; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); missing fanart.tv, Discogs, Cover Art Archive |
+| Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~70% | Meilisearch + fallback; no advanced filters |
 | Notifications | ~20% | Activity log only; no webhooks |

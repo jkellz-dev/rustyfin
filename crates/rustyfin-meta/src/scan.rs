@@ -6,6 +6,7 @@ use rustyfin_common::artwork::download_image_with_options;
 use rustyfin_common::discogs::DiscogsClient;
 use rustyfin_common::fanart::FanartClient;
 use rustyfin_common::music_tags;
+use rustyfin_common::cache::DiskCache;
 use rustyfin_common::musicbrainz::MusicBrainzClient;
 use rustyfin_common::naming::{self, is_audio_file, is_video_file};
 use rustyfin_common::nfo::{self, find_movie_nfo, find_series_nfo};
@@ -22,13 +23,19 @@ pub struct ScanStats {
     pub errors: u32,
 }
 
+pub struct ScanOpts<'a> {
+    pub config: &'a MetaConfig,
+    pub dry_run: bool,
+    pub auto_mode: bool,
+    pub no_cache: bool,
+}
+
 pub async fn scan_directory(
     path: &Path,
     library_type: &str,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<ScanStats> {
+    let config = opts.config;
     let tmdb = config
         .tmdb
         .api_key
@@ -57,9 +64,7 @@ pub async fn scan_directory(
                 tmdb.as_ref(),
                 fanart.as_ref(),
                 fanart_limiter.as_ref(),
-                config,
-                dry_run,
-                auto_mode,
+                opts,
             )
             .await
         }
@@ -70,9 +75,7 @@ pub async fn scan_directory(
                 tvdb.as_ref(),
                 fanart.as_ref(),
                 fanart_limiter.as_ref(),
-                config,
-                dry_run,
-                auto_mode,
+                opts,
             )
             .await
         }
@@ -81,9 +84,7 @@ pub async fn scan_directory(
                 path,
                 fanart.as_ref(),
                 fanart_limiter.as_ref(),
-                config,
-                dry_run,
-                auto_mode,
+                opts,
             )
             .await
         }
@@ -169,10 +170,11 @@ async fn scan_movies(
     tmdb: Option<&TmdbClient>,
     fanart: Option<&FanartClient>,
     fanart_limiter: Option<&RateLimiter>,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<ScanStats> {
+    let config = opts.config;
+    let dry_run = opts.dry_run;
+    let auto_mode = opts.auto_mode;
     let http = reqwest::Client::new();
     let limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
     let skip_existing = !config.output.overwrite_existing;
@@ -337,10 +339,11 @@ async fn scan_tvshows(
     tvdb: Option<&TvdbClient>,
     fanart: Option<&FanartClient>,
     fanart_limiter: Option<&RateLimiter>,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<ScanStats> {
+    let config = opts.config;
+    let dry_run = opts.dry_run;
+    let auto_mode = opts.auto_mode;
     let http = reqwest::Client::new();
     let tmdb_limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
     let tvdb_limiter = RateLimiter::new(config.tvdb.rate_limit, config.tvdb.rate_window_secs);
@@ -520,10 +523,12 @@ async fn scan_music(
     path: &Path,
     fanart: Option<&FanartClient>,
     fanart_limiter: Option<&RateLimiter>,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<ScanStats> {
+    let config = opts.config;
+    let dry_run = opts.dry_run;
+    let auto_mode = opts.auto_mode;
+    let no_cache = opts.no_cache;
     let mut stats = ScanStats {
         scanned: 0,
         fetched: 0,
@@ -533,7 +538,16 @@ async fn scan_music(
 
     let overwrite = config.output.overwrite_existing;
 
-    let mb_client = MusicBrainzClient::new(config.musicbrainz.base_url.clone());
+    let mb_cache = if no_cache {
+        None
+    } else {
+        let cache_dir = expand_tilde(&config.musicbrainz.cache_dir);
+        Some(DiskCache::new(
+            std::path::PathBuf::from(cache_dir),
+            config.musicbrainz.cache_ttl_days,
+        ))
+    };
+    let mb_client = MusicBrainzClient::with_cache(config.musicbrainz.base_url.clone(), mb_cache);
     let mb_limiter = if mb_client.is_local {
         None
     } else {

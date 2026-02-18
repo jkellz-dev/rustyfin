@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+use crate::cache::DiskCache;
 use crate::nfo::NfoMetadata;
 use crate::tmdb::SearchResult;
 
@@ -8,15 +9,24 @@ pub struct MusicBrainzClient {
     client: reqwest::Client,
     /// `true` when `base_url` points at a local instance (no rate-limit needed).
     pub is_local: bool,
+    cache: Option<DiskCache>,
 }
 
 impl MusicBrainzClient {
     /// Create a new client.  Pass `None` to use the public MusicBrainz API.
     pub fn new(base_url: Option<String>) -> Self {
+        Self::with_cache(base_url, None)
+    }
+
+    /// Create a new client with an optional disk cache.
+    pub fn with_cache(base_url: Option<String>, cache: Option<DiskCache>) -> Self {
         let base_url = base_url.unwrap_or_else(|| "https://musicbrainz.org/ws/2".to_string());
         let is_local = base_url.contains("localhost")
             || base_url.contains("127.0.0.1")
             || base_url.contains("[::1]");
+
+        // Disable cache for local instances (always fresh, no rate limit).
+        let cache = if is_local { None } else { cache };
 
         let client = reqwest::Client::builder()
             .user_agent("rustyfin/0.1.0 (https://github.com/rustyfin/rustyfin)")
@@ -27,11 +37,20 @@ impl MusicBrainzClient {
             base_url,
             client,
             is_local,
+            cache,
         }
     }
 
     /// Search for an artist by name, returning up to 10 results.
     pub async fn search_artist(&self, name: &str) -> Vec<SearchResult> {
+        let cache_key = DiskCache::hash_key(name);
+        if let Some(ref cache) = self.cache
+            && let Some(cached) = cache.get::<Vec<SearchResult>>("artist_search", &cache_key)
+        {
+            tracing::debug!("Cache hit: artist search '{name}'");
+            return cached;
+        }
+
         let url = format!(
             "{}/artist?query={}&fmt=json&limit=10",
             self.base_url,
@@ -45,7 +64,8 @@ impl MusicBrainzClient {
             return vec![];
         };
 
-        data.artists
+        let results: Vec<SearchResult> = data
+            .artists
             .into_iter()
             .map(|a| SearchResult {
                 id: 0,
@@ -54,11 +74,24 @@ impl MusicBrainzClient {
                 overview: a.disambiguation.clone(),
                 mbid: Some(a.id),
             })
-            .collect()
+            .collect();
+
+        if let Some(ref cache) = self.cache {
+            cache.put("artist_search", &cache_key, &results);
+        }
+
+        results
     }
 
     /// Fetch detailed artist metadata by MusicBrainz ID.
     pub async fn fetch_artist(&self, mbid: &str) -> Option<NfoMetadata> {
+        if let Some(ref cache) = self.cache
+            && let Some(cached) = cache.get::<NfoMetadata>("artist", mbid)
+        {
+            tracing::debug!("Cache hit: artist '{mbid}'");
+            return Some(cached);
+        }
+
         let url = format!(
             "{}/artist/{}?inc=aliases+tags+genres+annotation&fmt=json",
             self.base_url, mbid
@@ -81,7 +114,7 @@ impl MusicBrainzClient {
 
         let life_span = artist.life_span;
 
-        Some(NfoMetadata {
+        let result = NfoMetadata {
             title: artist.name,
             sort_name: artist.sort_name,
             overview,
@@ -93,11 +126,26 @@ impl MusicBrainzClient {
             country: artist.country,
             disambiguation: artist.disambiguation,
             ..Default::default()
-        })
+        };
+
+        if let Some(ref cache) = self.cache {
+            cache.put("artist", mbid, &result);
+        }
+
+        Some(result)
     }
 
     /// Search for a release group (album) by album title and artist name.
     pub async fn search_release_group(&self, album: &str, artist: &str) -> Vec<SearchResult> {
+        let cache_key = DiskCache::hash_key(&format!("{album}||{artist}"));
+        if let Some(ref cache) = self.cache
+            && let Some(cached) =
+                cache.get::<Vec<SearchResult>>("release_group_search", &cache_key)
+        {
+            tracing::debug!("Cache hit: release group search '{album}' by '{artist}'");
+            return cached;
+        }
+
         let url = format!(
             "{}/release-group?query=release:\"{}\" AND artist:\"{}\"&fmt=json&limit=10",
             self.base_url,
@@ -112,7 +160,8 @@ impl MusicBrainzClient {
             return vec![];
         };
 
-        data.release_groups
+        let results: Vec<SearchResult> = data
+            .release_groups
             .into_iter()
             .map(|rg| {
                 let year = rg
@@ -128,11 +177,24 @@ impl MusicBrainzClient {
                     mbid: Some(rg.id),
                 }
             })
-            .collect()
+            .collect();
+
+        if let Some(ref cache) = self.cache {
+            cache.put("release_group_search", &cache_key, &results);
+        }
+
+        results
     }
 
     /// Fetch detailed release-group metadata by MusicBrainz ID.
     pub async fn fetch_release_group(&self, mbid: &str) -> Option<NfoMetadata> {
+        if let Some(ref cache) = self.cache
+            && let Some(cached) = cache.get::<NfoMetadata>("release_group", mbid)
+        {
+            tracing::debug!("Cache hit: release group '{mbid}'");
+            return Some(cached);
+        }
+
         let url = format!(
             "{}/release-group/{}?inc=artist-credits+tags+genres+releases&fmt=json",
             self.base_url, mbid
@@ -170,7 +232,7 @@ impl MusicBrainzClient {
             .take(1)
             .collect();
 
-        Some(NfoMetadata {
+        let result = NfoMetadata {
             title: rg.title,
             musicbrainz_release_group_id: Some(mbid.to_string()),
             album_type: rg.primary_type,
@@ -179,19 +241,41 @@ impl MusicBrainzClient {
             artist_name,
             studios,
             ..Default::default()
-        })
+        };
+
+        if let Some(ref cache) = self.cache {
+            cache.put("release_group", mbid, &result);
+        }
+
+        Some(result)
     }
 
     /// Fetch the front cover art URL from the Cover Art Archive.
     pub async fn fetch_cover_art_url(&self, release_group_mbid: &str) -> Option<String> {
+        if let Some(ref cache) = self.cache
+            && let Some(cached) = cache.get::<String>("cover_art", release_group_mbid)
+        {
+            tracing::debug!("Cache hit: cover art '{release_group_mbid}'");
+            return Some(cached);
+        }
+
         let url = format!("https://coverartarchive.org/release-group/{release_group_mbid}");
 
         let caa: CaaResponse = self.client.get(&url).send().await.ok()?.json().await.ok()?;
 
-        caa.images
+        let result = caa
+            .images
             .into_iter()
             .find(|img| img.front)
-            .map(|img| img.image)
+            .map(|img| img.image);
+
+        if let Some(ref cache) = self.cache
+            && let Some(ref art_url) = result
+        {
+            cache.put("cover_art", release_group_mbid, art_url);
+        }
+
+        result
     }
 }
 

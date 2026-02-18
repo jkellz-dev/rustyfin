@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::artwork::tmdb_image_url;
 use crate::nfo::{NfoMetadata, NfoPerson};
@@ -11,7 +11,7 @@ pub struct TmdbClient {
 }
 
 /// A search result from TMDB/TVDB/MusicBrainz containing enough info for disambiguation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub id: i64,
     pub title: String,

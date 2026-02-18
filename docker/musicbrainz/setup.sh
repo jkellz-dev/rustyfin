@@ -4,6 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MB_DOCKER_DIR="$SCRIPT_DIR/musicbrainz-docker"
 
+# Accept optional path to existing musicbrainz-docker clone
+if [ -n "${1:-}" ]; then
+    if [ ! -d "$1" ]; then
+        echo "Error: $1 is not a directory."
+        exit 1
+    fi
+    MB_DOCKER_DIR="$(cd "$1" && pwd)"
+    if [ ! -f "$MB_DOCKER_DIR/docker-compose.yml" ] && [ ! -d "$MB_DOCKER_DIR/compose" ]; then
+        echo "Error: $MB_DOCKER_DIR does not look like a musicbrainz-docker checkout."
+        echo "Expected docker-compose.yml or compose/ directory."
+        exit 1
+    fi
+    echo "Using existing musicbrainz-docker at: $MB_DOCKER_DIR"
+fi
+
 echo "=== Self-Hosted MusicBrainz Setup ==="
 echo ""
 echo "This will:"
@@ -17,13 +32,15 @@ echo ""
 read -p "Continue? [y/N] " -r
 [[ $REPLY =~ ^[Yy]$ ]] || exit 0
 
-# Step 1: Clone official musicbrainz-docker
-if [ ! -d "$MB_DOCKER_DIR" ]; then
-    echo "Cloning musicbrainz-docker..."
-    git clone --depth 1 https://github.com/metabrainz/musicbrainz-docker.git "$MB_DOCKER_DIR"
-else
-    echo "musicbrainz-docker already cloned, pulling latest..."
-    git -C "$MB_DOCKER_DIR" pull
+# Step 1: Locate or clone musicbrainz-docker
+if [ -z "${1:-}" ]; then
+    if [ ! -d "$MB_DOCKER_DIR" ]; then
+        echo "Cloning musicbrainz-docker..."
+        git clone --depth 1 https://github.com/metabrainz/musicbrainz-docker.git "$MB_DOCKER_DIR"
+    else
+        echo "musicbrainz-docker already cloned, pulling latest..."
+        git -C "$MB_DOCKER_DIR" pull
+    fi
 fi
 
 cd "$MB_DOCKER_DIR"

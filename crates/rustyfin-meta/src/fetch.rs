@@ -7,29 +7,27 @@ use rustyfin_common::rate_limit::RateLimiter;
 use rustyfin_common::tmdb::TmdbClient;
 use rustyfin_common::tvdb::TvdbClient;
 
-use crate::config::MetaConfig;
-use crate::scan::{disambiguate, rename_folder_with_provider_id};
+use crate::scan::{ScanOpts, disambiguate, rename_folder_with_provider_id};
 
 pub async fn fetch_metadata(
     path: &Path,
     media_type: &str,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<()> {
     match media_type {
-        "movie" => fetch_movie(path, config, dry_run, auto_mode).await,
-        "series" => fetch_series(path, config, dry_run, auto_mode).await,
+        "movie" => fetch_movie(path, opts).await,
+        "series" => fetch_series(path, opts).await,
         other => anyhow::bail!("Unknown media type: {other}. Use: movie, series"),
     }
 }
 
 async fn fetch_movie(
     path: &Path,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<()> {
+    let config = opts.config;
+    let dry_run = opts.dry_run;
+    let auto_mode = opts.auto_mode;
     let Some(tmdb_key) = config.tmdb.api_key.as_ref() else {
         anyhow::bail!("TMDB API key required for movie metadata. Set [tmdb] api_key in config.");
     };
@@ -149,10 +147,11 @@ async fn fetch_movie(
 
 async fn fetch_series(
     path: &Path,
-    config: &MetaConfig,
-    dry_run: bool,
-    auto_mode: bool,
+    opts: &ScanOpts<'_>,
 ) -> anyhow::Result<()> {
+    let config = opts.config;
+    let dry_run = opts.dry_run;
+    let auto_mode = opts.auto_mode;
     if !path.is_dir() {
         anyhow::bail!("Series path must be a directory: {}", path.display());
     }

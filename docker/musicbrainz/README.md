@@ -10,6 +10,16 @@ Run a local MusicBrainz instance for unlimited metadata lookups without rate lim
 
 This clones the [official musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker) project and runs its setup process.
 
+## Usage
+
+```bash
+# Clone and set up from scratch
+./setup.sh
+
+# Use an existing musicbrainz-docker clone
+./setup.sh /path/to/musicbrainz-docker
+```
+
 ## Requirements
 
 - Docker and Docker Compose
