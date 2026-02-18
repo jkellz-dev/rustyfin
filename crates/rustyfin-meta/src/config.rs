@@ -16,6 +16,8 @@ pub struct MetaConfig {
     pub discogs: DiscogsConfig,
     #[serde(default)]
     pub output: OutputConfig,
+    #[serde(default)]
+    pub server: ServerConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -213,6 +215,12 @@ fn default_discogs_rate_window() -> u64 {
 
 fn default_token_file() -> String {
     "~/.config/rustyfin/discogs_tokens.json".to_string()
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ServerConfig {
+    pub url: Option<String>,
+    pub api_key: Option<String>,
 }
 
 impl MetaConfig {

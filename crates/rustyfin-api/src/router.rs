@@ -77,6 +77,12 @@ pub fn build_router(state: AppState) -> Router {
             "/Users/AuthenticateByName",
             post(auth::authenticate_by_name),
         )
+        // ── API keys (admin) ──────────────────────────────────
+        .route(
+            "/Auth/Keys",
+            get(api_keys::list_api_keys).post(api_keys::create_api_key),
+        )
+        .route("/Auth/Keys/{id}", delete(api_keys::delete_api_key))
         // ── Users ───────────────────────────────────────────────
         .route("/Users", get(users::list_users))
         .route("/Users/Me", get(users::get_current_user))

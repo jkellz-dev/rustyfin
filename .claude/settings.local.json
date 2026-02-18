@@ -30,7 +30,8 @@
       "mcp__vectorcode__files_ls",
       "mcp__vectorcode__files_rm",
       "mcp__vectorcode__query",
-      "mcp__vectorcode__vectorise"
+      "mcp__vectorcode__vectorise",
+      "Bash(python3:*)"
     ]
   }
 }

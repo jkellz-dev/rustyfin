@@ -1,4 +1,5 @@
 pub mod activity_log;
+pub mod api_keys;
 pub mod artists;
 pub mod auth;
 pub mod branding;
