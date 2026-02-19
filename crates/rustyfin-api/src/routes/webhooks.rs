@@ -53,10 +53,7 @@ pub async fn post_updated_media(
                     .iter()
                     .find(|lib| lib.paths.iter().any(|root| scan_dir.starts_with(root)))
                 {
-                    scan_targets
-                        .entry(lib.id)
-                        .or_default()
-                        .push(scan_dir);
+                    scan_targets.entry(lib.id).or_default().push(scan_dir);
                 } else {
                     tracing::warn!("No library found for path: {}", update.path);
                 }

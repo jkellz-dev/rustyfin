@@ -115,12 +115,12 @@ async fn main() -> anyhow::Result<()> {
             fetch::fetch_metadata(&path, &media_type, &opts).await?;
 
             // Auto-notify server if configured
-            if let (Some(server_url), Some(api_key)) =
-                (config.server.url.as_deref(), config.server.api_key.as_deref())
+            if let (Some(server_url), Some(api_key)) = (
+                config.server.url.as_deref(),
+                config.server.api_key.as_deref(),
+            ) && let Err(e) = notify_server(server_url, api_key, &[&path]).await
             {
-                if let Err(e) = notify_server(server_url, api_key, &[&path]).await {
-                    tracing::warn!("Failed to notify server: {e}");
-                }
+                tracing::warn!("Failed to notify server: {e}");
             }
         }
         Command::Notify { paths } => {
@@ -129,11 +129,10 @@ async fn main() -> anyhow::Result<()> {
                 .url
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("server.url not configured in config file"))?;
-            let api_key = config
-                .server
-                .api_key
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("server.api_key not configured in config file"))?;
+            let api_key =
+                config.server.api_key.as_deref().ok_or_else(|| {
+                    anyhow::anyhow!("server.api_key not configured in config file")
+                })?;
 
             let path_refs: Vec<&Path> = paths.iter().map(|p| p.as_path()).collect();
             notify_server(server_url, api_key, &path_refs).await?;
