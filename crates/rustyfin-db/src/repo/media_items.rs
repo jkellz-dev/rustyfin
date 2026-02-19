@@ -1140,19 +1140,21 @@ impl ItemQuery {
             qb.push_bind(format!("%{term}%"));
         }
 
-        // User data filters
-        if let Some(fav) = self.is_favorite {
-            if fav {
-                qb.push(" AND ud.is_favorite = true");
-            } else {
-                qb.push(" AND (ud.is_favorite = false OR ud.is_favorite IS NULL)");
+        // User data filters (only apply when user_id is set, otherwise ud alias is undefined)
+        if self.user_id.is_some() {
+            if let Some(fav) = self.is_favorite {
+                if fav {
+                    qb.push(" AND ud.is_favorite = true");
+                } else {
+                    qb.push(" AND (ud.is_favorite = false OR ud.is_favorite IS NULL)");
+                }
             }
-        }
-        if let Some(played) = self.is_played {
-            if played {
-                qb.push(" AND ud.played = true");
-            } else {
-                qb.push(" AND (ud.played = false OR ud.played IS NULL)");
+            if let Some(played) = self.is_played {
+                if played {
+                    qb.push(" AND ud.played = true");
+                } else {
+                    qb.push(" AND (ud.played = false OR ud.played IS NULL)");
+                }
             }
         }
     }
@@ -1190,10 +1192,12 @@ impl ItemQuery {
             }
         }
 
-        // Always add a tiebreaker
         if first {
-            // No valid sort columns matched
-            qb.push(" ORDER BY mi.sort_name, mi.name");
+            // No valid sort columns matched — reuse the already-emitted ORDER BY
+            qb.push("mi.sort_name, mi.name");
+        } else {
+            // Add deterministic tiebreaker after custom sort columns
+            qb.push(", mi.sort_name, mi.name");
         }
     }
 }
