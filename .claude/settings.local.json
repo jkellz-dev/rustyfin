@@ -31,7 +31,8 @@
       "mcp__vectorcode__files_rm",
       "mcp__vectorcode__query",
       "mcp__vectorcode__vectorise",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "WebFetch(domain:milvus.io)"
     ]
   }
 }

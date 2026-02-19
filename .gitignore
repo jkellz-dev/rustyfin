@@ -45,4 +45,6 @@ Caddyfile.dev
 
 *.local.*
 
+.claude/
+
 .vectorcode/

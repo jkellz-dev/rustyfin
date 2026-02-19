@@ -350,11 +350,59 @@ Dynamic `ItemQuery` builder with composable WHERE clauses and ORDER BY from quer
 Final phase before considering Rustyfin production-ready. Comprehensive quality pass across the entire codebase.
 
 ### 11a. Jellyfin Parity Audit
-- [ ] Systematic endpoint comparison against Jellyfin's controllers (`/home/jonathan/src/jellyfin/Jellyfin.Api/Controllers/`)
-- [ ] Document every remaining 404 that clients hit — prioritize by client (web, iOS/Infuse, Apple TV)
+Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playback path is ~90% complete. The missing 68% is dominated by features rustyfin intentionally excludes (LiveTV 41, SyncPlay 22, Plugins 9, Channels 5) or low-priority admin features.
+
+**Complete (matching Jellyfin):**
+- [x] Search (1/1)
+- [x] Display Preferences (2/2)
+- [x] TV Shows — Seasons, Episodes, NextUp (4/4)
+- [x] Quick Connect — disabled stubs (4/4)
+- [x] Localization (4/4)
+- [x] Filters (2/2)
+- [x] Collections (3/3)
+- [x] Branding (2/3 — missing Css/Splashscreen config POST)
+- [x] Universal Audio (1/1)
+- [x] WebSocket (1/1 — Jellyfin uses SignalR)
+- [x] Suggestions (2/2)
+
+**Good coverage (>60%):**
+- [x] Items — core browse/query (6/8)
+- [x] Streaming — direct play + HLS (8/7 — rustyfin has more due to audio HLS)
+- [x] HLS/Transcode (7/12)
+- [x] Configuration (4/6)
+- [x] Artists (2/3)
+- [x] Movies — Recommendations (1/1)
+- [x] Playlists — CRUD + move (4/11 — missing user playlists, sharing)
+
+**Partial (<60%, client-impacting):**
+- [ ] Images (3/30) — only item images; missing user avatars, upload, genre/studio/person images
+- [ ] Sessions (4/16) — missing remote control, message, viewing, now-playing broadcast
+- [ ] Playback/Playstate (4/14) — start/progress/stop/ping covered; missing mark played via API
+- [ ] Users (7/18) — missing password change, new user wizard steps, user image
+- [ ] Subtitles (3/10) — stream works; missing search, upload, delete
+- [ ] Genres/Studios/Persons (3/6) — list works; missing individual GET by ID
+- [ ] System (6/10) — missing shutdown, restart, log file endpoints
+
+**Intentionally not implemented (excluded by design):**
+- LiveTV (0/41) — excluded in design boundaries
+- SyncPlay (0/22) — stretch goal (Phase 15b)
+- Plugins (stub/9) — no plugin system
+- Packages (stub/6) — no plugin system
+- Channels (0/5) — not planned
+- Scheduled Tasks API (0/5) — internal scheduler exists but no REST management API
+- Item Lookup/Update (0/14) — server is read-only for metadata; CLI handles writes
+- Remote Images (0/3) — server doesn't fetch remote images
+- Lyrics (0/6) — stretch goal (Phase 15f)
+- Trickplay (0/2) — deferred
+- Backup (0/4) — not planned
+- Devices (0/5) — not planned
+
+**Remaining audit tasks:**
 - [ ] Verify response shapes match Jellyfin exactly (field names, nullability, default values)
 - [ ] Test with each major client end-to-end: Jellyfin Web, Infuse, Swiftfin, Jellyfin Media Player
-- [ ] Identify and stub any remaining undiscovered endpoints
+- [ ] Document every remaining 404 that clients hit — prioritize by frequency
+- [ ] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — clients link to these
+- [ ] Image endpoint coverage: user avatars, person/genre/studio images
 
 ### 11b. Automated Test Suite
 - [ ] Unit tests for core logic: naming resolution, NFO parsing, TMDB response mapping
@@ -591,7 +639,15 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Filter items exceeding user's rating in all query endpoints
 - [ ] Block playback of restricted items
 
-### 15e. Custom Theming
+### 15e. Lyrics
+- [ ] `GET /Audio/{itemId}/Lyrics` — serve synced (LRC) or plain lyrics
+- [ ] Lyrics file discovery (`.lrc` sidecar files alongside audio)
+- [ ] Embedded lyrics extraction from audio tags (ID3v2 USLT/SYLT, Vorbis LYRICS)
+- [ ] `GET /Providers/Lyrics/{itemId}` — search external lyrics providers
+- [ ] `POST /Audio/{itemId}/Lyrics` — upload/save lyrics
+- [ ] `DELETE /Audio/{itemId}/Lyrics` — remove lyrics
+
+### 15f. Custom Theming
 Theming is file-based config (not DB), consistent with the config boundary. Themes are defined as YAML files with structured keys, compiled to CSS at startup and served via `/Branding/Css`.
 
 - [ ] `theme_path` in `rustyfin.toml` — path to a YAML theme file
