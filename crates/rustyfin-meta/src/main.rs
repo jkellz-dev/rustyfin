@@ -2,7 +2,7 @@ mod config;
 mod fetch;
 mod scan;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -48,6 +48,38 @@ enum Command {
     },
 }
 
+/// Notify the server about changed paths via the /Library/Media/Updated endpoint.
+async fn notify_server(server_url: &str, api_key: &str, paths: &[&Path]) -> anyhow::Result<()> {
+    let updates: Vec<serde_json::Value> = paths
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "Path": p.canonicalize().unwrap_or_else(|_| p.to_path_buf()).to_string_lossy()
+            })
+        })
+        .collect();
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{server_url}/Library/Media/Updated"))
+        .header("X-Api-Key", api_key)
+        .json(&serde_json::json!({ "Updates": updates }))
+        .send()
+        .await?;
+
+    if resp.status().is_success() {
+        tracing::info!("Server notified of {} path(s)", paths.len());
+    } else {
+        tracing::error!(
+            "Server notification failed: {} {}",
+            resp.status(),
+            resp.text().await.unwrap_or_default()
+        );
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
@@ -81,6 +113,15 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Fetch { path, media_type } => {
             fetch::fetch_metadata(&path, &media_type, &opts).await?;
+
+            // Auto-notify server if configured
+            if let (Some(server_url), Some(api_key)) =
+                (config.server.url.as_deref(), config.server.api_key.as_deref())
+            {
+                if let Err(e) = notify_server(server_url, api_key, &[&path]).await {
+                    tracing::warn!("Failed to notify server: {e}");
+                }
+            }
         }
         Command::Notify { paths } => {
             let server_url = config
@@ -94,32 +135,8 @@ async fn main() -> anyhow::Result<()> {
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("server.api_key not configured in config file"))?;
 
-            let updates: Vec<serde_json::Value> = paths
-                .iter()
-                .map(|p| {
-                    serde_json::json!({
-                        "Path": p.canonicalize().unwrap_or_else(|_| p.clone()).to_string_lossy()
-                    })
-                })
-                .collect();
-
-            let client = reqwest::Client::new();
-            let resp = client
-                .post(format!("{server_url}/Library/Media/Updated"))
-                .header("X-Api-Key", api_key)
-                .json(&serde_json::json!({ "Updates": updates }))
-                .send()
-                .await?;
-
-            if resp.status().is_success() {
-                tracing::info!("Server notified of {} path(s)", paths.len());
-            } else {
-                tracing::error!(
-                    "Server notification failed: {} {}",
-                    resp.status(),
-                    resp.text().await.unwrap_or_default()
-                );
-            }
+            let path_refs: Vec<&Path> = paths.iter().map(|p| p.as_path()).collect();
+            notify_server(server_url, api_key, &path_refs).await?;
         }
     }
     Ok(())
