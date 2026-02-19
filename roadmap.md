@@ -131,7 +131,7 @@ ffmpeg HLS output, device profiles, subtitle delivery, throttling, seek support.
 
 ### 8a. Device Profiles & Codec Negotiation [DONE]
 - [x] `DeviceProfile` model — client sends supported codecs, containers, bitrate limits
-- [ ] `POST /Sessions/Capabilities/Full` — clients report their capabilities
+- [x] `POST /Sessions/Capabilities/Full` — clients report their capabilities; stored DeviceProfile used as fallback in PlaybackInfo
 - [x] Codec/container compatibility matrix (what can be direct-played vs needs transcode)
 - [x] Decision engine: given item media streams + device profile → direct play / direct stream / transcode
 
