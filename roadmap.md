@@ -253,9 +253,7 @@ Push-based notification model: external tools (CLI, Sonarr, Radarr, scripts) POS
 - [x] Auto-notify after `rustyfin fetch` completes (if `server.url` configured)
 - [x] Server config in `rustyfin-meta.toml`: `[server]` section with `url` and `api_key`
 
-### 10c. Outbound Webhooks
-- [ ] Webhook delivery for events (item added, playback started, scan complete)
-- [ ] Configurable webhook URLs in `rustyfin.toml`
+### ~~10c. Outbound Webhooks~~ → moved to Phase 15 stretch goals
 
 ### 10d. Metadata Providers & `rustyfin-meta` CLI [DONE]
 
@@ -323,10 +321,7 @@ For users who want unlimited lookups with no rate limits and full offline capabi
 - [x] Reference: MusicBrainz server source at `/home/jonathan/src/musicbrainz-server/`
 - [x] Documentation: storage requirements (~30 GB for full dump), update cadence, Docker resource needs
 
-### 10e. Parental Controls
-- [ ] `max_parental_rating` per user policy
-- [ ] Filter items exceeding user's rating in all query endpoints
-- [ ] Block playback of restricted items
+### ~~10e. Parental Controls~~ → moved to Phase 15 stretch goals
 
 ### 10f. Advanced Search Filters
 - [ ] Filter by genre, year range, rating, studio, cast in `GET /Items`
@@ -577,7 +572,16 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Session group management (create/join/leave)
 - [ ] Playback state synchronization (play, pause, seek broadcast)
 
-### 15c. Custom Theming
+### 15c. Outbound Webhooks
+- [ ] Webhook delivery for events (item added, playback started, scan complete)
+- [ ] Configurable webhook URLs in `rustyfin.toml`
+
+### 15d. Parental Controls
+- [ ] `max_parental_rating` per user policy
+- [ ] Filter items exceeding user's rating in all query endpoints
+- [ ] Block playback of restricted items
+
+### 15e. Custom Theming
 Theming is file-based config (not DB), consistent with the config boundary. Themes are defined as YAML files with structured keys, compiled to CSS at startup and served via `/Branding/Css`.
 
 - [ ] `theme_path` in `rustyfin.toml` — path to a YAML theme file

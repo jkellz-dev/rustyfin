@@ -1,0 +1,3 @@
+[daemons.coderlm]
+auto = ["start", "stop"]     # Auto-start and auto-stop
+run = "coderlm-server serve"
