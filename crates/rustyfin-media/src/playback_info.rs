@@ -1,7 +1,7 @@
 use rustyfin_db::repo::media_items::MediaItemRow;
 use rustyfin_db::repo::media_streams::MediaStreamRow;
 use rustyfin_models::dto::{
-    MediaSourceInfo, MediaStream, PlaybackInfoRequest, PlaybackInfoResponse,
+    DeviceProfile, MediaSourceInfo, MediaStream, PlaybackInfoRequest, PlaybackInfoResponse,
 };
 use uuid::Uuid;
 
@@ -40,11 +40,14 @@ pub fn build_playback_info(
     item: &MediaItemRow,
     streams: &[MediaStreamRow],
     request: Option<&PlaybackInfoRequest>,
+    stored_profile: Option<&DeviceProfile>,
 ) -> PlaybackInfoResponse {
     let media_streams: Vec<MediaStream> = streams.iter().map(stream_row_to_dto).collect();
     let play_session_id = Uuid::new_v4().to_string();
 
-    let profile = request.and_then(|r| r.device_profile.as_ref());
+    let profile = request
+        .and_then(|r| r.device_profile.as_ref())
+        .or(stored_profile);
 
     let mut source = MediaSourceInfo {
         id: item.id.to_string(),

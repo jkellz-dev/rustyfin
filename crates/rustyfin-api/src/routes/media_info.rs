@@ -15,7 +15,7 @@ use crate::router::AppState;
 /// `GET /Items/{itemId}/PlaybackInfo` — Simple playback info (no device profile).
 pub async fn get_playback_info(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
     let item = media_items::find_by_id(&state.pool, item_id)
@@ -27,15 +27,23 @@ pub async fn get_playback_info(
         .await
         .map_err(ApiError::Database)?;
 
+    let stored_profile = state
+        .session_manager
+        .get_device_profile(auth.session_id)
+        .await;
+
     Ok(Json(playback_info::build_playback_info(
-        &item, &streams, None,
+        &item,
+        &streams,
+        None,
+        stored_profile.as_ref(),
     )))
 }
 
 /// `POST /Items/{itemId}/PlaybackInfo` — Full playback info with device profile.
 pub async fn post_playback_info(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Json(body): Json<PlaybackInfoRequest>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
@@ -48,9 +56,19 @@ pub async fn post_playback_info(
         .await
         .map_err(ApiError::Database)?;
 
+    let stored_profile = if body.device_profile.is_none() {
+        state
+            .session_manager
+            .get_device_profile(auth.session_id)
+            .await
+    } else {
+        None
+    };
+
     Ok(Json(playback_info::build_playback_info(
         &item,
         &streams,
         Some(&body),
+        stored_profile.as_ref(),
     )))
 }
