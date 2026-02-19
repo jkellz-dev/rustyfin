@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgPool, QueryBuilder};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -898,4 +898,302 @@ pub async fn count_songs_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i32
     .fetch_one(pool)
     .await?;
     Ok(row.0 as i32)
+}
+
+/// Dynamic query builder for GET /Items with filtering, sorting, and pagination.
+pub struct ItemQuery {
+    // Scoping
+    pub parent_id: Option<Uuid>,
+    pub library_id: Option<Uuid>,
+    pub recursive: bool,
+    pub ids: Vec<Uuid>,
+
+    // Type filters
+    pub include_item_types: Vec<String>,
+    pub exclude_item_types: Vec<String>,
+
+    // Metadata filters
+    pub genres: Vec<String>,
+    pub years: Vec<i32>,
+    pub studios: Vec<String>,
+    pub official_ratings: Vec<String>,
+    pub tags: Vec<String>,
+    pub person_ids: Vec<Uuid>,
+    pub min_community_rating: Option<f64>,
+    pub min_critic_rating: Option<f64>,
+    pub name_starts_with: Option<String>,
+
+    // User data filters
+    pub user_id: Option<Uuid>,
+    pub is_favorite: Option<bool>,
+    pub is_played: Option<bool>,
+
+    // Search
+    pub search_term: Option<String>,
+
+    // Sorting
+    pub sort_by: Vec<String>,
+    pub sort_order: Vec<String>,
+
+    // Pagination
+    pub start_index: i64,
+    pub limit: i64,
+}
+
+impl Default for ItemQuery {
+    fn default() -> Self {
+        Self {
+            parent_id: None,
+            library_id: None,
+            recursive: false,
+            ids: Vec::new(),
+            include_item_types: Vec::new(),
+            exclude_item_types: Vec::new(),
+            genres: Vec::new(),
+            years: Vec::new(),
+            studios: Vec::new(),
+            official_ratings: Vec::new(),
+            tags: Vec::new(),
+            person_ids: Vec::new(),
+            min_community_rating: None,
+            min_critic_rating: None,
+            name_starts_with: None,
+            user_id: None,
+            is_favorite: None,
+            is_played: None,
+            search_term: None,
+            sort_by: Vec::new(),
+            sort_order: Vec::new(),
+            start_index: 0,
+            limit: 50,
+        }
+    }
+}
+
+impl ItemQuery {
+    /// Check if any sort or filter requires a user_data JOIN.
+    fn needs_user_data_join(&self) -> bool {
+        self.is_favorite.is_some()
+            || self.is_played.is_some()
+            || self.sort_by.iter().any(|s| {
+                matches!(
+                    s.as_str(),
+                    "DatePlayed" | "PlayCount" | "IsFavoriteOrLiked" | "IsUnplayed" | "IsPlayed"
+                )
+            })
+    }
+
+    /// Map a Jellyfin sort name to a SQL expression.
+    fn sort_column(name: &str) -> Option<&'static str> {
+        match name {
+            "SortName" | "Default" => Some("mi.sort_name"),
+            "Name" => Some("mi.name"),
+            "DateCreated" => Some("mi.date_created"),
+            "PremiereDate" => Some("mi.premiere_date"),
+            "ProductionYear" => Some("mi.production_year"),
+            "CommunityRating" => Some("mi.community_rating"),
+            "CriticRating" => Some("mi.critic_rating"),
+            "Runtime" => Some("mi.runtime_ticks"),
+            "Random" => Some("RANDOM()"),
+            "IndexNumber" => Some("mi.index_number"),
+            "ParentIndexNumber" => Some("mi.parent_index_number"),
+            "DateLastContentAdded" => Some("mi.date_last_media_added"),
+            "DatePlayed" => Some("ud.last_played_date"),
+            "PlayCount" => Some("ud.play_count"),
+            "IsFavoriteOrLiked" => Some("ud.is_favorite"),
+            "IsUnplayed" | "IsPlayed" => Some("ud.played"),
+            "OfficialRating" => Some("mi.official_rating"),
+            _ => None,
+        }
+    }
+
+    /// Execute the query and return matching items.
+    pub async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+        let mut qb: QueryBuilder<'_, sqlx::Postgres> =
+            QueryBuilder::new("SELECT mi.* FROM media_items mi");
+
+        // JOINs
+        if self.needs_user_data_join()
+            && let Some(user_id) = self.user_id
+        {
+            qb.push(" LEFT JOIN user_data ud ON ud.item_id = mi.id AND ud.user_id = ");
+            qb.push_bind(user_id);
+        }
+
+        qb.push(" WHERE 1=1");
+
+        self.apply_filters(&mut qb);
+        self.apply_sorting(&mut qb);
+
+        qb.push(" LIMIT ");
+        qb.push_bind(self.limit);
+        qb.push(" OFFSET ");
+        qb.push_bind(self.start_index);
+
+        qb.build_query_as::<MediaItemRow>().fetch_all(pool).await
+    }
+
+    /// Count matching items (for TotalRecordCount).
+    pub async fn count(&self, pool: &PgPool) -> Result<i64, sqlx::Error> {
+        let mut qb: QueryBuilder<'_, sqlx::Postgres> =
+            QueryBuilder::new("SELECT COUNT(*) FROM media_items mi");
+
+        if self.needs_user_data_join()
+            && let Some(user_id) = self.user_id
+        {
+            qb.push(" LEFT JOIN user_data ud ON ud.item_id = mi.id AND ud.user_id = ");
+            qb.push_bind(user_id);
+        }
+
+        qb.push(" WHERE 1=1");
+
+        self.apply_filters(&mut qb);
+
+        let (count,): (i64,) = qb.build_query_as().fetch_one(pool).await?;
+        Ok(count)
+    }
+
+    fn apply_filters<'a>(&'a self, qb: &mut QueryBuilder<'a, sqlx::Postgres>) {
+        // Scoping
+        if !self.ids.is_empty() {
+            qb.push(" AND mi.id = ANY(");
+            qb.push_bind(&self.ids);
+            qb.push(")");
+        } else if let Some(library_id) = self.library_id {
+            qb.push(" AND mi.library_id = ");
+            qb.push_bind(library_id);
+            if !self.recursive {
+                qb.push(" AND mi.parent_id IS NULL");
+            }
+        } else if let Some(parent_id) = self.parent_id {
+            qb.push(" AND mi.parent_id = ");
+            qb.push_bind(parent_id);
+        } else {
+            qb.push(" AND mi.parent_id IS NULL");
+        }
+
+        // Type filters
+        if !self.include_item_types.is_empty() {
+            qb.push(" AND mi.item_type = ANY(");
+            qb.push_bind(&self.include_item_types);
+            qb.push(")");
+        }
+        if !self.exclude_item_types.is_empty() {
+            qb.push(" AND mi.item_type != ALL(");
+            qb.push_bind(&self.exclude_item_types);
+            qb.push(")");
+        }
+
+        // Metadata filters
+        if !self.genres.is_empty() {
+            qb.push(" AND mi.genres @> ");
+            qb.push_bind(&self.genres);
+        }
+        if !self.years.is_empty() {
+            qb.push(" AND mi.production_year = ANY(");
+            qb.push_bind(&self.years);
+            qb.push(")");
+        }
+        if !self.studios.is_empty() {
+            qb.push(" AND mi.studios @> ");
+            qb.push_bind(&self.studios);
+        }
+        if !self.official_ratings.is_empty() {
+            qb.push(" AND mi.official_rating = ANY(");
+            qb.push_bind(&self.official_ratings);
+            qb.push(")");
+        }
+        if !self.tags.is_empty() {
+            qb.push(" AND mi.tags @> ");
+            qb.push_bind(&self.tags);
+        }
+
+        // Person filter
+        if !self.person_ids.is_empty() {
+            qb.push(
+                " AND EXISTS (SELECT 1 FROM media_item_people mip \
+                 WHERE mip.item_id = mi.id AND mip.person_id = ANY(",
+            );
+            qb.push_bind(&self.person_ids);
+            qb.push("))");
+        }
+
+        // Rating filters
+        if let Some(min) = self.min_community_rating {
+            qb.push(" AND mi.community_rating >= ");
+            qb.push_bind(min);
+        }
+        if let Some(min) = self.min_critic_rating {
+            qb.push(" AND mi.critic_rating >= ");
+            qb.push_bind(min);
+        }
+
+        // Name starts with
+        if let Some(ref prefix) = self.name_starts_with {
+            qb.push(" AND UPPER(COALESCE(mi.sort_name, mi.name)) LIKE ");
+            qb.push_bind(format!("{}%", prefix.to_uppercase()));
+        }
+
+        // Search term
+        if let Some(ref term) = self.search_term {
+            qb.push(" AND mi.name ILIKE ");
+            qb.push_bind(format!("%{term}%"));
+        }
+
+        // User data filters
+        if let Some(fav) = self.is_favorite {
+            if fav {
+                qb.push(" AND ud.is_favorite = true");
+            } else {
+                qb.push(" AND (ud.is_favorite = false OR ud.is_favorite IS NULL)");
+            }
+        }
+        if let Some(played) = self.is_played {
+            if played {
+                qb.push(" AND ud.played = true");
+            } else {
+                qb.push(" AND (ud.played = false OR ud.played IS NULL)");
+            }
+        }
+    }
+
+    fn apply_sorting<'a>(&'a self, qb: &mut QueryBuilder<'a, sqlx::Postgres>) {
+        if self.sort_by.is_empty() {
+            qb.push(" ORDER BY mi.sort_name, mi.name");
+            return;
+        }
+
+        qb.push(" ORDER BY ");
+        let mut first = true;
+        for (i, sort_name) in self.sort_by.iter().enumerate() {
+            let Some(col) = Self::sort_column(sort_name) else {
+                continue;
+            };
+            if !first {
+                qb.push(", ");
+            }
+            first = false;
+
+            qb.push(col);
+
+            // Direction
+            let desc = self
+                .sort_order
+                .get(i)
+                .or(self.sort_order.first())
+                .is_some_and(|o| o.eq_ignore_ascii_case("Descending"));
+
+            if desc {
+                qb.push(" DESC NULLS LAST");
+            } else {
+                qb.push(" ASC NULLS LAST");
+            }
+        }
+
+        // Always add a tiebreaker
+        if first {
+            // No valid sort columns matched
+            qb.push(" ORDER BY mi.sort_name, mi.name");
+        }
+    }
 }
