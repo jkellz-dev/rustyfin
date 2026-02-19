@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use rustyfin_models::dto::DeviceProfile;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -22,6 +23,7 @@ pub struct TrackedSession {
     pub app_version: Option<String>,
     pub last_activity: DateTime<Utc>,
     pub playback: Option<ActivePlayback>,
+    pub capabilities: Option<ClientCapabilities>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +39,17 @@ pub struct ActivePlayback {
     pub audio_stream_index: Option<i32>,
     pub subtitle_stream_index: Option<i32>,
     pub play_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ClientCapabilities {
+    pub playable_media_types: Vec<String>,
+    pub supported_commands: Vec<String>,
+    pub supports_media_control: bool,
+    pub supports_persistent_identifier: bool,
+    pub device_profile: Option<DeviceProfile>,
+    pub app_store_url: Option<String>,
+    pub icon_url: Option<String>,
 }
 
 impl SessionManager {
@@ -76,6 +89,7 @@ impl SessionManager {
                 app_version: app_version.map(String::from),
                 last_activity: Utc::now(),
                 playback: None,
+                capabilities: None,
             },
         );
     }
@@ -193,5 +207,23 @@ impl SessionManager {
     pub async fn remove_session(&self, session_id: Uuid) {
         let mut sessions = self.sessions.write().await;
         sessions.remove(&session_id);
+    }
+
+    /// Store client capabilities on a session.
+    pub async fn report_capabilities(&self, session_id: Uuid, caps: ClientCapabilities) {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(&session_id) {
+            session.capabilities = Some(caps);
+            session.last_activity = Utc::now();
+        }
+    }
+
+    /// Get the DeviceProfile stored for a session, if any.
+    pub async fn get_device_profile(&self, session_id: Uuid) -> Option<DeviceProfile> {
+        let sessions = self.sessions.read().await;
+        sessions
+            .get(&session_id)
+            .and_then(|s| s.capabilities.as_ref())
+            .and_then(|c| c.device_profile.clone())
     }
 }
