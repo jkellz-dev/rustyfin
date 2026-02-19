@@ -375,6 +375,15 @@ pub async fn update(
     .await
 }
 
+/// Delete a media item by its filesystem path.
+pub async fn delete_by_path(pool: &PgPool, path: &str) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("DELETE FROM media_items WHERE path = $1")
+        .bind(path)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Delete all media items for a library.
 pub async fn delete_by_library(pool: &PgPool, library_id: Uuid) -> Result<u64, sqlx::Error> {
     let result = sqlx::query("DELETE FROM media_items WHERE library_id = $1")

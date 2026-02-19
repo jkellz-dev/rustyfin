@@ -32,4 +32,5 @@ pub mod system;
 pub mod universal_audio;
 pub mod user_data;
 pub mod users;
+pub mod webhooks;
 pub mod websocket;

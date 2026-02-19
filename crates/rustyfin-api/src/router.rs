@@ -92,6 +92,11 @@ pub fn build_router(state: AppState) -> Router {
             get(users::get_user_by_id).delete(users::delete_user),
         )
         .route("/Users/{userId}/Policy", post(users::update_user_policy))
+        // ── Media update notifications ─────────────────────────
+        .route(
+            "/Library/Media/Updated",
+            post(webhooks::post_updated_media),
+        )
         // ── Library views ───────────────────────────────────────
         .route("/UserViews", get(libraries::get_user_views))
         .route(
