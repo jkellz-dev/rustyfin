@@ -230,11 +230,30 @@ Generic `ScheduledTask` trait with a single background scheduler loop. Library s
 - [ ] Database optimization (ANALYZE)
 - [ ] Image cache pruning (evict stale resized images)
 
-### 10b. File System Monitoring
-- [ ] inotify/fswatch for auto-scan on media file changes
-- [ ] Debounce rapid changes (wait for copy to finish)
+### 10b. Media Update Notifications [DONE]
 
-### 10c. Notifications & Webhooks
+Push-based notification model: external tools (CLI, Sonarr, Radarr, scripts) POST changed filesystem paths to the server, triggering scoped rescans of just the affected directories. Replaces inotify/filesystem monitoring — avoids kernel watch limits and container sysctl issues.
+
+**API key authentication [DONE]:**
+- [x] `api_keys` table (UUID, name, SHA-256 hash, created_at, last_used_at)
+- [x] `ApiKeyUser` auth extractor (`X-Api-Key` header or `?api_key=` query param)
+- [x] Admin CRUD endpoints: `POST /Auth/Keys` (generate), `GET /Auth/Keys` (list), `DELETE /Auth/Keys/{id}` (revoke)
+- [x] Keys prefixed `rfy_` for identification, plaintext returned once on creation, only hash stored
+
+**Webhook endpoint [DONE]:**
+- [x] `POST /Library/Media/Updated` — Jellyfin-compatible, accepts list of changed paths
+- [x] Path resolution: match paths to libraries, resolve files to parent directories
+- [x] Scoped scanning: pass subdirectories to existing `LibraryScanner::scan()` instead of full library roots
+- [x] Deletion handling: if path doesn't exist on disk, look up and delete from DB
+- [x] In-flight deduplication: skip libraries already being scanned
+- [x] Search reindex after webhook scan completes
+
+**CLI integration [DONE]:**
+- [x] `rustyfin notify <paths...>` — POST changed paths to server
+- [x] Auto-notify after `rustyfin fetch` completes (if `server.url` configured)
+- [x] Server config in `rustyfin-meta.toml`: `[server]` section with `url` and `api_key`
+
+### 10c. Outbound Webhooks
 - [ ] Webhook delivery for events (item added, playback started, scan complete)
 - [ ] Configurable webhook URLs in `rustyfin.toml`
 
@@ -587,4 +606,4 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~70% | Meilisearch + fallback; no advanced filters |
-| Notifications | ~20% | Activity log only; no webhooks |
+| Notifications | ~50% | Activity log + inbound media update webhook + API key auth; no outbound webhooks |
