@@ -323,10 +323,20 @@ For users who want unlimited lookups with no rate limits and full offline capabi
 
 ### ~~10e. Parental Controls~~ → moved to Phase 15 stretch goals
 
-### 10f. Advanced Search Filters
-- [ ] Filter by genre, year range, rating, studio, cast in `GET /Items`
-- [ ] Combine multiple filters (AND logic)
-- [ ] Sort by community rating, critic rating, date added, release date
+### 10f. Advanced Search Filters [DONE]
+
+Dynamic `ItemQuery` builder with composable WHERE clauses and ORDER BY from query params. All filtering and sorting in Postgres — Meilisearch stays dedicated to fuzzy text search on `/Search/Hints`.
+
+- [x] `ItemQuery` struct — dynamic SQL composition via `sqlx::QueryBuilder` with parameterized binds
+- [x] Filter by genre, year, rating, studio, cast, tags, official rating in `GET /Items`
+- [x] Combine multiple filters (AND logic, array containment for genres/studios/tags)
+- [x] Sort by 17 Jellyfin sort fields (SortName, DateCreated, CommunityRating, Random, DatePlayed, etc.)
+- [x] Multi-column sort with per-column direction and deterministic tiebreaker
+- [x] Recursive library traversal (`recursive=true` removes `parent_id IS NULL` restriction)
+- [x] `enable_total_record_count` optimization (skip COUNT query when false)
+- [x] Name prefix filter (`NameStartsWith` for A-Z browsing)
+- [x] User data filters (is_favorite, is_played) with conditional LEFT JOIN
+- [x] Pipe-delimited parsing for genres/studios/tags/ratings, comma-delimited for types/sort/IDs/years
 
 ### 10g. Remote Control
 - [ ] `POST /Sessions/{sessionId}/Playing` — send play command to another session
@@ -609,5 +619,5 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
 | Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
-| Search | ~70% | Meilisearch + fallback; no advanced filters |
+| Search | ~90% | Meilisearch + fallback; full filter engine (genre/year/studio/rating/person/tags); 17 sort options |
 | Notifications | ~50% | Activity log + inbound media update webhook + API key auth; no outbound webhooks |
