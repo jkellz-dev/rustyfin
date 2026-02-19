@@ -6,8 +6,11 @@ use axum::{
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_core::session::ClientCapabilities;
 use rustyfin_db::repo::sessions as sessions_repo;
-use rustyfin_models::dto::{BaseItemDto, PlayerStateInfo, SessionInfoDto, TranscodingInfo};
+use rustyfin_models::dto::{
+    BaseItemDto, DeviceProfile, PlayerStateInfo, SessionInfoDto, TranscodingInfo,
+};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -16,6 +19,39 @@ use crate::router::AppState;
 #[serde(rename_all = "PascalCase")]
 pub struct SessionsQuery {
     pub active_within_seconds: Option<i64>,
+}
+
+/// Request body for `POST /Sessions/Capabilities/Full`.
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct ClientCapabilitiesDto {
+    #[serde(default)]
+    pub playable_media_types: Vec<String>,
+    #[serde(default)]
+    pub supported_commands: Vec<String>,
+    #[serde(default)]
+    pub supports_media_control: bool,
+    #[serde(default = "default_true")]
+    pub supports_persistent_identifier: bool,
+    pub device_profile: Option<DeviceProfile>,
+    pub app_store_url: Option<String>,
+    pub icon_url: Option<String>,
+}
+
+/// Query params for `POST /Sessions/Capabilities` (lightweight version).
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct CapabilitiesQuery {
+    pub playable_media_types: Option<String>,
+    pub supported_commands: Option<String>,
+    #[serde(default)]
+    pub supports_media_control: bool,
+    #[serde(default = "default_true")]
+    pub supports_persistent_identifier: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// `GET /Sessions` — List active sessions.
@@ -129,4 +165,72 @@ pub async fn logout(
     state.session_manager.remove_session(auth.session_id).await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /Sessions/Capabilities` — Report basic capabilities (query params).
+pub async fn post_capabilities(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Query(query): Query<CapabilitiesQuery>,
+) -> StatusCode {
+    let playable_media_types: Vec<String> = query
+        .playable_media_types
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+
+    let supported_commands: Vec<String> = query
+        .supported_commands
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+
+    let caps = ClientCapabilities {
+        playable_media_types,
+        supported_commands,
+        supports_media_control: query.supports_media_control,
+        supports_persistent_identifier: query.supports_persistent_identifier,
+        device_profile: None,
+        app_store_url: None,
+        icon_url: None,
+    };
+
+    state
+        .session_manager
+        .report_capabilities(auth.session_id, caps)
+        .await;
+
+    StatusCode::NO_CONTENT
+}
+
+/// `POST /Sessions/Capabilities/Full` — Report full capabilities (JSON body).
+pub async fn post_full_capabilities(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Json(body): Json<ClientCapabilitiesDto>,
+) -> StatusCode {
+    let caps = ClientCapabilities {
+        playable_media_types: body.playable_media_types,
+        supported_commands: body.supported_commands,
+        supports_media_control: body.supports_media_control,
+        supports_persistent_identifier: body.supports_persistent_identifier,
+        device_profile: body.device_profile,
+        app_store_url: body.app_store_url,
+        icon_url: body.icon_url,
+    };
+
+    state
+        .session_manager
+        .report_capabilities(auth.session_id, caps)
+        .await;
+
+    StatusCode::NO_CONTENT
 }

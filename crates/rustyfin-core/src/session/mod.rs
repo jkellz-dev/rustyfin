@@ -1,3 +1,3 @@
 pub mod manager;
 
-pub use manager::{ActivePlayback, SessionManager, TrackedSession};
+pub use manager::{ActivePlayback, ClientCapabilities, SessionManager, TrackedSession};

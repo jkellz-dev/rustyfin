@@ -206,6 +206,11 @@ pub fn build_router(state: AppState) -> Router {
         // ── Sessions ──────────────────────────────────────────────
         .route("/Sessions", get(sessions::get_sessions))
         .route("/Sessions/Logout", post(sessions::logout))
+        .route("/Sessions/Capabilities", post(sessions::post_capabilities))
+        .route(
+            "/Sessions/Capabilities/Full",
+            post(sessions::post_full_capabilities),
+        )
         // ── Playback reporting ──────────────────────────────────
         .route("/Sessions/Playing", post(playback::report_playback_start))
         .route(
