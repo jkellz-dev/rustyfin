@@ -42,6 +42,20 @@ pub struct ItemsQuery {
     pub enable_images: Option<bool>,
     pub enable_user_data: Option<bool>,
     pub image_type_limit: Option<i32>,
+    // New filter params
+    pub genres: Option<String>,
+    pub years: Option<String>,
+    pub studios: Option<String>,
+    pub official_ratings: Option<String>,
+    pub tags: Option<String>,
+    pub person_ids: Option<String>,
+    pub artist_ids: Option<String>,
+    pub album_artist_ids: Option<String>,
+    pub ids: Option<String>,
+    pub min_community_rating: Option<f64>,
+    pub min_critic_rating: Option<f64>,
+    pub name_starts_with: Option<String>,
+    pub enable_total_record_count: Option<bool>,
 }
 
 pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
@@ -188,6 +202,40 @@ pub(crate) fn group_images_by_item(all_images: Vec<ImageRow>) -> HashMap<Uuid, V
     map
 }
 
+fn parse_comma_delimited(s: &Option<String>) -> Vec<String> {
+    s.as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+fn parse_pipe_delimited(s: &Option<String>) -> Vec<String> {
+    s.as_deref()
+        .unwrap_or("")
+        .split('|')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+fn parse_comma_uuids(s: &Option<String>) -> Vec<Uuid> {
+    s.as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter_map(|s| s.trim().parse::<Uuid>().ok())
+        .collect()
+}
+
+fn parse_comma_ints(s: &Option<String>) -> Vec<i32> {
+    s.as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter_map(|s| s.trim().parse::<i32>().ok())
+        .collect()
+}
+
 /// `GET /Items` — Main query endpoint.
 pub async fn get_items(
     State(state): State<AppState>,
@@ -196,22 +244,13 @@ pub async fn get_items(
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let start_index = query.start_index.unwrap_or(0);
     let limit = query.limit.unwrap_or(50).min(500);
-
-    let item_types: Vec<String> = query
-        .include_item_types
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect();
+    let recursive = query.recursive.unwrap_or(false);
 
     let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
         .await
         .map_err(ApiError::Database)?;
 
-    // If ParentId matches a library, query top-level items by library_id
-    // (top-level media items have parent_id = NULL but library_id = <library UUID>)
+    // Determine if parent_id is a library
     let is_library = if let Some(pid) = query.parent_id {
         libraries::find_by_id(&state.pool, pid)
             .await
@@ -229,38 +268,53 @@ pub async fn get_items(
         return Err(ApiError::NotFound);
     }
 
-    let (items, total) = if is_library {
-        let lib_id = query.parent_id.unwrap();
-        let items = media_items::list_top_level_by_library(
-            &state.pool,
-            lib_id,
-            &item_types,
-            start_index,
-            limit,
-        )
-        .await
-        .map_err(ApiError::Database)?;
-        let total = media_items::count_top_level_by_library(&state.pool, lib_id, &item_types)
-            .await
-            .map_err(ApiError::Database)?;
-        (items, total)
-    } else {
-        let items = media_items::list_by_parent(
-            &state.pool,
-            query.parent_id,
-            &item_types,
-            start_index,
-            limit,
-        )
-        .await
-        .map_err(ApiError::Database)?;
-        let total = media_items::count_by_parent(&state.pool, query.parent_id, &item_types)
-            .await
-            .map_err(ApiError::Database)?;
-        (items, total)
+    // Merge artist_ids and album_artist_ids into person_ids
+    let mut person_ids = parse_comma_uuids(&query.person_ids);
+    person_ids.extend(parse_comma_uuids(&query.artist_ids));
+    person_ids.extend(parse_comma_uuids(&query.album_artist_ids));
+
+    // Build the query
+    let item_query = media_items::ItemQuery {
+        library_id: if is_library { query.parent_id } else { None },
+        parent_id: if !is_library { query.parent_id } else { None },
+        recursive,
+        ids: parse_comma_uuids(&query.ids),
+        include_item_types: parse_comma_delimited(&query.include_item_types),
+        exclude_item_types: parse_comma_delimited(&query.exclude_item_types),
+        genres: parse_pipe_delimited(&query.genres),
+        years: parse_comma_ints(&query.years),
+        studios: parse_pipe_delimited(&query.studios),
+        official_ratings: parse_pipe_delimited(&query.official_ratings),
+        tags: parse_pipe_delimited(&query.tags),
+        person_ids,
+        min_community_rating: query.min_community_rating,
+        min_critic_rating: query.min_critic_rating,
+        name_starts_with: query.name_starts_with.clone(),
+        user_id: Some(auth.user_id),
+        is_favorite: query.is_favorite,
+        is_played: query.is_played,
+        search_term: query.search_term.clone(),
+        sort_by: parse_comma_delimited(&query.sort_by),
+        sort_order: parse_comma_delimited(&query.sort_order),
+        start_index,
+        limit,
     };
 
-    // Filter items by library access for non-library parents
+    let items = item_query
+        .fetch(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let total = if query.enable_total_record_count.unwrap_or(true) {
+        item_query
+            .count(&state.pool)
+            .await
+            .map_err(ApiError::Database)?
+    } else {
+        0
+    };
+
+    // Filter items by library access for non-library-scoped queries
     let items: Vec<_> = if !is_library && accessible.is_some() {
         items
             .into_iter()
