@@ -15,9 +15,7 @@ async fn empty_library_returns_empty_items_array_not_null() {
     let (status, body) = app.get(&path, &token).await;
     assert_eq!(status, StatusCode::OK);
 
-    let items = body
-        .get("Items")
-        .expect("response missing Items field");
+    let items = body.get("Items").expect("response missing Items field");
     assert!(items.is_array(), "Items should be an array, got: {items}");
     assert_eq!(
         items.as_array().unwrap().len(),
@@ -43,10 +41,11 @@ async fn user_dto_has_policy_field() {
     let (status, body) = app.get("/Users/Me", &token).await;
     assert_eq!(status, StatusCode::OK);
 
-    let policy = body
-        .get("Policy")
-        .expect("response missing Policy field");
-    assert!(policy.is_object(), "Policy should be an object, got: {policy}");
+    let policy = body.get("Policy").expect("response missing Policy field");
+    assert!(
+        policy.is_object(),
+        "Policy should be an object, got: {policy}"
+    );
     assert!(
         policy.get("IsAdministrator").is_some(),
         "Policy missing IsAdministrator field: {policy}"

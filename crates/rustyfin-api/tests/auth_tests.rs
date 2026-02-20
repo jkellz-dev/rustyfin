@@ -33,7 +33,9 @@ async fn admin_endpoint_with_non_admin_returns_403() {
     let app = common::TestApp::new().await;
 
     let (_user_id, token) = app.create_user("bob", false).await;
-    let (status, _body) = app.post("/Library/Refresh", &serde_json::json!({}), &token).await;
+    let (status, _body) = app
+        .post("/Library/Refresh", &serde_json::json!({}), &token)
+        .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     app.cleanup().await;
@@ -58,8 +60,9 @@ async fn system_configuration_post_requires_admin() {
     let app = common::TestApp::new().await;
 
     let (_user_id, token) = app.create_user("dave", false).await;
-    let (status, _body) =
-        app.post("/System/Configuration", &serde_json::json!({}), &token).await;
+    let (status, _body) = app
+        .post("/System/Configuration", &serde_json::json!({}), &token)
+        .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     app.cleanup().await;

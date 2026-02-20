@@ -67,15 +67,11 @@ impl TestApp {
             .expect("failed to connect to test database with schema");
 
         // Run migrations within this schema.
-        let migrations_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations");
+        let migrations_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations");
         let migrator = sqlx::migrate::Migrator::new(migrations_path.as_path())
             .await
             .expect("failed to load migrations");
-        migrator
-            .run(&pool)
-            .await
-            .expect("failed to run migrations");
+        migrator.run(&pool).await.expect("failed to run migrations");
 
         // Build AppState with minimal config.
         let session_manager = Arc::new(SessionManager::new(pool.clone()));
@@ -235,10 +231,7 @@ impl TestApp {
 
     /// Send a GET request without auth. Returns `(status, body_json)`.
     pub async fn get_no_auth(&self, path: &str) -> (StatusCode, Value) {
-        let request = Request::builder()
-            .uri(path)
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri(path).body(Body::empty()).unwrap();
 
         let response = self.router.clone().oneshot(request).await.unwrap();
         let status = response.status();

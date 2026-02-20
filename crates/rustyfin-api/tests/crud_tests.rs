@@ -24,7 +24,10 @@ async fn get_users_returns_seeded_users() {
 
     // Verify PascalCase fields on each user
     for user in users {
-        assert!(user.get("Name").is_some(), "user missing Name field: {user}");
+        assert!(
+            user.get("Name").is_some(),
+            "user missing Name field: {user}"
+        );
         assert!(user.get("Id").is_some(), "user missing Id field: {user}");
     }
 
@@ -62,7 +65,9 @@ async fn get_items_returns_query_result_shape() {
 
     let (_user_id, token) = app.create_user("viewer", true).await;
     let lib_id = app.create_library("Movies", "movies").await;
-    let _item_id = app.create_media_item("Test Movie", "Movie", lib_id, None).await;
+    let _item_id = app
+        .create_media_item("Test Movie", "Movie", lib_id, None)
+        .await;
 
     let path = format!("/Items?ParentId={lib_id}&Recursive=true");
     let (status, body) = app.get(&path, &token).await;
@@ -94,7 +99,9 @@ async fn get_item_by_id_returns_detail() {
 
     let (_user_id, token) = app.create_user("detail_viewer", true).await;
     let lib_id = app.create_library("Movies", "movies").await;
-    let item_id = app.create_media_item("Detail Movie", "Movie", lib_id, None).await;
+    let item_id = app
+        .create_media_item("Detail Movie", "Movie", lib_id, None)
+        .await;
 
     let path = format!("/Items/{item_id}");
     let (status, body) = app.get(&path, &token).await;

@@ -83,6 +83,12 @@ pub fn build_router(state: AppState) -> Router {
             get(api_keys::list_api_keys).post(api_keys::create_api_key),
         )
         .route("/Auth/Keys/{id}", delete(api_keys::delete_api_key))
+        // ── Auth provider info (admin, stubs) ─────────────────
+        .route("/Auth/Providers", get(stubs::empty_array_admin))
+        .route(
+            "/Auth/PasswordResetProviders",
+            get(stubs::empty_array_admin),
+        )
         // ── Users ───────────────────────────────────────────────
         .route("/Users", get(users::list_users))
         .route("/Users/Me", get(users::get_current_user))
@@ -92,6 +98,23 @@ pub fn build_router(state: AppState) -> Router {
             get(users::get_user_by_id).delete(users::delete_user),
         )
         .route("/Users/{userId}/Policy", post(users::update_user_policy))
+        .route("/Users/{userId}/Password", post(stubs::no_content_auth))
+        .route(
+            "/Users/{userId}/Configuration",
+            post(stubs::no_content_auth),
+        )
+        .route("/Users/New", post(stubs::create_user_disabled))
+        // ── User images (stubs) ───────────────────────────────
+        .route(
+            "/Users/{userId}/Images/{imageType}",
+            get(stubs::not_found)
+                .post(stubs::no_content_auth)
+                .delete(stubs::no_content_auth),
+        )
+        .route(
+            "/Users/{userId}/Images/{imageType}/{imageIndex}",
+            get(stubs::not_found),
+        )
         // ── Media update notifications ─────────────────────────
         .route("/Library/Media/Updated", post(webhooks::post_updated_media))
         // ── Library views ───────────────────────────────────────
@@ -136,6 +159,36 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/Items/{itemId}/Images/{imageType}/{imageIndex}",
             get(images::get_item_image_by_index),
+        )
+        .route("/Items/{itemId}/Images", get(stubs::get_item_images_list))
+        // ── Entity image stubs (genres, studios, persons, artists, music genres) ──
+        .route("/Genres/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Genres/{name}/Images/{imageType}/{imageIndex}",
+            get(stubs::not_found),
+        )
+        .route("/Studios/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Studios/{name}/Images/{imageType}/{imageIndex}",
+            get(stubs::not_found),
+        )
+        .route("/Persons/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Persons/{name}/Images/{imageType}/{imageIndex}",
+            get(stubs::not_found),
+        )
+        .route("/Artists/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Artists/{name}/Images/{imageType}/{imageIndex}",
+            get(stubs::not_found),
+        )
+        .route(
+            "/MusicGenres/{name}/Images/{imageType}",
+            get(stubs::not_found),
+        )
+        .route(
+            "/MusicGenres/{name}/Images/{imageType}/{imageIndex}",
+            get(stubs::not_found),
         )
         // ── Media info ──────────────────────────────────────────
         .route(
@@ -222,6 +275,7 @@ pub fn build_router(state: AppState) -> Router {
             post(playback::report_playback_stopped),
         )
         .route("/Sessions/Playing/Ping", post(playback::playback_ping))
+        .route("/Sessions/Viewing", post(stubs::no_content_auth))
         // ── Remote control ───────────────────────────────────────
         .route(
             "/Sessions/{sessionId}/Playing",
@@ -324,6 +378,10 @@ pub fn build_router(state: AppState) -> Router {
             "/Items/{itemId}/SpecialFeatures",
             get(stubs::empty_array_auth),
         )
+        .route(
+            "/Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}",
+            get(stubs::search_remote_subtitles).post(stubs::download_remote_subtitles),
+        )
         .route("/Items/{itemId}/Similar", get(similar::get_similar))
         .route("/Items/Suggestions", get(suggestions::get_suggestions))
         .route("/Movies/Recommendations", get(similar::get_recommendations))
@@ -335,6 +393,17 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Studios/{name}", get(studios::get_studio))
         .route("/Persons", get(persons::get_persons))
         .route("/Persons/{name}", get(persons::get_person))
+        // ── Years ──────────────────────────────────────────────────
+        .route("/Years", get(stubs::empty_query_result_auth))
+        .route("/Years/{year}", get(stubs::get_year))
+        // ── MusicGenres ────────────────────────────────────────────
+        .route("/MusicGenres", get(stubs::empty_query_result_auth))
+        .route("/MusicGenres/{genreName}", get(stubs::get_music_genre))
+        // ── ScheduledTasks (admin) ─────────────────────────────────
+        .route("/ScheduledTasks", get(stubs::empty_array_admin))
+        .route("/ScheduledTasks/{taskId}", get(stubs::not_found_admin))
+        // ── Time sync (no auth) ────────────────────────────────────
+        .route("/GetUtcTime", get(stubs::get_utc_time))
         .route(
             "/Users/{userId}/Suggestions",
             get(suggestions::get_suggestions),

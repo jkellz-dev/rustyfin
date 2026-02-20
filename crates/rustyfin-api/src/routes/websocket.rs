@@ -25,7 +25,10 @@ pub async fn websocket_handler(
     ws: WebSocketUpgrade,
 ) -> Response {
     let session = if let Some(ref token) = query.api_key {
-        sessions::find_by_token(&state.pool, token).await.ok().flatten()
+        sessions::find_by_token(&state.pool, token)
+            .await
+            .ok()
+            .flatten()
     } else {
         None
     };

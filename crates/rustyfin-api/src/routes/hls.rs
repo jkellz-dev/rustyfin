@@ -15,8 +15,8 @@ use rustyfin_db::repo::{media_items, media_streams};
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_media::transcode::{
     hls::{
-        generate_audio_master_playlist, generate_master_playlist, rewrite_audio_variant_playlist,
-        rewrite_variant_playlist, MasterPlaylistParams,
+        MasterPlaylistParams, generate_audio_master_playlist, generate_master_playlist,
+        rewrite_audio_variant_playlist, rewrite_variant_playlist,
     },
     manager::TranscodeRequest,
     params::*,
