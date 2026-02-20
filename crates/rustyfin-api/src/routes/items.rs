@@ -69,6 +69,14 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         if map.is_empty() { None } else { Some(map) }
     });
 
+    // Derive media_type from item_type for client playback decisions
+    let media_type = match item.item_type.as_str() {
+        "Movie" | "Episode" => Some("Video".to_string()),
+        "Audio" => Some("Audio".to_string()),
+        "Photo" => Some("Photo".to_string()),
+        _ => None,
+    };
+
     BaseItemDto {
         name: item.name.clone(),
         original_title: item.original_title.clone(),
@@ -102,6 +110,9 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         date_last_media_added: item.date_last_media_added,
         etag: item.etag.clone(),
         provider_ids,
+        media_type,
+        can_delete: Some(false),
+        can_download: Some(true),
         ..Default::default()
     }
 }

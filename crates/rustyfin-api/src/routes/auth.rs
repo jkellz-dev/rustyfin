@@ -212,6 +212,14 @@ pub async fn authenticate_by_name(
         transcoding_info: None,
         supports_remote_control: false,
         server_id: state.server_id.clone(),
+        playable_media_types: Some(vec!["Video".to_string(), "Audio".to_string()]),
+        supported_commands: Some(vec![]),
+        supports_media_control: true,
+        now_viewing_item: None,
+        capabilities: None,
+        remote_end_point: None,
+        now_playing_queue: None,
+        user_primary_image_tag: None,
     };
 
     // Log authentication

@@ -142,6 +142,84 @@ pub struct BaseItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location_type: Option<String>,
 
+    // Media type (Video, Audio, Photo, Book)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+
+    // Access control
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_delete: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_download: Option<bool>,
+
+    // Series/TV metadata
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub air_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub air_days: Option<Vec<String>>,
+
+    // External URLs (IMDb, TMDB links)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_urls: Option<Vec<ExternalUrl>>,
+
+    // Taglines
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub taglines: Option<Vec<String>>,
+
+    // Genre items with IDs (for linking to genre detail pages)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub genre_items: Option<Vec<NameGuidPair>>,
+
+    // Studio items with IDs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub studio_items: Option<Vec<NameGuidPair>>,
+
+    // Parent image inheritance (for fallback images)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_logo_item_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_backdrop_item_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_backdrop_image_tags: Option<Vec<String>>,
+
+    // Music-specific
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_primary_image_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_artist: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist_items: Option<Vec<NameGuidPair>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_artists: Option<Vec<NameGuidPair>>,
+
+    // Trailer count
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_trailer_count: Option<i32>,
+
+    // Recursive item count (for collection/folder stats)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recursive_item_count: Option<i32>,
+
+    // Series primary image tag (for episode/season detail)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series_primary_image_tag: Option<String>,
+
+    // Video type (VideoFile, Dvd, BluRay)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_type: Option<String>,
+
+    // Display order
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_order: Option<String>,
+
+    // Lock metadata
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lock_data: Option<bool>,
+
     // Etag
     #[serde(skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
@@ -454,6 +532,14 @@ pub struct QueryFiltersLegacy {
 pub struct NameGuidPair {
     pub name: String,
     pub id: Uuid,
+}
+
+/// External URL (IMDb, TMDB, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ExternalUrl {
+    pub name: String,
+    pub url: String,
 }
 
 /// Modern filter response for `GET /Items/Filters2`.

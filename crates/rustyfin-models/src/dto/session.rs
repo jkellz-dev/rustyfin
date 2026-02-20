@@ -23,6 +23,21 @@ pub struct SessionInfoDto {
     pub transcoding_info: Option<TranscodingInfo>,
     pub supports_remote_control: bool,
     pub server_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playable_media_types: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_commands: Option<Vec<String>>,
+    pub supports_media_control: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub now_viewing_item: Option<super::BaseItemDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ClientCapabilitiesDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_end_point: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub now_playing_queue: Option<Vec<QueueItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_primary_image_tag: Option<String>,
 }
 
 /// Current playback state of a session.
@@ -70,4 +85,34 @@ pub struct TranscodingInfo {
     pub height: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transcode_reasons: Option<Vec<String>>,
+}
+
+/// Client capabilities for a session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ClientCapabilitiesDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playable_media_types: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_commands: Option<Vec<String>>,
+    pub supports_media_control: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_live_media_types: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_callback_url: Option<String>,
+    pub supports_persistent_identifier: bool,
+    pub supports_sync: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_store_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
+}
+
+/// Queue item for now-playing queue.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct QueueItem {
+    pub id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playlist_item_id: Option<String>,
 }
