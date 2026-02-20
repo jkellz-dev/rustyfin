@@ -202,6 +202,16 @@ pub struct TasksConfig {
     pub library_scan: LibraryScanConfig,
     #[serde(default)]
     pub search_reindex: SearchReindexConfig,
+    #[serde(default)]
+    pub activity_log_prune: ActivityLogPruneConfig,
+    #[serde(default)]
+    pub session_cleanup: SessionCleanupConfig,
+    #[serde(default)]
+    pub transcode_temp_cleanup: TranscodeTempCleanupConfig,
+    #[serde(default)]
+    pub db_optimize: DbOptimizeConfig,
+    #[serde(default)]
+    pub image_cache_prune: ImageCachePruneConfig,
 }
 
 impl Default for TasksConfig {
@@ -214,6 +224,13 @@ impl Default for TasksConfig {
                 jitter_seconds: None,
             },
         );
+        schedules.insert(
+            "weekly".to_string(),
+            ScheduleEntry {
+                cron: "0 0 4 * * 0 *".to_string(),
+                jitter_seconds: None,
+            },
+        );
         Self {
             enabled: true,
             run_on_startup: true,
@@ -221,6 +238,11 @@ impl Default for TasksConfig {
             schedules,
             library_scan: LibraryScanConfig::default(),
             search_reindex: SearchReindexConfig::default(),
+            activity_log_prune: ActivityLogPruneConfig::default(),
+            session_cleanup: SessionCleanupConfig::default(),
+            transcode_temp_cleanup: TranscodeTempCleanupConfig::default(),
+            db_optimize: DbOptimizeConfig::default(),
+            image_cache_prune: ImageCachePruneConfig::default(),
         }
     }
 }
@@ -265,6 +287,85 @@ impl Default for SearchReindexConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ActivityLogPruneConfig {
+    #[serde(default = "default_maintenance_daily")]
+    pub schedule: String,
+    #[serde(default = "default_retention_days")]
+    pub retention_days: u32,
+}
+
+impl Default for ActivityLogPruneConfig {
+    fn default() -> Self {
+        Self {
+            schedule: default_maintenance_daily(),
+            retention_days: default_retention_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SessionCleanupConfig {
+    #[serde(default = "default_maintenance_daily")]
+    pub schedule: String,
+    #[serde(default = "default_inactive_days")]
+    pub inactive_days: u32,
+}
+
+impl Default for SessionCleanupConfig {
+    fn default() -> Self {
+        Self {
+            schedule: default_maintenance_daily(),
+            inactive_days: default_inactive_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TranscodeTempCleanupConfig {
+    #[serde(default = "default_maintenance_daily")]
+    pub schedule: String,
+}
+
+impl Default for TranscodeTempCleanupConfig {
+    fn default() -> Self {
+        Self {
+            schedule: default_maintenance_daily(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DbOptimizeConfig {
+    #[serde(default = "default_maintenance_weekly")]
+    pub schedule: String,
+}
+
+impl Default for DbOptimizeConfig {
+    fn default() -> Self {
+        Self {
+            schedule: default_maintenance_weekly(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImageCachePruneConfig {
+    #[serde(default = "default_maintenance_weekly")]
+    pub schedule: String,
+    #[serde(default = "default_max_age_days")]
+    pub max_age_days: u32,
+}
+
+impl Default for ImageCachePruneConfig {
+    fn default() -> Self {
+        Self {
+            schedule: default_maintenance_weekly(),
+            max_age_days: default_max_age_days(),
+        }
+    }
+}
+
 fn default_tasks_enabled() -> bool {
     true
 }
@@ -279,6 +380,21 @@ fn default_library_scan_schedule() -> String {
 }
 fn default_search_reindex_schedule() -> String {
     "daily".to_string()
+}
+fn default_maintenance_daily() -> String {
+    "daily".to_string()
+}
+fn default_maintenance_weekly() -> String {
+    "weekly".to_string()
+}
+fn default_retention_days() -> u32 {
+    90
+}
+fn default_inactive_days() -> u32 {
+    30
+}
+fn default_max_age_days() -> u32 {
+    30
 }
 
 // ── Defaults ─────────────────────────────────────────────────────────
