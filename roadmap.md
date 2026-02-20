@@ -200,7 +200,7 @@ Stubs replaced with real implementations for discovery, navigation, and media ma
 
 ---
 
-## Phase 10 — Operational Features
+## Phase 10 — Operational Features [DONE]
 
 ### 10a. Task Scheduler & Scheduled Scans [DONE]
 
@@ -223,12 +223,12 @@ Generic `ScheduledTask` trait with a single background scheduler loop. Library s
 **Search reindex task [DONE]:**
 - [x] `SearchReindexTask` — registered statically at startup on a named schedule
 
-**Future maintenance tasks (implement when needed):**
-- [ ] Activity log pruning (delete entries older than N days)
-- [ ] Session cleanup (expire stale sessions)
-- [ ] Transcode temp file cleanup (orphaned HLS segments)
-- [ ] Database optimization (ANALYZE)
-- [ ] Image cache pruning (evict stale resized images)
+**Maintenance tasks [DONE]:**
+- [x] Activity log pruning (delete entries older than N days)
+- [x] Session cleanup (expire stale sessions)
+- [x] Transcode temp file cleanup (orphaned HLS segments)
+- [x] Database optimization (ANALYZE)
+- [x] Image cache pruning (evict stale resized images)
 
 ### 10b. Media Update Notifications [DONE]
 
@@ -338,10 +338,10 @@ Dynamic `ItemQuery` builder with composable WHERE clauses and ORDER BY from quer
 - [x] User data filters (is_favorite, is_played) with conditional LEFT JOIN
 - [x] Pipe-delimited parsing for genres/studios/tags/ratings, comma-delimited for types/sort/IDs/years
 
-### 10g. Remote Control
-- [ ] `POST /Sessions/{sessionId}/Playing` — send play command to another session
-- [ ] Pause, seek, stop, next/previous commands
-- [ ] General message commands (display message on client)
+### 10g. Remote Control [DONE]
+- [x] `POST /Sessions/{sessionId}/Playing` — send play command to another session
+- [x] Pause, seek, stop, next/previous commands (`POST /Sessions/{sessionId}/Playing/{command}`)
+- [x] General message commands (`POST /Sessions/{sessionId}/Command`, `/Command/{command}`, `/Message`)
 
 ---
 
@@ -376,7 +376,7 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 
 **Partial (<60%, client-impacting):**
 - [ ] Images (3/30) — only item images; missing user avatars, upload, genre/studio/person images
-- [ ] Sessions (4/16) — missing remote control, message, viewing, now-playing broadcast
+- [ ] Sessions (9/16) — remote control done; missing viewing, now-playing broadcast
 - [ ] Playback/Playstate (4/14) — start/progress/stop/ping covered; missing mark played via API
 - [ ] Users (7/18) — missing password change, new user wizard steps, user image
 - [ ] Subtitles (3/10) — stream works; missing search, upload, delete
@@ -672,7 +672,7 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Auth | ~90% | Forward auth + LDAP + device auth; admin/user audit done; Quick Connect disabled |
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~90% | Movies, TV, music scanning; cron-based scheduled scans with per-library overrides |
-| Sessions | ~75% | Tracking + WebSocket + transcode status; no remote control |
+| Sessions | ~85% | Tracking + WebSocket + transcode status + remote control (play/pause/seek/message via broadcast) |
 | Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~90% | Meilisearch + fallback; full filter engine (genre/year/studio/rating/person/tags); 17 sort options |

@@ -43,10 +43,10 @@ fn user_row_to_dto(row: &users::UserRow, server_id: &str, ldap_enabled: bool) ->
 
 /// Populate the `enabled_folders` field on a user DTO if the user is restricted.
 async fn populate_enabled_folders(pool: &sqlx::PgPool, dto: &mut UserDto) {
-    if !dto.policy.enable_all_folders {
-        if let Ok(ids) = user_library_access::get_enabled_libraries(pool, dto.id).await {
-            dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();
-        }
+    if !dto.policy.enable_all_folders
+        && let Ok(ids) = user_library_access::get_enabled_libraries(pool, dto.id).await
+    {
+        dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();
     }
 }
 

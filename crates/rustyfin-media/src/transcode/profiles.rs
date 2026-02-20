@@ -97,7 +97,7 @@ pub fn decide_play_method(
             let type_ok = dp
                 .profile_type
                 .as_deref()
-                .map_or(true, |t| t.eq_ignore_ascii_case("Video"));
+                .is_none_or(|t| t.eq_ignore_ascii_case("Video"));
             if !type_ok {
                 continue;
             }
@@ -105,7 +105,7 @@ pub fn decide_play_method(
             let container_ok = dp
                 .container
                 .as_deref()
-                .map_or(true, |c| csv_contains(c, &source_container));
+                .is_none_or(|c| csv_contains(c, &source_container));
             if container_ok {
                 container_supported = true;
             }
@@ -113,7 +113,7 @@ pub fn decide_play_method(
             let video_ok = dp
                 .video_codec
                 .as_deref()
-                .map_or(true, |c| csv_contains(c, &source_video_codec));
+                .is_none_or(|c| csv_contains(c, &source_video_codec));
             if video_ok {
                 video_supported = true;
             }
@@ -121,7 +121,7 @@ pub fn decide_play_method(
             let audio_ok = dp
                 .audio_codec
                 .as_deref()
-                .map_or(true, |c| csv_contains(c, &source_audio_codec));
+                .is_none_or(|c| csv_contains(c, &source_audio_codec));
             if audio_ok {
                 audio_supported = true;
             }
@@ -147,11 +147,11 @@ pub fn decide_play_method(
         }
 
         // Check bitrate
-        if let (Some(src_br), Some(max_br)) = (source_bitrate, profile.max_streaming_bitrate) {
-            if src_br > max_br {
-                can_direct_play = false;
-                reasons.push(TranscodeReason::VideoBitrateTooHigh);
-            }
+        if let (Some(src_br), Some(max_br)) = (source_bitrate, profile.max_streaming_bitrate)
+            && src_br > max_br
+        {
+            can_direct_play = false;
+            reasons.push(TranscodeReason::VideoBitrateTooHigh);
         }
 
         if can_direct_play {
@@ -180,7 +180,7 @@ pub fn decide_play_method(
                 .find(|tp| {
                     tp.profile_type
                         .as_deref()
-                        .map_or(true, |t| t.eq_ignore_ascii_case("Video"))
+                        .is_none_or(|t| t.eq_ignore_ascii_case("Video"))
                 })
                 .and_then(|tp| tp.container.clone());
 
@@ -212,7 +212,7 @@ pub fn decide_play_method(
     let transcode_profile = profile.transcoding_profiles.iter().find(|tp| {
         tp.profile_type
             .as_deref()
-            .map_or(true, |t| t.eq_ignore_ascii_case("Video"))
+            .is_none_or(|t| t.eq_ignore_ascii_case("Video"))
     });
 
     let (target_video, target_audio, target_container) = if let Some(tp) = transcode_profile {

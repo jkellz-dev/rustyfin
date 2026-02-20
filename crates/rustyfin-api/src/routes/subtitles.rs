@@ -63,20 +63,20 @@ async fn serve_subtitle(
         .ok_or(ApiError::NotFound)?;
 
     // If external subtitle file, serve directly
-    if sub_stream.is_external {
-        if let Some(ref path) = sub_stream.path {
-            let content = tokio::fs::read_to_string(path)
-                .await
-                .map_err(|_| ApiError::NotFound)?;
+    if sub_stream.is_external
+        && let Some(ref path) = sub_stream.path
+    {
+        let content = tokio::fs::read_to_string(path)
+            .await
+            .map_err(|_| ApiError::NotFound)?;
 
-            let content_type = subtitles::subtitle_content_type(output_format);
-            return Ok(Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, content_type)
-                .header(header::CACHE_CONTROL, "public, max-age=86400")
-                .body(Body::from(content))
-                .unwrap());
-        }
+        let content_type = subtitles::subtitle_content_type(output_format);
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, content_type)
+            .header(header::CACHE_CONTROL, "public, max-age=86400")
+            .body(Body::from(content))
+            .unwrap());
     }
 
     // Embedded subtitle — extract via ffmpeg with caching

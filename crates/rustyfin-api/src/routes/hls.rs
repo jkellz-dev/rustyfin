@@ -16,7 +16,7 @@ use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_media::transcode::{
     hls::{
         generate_audio_master_playlist, generate_master_playlist, rewrite_audio_variant_playlist,
-        rewrite_variant_playlist,
+        rewrite_variant_playlist, MasterPlaylistParams,
     },
     manager::TranscodeRequest,
     params::*,
@@ -88,19 +88,19 @@ pub async fn get_master_playlist(
         extra_qs.push_str(&format!("&StartTimeTicks={ticks}"));
     }
 
-    let playlist = generate_master_playlist(
+    let playlist = generate_master_playlist(&MasterPlaylistParams {
         item_id,
         video_codec,
         audio_codec,
-        params
+        bitrate: params
             .max_streaming_bitrate
             .or(item.total_bitrate.map(|b| b as i64)),
-        video_stream.and_then(|s| s.width),
-        video_stream.and_then(|s| s.height),
+        width: video_stream.and_then(|s| s.width),
+        height: video_stream.and_then(|s| s.height),
         play_session_id,
         media_source_id,
-        &extra_qs,
-    );
+        query_string: &extra_qs,
+    });
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -163,7 +163,7 @@ pub async fn get_variant_playlist(
             segment_duration: tm.segment_duration,
             segment_format,
             start_number: 0,
-            hardware_accel: HardwareAccel::from_str(&tm.hardware_acceleration),
+            hardware_accel: tm.hardware_acceleration.parse().unwrap(),
             threads: tm.threads_per_job,
             audio_only: false,
         };
@@ -516,12 +516,11 @@ async fn wait_and_read_file(path: &std::path::Path, timeout_secs: u64) -> Result
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
-        if path.exists() {
-            if let Ok(content) = tokio::fs::read_to_string(path).await {
-                if !content.is_empty() {
-                    return Ok(content);
-                }
-            }
+        if path.exists()
+            && let Ok(content) = tokio::fs::read_to_string(path).await
+            && !content.is_empty()
+        {
+            return Ok(content);
         }
 
         if tokio::time::Instant::now() >= deadline {
@@ -540,12 +539,11 @@ async fn wait_and_read_file_bytes(
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
-        if path.exists() {
-            if let Ok(content) = tokio::fs::read(path).await {
-                if !content.is_empty() {
-                    return Ok(content);
-                }
-            }
+        if path.exists()
+            && let Ok(content) = tokio::fs::read(path).await
+            && !content.is_empty()
+        {
+            return Ok(content);
         }
 
         if tokio::time::Instant::now() >= deadline {

@@ -11,11 +11,11 @@ pub fn build_ffmpeg_args(params: &StreamParams) -> Vec<String> {
     args.extend(build_hw_accel_input_args(params));
 
     // 3. Seek (before input for fast seek)
-    if let Some(ticks) = params.start_time_ticks {
-        if ticks > 0 {
-            let secs = ticks_to_seconds(ticks);
-            args.extend(["-ss".to_string(), format!("{secs:.3}")]);
-        }
+    if let Some(ticks) = params.start_time_ticks
+        && ticks > 0
+    {
+        let secs = ticks_to_seconds(ticks);
+        args.extend(["-ss".to_string(), format!("{secs:.3}")]);
     }
 
     // 4. Input

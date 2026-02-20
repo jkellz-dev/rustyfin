@@ -76,14 +76,16 @@ pub enum HardwareAccel {
     Nvenc,
 }
 
-impl HardwareAccel {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl std::str::FromStr for HardwareAccel {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "qsv" => Self::Qsv,
             "vaapi" => Self::Vaapi,
             "nvenc" => Self::Nvenc,
             _ => Self::None,
-        }
+        })
     }
 }
 

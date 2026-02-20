@@ -2,28 +2,31 @@ use uuid::Uuid;
 
 use super::params::{AudioCodec, VideoCodec};
 
+/// Parameters for generating an HLS master playlist.
+pub struct MasterPlaylistParams<'a> {
+    pub item_id: Uuid,
+    pub video_codec: VideoCodec,
+    pub audio_codec: AudioCodec,
+    pub bitrate: Option<i64>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub play_session_id: &'a str,
+    pub media_source_id: &'a str,
+    pub query_string: &'a str,
+}
+
 /// Generate an HLS master playlist pointing to our variant playlist endpoint.
-pub fn generate_master_playlist(
-    item_id: Uuid,
-    video_codec: VideoCodec,
-    audio_codec: AudioCodec,
-    bitrate: Option<i64>,
-    width: Option<i32>,
-    height: Option<i32>,
-    play_session_id: &str,
-    media_source_id: &str,
-    query_string: &str,
-) -> String {
+pub fn generate_master_playlist(params: &MasterPlaylistParams<'_>) -> String {
     let mut playlist = String::from("#EXTM3U\n");
 
     // Build codec string
-    let codecs = build_codec_string(video_codec, audio_codec);
+    let codecs = build_codec_string(params.video_codec, params.audio_codec);
 
     // Build STREAM-INF line
-    let bw = bitrate.unwrap_or(8_000_000);
+    let bw = params.bitrate.unwrap_or(8_000_000);
     let mut stream_inf = format!("#EXT-X-STREAM-INF:BANDWIDTH={bw}");
 
-    if let (Some(w), Some(h)) = (width, height) {
+    if let (Some(w), Some(h)) = (params.width, params.height) {
         stream_inf.push_str(&format!(",RESOLUTION={w}x{h}"));
     }
 
@@ -32,6 +35,10 @@ pub fn generate_master_playlist(
     playlist.push('\n');
 
     // Variant playlist URL
+    let item_id = params.item_id;
+    let play_session_id = params.play_session_id;
+    let media_source_id = params.media_source_id;
+    let query_string = params.query_string;
     playlist.push_str(&format!(
         "/Videos/{item_id}/main.m3u8?PlaySessionId={play_session_id}&MediaSourceId={media_source_id}{query_string}\n"
     ));
@@ -147,17 +154,17 @@ mod tests {
 
     #[test]
     fn test_master_playlist_basic() {
-        let playlist = generate_master_playlist(
-            Uuid::nil(),
-            VideoCodec::H264,
-            AudioCodec::AAC,
-            Some(8_000_000),
-            Some(1920),
-            Some(1080),
-            "session1",
-            "source1",
-            "",
-        );
+        let playlist = generate_master_playlist(&MasterPlaylistParams {
+            item_id: Uuid::nil(),
+            video_codec: VideoCodec::H264,
+            audio_codec: AudioCodec::AAC,
+            bitrate: Some(8_000_000),
+            width: Some(1920),
+            height: Some(1080),
+            play_session_id: "session1",
+            media_source_id: "source1",
+            query_string: "",
+        });
 
         assert!(playlist.starts_with("#EXTM3U"));
         assert!(playlist.contains("BANDWIDTH=8000000"));
@@ -171,34 +178,34 @@ mod tests {
 
     #[test]
     fn test_master_playlist_h265() {
-        let playlist = generate_master_playlist(
-            Uuid::nil(),
-            VideoCodec::H265,
-            AudioCodec::AAC,
-            None,
-            None,
-            None,
-            "s1",
-            "m1",
-            "",
-        );
+        let playlist = generate_master_playlist(&MasterPlaylistParams {
+            item_id: Uuid::nil(),
+            video_codec: VideoCodec::H265,
+            audio_codec: AudioCodec::AAC,
+            bitrate: None,
+            width: None,
+            height: None,
+            play_session_id: "s1",
+            media_source_id: "m1",
+            query_string: "",
+        });
 
         assert!(playlist.contains("hvc1.1.6.L120.B0"));
     }
 
     #[test]
     fn test_master_playlist_with_query_string() {
-        let playlist = generate_master_playlist(
-            Uuid::nil(),
-            VideoCodec::H264,
-            AudioCodec::AAC,
-            None,
-            None,
-            None,
-            "s1",
-            "m1",
-            "&SubtitleStreamIndex=2",
-        );
+        let playlist = generate_master_playlist(&MasterPlaylistParams {
+            item_id: Uuid::nil(),
+            video_codec: VideoCodec::H264,
+            audio_codec: AudioCodec::AAC,
+            bitrate: None,
+            width: None,
+            height: None,
+            play_session_id: "s1",
+            media_source_id: "m1",
+            query_string: "&SubtitleStreamIndex=2",
+        });
 
         assert!(playlist.contains("SubtitleStreamIndex=2"));
     }

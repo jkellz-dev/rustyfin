@@ -72,7 +72,7 @@ pub async fn get_next_up(
     }
 
     // Find all series with recent activity
-    let fetch_limit = (start + limit + 10) as i64;
+    let fetch_limit = start + limit + 10;
     let active_series =
         media_items::get_active_series(&state.pool, auth.user_id, query.parent_id, fetch_limit)
             .await

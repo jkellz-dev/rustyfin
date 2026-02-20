@@ -195,7 +195,7 @@ impl TranscodeManager {
             // Build new params with updated start position
             let mut params = job.stream_params_cache.unwrap_or_else(|| {
                 warn!("no cached stream params for restart, cannot seek");
-                return StreamParams {
+                StreamParams {
                     input_path: PathBuf::new(),
                     output_dir: job.output_dir.clone(),
                     start_time_ticks: Some(start_ticks),
@@ -217,7 +217,7 @@ impl TranscodeManager {
                     hardware_accel: super::params::HardwareAccel::None,
                     threads: 0,
                     audio_only: false,
-                };
+                }
             });
             params.start_time_ticks = Some(start_ticks);
             params.start_number = start_number;

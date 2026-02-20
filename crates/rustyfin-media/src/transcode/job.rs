@@ -83,32 +83,32 @@ impl TranscodeJob {
     /// Pause the ffmpeg process (SIGSTOP on Unix).
     #[cfg(unix)]
     pub fn pause(&self) {
-        if let Some(ref process) = self.process {
-            if let Some(pid) = process.id() {
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGSTOP);
-                }
-                info!(
-                    play_session_id = %self.play_session_id,
-                    "paused ffmpeg (SIGSTOP)"
-                );
+        if let Some(ref process) = self.process
+            && let Some(pid) = process.id()
+        {
+            unsafe {
+                libc::kill(pid as i32, libc::SIGSTOP);
             }
+            info!(
+                play_session_id = %self.play_session_id,
+                "paused ffmpeg (SIGSTOP)"
+            );
         }
     }
 
     /// Resume the ffmpeg process (SIGCONT on Unix).
     #[cfg(unix)]
     pub fn resume(&self) {
-        if let Some(ref process) = self.process {
-            if let Some(pid) = process.id() {
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGCONT);
-                }
-                info!(
-                    play_session_id = %self.play_session_id,
-                    "resumed ffmpeg (SIGCONT)"
-                );
+        if let Some(ref process) = self.process
+            && let Some(pid) = process.id()
+        {
+            unsafe {
+                libc::kill(pid as i32, libc::SIGCONT);
             }
+            info!(
+                play_session_id = %self.play_session_id,
+                "resumed ffmpeg (SIGCONT)"
+            );
         }
     }
 
