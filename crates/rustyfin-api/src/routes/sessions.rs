@@ -145,7 +145,7 @@ pub async fn get_sessions(
             now_playing_item,
             play_state,
             transcoding_info,
-            supports_remote_control: false,
+            supports_remote_control: state.session_manager.has_websocket(s.session_id).await,
             server_id: state.server_id.clone(),
         });
     }
