@@ -451,33 +451,33 @@ Endpoints that return hardcoded/empty responses to prevent client 404s. Each wou
 | `GET /System/Configuration/{key}` | `{}` (auth) | Named config section (encoding, networking, etc.) |
 | `POST /System/Configuration/{key}` | 204 no-op (admin) | Update named config section |
 
-**Display Preferences** — returns hardcoded defaults; POST accepted but not persisted.
+**Display Preferences** — hardcoded defaults; needs DB persistence for client parity (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /DisplayPreferences/{id}` | Hardcoded defaults (auth) | Per-client view preferences (sort, layout) |
-| `POST /DisplayPreferences/{id}` | 204 no-op (auth) | Save view preferences |
+| `GET /DisplayPreferences/{id}` | Hardcoded defaults (auth) → **implement persistence** | Per-client view preferences (sort, layout) |
+| `POST /DisplayPreferences/{id}` | 204 no-op (auth) → **implement persistence** | Save view preferences |
 
-**User images** — no user avatar storage; stubs prevent client errors.
+**User images** — config-based avatar URLs instead of storage (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /Users/{userId}/Images/{imageType}` | 404 | Serve user profile image |
-| `GET /Users/{userId}/Images/{imageType}/{idx}` | 404 | Serve indexed user image |
-| `POST /Users/{userId}/Images/{imageType}` | 204 (auth) | Upload user profile image |
-| `DELETE /Users/{userId}/Images/{imageType}` | 204 (auth) | Delete user profile image |
+| `GET /Users/{userId}/Images/{imageType}` | 404 → **redirect to config URL** | Serve user profile image |
+| `GET /Users/{userId}/Images/{imageType}/{idx}` | 404 → **redirect to config URL** | Serve indexed user image |
+| `POST /Users/{userId}/Images/{imageType}` | 204 (auth) — keep as no-op | Upload user profile image |
+| `DELETE /Users/{userId}/Images/{imageType}` | 204 (auth) — keep as no-op | Delete user profile image |
 
-**Entity images** — no image storage for genres/studios/persons/artists; 404 until image serving is extended.
+**Entity images** — needs implementation for client detail pages (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /Genres/{name}/Images/{imageType}[/{idx}]` | 404 | Genre thumbnail/banner |
-| `GET /Studios/{name}/Images/{imageType}[/{idx}]` | 404 | Studio logo |
-| `GET /Persons/{name}/Images/{imageType}[/{idx}]` | 404 | Actor headshot |
-| `GET /Artists/{name}/Images/{imageType}[/{idx}]` | 404 | Artist photo |
-| `GET /MusicGenres/{name}/Images/{imageType}[/{idx}]` | 404 | Music genre artwork |
+| `GET /Genres/{name}/Images/{imageType}[/{idx}]` | 404 → **implement** | Genre thumbnail/banner |
+| `GET /Studios/{name}/Images/{imageType}[/{idx}]` | 404 → **implement** | Studio logo |
+| `GET /Persons/{name}/Images/{imageType}[/{idx}]` | 404 → **implement** | Actor headshot |
+| `GET /Artists/{name}/Images/{imageType}[/{idx}]` | 404 → **implement** | Artist photo |
+| `GET /MusicGenres/{name}/Images/{imageType}[/{idx}]` | 404 → **implement** | Music genre artwork |
 
-**Item image list** — returns `[]` since we serve images by type, not as a list.
+**Item image list** — needs real implementation for client detail pages (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /Items/{itemId}/Images` | `[]` (auth) | List all images for an item (types, tags, dimensions) |
+| `GET /Items/{itemId}/Images` | `[]` (auth) → **implement** | List all images for an item (types, tags, dimensions) |
 
 **Item metadata stubs** — features not implemented.
 | Route | Response | Jellyfin purpose |
@@ -486,28 +486,30 @@ Endpoints that return hardcoded/empty responses to prevent client 404s. Each wou
 | `GET /Items/{itemId}/LocalTrailers` | `[]` (auth) | Local trailer files alongside media |
 | `GET /Items/{itemId}/SpecialFeatures` | `[]` (auth) | Behind-the-scenes, deleted scenes, etc. |
 
-**Years** — returns empty/minimal responses; no year-based browsing implemented.
+**Years** — `GET /Years/{year}` works; `GET /Years` needs real DB query (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /Years` | Empty QueryResult (auth) | Year items for year-based navigation |
-| `GET /Years/{year}` | Minimal BaseItemDto (auth) | Single year item with metadata |
+| `GET /Years` | Empty QueryResult (auth) → **implement** | Year items for year-based navigation |
+| `GET /Years/{year}` | Minimal BaseItemDto (auth) ✅ | Single year item with metadata |
 
-**Music Genres** — minimal stubs; use `/Genres` for real genre browsing.
+**Music Genres** — deprecated in Jellyfin; route to existing `/Genres` handler (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /MusicGenres` | Empty QueryResult (auth) | Music-specific genre list (deprecated in Jellyfin) |
-| `GET /MusicGenres/{genreName}` | Minimal BaseItemDto (auth) | Single music genre item |
+| `GET /MusicGenres` | Empty QueryResult (auth) → **alias to /Genres** | Music-specific genre list (deprecated in Jellyfin) |
+| `GET /MusicGenres/{genreName}` | Minimal BaseItemDto (auth) → **alias to /Genres/{name}** | Single music genre item |
 
-**Scheduled Tasks** — internal scheduler exists but no REST API to manage tasks.
+**Scheduled Tasks** — internal scheduler exists but no REST API; needs real implementation (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /ScheduledTasks` | `[]` (admin) | List scheduled tasks with triggers and state |
-| `GET /ScheduledTasks/{taskId}` | 404 (admin) | Get task details |
+| `GET /ScheduledTasks` | `[]` (admin) → **implement** | List scheduled tasks with triggers and state |
+| `GET /ScheduledTasks/{taskId}` | 404 (admin) → **implement** | Get task details |
+| `POST /ScheduledTasks/Running/{taskId}` | — → **implement** | Manually trigger a task |
+| `DELETE /ScheduledTasks/Running/{taskId}` | — → **implement** | Cancel a running task |
 
-**Time sync** — minimal implementation (returns current time, no NTP-style offset calculation).
+**Time sync** — already sufficient ✅ (Jellyfin itself just captures two `DateTime.UtcNow` values).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /GetUtcTime` | UTC timestamps (no auth) | Client clock sync (request/response times) |
+| `GET /GetUtcTime` | UTC timestamps (no auth) ✅ | Client clock sync (request/response times) |
 
 **Sessions** — viewing stub only; real playback reporting exists elsewhere.
 | Route | Response | Jellyfin purpose |
@@ -531,6 +533,110 @@ Endpoints that return hardcoded/empty responses to prevent client 404s. Each wou
 - [ ] Repository tests: media_items CRUD, user_data operations, library access queries (requires test DB)
 - [ ] DTO serialization tests: verify PascalCase output, optional field omission, edge cases (empty arrays vs null)
 - [ ] Snapshot tests for key API responses (compare against known-good Jellyfin responses)
+
+#### Jellyfin Parity Tests (translated from Jellyfin.Server.Integration.Tests)
+
+Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Reference source: `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/`. Adapt for forward auth (no startup wizard) and Postgres (not SQLite).
+
+**User controller parity** (from `UserControllerTests.cs`, 8 tests):
+- [ ] `GET /Users` — returns seeded users array
+- [ ] `GET /Users/Me` — returns authenticated user's own data
+- [ ] `POST /Users/New` — returns 403 (forward auth; Jellyfin returns 200)
+- [ ] `POST /Users/New` with invalid names (empty, whitespace) — returns 400/403
+- [ ] `DELETE /Users/{nonExistentId}` — returns 404
+- [ ] `POST /Users/{userId}/Password` — returns 204 no-op (forward auth)
+- [ ] `GET /Users/Public` — returns empty array (users hidden by default)
+
+**Items controller parity** (from `ItemsControllerTests.cs`, 3 tests):
+- [ ] `GET /Items` with auth — 200 OK, deserializes to `QueryResult<BaseItemDto>`
+- [ ] `GET /Users/{nonExistentId}/Items` — 404
+- [ ] `GET /Items?userId={id}` and `/Users/{id}/Items` — 200, both return same shape
+
+**User library parity** (from `UserLibraryControllerTests.cs`, 4 tests):
+- [ ] `GET /Users/{nonExistentId}/Items/Root` — 404
+- [ ] `GET /Users/{realId}/Items/Root` — 200, returns root folder DTO
+- [ ] `GET /Users/{realId}/Items/{nonExistentItemId}` — 404
+- [ ] `GET /Items/{itemId}/Intros` — returns empty QueryResult (stub parity)
+
+**Playstate parity** (from `PlaystateControllerTests.cs`, 4 tests):
+- [ ] `DELETE /Users/{nonExistentId}/PlayedItems/{itemId}` — 404
+- [ ] `POST /Users/{nonExistentId}/PlayedItems/{itemId}` — 404
+- [ ] `DELETE /Users/{realId}/PlayedItems/{nonExistentItemId}` — 404
+- [ ] `POST /Users/{realId}/PlayedItems/{nonExistentItemId}` — 404
+
+**Library structure parity** (from `LibraryStructureControllerTests.cs`, 5 tests):
+- [ ] `POST /Library/VirtualFolders?name=test` — creates library, 204 or equivalent
+- [ ] `DELETE /Library/VirtualFolders?name=doesntExist` — 404
+- [ ] `DELETE /Library/VirtualFolders?name=test` — 204
+- [ ] `POST /Library/VirtualFolders/LibraryOptions` with nonexistent ID — 404
+- [ ] `POST /Library/VirtualFolders/LibraryOptions` with real library — 204 round-trip
+
+**Library item routes parity** (from `LibraryControllerTests.cs`, 3 tests):
+- [ ] `GET /Items/{nonExistentId}/ThemeSongs`, `/ThemeVideos`, `/Ancestors`, `/Similar` — 404
+- [ ] `DELETE /Items/{id}` without auth — 401
+- [ ] `DELETE /Items/{id}` with auth, nonexistent — 404
+
+**Media structure parity** (from `MediaStructureControllerTests.cs`, 7 tests):
+- [ ] Rename library with whitespace name → 400
+- [ ] Rename nonexistent library → 404
+- [ ] Add media path that doesn't exist on disk → 404
+- [ ] Update media path with whitespace library name → 400
+- [ ] Remove media path with whitespace name → 400
+- [ ] Remove media path that doesn't exist → 404
+
+**Branding parity** (from `BrandingControllerTests.cs`, 2 tests):
+- [ ] `GET /Branding/Configuration` — 200, JSON shape matches Jellyfin's `BrandingOptions`
+- [ ] `GET /Branding/Css` — 200, `text/css` content type
+
+**Activity log parity** (from `ActivityLogControllerTests.cs`, 1 test):
+- [ ] `GET /System/ActivityLog/Entries` — 200, JSON with Items/TotalRecordCount
+
+**Entity endpoint parity** (from `PersonsControllerTests.cs` + `MusicGenreControllerTests.cs`):
+- [ ] `GET /Persons/DoesntExist` — 404
+- [ ] `GET /MusicGenres/Fake-MusicGenre` — 404
+
+**Auth parity** (from `PluginsControllerTests.cs`):
+- [ ] `GET /Plugins` without auth — 401
+- [ ] `GET /Plugins` with auth — 200, JSON array
+
+**WebSocket parity** (from `WebSocketTests.cs`):
+- [ ] WebSocket connect without auth — rejected
+
+#### Jellyfin Unit Test Ports (translated from domain test projects)
+
+Port the most relevant unit tests from Jellyfin's domain test projects. These test pure logic without HTTP.
+
+**Naming tests** (from `Jellyfin.Naming.Tests`, 123 tests — highest value):
+- [ ] Episode parsing: `S01E01`, `1x01`, `Part 1`, multi-episode, absolute numbering
+- [ ] Movie parsing: year extraction, edition tags, stacking indicators
+- [ ] Season folder parsing: `Season 01`, `Specials`, `S01`, numbered folders
+- [ ] Audio file naming: track number, disc number, artist/album from path
+- [ ] Video file resolution: extras detection (behind-the-scenes, trailers, samples)
+
+**NFO parsing tests** (from `Jellyfin.XbmcMetadata.Tests`, 33 tests):
+- [ ] Movie NFO: title, year, ratings, genres, cast, provider IDs, plot
+- [ ] Series NFO: title, status, premiered, ratings, genres
+- [ ] Episode NFO: title, season/episode numbers, aired date, ratings
+- [ ] Music NFO: artist, album, track metadata
+- [ ] Edge cases: missing fields, malformed XML, empty files
+
+**Auth logic tests** (from `Jellyfin.Api.Tests/Auth/`, 13 tests):
+- [ ] MediaBrowser header parsing: `Client`, `Device`, `DeviceId`, `Version`, `Token` extraction
+- [ ] Quoted values with commas in MediaBrowser header
+- [ ] URL-encoded values in auth header
+- [ ] Admin role assignment vs regular user role
+- [ ] Missing/invalid token → auth failure
+
+**Query param parsing tests** (from model binder tests, 16 tests):
+- [ ] Comma-delimited: `"a,b,c"` → `["a","b","c"]` for types, IDs, sort fields
+- [ ] Pipe-delimited: `"a|b|c"` → `["a","b","c"]` for genres, studios, tags
+- [ ] Empty/null → empty collection
+- [ ] Single value (no delimiter) → single-element collection
+
+**Media encoding tests** (from `Jellyfin.MediaEncoding.Tests`, 22 tests):
+- [ ] HLS segment length calculation from runtime ticks
+- [ ] ffprobe output normalization
+- [ ] Subtitle format detection and conversion rules
 
 #### API Integration Test Infrastructure [DONE]
 `TestApp` harness in `crates/rustyfin-api/tests/common/mod.rs` — per-test random Postgres schema, `tower::ServiceExt::oneshot` dispatch, seed helpers, schema cleanup. 20 integration tests across 4 test files.
@@ -600,6 +706,53 @@ Endpoints that return hardcoded/empty responses to prevent client 404s. Each wou
 - [ ] Optional Meilisearch service container for search tests
 - [ ] Binary build artifacts (Linux x86_64, aarch64)
 - [ ] Container image build (Docker/OCI)
+
+### 11g. Stub-to-Real Implementation (client compatibility)
+
+Stubs re-evaluated for real implementation to support major Jellyfin clients (Web, Infuse, Swiftfin, JMP).
+
+**MusicGenres → Genres alias:**
+- [ ] Route `GET /MusicGenres` to existing `get_genres` handler (same contract, deprecated in Jellyfin)
+- [ ] Route `GET /MusicGenres/{genreName}` to existing `get_genre_by_name` handler
+
+**Years — real year-based browsing:**
+- [ ] `GET /Years` — query `distinct_years` from DB, return `QueryResult<BaseItemDto>` with one item per year
+- [ ] Wire year items into client navigation (year filter in `/Items` already works)
+
+**Entity images (genres, studios, persons, artists):**
+- [ ] Design: extend `images` table with entity FKs, or use deterministic UUIDs to map entity names → virtual item IDs
+- [ ] `GET /Genres/{name}/Images/{imageType}` — look up genre by name, serve associated image
+- [ ] `GET /Studios/{name}/Images/{imageType}` — same for studios
+- [ ] `GET /Persons/{name}/Images/{imageType}` — same for persons (headshots from TMDB/NFO)
+- [ ] `GET /Artists/{name}/Images/{imageType}` — same for artists (sidecar artist.jpg)
+- [ ] `GET /MusicGenres/{name}/Images/{imageType}` — alias to genres
+
+**Item images list:**
+- [ ] `GET /Items/{itemId}/Images` — return real `ImageInfo` DTOs (type, index, tag, blurhash, dimensions)
+
+**Display Preferences persistence:**
+- [ ] DB table for display preferences (user_id, client, sort_by, sort_order, view_type, etc.)
+- [ ] `POST /DisplayPreferences/{id}` — persist to DB instead of no-op
+- [ ] `GET /DisplayPreferences/{id}` — return saved preferences, fall back to defaults
+
+**Scheduled Tasks REST API + admin view:**
+- [ ] `task_results` DB table (task_key, started_at, ended_at, status, error_message)
+- [ ] Record task results when scheduler runs each task
+- [ ] `GET /ScheduledTasks` — list all registered tasks with state, last result, triggers
+- [ ] `GET /ScheduledTasks/{taskId}` — single task detail
+- [ ] `POST /ScheduledTasks/Running/{taskId}` — manually trigger a task
+- [ ] `DELETE /ScheduledTasks/Running/{taskId}` — cancel a running task (if supported)
+- [ ] Sycamore admin page: scheduled tasks view (table of tasks, status, last run, next run)
+- [ ] Sycamore admin page: task run history with log cleanup integration
+- [ ] Activity log pruning task cleans up old `task_results` rows
+
+**User images (config-based):**
+- [ ] Config option `user_image_url_template` in `rustyfin.toml` (e.g., Gravatar URL template)
+- [ ] `GET /Users/{userId}/Images/{imageType}` — redirect to configured avatar URL or return 404
+- [ ] Populate `PrimaryImageTag` in UserDto when avatar URL is configured
+
+**Shows/Upcoming:**
+- [ ] `GET /Shows/Upcoming` — query episodes by air date (requires `premiered` field in DB)
 
 ---
 
