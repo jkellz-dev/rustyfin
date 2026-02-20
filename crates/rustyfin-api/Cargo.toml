@@ -26,3 +26,9 @@ tracing.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
 rand.workspace = true
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+tokio = { workspace = true, features = ["full", "test-util"] }
+serde_json = { workspace = true }
+uuid = { workspace = true }
