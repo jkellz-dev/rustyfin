@@ -222,6 +222,27 @@ pub fn build_router(state: AppState) -> Router {
             post(playback::report_playback_stopped),
         )
         .route("/Sessions/Playing/Ping", post(playback::playback_ping))
+        // ── Remote control ───────────────────────────────────────
+        .route(
+            "/Sessions/{sessionId}/Playing",
+            post(remote_control::send_play_command),
+        )
+        .route(
+            "/Sessions/{sessionId}/Playing/{command}",
+            post(remote_control::send_playstate_command),
+        )
+        .route(
+            "/Sessions/{sessionId}/Command/{command}",
+            post(remote_control::send_general_command),
+        )
+        .route(
+            "/Sessions/{sessionId}/Command",
+            post(remote_control::send_full_general_command),
+        )
+        .route(
+            "/Sessions/{sessionId}/Message",
+            post(remote_control::send_message_command),
+        )
         // ── User data (favorites, played) ───────────────────────
         .route(
             "/UserFavoriteItems/{itemId}",
