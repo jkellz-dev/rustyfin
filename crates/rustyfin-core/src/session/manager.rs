@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use rustyfin_models::dto::DeviceProfile;
+use rustyfin_models::dto::{DeviceProfile, SessionCommand};
 use sqlx::PgPool;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 /// Tracks active session state and playback in memory.
 pub struct SessionManager {
     pool: PgPool,
     sessions: RwLock<HashMap<Uuid, TrackedSession>>,
+    channels: RwLock<HashMap<Uuid, broadcast::Sender<SessionCommand>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +58,7 @@ impl SessionManager {
         Self {
             pool,
             sessions: RwLock::new(HashMap::new()),
+            channels: RwLock::new(HashMap::new()),
         }
     }
 
@@ -205,8 +207,8 @@ impl SessionManager {
 
     /// Remove a session from tracking.
     pub async fn remove_session(&self, session_id: Uuid) {
-        let mut sessions = self.sessions.write().await;
-        sessions.remove(&session_id);
+        self.sessions.write().await.remove(&session_id);
+        self.channels.write().await.remove(&session_id);
     }
 
     /// Store client capabilities on a session.
@@ -225,5 +227,39 @@ impl SessionManager {
             .get(&session_id)
             .and_then(|s| s.capabilities.as_ref())
             .and_then(|c| c.device_profile.clone())
+    }
+
+    /// Subscribe to commands for a session. Creates the channel if needed.
+    pub async fn subscribe(&self, session_id: Uuid) -> broadcast::Receiver<SessionCommand> {
+        let mut channels = self.channels.write().await;
+        let sender = channels
+            .entry(session_id)
+            .or_insert_with(|| broadcast::channel(16).0);
+        sender.subscribe()
+    }
+
+    /// Send a command to a session. Returns error if no receivers are listening.
+    pub async fn send_command(
+        &self,
+        session_id: Uuid,
+        cmd: SessionCommand,
+    ) -> Result<(), anyhow::Error> {
+        let channels = self.channels.read().await;
+        if let Some(sender) = channels.get(&session_id) {
+            sender
+                .send(cmd)
+                .map_err(|_| anyhow::anyhow!("No active WebSocket for session {session_id}"))?;
+            Ok(())
+        } else {
+            anyhow::bail!("Session {session_id} has no command channel")
+        }
+    }
+
+    /// Check if a session has an active WebSocket subscriber.
+    pub async fn has_websocket(&self, session_id: Uuid) -> bool {
+        let channels = self.channels.read().await;
+        channels
+            .get(&session_id)
+            .is_some_and(|s| s.receiver_count() > 0)
     }
 }
