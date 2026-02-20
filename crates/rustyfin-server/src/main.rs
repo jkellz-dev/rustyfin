@@ -93,6 +93,20 @@ async fn main() -> anyhow::Result<()> {
     // Initialize scan in-flight tracking (shared between scheduler and manual scans)
     let scan_in_flight = Arc::new(RwLock::new(HashSet::<uuid::Uuid>::new()));
 
+    // Image cache directory (computed early so maintenance tasks can reference it)
+    let image_cache_dir = std::path::PathBuf::from(
+        std::env::var("RUSTYFIN_IMAGE_CACHE_DIR").unwrap_or_else(|_| {
+            std::env::temp_dir()
+                .join("rustyfin-image-cache")
+                .to_string_lossy()
+                .into_owned()
+        }),
+    );
+    if !image_cache_dir.exists() {
+        std::fs::create_dir_all(&image_cache_dir)?;
+    }
+    tracing::info!("Image cache directory: {}", image_cache_dir.display());
+
     // Initialize task scheduler
     if config.tasks.enabled {
         let raw_schedules: std::collections::HashMap<String, (String, Option<u64>)> = config
@@ -129,6 +143,54 @@ async fn main() -> anyhow::Result<()> {
             .register(
                 config.tasks.search_reindex.schedule.clone(),
                 Arc::new(SearchReindexTask::new(search_service.clone())),
+            )
+            .await;
+
+        // Register maintenance tasks
+        task_scheduler
+            .register(
+                config.tasks.activity_log_prune.schedule.clone(),
+                Arc::new(rustyfin_core::ActivityLogPruneTask::new(
+                    db_pool.clone(),
+                    config.tasks.activity_log_prune.retention_days,
+                )),
+            )
+            .await;
+
+        task_scheduler
+            .register(
+                config.tasks.session_cleanup.schedule.clone(),
+                Arc::new(rustyfin_core::SessionCleanupTask::new(
+                    db_pool.clone(),
+                    session_manager.clone(),
+                    config.tasks.session_cleanup.inactive_days,
+                )),
+            )
+            .await;
+
+        task_scheduler
+            .register(
+                config.tasks.transcode_temp_cleanup.schedule.clone(),
+                Arc::new(rustyfin_core::TranscodeTempCleanupTask::new(
+                    transcode_manager.clone(),
+                )),
+            )
+            .await;
+
+        task_scheduler
+            .register(
+                config.tasks.db_optimize.schedule.clone(),
+                Arc::new(rustyfin_core::DatabaseOptimizeTask::new(db_pool.clone())),
+            )
+            .await;
+
+        task_scheduler
+            .register(
+                config.tasks.image_cache_prune.schedule.clone(),
+                Arc::new(rustyfin_core::ImageCachePruneTask::new(
+                    image_cache_dir.clone(),
+                    config.tasks.image_cache_prune.max_age_days,
+                )),
             )
             .await;
 
@@ -185,20 +247,6 @@ async fn main() -> anyhow::Result<()> {
         forward_auth_config.is_some(),
         ldap_config.is_some()
     );
-
-    // Image cache directory
-    let image_cache_dir = std::path::PathBuf::from(
-        std::env::var("RUSTYFIN_IMAGE_CACHE_DIR").unwrap_or_else(|_| {
-            std::env::temp_dir()
-                .join("rustyfin-image-cache")
-                .to_string_lossy()
-                .into_owned()
-        }),
-    );
-    if !image_cache_dir.exists() {
-        std::fs::create_dir_all(&image_cache_dir)?;
-    }
-    tracing::info!("Image cache directory: {}", image_cache_dir.display());
 
     // Build scan schedules JSON for the /Library/Schedules endpoint
     let scan_schedules = {
