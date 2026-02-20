@@ -25,6 +25,7 @@ pub struct TestApp {
     pub router: Router,
     pub pool: PgPool,
     pub schema: String,
+    pub session_manager: Arc<SessionManager>,
 }
 
 impl TestApp {
@@ -95,7 +96,7 @@ impl TestApp {
             base_url: "http://localhost:8096".to_string(),
             port: 8096,
             tmdb_api_key: None,
-            session_manager,
+            session_manager: session_manager.clone(),
             search_service,
             forward_auth_config: None,
             ldap_config: None,
@@ -111,6 +112,7 @@ impl TestApp {
             router,
             pool,
             schema,
+            session_manager,
         }
     }
 
@@ -128,17 +130,31 @@ impl TestApp {
             .expect("failed to update user policy");
 
         let token = format!("test-token-{}", Uuid::new_v4().simple());
-        sessions::create(
+        let device_id = format!("test-device-{}", Uuid::new_v4().simple());
+        let session = sessions::create(
             &self.pool,
             &token,
             user.id,
-            "test-device-id",
+            &device_id,
             "Test Device",
             "TestApp",
             Some("1.0.0"),
         )
         .await
         .expect("failed to create test session");
+
+        // Also register in the in-memory SessionManager so GET /Sessions can see it.
+        self.session_manager
+            .register_session(
+                session.id,
+                user.id,
+                name,
+                &device_id,
+                "Test Device",
+                "TestApp",
+                Some("1.0.0"),
+            )
+            .await;
 
         (user.id, token)
     }
