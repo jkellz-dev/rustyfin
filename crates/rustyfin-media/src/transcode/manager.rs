@@ -371,6 +371,11 @@ impl TranscodeManager {
         }
     }
 
+    /// Get the set of active job play-session IDs (for temp cleanup).
+    pub async fn active_job_ids(&self) -> std::collections::HashSet<String> {
+        self.jobs.read().await.keys().cloned().collect()
+    }
+
     /// Number of currently active transcode jobs.
     pub async fn active_job_count(&self) -> usize {
         self.jobs.read().await.len()

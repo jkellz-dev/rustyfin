@@ -90,6 +90,18 @@ pub async fn list_paginated(
     q.fetch_all(pool).await
 }
 
+/// Delete activity log entries older than the given number of days.
+/// Returns the number of rows deleted.
+pub async fn delete_older_than(pool: &PgPool, days: u32) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        "DELETE FROM activity_log WHERE created_at < NOW() - make_interval(days => $1)",
+    )
+    .bind(days as i32)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 /// Count activity log entries with optional filtering.
 pub async fn count(
     pool: &PgPool,

@@ -91,6 +91,21 @@ pub async fn list_active(pool: &PgPool) -> Result<Vec<SessionRow>, sqlx::Error> 
     .await
 }
 
+/// Deactivate sessions that have been inactive for longer than the given number of days.
+/// Returns the IDs of the deactivated sessions.
+pub async fn deactivate_stale(pool: &PgPool, inactive_days: u32) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (Uuid,)>(
+        "UPDATE sessions SET is_active = false \
+         WHERE is_active = true \
+         AND last_activity < NOW() - make_interval(days => $1) \
+         RETURNING id",
+    )
+    .bind(inactive_days as i32)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
 /// Deactivate a session by token.
 pub async fn deactivate_by_token(pool: &PgPool, token: &str) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE sessions SET is_active = false WHERE access_token = $1")
