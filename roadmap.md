@@ -492,11 +492,11 @@ Endpoints that return hardcoded/empty responses to prevent client 404s. Each wou
 | `GET /Years` | Empty QueryResult (auth) → **implement** | Year items for year-based navigation |
 | `GET /Years/{year}` | Minimal BaseItemDto (auth) ✅ | Single year item with metadata |
 
-**Music Genres** — deprecated in Jellyfin; route to existing `/Genres` handler (→ Phase 11g).
+**Music Genres** — deprecated in Jellyfin; needs music-only genre filter (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
 |-------|----------|------------------|
-| `GET /MusicGenres` | Empty QueryResult (auth) → **alias to /Genres** | Music-specific genre list (deprecated in Jellyfin) |
-| `GET /MusicGenres/{genreName}` | Minimal BaseItemDto (auth) → **alias to /Genres/{name}** | Single music genre item |
+| `GET /MusicGenres` | Empty QueryResult (auth) → **implement (music-only genres)** | Music-specific genre list (deprecated in Jellyfin) |
+| `GET /MusicGenres/{genreName}` | Minimal BaseItemDto (auth) → **implement** | Single music genre item |
 
 **Scheduled Tasks** — internal scheduler exists but no REST API; needs real implementation (→ Phase 11g).
 | Route | Response | Jellyfin purpose |
@@ -711,9 +711,10 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 
 Stubs re-evaluated for real implementation to support major Jellyfin clients (Web, Infuse, Swiftfin, JMP).
 
-**MusicGenres → Genres alias:**
-- [ ] Route `GET /MusicGenres` to existing `get_genres` handler (same contract, deprecated in Jellyfin)
-- [ ] Route `GET /MusicGenres/{genreName}` to existing `get_genre_by_name` handler
+**MusicGenres — music-only genre filter:**
+- [ ] Add `distinct_genres_by_item_types(pool, parent_id, &["Audio", "MusicAlbum"])` to `media_items.rs` — filters `WHERE item_type = ANY($1)` before unnesting genres
+- [ ] `GET /MusicGenres` handler — calls the filtered query, returns `QueryResult<BaseItemDto>` with `item_type: "MusicGenre"`
+- [ ] `GET /MusicGenres/{genreName}` — return `BaseItemDto` with `item_type: "MusicGenre"` and music-scoped child counts
 
 **Years — real year-based browsing:**
 - [ ] `GET /Years` — query `distinct_years` from DB, return `QueryResult<BaseItemDto>` with one item per year
