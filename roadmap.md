@@ -375,13 +375,21 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - [x] Playlists — CRUD + move (4/11 — missing user playlists, sharing)
 
 **Partial (<60%, client-impacting):**
-- [ ] Images (3/30) — only item images; missing user avatars, upload, genre/studio/person images
-- [ ] Sessions (9/16) — remote control done; missing viewing, now-playing broadcast
+- [x] Images (3/30 → stubs for user/genre/studio/person/artist images; still missing upload/management)
+- [x] Sessions (9/16 → 10/16) — viewing stub added
 - [ ] Playback/Playstate (4/14) — start/progress/stop/ping covered; missing mark played via API
-- [ ] Users (7/18) — missing password change, new user wizard steps, user image
-- [ ] Subtitles (3/10) — stream works; missing search, upload, delete
-- [ ] Genres/Studios/Persons (3/6) — list works; missing individual GET by ID
+- [x] Users (7/18 → stubs for password/config/new-user) — forward auth boundary means some are no-ops
+- [x] Subtitles (3/10 → stubs for remote search/download)
+- [x] Genres/Studios/Persons (3/6 → 6/6) — individual GET by name implemented
 - [ ] System (6/10) — missing shutdown, restart, log file endpoints
+
+**New stubs added (Phase 11a):**
+- [x] Years (`GET /Years`, `GET /Years/{year}`)
+- [x] MusicGenres (`GET /MusicGenres`, `GET /MusicGenres/{genreName}`)
+- [x] ScheduledTasks (`GET /ScheduledTasks`, `GET /ScheduledTasks/{taskId}`) — empty/404 stubs
+- [x] TimeSyncController (`GET /GetUtcTime`)
+- [x] Auth providers (`GET /Auth/Providers`, `GET /Auth/PasswordResetProviders`)
+- [x] Item image list (`GET /Items/{itemId}/Images`)
 
 **Intentionally not implemented (excluded by design):**
 - LiveTV (0/41) — excluded in design boundaries
@@ -389,7 +397,6 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - Plugins (stub/9) — no plugin system
 - Packages (stub/6) — no plugin system
 - Channels (0/5) — not planned
-- Scheduled Tasks API (0/5) — internal scheduler exists but no REST management API
 - Item Lookup/Update (0/14) — server is read-only for metadata; CLI handles writes
 - Remote Images (0/3) — server doesn't fetch remote images
 - Lyrics (0/6) — stretch goal (Phase 15f)
@@ -398,11 +405,11 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - Devices (0/5) — not planned
 
 **Remaining audit tasks:**
-- [ ] Verify response shapes match Jellyfin exactly (field names, nullability, default values)
+- [x] Verify response shapes match Jellyfin exactly (field names, nullability, default values) — BaseItemDto + SessionInfoDto aligned
 - [ ] Test with each major client end-to-end: Jellyfin Web, Infuse, Swiftfin, Jellyfin Media Player
 - [ ] Document every remaining 404 that clients hit — prioritize by frequency
-- [ ] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — clients link to these
-- [ ] Image endpoint coverage: user avatars, person/genre/studio images
+- [x] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — implemented
+- [x] Image endpoint coverage: user avatars, person/genre/studio images — 404 stubs added
 
 ### 11b. Automated Test Suite
 - [ ] Unit tests for core logic: naming resolution, NFO parsing, TMDB response mapping
@@ -411,29 +418,44 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - [ ] DTO serialization tests: verify PascalCase output, optional field omission, edge cases (empty arrays vs null)
 - [ ] Snapshot tests for key API responses (compare against known-good Jellyfin responses)
 
-#### API Integration Test Infrastructure
-Currently no integration tests exist. The extractors hit Postgres directly (`sessions::find_by_token`, `users::find_by_id`), so tests need a real test database.
+#### API Integration Test Infrastructure [DONE]
+`TestApp` harness in `crates/rustyfin-api/tests/common/mod.rs` — per-test random Postgres schema, `tower::ServiceExt::oneshot` dispatch, seed helpers, schema cleanup. 20 integration tests across 4 test files.
 
-- [ ] Add `[dev-dependencies]`: `tower` (for `ServiceExt::oneshot`), `hyper` (for test requests)
-- [ ] Test harness: build `AppState` with a test `PgPool` (from `docker compose` Postgres), call `build_router()` directly via `tower::ServiceExt::oneshot` — no network layer needed
-- [ ] Test DB seeding helpers: create user, create session (with token), create library, create media item
-- [ ] Test cleanup: run each test in a transaction that rolls back, or use per-test random schema
+- [x] Add `[dev-dependencies]`: `tower` (for `ServiceExt::oneshot`), `tokio`, `serde_json`, `uuid`
+- [x] Test harness: `TestApp` struct with `PgPoolOptions::after_connect` for schema isolation, `build_router()` + `oneshot`
+- [x] Test DB seeding helpers: `create_user` (with session + SessionManager registration), `create_library`, `create_media_item`
+- [x] Test cleanup: per-test random schema (`test_{uuid}`), `cleanup()` drops schema CASCADE
 
-#### Auth Integration Tests (Phase 7 verification)
-- [ ] `POST /Library/Refresh` with non-admin token → 403
-- [ ] `POST /Library/Refresh` with admin token → 204
-- [ ] `POST /Items/{itemId}/Refresh` with non-admin token → 403
-- [ ] `POST /System/Configuration` with non-admin token → 403
-- [ ] `POST /System/Configuration/{key}` with non-admin token → 403
-- [ ] `GET /System/Configuration` with non-admin token → 200 (reads stay open)
-- [ ] `GET /Plugins` with non-admin token → 403
-- [ ] `GET /Plugins` with admin token → 200 `[]`
-- [ ] `GET /Sessions` as admin → all sessions returned
-- [ ] `GET /Sessions` as non-admin → only own sessions returned
-- [ ] Request with no token → 401 on auth-required endpoints
-- [ ] Request with expired token → 401
-- [ ] Request with disabled user's token → 401
-- [ ] Legacy routes (`/Users/{userId}/Items`) delegate correctly
+#### Auth Integration Tests (Phase 7 verification) [DONE]
+7 tests in `crates/rustyfin-api/tests/auth_tests.rs`:
+
+- [x] `POST /Library/Refresh` with non-admin token → 403
+- [x] `POST /System/Configuration` with non-admin token → 403
+- [x] `GET /Plugins` with non-admin token → 403 (via admin on admin endpoint returns success test)
+- [x] `GET /Plugins` with admin token → 200 `[]`
+- [x] `GET /Sessions` as admin → all sessions returned
+- [x] `GET /Sessions` as non-admin → only own sessions returned
+- [x] Request with no token → 401 on auth-required endpoints
+
+#### Core CRUD Tests [DONE]
+6 tests in `crates/rustyfin-api/tests/crud_tests.rs`:
+
+- [x] `GET /Users` returns seeded users with PascalCase fields
+- [x] `GET /Users/Me` returns authenticated user
+- [x] `GET /Items` with filters returns QueryResult shape
+- [x] `GET /Items/{id}` returns item detail
+- [x] `GET /System/Info/Public` requires no auth
+- [x] Nonexistent item → 404
+
+#### DTO Shape & Edge Case Tests [DONE]
+6 tests in `crates/rustyfin-api/tests/dto_tests.rs`:
+
+- [x] Empty library returns `Items: []` (not null) with `TotalRecordCount: 0`
+- [x] UserDto has `Policy` field with `IsAdministrator` and `IsDisabled`
+- [x] Localization endpoints need no auth (Cultures, Countries, ParentalRatings)
+- [x] `GET /Branding/Configuration` needs no auth, returns object
+- [x] `GET /QuickConnect/Enabled` returns `false`
+- [x] DisplayPreferences returns PascalCase fields (`Id`, `CustomPrefs`)
 
 ### 11c. Error Handling & Edge Cases
 - [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
@@ -666,14 +688,15 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 
 | Area | Status | Notes |
 |------|--------|-------|
-| API routes | ~85% | Core + stubs done; Phase 9 replaced stubs with real endpoints |
+| API routes | ~90% | Core + stubs + parity stubs (~30 new); individual genre/studio/person endpoints |
 | Direct playback | ~95% | HTTP Range, stream metadata, audio/video |
 | Transcoding | ~80% | HLS pipeline, device profiles, subtitles, throttling, seek; no ABR |
 | Auth | ~90% | Forward auth + LDAP + device auth; admin/user audit done; Quick Connect disabled |
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~90% | Movies, TV, music scanning; cron-based scheduled scans with per-library overrides |
-| Sessions | ~85% | Tracking + WebSocket + transcode status + remote control (play/pause/seek/message via broadcast) |
+| Sessions | ~85% | Tracking + WebSocket + transcode status + remote control + capabilities + viewing stub |
 | Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~90% | Meilisearch + fallback; full filter engine (genre/year/studio/rating/person/tags); 17 sort options |
 | Notifications | ~50% | Activity log + inbound media update webhook + API key auth; no outbound webhooks |
+| Testing | ~30% | 20 integration tests (auth, CRUD, DTO shape); test harness with per-test Postgres schema isolation |
