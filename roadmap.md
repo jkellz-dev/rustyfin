@@ -411,6 +411,120 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - [x] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — implemented
 - [x] Image endpoint coverage: user avatars, person/genre/studio images — 404 stubs added
 
+#### Stub Endpoint Inventory
+
+Endpoints that return hardcoded/empty responses to prevent client 404s. Each would need a real implementation for full Jellyfin parity.
+
+**Plugins / Packages / Repositories** — no plugin system exists, so these always return `[]`.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Plugins` | `[]` (admin) | List installed plugins |
+| `GET /Packages` | `[]` (admin) | List available plugin packages from repository |
+| `GET /Repositories` | `[]` (admin) | List plugin repository URLs |
+
+**Quick Connect** — permanently disabled; forward auth replaces this flow.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /QuickConnect/Enabled` | `false` | Check if Quick Connect is available |
+| `POST /QuickConnect/Initiate` | 401 | Generate a Quick Connect code |
+| `GET /QuickConnect/Connect` | 401 | Poll for code authorization |
+| `POST /QuickConnect/Authorize` | 401 | Authorize a pending Quick Connect code |
+
+**User management** — forward auth manages users externally; these are no-ops.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `POST /Users/New` | 403 (admin) | Create a new user (N/A: users created on first forward auth login) |
+| `POST /Users/{userId}/Password` | 204 (auth) | Change user password (N/A: no local passwords) |
+| `POST /Users/{userId}/Configuration` | 204 (auth) | Update user preferences (e.g. subtitle mode, audio language) |
+
+**Auth providers** — forward auth is the only provider; clients expect these for setup wizard.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Auth/Providers` | `[]` (admin) | List authentication providers (LDAP, local, etc.) |
+| `GET /Auth/PasswordResetProviders` | `[]` (admin) | List password reset providers |
+
+**Configuration** — file-based config (`rustyfin.toml`); server never writes config.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /System/Configuration` | Hardcoded defaults (auth) | Server configuration object |
+| `POST /System/Configuration` | 204 no-op (admin) | Update server configuration |
+| `GET /System/Configuration/{key}` | `{}` (auth) | Named config section (encoding, networking, etc.) |
+| `POST /System/Configuration/{key}` | 204 no-op (admin) | Update named config section |
+
+**Display Preferences** — returns hardcoded defaults; POST accepted but not persisted.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /DisplayPreferences/{id}` | Hardcoded defaults (auth) | Per-client view preferences (sort, layout) |
+| `POST /DisplayPreferences/{id}` | 204 no-op (auth) | Save view preferences |
+
+**User images** — no user avatar storage; stubs prevent client errors.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Users/{userId}/Images/{imageType}` | 404 | Serve user profile image |
+| `GET /Users/{userId}/Images/{imageType}/{idx}` | 404 | Serve indexed user image |
+| `POST /Users/{userId}/Images/{imageType}` | 204 (auth) | Upload user profile image |
+| `DELETE /Users/{userId}/Images/{imageType}` | 204 (auth) | Delete user profile image |
+
+**Entity images** — no image storage for genres/studios/persons/artists; 404 until image serving is extended.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Genres/{name}/Images/{imageType}[/{idx}]` | 404 | Genre thumbnail/banner |
+| `GET /Studios/{name}/Images/{imageType}[/{idx}]` | 404 | Studio logo |
+| `GET /Persons/{name}/Images/{imageType}[/{idx}]` | 404 | Actor headshot |
+| `GET /Artists/{name}/Images/{imageType}[/{idx}]` | 404 | Artist photo |
+| `GET /MusicGenres/{name}/Images/{imageType}[/{idx}]` | 404 | Music genre artwork |
+
+**Item image list** — returns `[]` since we serve images by type, not as a list.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Items/{itemId}/Images` | `[]` (auth) | List all images for an item (types, tags, dimensions) |
+
+**Item metadata stubs** — features not implemented.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Items/{itemId}/Intros` | Empty QueryResult (auth) | Pre-roll intro clips before playback |
+| `GET /Items/{itemId}/LocalTrailers` | `[]` (auth) | Local trailer files alongside media |
+| `GET /Items/{itemId}/SpecialFeatures` | `[]` (auth) | Behind-the-scenes, deleted scenes, etc. |
+
+**Years** — returns empty/minimal responses; no year-based browsing implemented.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Years` | Empty QueryResult (auth) | Year items for year-based navigation |
+| `GET /Years/{year}` | Minimal BaseItemDto (auth) | Single year item with metadata |
+
+**Music Genres** — minimal stubs; use `/Genres` for real genre browsing.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /MusicGenres` | Empty QueryResult (auth) | Music-specific genre list (deprecated in Jellyfin) |
+| `GET /MusicGenres/{genreName}` | Minimal BaseItemDto (auth) | Single music genre item |
+
+**Scheduled Tasks** — internal scheduler exists but no REST API to manage tasks.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /ScheduledTasks` | `[]` (admin) | List scheduled tasks with triggers and state |
+| `GET /ScheduledTasks/{taskId}` | 404 (admin) | Get task details |
+
+**Time sync** — minimal implementation (returns current time, no NTP-style offset calculation).
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /GetUtcTime` | UTC timestamps (no auth) | Client clock sync (request/response times) |
+
+**Sessions** — viewing stub only; real playback reporting exists elsewhere.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `POST /Sessions/Viewing` | 204 (auth) | Report that client is browsing a specific item |
+
+**Subtitle remote search** — no external subtitle provider integration.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Items/{itemId}/RemoteSearch/Subtitles/{lang}` | `[]` (admin) | Search OpenSubtitles/etc. for subtitles |
+| `POST /Items/{itemId}/RemoteSearch/Subtitles/{id}` | 204 (admin) | Download a remote subtitle file |
+
+**Shows** — `NextUp` is real; `Upcoming` is a stub.
+| Route | Response | Jellyfin purpose |
+|-------|----------|------------------|
+| `GET /Shows/Upcoming` | Empty QueryResult (auth) | Upcoming episodes by air date |
+
 ### 11b. Automated Test Suite
 - [ ] Unit tests for core logic: naming resolution, NFO parsing, TMDB response mapping
 - [ ] Unit tests for auth: MediaBrowser header parsing, token extraction, admin vs user enforcement
