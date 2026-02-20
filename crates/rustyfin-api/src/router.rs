@@ -330,8 +330,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Artists", get(artists::get_artists))
         .route("/Artists/AlbumArtists", get(artists::get_album_artists))
         .route("/Genres", get(genres::get_genres))
+        .route("/Genres/{genreName}", get(genres::get_genre))
         .route("/Studios", get(studios::get_studios))
+        .route("/Studios/{name}", get(studios::get_studio))
         .route("/Persons", get(persons::get_persons))
+        .route("/Persons/{name}", get(persons::get_person))
         .route(
             "/Users/{userId}/Suggestions",
             get(suggestions::get_suggestions),

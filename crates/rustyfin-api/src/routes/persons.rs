@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -101,4 +101,25 @@ pub async fn get_persons(
     let mut result = QueryResult::new(dtos, total);
     result.start_index = offset as i32;
     Ok(Json(result))
+}
+
+/// `GET /Persons/{name}` — Get a specific person by name.
+pub async fn get_person(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path(person_name): Path<String>,
+) -> Result<Json<BaseItemDto>, ApiError> {
+    let person = people::find_by_name(&state.pool, &person_name)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    Ok(Json(BaseItemDto {
+        id: person.id,
+        name: person.name,
+        server_id: state.server_id.clone(),
+        item_type: "Person".to_string(),
+        overview: person.overview,
+        ..Default::default()
+    }))
 }

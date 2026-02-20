@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -86,4 +86,44 @@ pub async fn get_genres(
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
+}
+
+/// `GET /Genres/{genreName}` — Get a specific genre by name.
+pub async fn get_genre(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path(genre_name): Path<String>,
+) -> Result<Json<BaseItemDto>, ApiError> {
+    let counts = media_items::count_items_with_genre(&state.pool, &genre_name, None)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let total_children: i32 = counts.iter().map(|(_, c)| *c as i32).sum();
+
+    if total_children == 0 {
+        return Err(ApiError::NotFound);
+    }
+
+    let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes());
+    let mut dto = BaseItemDto {
+        id,
+        name: genre_name,
+        server_id: state.server_id.clone(),
+        item_type: "Genre".to_string(),
+        child_count: Some(total_children),
+        ..Default::default()
+    };
+
+    for (item_type, cnt) in &counts {
+        let c = *cnt as i32;
+        match item_type.as_str() {
+            "Movie" => dto.movie_count = Some(c),
+            "Series" => dto.series_count = Some(c),
+            "Episode" => dto.episode_count = Some(c),
+            "Audio" => dto.song_count = Some(c),
+            _ => {}
+        }
+    }
+
+    Ok(Json(dto))
 }
