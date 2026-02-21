@@ -45,6 +45,8 @@ pub struct NfoPerson {
     pub person_type: String,
     pub role: Option<String>,
     pub sort_order: Option<i32>,
+    pub image_url: Option<String>,
+    pub provider_person_id: Option<String>,
 }
 
 /// Track entry within an album NFO (Rustyfin extension — ignored by Kodi).
@@ -77,8 +79,10 @@ struct MovieNfo {
     uniqueid: Vec<NfoUniqueId>,
     #[serde(default)]
     actor: Vec<NfoActor>,
-    director: Option<String>,
-    credits: Option<String>,
+    #[serde(default)]
+    director: Vec<String>,
+    #[serde(default)]
+    credits: Vec<String>,
 }
 
 /// Root element for tvshow NFO files.
@@ -112,8 +116,10 @@ struct EpisodeNfo {
     uniqueid: Vec<NfoUniqueId>,
     #[serde(default)]
     actor: Vec<NfoActor>,
-    director: Option<String>,
-    credits: Option<String>,
+    #[serde(default)]
+    director: Vec<String>,
+    #[serde(default)]
+    credits: Vec<String>,
 }
 
 /// Root element for artist NFO files (Kodi `<artist>` format).
@@ -189,6 +195,8 @@ struct NfoActor {
     name: Option<String>,
     role: Option<String>,
     order: Option<i32>,
+    thumb: Option<String>,
+    tmdbid: Option<String>,
 }
 
 // ── Discovery functions ─────────────────────────────────────────
@@ -242,52 +250,87 @@ pub fn find_album_nfo(album_dir: &Path) -> Option<PathBuf> {
 
 /// Parse a movie NFO file into `NfoMetadata`.
 pub fn parse_movie_nfo(path: &Path) -> Option<NfoMetadata> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = read_nfo(path)?;
     if is_url_only(&content) {
         return None;
     }
-    let nfo: MovieNfo = quick_xml::de::from_str(&content).ok()?;
-    Some(movie_nfo_to_metadata(nfo))
+    match quick_xml::de::from_str::<MovieNfo>(&content) {
+        Ok(nfo) => Some(movie_nfo_to_metadata(nfo)),
+        Err(e) => {
+            tracing::warn!("Failed to parse movie NFO {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Parse a tvshow NFO file into `NfoMetadata`.
 pub fn parse_series_nfo(path: &Path) -> Option<NfoMetadata> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = read_nfo(path)?;
     if is_url_only(&content) {
         return None;
     }
-    let nfo: TvShowNfo = quick_xml::de::from_str(&content).ok()?;
-    Some(tvshow_nfo_to_metadata(nfo))
+    match quick_xml::de::from_str::<TvShowNfo>(&content) {
+        Ok(nfo) => Some(tvshow_nfo_to_metadata(nfo)),
+        Err(e) => {
+            tracing::warn!("Failed to parse series NFO {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Parse an episode NFO file into `NfoMetadata`.
 pub fn parse_episode_nfo(path: &Path) -> Option<NfoMetadata> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = read_nfo(path)?;
     if is_url_only(&content) {
         return None;
     }
-    let nfo: EpisodeNfo = quick_xml::de::from_str(&content).ok()?;
-    Some(episode_nfo_to_metadata(nfo))
+    match quick_xml::de::from_str::<EpisodeNfo>(&content) {
+        Ok(nfo) => Some(episode_nfo_to_metadata(nfo)),
+        Err(e) => {
+            tracing::warn!("Failed to parse episode NFO {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Parse an artist NFO file into `NfoMetadata`.
 pub fn parse_artist_nfo(path: &Path) -> Option<NfoMetadata> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = read_nfo(path)?;
     if is_url_only(&content) {
         return None;
     }
-    let nfo: ArtistNfo = quick_xml::de::from_str(&content).ok()?;
-    Some(artist_nfo_to_metadata(nfo))
+    match quick_xml::de::from_str::<ArtistNfo>(&content) {
+        Ok(nfo) => Some(artist_nfo_to_metadata(nfo)),
+        Err(e) => {
+            tracing::warn!("Failed to parse artist NFO {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Parse an album NFO file into `NfoMetadata`.
 pub fn parse_album_nfo(path: &Path) -> Option<NfoMetadata> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = read_nfo(path)?;
     if is_url_only(&content) {
         return None;
     }
-    let nfo: AlbumNfo = quick_xml::de::from_str(&content).ok()?;
-    Some(album_nfo_to_metadata(nfo))
+    match quick_xml::de::from_str::<AlbumNfo>(&content) {
+        Ok(nfo) => Some(album_nfo_to_metadata(nfo)),
+        Err(e) => {
+            tracing::warn!("Failed to parse album NFO {}: {e}", path.display());
+            None
+        }
+    }
+}
+
+fn read_nfo(path: &Path) -> Option<String> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(e) => {
+            tracing::warn!("Failed to read NFO {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 // ── Conversion helpers ──────────────────────────────────────────
@@ -297,8 +340,8 @@ fn movie_nfo_to_metadata(nfo: MovieNfo) -> NfoMetadata {
         title: nfo.title,
         original_title: nfo.originaltitle,
         overview: nfo.plot,
-        genres: nfo.genre,
-        studios: nfo.studio,
+        genres: nfo.genre.into_iter().filter(|s| !s.is_empty()).collect(),
+        studios: nfo.studio.into_iter().filter(|s| !s.is_empty()).collect(),
         official_rating: nfo.mpaa,
         production_year: nfo.year,
         premiere_date: nfo.premiered.as_deref().and_then(parse_date),
@@ -309,24 +352,28 @@ fn movie_nfo_to_metadata(nfo: MovieNfo) -> NfoMetadata {
     apply_unique_ids(&nfo.uniqueid, &mut meta);
     apply_actors(&nfo.actor, &mut meta);
 
-    if let Some(director) = nfo.director {
+    for director in &nfo.director {
         for name in director.split('/').map(str::trim).filter(|s| !s.is_empty()) {
             meta.people.push(NfoPerson {
                 name: name.to_string(),
                 person_type: "Director".to_string(),
                 role: None,
                 sort_order: None,
+                image_url: None,
+                provider_person_id: None,
             });
         }
     }
 
-    if let Some(credits) = nfo.credits {
+    for credits in &nfo.credits {
         for name in credits.split('/').map(str::trim).filter(|s| !s.is_empty()) {
             meta.people.push(NfoPerson {
                 name: name.to_string(),
                 person_type: "Writer".to_string(),
                 role: None,
                 sort_order: None,
+                image_url: None,
+                provider_person_id: None,
             });
         }
     }
@@ -339,8 +386,8 @@ fn tvshow_nfo_to_metadata(nfo: TvShowNfo) -> NfoMetadata {
         title: nfo.title,
         original_title: nfo.originaltitle,
         overview: nfo.plot,
-        genres: nfo.genre,
-        studios: nfo.studio,
+        genres: nfo.genre.into_iter().filter(|s| !s.is_empty()).collect(),
+        studios: nfo.studio.into_iter().filter(|s| !s.is_empty()).collect(),
         official_rating: nfo.mpaa,
         production_year: nfo.year,
         premiere_date: nfo.premiered.as_deref().and_then(parse_date),
@@ -366,24 +413,28 @@ fn episode_nfo_to_metadata(nfo: EpisodeNfo) -> NfoMetadata {
     apply_unique_ids(&nfo.uniqueid, &mut meta);
     apply_actors(&nfo.actor, &mut meta);
 
-    if let Some(director) = nfo.director {
+    for director in &nfo.director {
         for name in director.split('/').map(str::trim).filter(|s| !s.is_empty()) {
             meta.people.push(NfoPerson {
                 name: name.to_string(),
                 person_type: "Director".to_string(),
                 role: None,
                 sort_order: None,
+                image_url: None,
+                provider_person_id: None,
             });
         }
     }
 
-    if let Some(credits) = nfo.credits {
+    for credits in &nfo.credits {
         for name in credits.split('/').map(str::trim).filter(|s| !s.is_empty()) {
             meta.people.push(NfoPerson {
                 name: name.to_string(),
                 person_type: "Writer".to_string(),
                 role: None,
                 sort_order: None,
+                image_url: None,
+                provider_person_id: None,
             });
         }
     }
@@ -485,11 +536,14 @@ fn apply_actors(actors: &[NfoActor], meta: &mut NfoMetadata) {
         if name.is_empty() {
             continue;
         }
+        let provider_person_id = actor.tmdbid.as_ref().map(|id| format!("tmdb-{id}"));
         meta.people.push(NfoPerson {
             name: name.clone(),
             person_type: "Actor".to_string(),
             role: actor.role.clone(),
             sort_order: actor.order.or(Some(i as i32)),
+            image_url: actor.thumb.clone(),
+            provider_person_id,
         });
     }
 }
@@ -648,6 +702,10 @@ struct WriteActor {
     role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     order: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thumb: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tmdbid: Option<String>,
 }
 
 // ── Write functions ─────────────────────────────────────────────
@@ -818,6 +876,11 @@ fn build_write_actors(people: &[NfoPerson]) -> Vec<WriteActor> {
             name: p.name.clone(),
             role: p.role.clone(),
             order: p.sort_order,
+            thumb: p.image_url.clone(),
+            tmdbid: p
+                .provider_person_id
+                .as_ref()
+                .and_then(|pid| pid.strip_prefix("tmdb-").map(|s| s.to_string())),
         })
         .collect()
 }
@@ -903,5 +966,30 @@ mod tests {
         assert_eq!(read_back.genres, vec!["Progressive Rock"]);
         assert_eq!(read_back.production_year, Some(1973));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_parse_movie_nfo_with_duplicate_directors() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<movie>
+  <title>The Many Adventures of Winnie the Pooh</title>
+  <plot>A lovely movie.</plot>
+  <director>John Lounsbery</director>
+  <director>Wolfgang Reitherman</director>
+  <year>1977</year>
+  <genre>Animation</genre>
+  <genre>Family</genre>
+  <studio />
+  <studio>Walt Disney Productions</studio>
+  <trailer>plugin://something</trailer>
+  <country />
+  <country>United States</country>
+  <tag>cartoon</tag>
+  <sorttitle>many adventures of winnie the pooh</sorttitle>
+</movie>"#;
+        let result: Result<MovieNfo, _> = quick_xml::de::from_str(xml);
+        assert!(result.is_ok(), "Failed to parse: {result:?}");
+        let nfo = result.unwrap();
+        assert_eq!(nfo.title, Some("The Many Adventures of Winnie the Pooh".to_string()));
     }
 }

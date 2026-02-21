@@ -10,11 +10,20 @@ pub fn Tasks() -> View {
     let loading = create_signal(true);
     let error: Signal<Option<String>> = create_signal(None);
     let toast: Signal<Option<String>> = create_signal(None);
+    let polling = create_signal(false);
 
     let load_tasks = move || {
         spawn_local(async move {
             match api::get_scheduled_tasks().await {
-                Ok(t) => tasks.set(t),
+                Ok(t) => {
+                    let any_running = t.iter().any(|task| task.state == "Running");
+                    tasks.set(t);
+                    // Start polling if any task is running
+                    if any_running && !polling.get() {
+                        polling.set(true);
+                        start_polling(tasks, polling);
+                    }
+                }
                 Err(e) => error.set(Some(e)),
             }
             loading.set(false);
@@ -28,7 +37,24 @@ pub fn Tasks() -> View {
             match api::run_scheduled_task(&task_id).await {
                 Ok(()) => {
                     toast.set(Some(format!("Started: {task_name}")));
-                    // Reload to get updated state
+                    if let Ok(t) = api::get_scheduled_tasks().await {
+                        tasks.set(t);
+                    }
+                    if !polling.get() {
+                        polling.set(true);
+                        start_polling(tasks, polling);
+                    }
+                }
+                Err(e) => error.set(Some(e)),
+            }
+        });
+    };
+
+    let on_stop_task = move |task_id: String, task_name: String| {
+        spawn_local(async move {
+            match api::stop_scheduled_task(&task_id).await {
+                Ok(()) => {
+                    toast.set(Some(format!("Stopped: {task_name}")));
                     if let Ok(t) = api::get_scheduled_tasks().await {
                         tasks.set(t);
                     }
@@ -70,10 +96,7 @@ pub fn Tasks() -> View {
             // Tasks table
             (if loading.get() {
                 view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
-            } else if tasks.get_clone().is_empty() {
-                view! { div(class="empty-state") { "No scheduled tasks." } }
             } else {
-                let items = tasks.get_clone();
                 view! {
                     div(class="card") {
                         table {
@@ -89,13 +112,15 @@ pub fn Tasks() -> View {
                             }
                             tbody {
                                 Indexed(
-                                    list=move || items.clone(),
+                                    list=move || tasks.get_clone(),
                                     view=move |task| {
                                         let name = task.name.clone();
                                         let category = task.category.clone();
                                         let state = task.state.clone();
                                         let run_id = task.id.clone();
+                                        let stop_id = task.id.clone();
                                         let run_name = task.name.clone();
+                                        let stop_name = task.name.clone();
                                         let is_running = state == "Running";
 
                                         let (last_run, result_status, result_error) =
@@ -139,7 +164,7 @@ pub fn Tasks() -> View {
                                                             }
                                                         }
                                                         "Cancelled" => view! { span(class="badge badge-warning") { "Cancelled" } },
-                                                        "" => view! { span(class="text-muted") { "—" } },
+                                                        "" => view! { span(class="text-muted") { "\u{2014}" } },
                                                         other => {
                                                             let s = other.to_string();
                                                             view! { span(class="text-muted") { (s) } }
@@ -147,17 +172,29 @@ pub fn Tasks() -> View {
                                                     })
                                                 }
                                                 td {
-                                                    button(
-                                                        class="btn btn-primary btn-sm",
-                                                        disabled=is_running,
-                                                        on:click={
-                                                            let run_id = run_id.clone();
-                                                            let run_name = run_name.clone();
-                                                            move |_| on_run_task(run_id.clone(), run_name.clone())
+                                                    (if is_running {
+                                                        view! {
+                                                            button(
+                                                                class="btn btn-danger btn-sm",
+                                                                on:click={
+                                                                    let stop_id = stop_id.clone();
+                                                                    let stop_name = stop_name.clone();
+                                                                    move |_| on_stop_task(stop_id.clone(), stop_name.clone())
+                                                                }
+                                                            ) { "Stop" }
                                                         }
-                                                    ) {
-                                                        (if is_running { "Running..." } else { "Run Now" })
-                                                    }
+                                                    } else {
+                                                        view! {
+                                                            button(
+                                                                class="btn btn-primary btn-sm",
+                                                                on:click={
+                                                                    let run_id = run_id.clone();
+                                                                    let run_name = run_name.clone();
+                                                                    move |_| on_run_task(run_id.clone(), run_name.clone())
+                                                                }
+                                                            ) { "Run Now" }
+                                                        }
+                                                    })
                                                 }
                                             }
                                         }
@@ -170,6 +207,40 @@ pub fn Tasks() -> View {
             })
         }
     }
+}
+
+/// Poll task state every 2 seconds until no tasks are running.
+fn start_polling(tasks: Signal<Vec<TaskInfoDto>>, polling: Signal<bool>) {
+    spawn_local(async move {
+        loop {
+            sleep_ms(2000).await;
+
+            match api::get_scheduled_tasks().await {
+                Ok(t) => {
+                    let any_running = t.iter().any(|task| task.state == "Running");
+                    tasks.set(t);
+                    if !any_running {
+                        polling.set(false);
+                        break;
+                    }
+                }
+                Err(_) => {
+                    polling.set(false);
+                    break;
+                }
+            }
+        }
+    });
+}
+
+async fn sleep_ms(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        web_sys::window()
+            .unwrap()
+            .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms)
+            .unwrap();
+    });
+    wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
 }
 
 /// Format an RFC 3339 datetime string to a shorter display form.

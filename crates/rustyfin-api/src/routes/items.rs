@@ -16,7 +16,8 @@ use rustyfin_db::repo::{
 };
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_models::dto::{
-    BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, QueryResult, UserItemDataDto,
+    BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, NameGuidPair, QueryResult,
+    UserItemDataDto,
 };
 
 use crate::error::ApiError;
@@ -100,7 +101,14 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         end_date: item.end_date,
         runtime_ticks: item.runtime_ticks,
         genres: item.genres.clone(),
-        studios: item.studios.clone(),
+        studios: item.studios.as_ref().map(|s| {
+            s.iter()
+                .map(|name| NameGuidPair {
+                    name: name.clone(),
+                    id: Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes()),
+                })
+                .collect()
+        }),
         tags: item.tags.clone(),
         container: item.container.clone(),
         width: item.width,

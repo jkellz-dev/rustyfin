@@ -424,6 +424,8 @@ pub async fn count_children_batch(
 
 /// Metadata fields that can be updated independently of structural insert/update.
 pub struct ItemMetadata {
+    pub name: Option<String>,
+    pub sort_name: Option<String>,
     pub overview: Option<String>,
     pub original_title: Option<String>,
     pub community_rating: Option<f32>,
@@ -447,23 +449,27 @@ pub async fn update_metadata(
     sqlx::query(
         r#"
         UPDATE media_items SET
-            overview = COALESCE($2, overview),
-            original_title = COALESCE($3, original_title),
-            community_rating = COALESCE($4, community_rating),
-            critic_rating = COALESCE($5, critic_rating),
-            official_rating = COALESCE($6, official_rating),
-            genres = COALESCE($7, genres),
-            studios = COALESCE($8, studios),
-            tags = COALESCE($9, tags),
-            premiere_date = COALESCE($10, premiere_date),
-            end_date = COALESCE($11, end_date),
-            production_year = COALESCE($12, production_year),
-            external_ids = COALESCE($13, external_ids),
+            name = COALESCE($2, name),
+            sort_name = COALESCE($3, sort_name),
+            overview = COALESCE($4, overview),
+            original_title = COALESCE($5, original_title),
+            community_rating = COALESCE($6, community_rating),
+            critic_rating = COALESCE($7, critic_rating),
+            official_rating = COALESCE($8, official_rating),
+            genres = COALESCE($9, genres),
+            studios = COALESCE($10, studios),
+            tags = COALESCE($11, tags),
+            premiere_date = COALESCE($12, premiere_date),
+            end_date = COALESCE($13, end_date),
+            production_year = COALESCE($14, production_year),
+            external_ids = COALESCE($15, external_ids),
             date_modified = NOW()
         WHERE id = $1
         "#,
     )
     .bind(id)
+    .bind(&meta.name)
+    .bind(&meta.sort_name)
     .bind(&meta.overview)
     .bind(&meta.original_title)
     .bind(meta.community_rating)

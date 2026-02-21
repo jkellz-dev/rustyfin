@@ -32,7 +32,7 @@ async fn fetch_movie(path: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<()> {
     let tmdb = TmdbClient::new(tmdb_key.clone());
     let http = reqwest::Client::new();
     let limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
-    let skip_existing = !config.output.overwrite_existing;
+    let skip_existing = !opts.force && !config.output.overwrite_existing;
 
     // Determine title and year: if path is a file, use resolve_movie; if directory, use dir name
     let (title, year, target_dir) = if path.is_file() {
@@ -183,7 +183,7 @@ async fn fetch_series(path: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<()> {
 
     let tmdb_limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
     let tvdb_limiter = RateLimiter::new(config.tvdb.rate_limit, config.tvdb.rate_window_secs);
-    let skip_existing = !config.output.overwrite_existing;
+    let skip_existing = !opts.force && !config.output.overwrite_existing;
 
     // Check folder name for provider ID
     let provider_id = naming::extract_provider_id(&series_name);

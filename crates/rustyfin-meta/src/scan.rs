@@ -28,6 +28,7 @@ pub struct ScanOpts<'a> {
     pub dry_run: bool,
     pub auto_mode: bool,
     pub no_cache: bool,
+    pub force: bool,
 }
 
 pub async fn scan_directory(
@@ -169,7 +170,7 @@ async fn scan_movies(
     let auto_mode = opts.auto_mode;
     let http = reqwest::Client::new();
     let limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
-    let skip_existing = !config.output.overwrite_existing;
+    let skip_existing = !opts.force && !config.output.overwrite_existing;
     let mut stats = ScanStats {
         scanned: 0,
         fetched: 0,
@@ -187,8 +188,8 @@ async fn scan_movies(
         let file_path = entry.path();
         stats.scanned += 1;
 
-        // Skip if NFO already exists and we're not overwriting
-        if !config.output.overwrite_existing && find_movie_nfo(file_path).is_some() {
+        // Skip if NFO already exists and we're not overwriting (unless --force)
+        if !opts.force && !config.output.overwrite_existing && find_movie_nfo(file_path).is_some() {
             tracing::info!("Skipping {} (NFO exists)", file_path.display());
             stats.skipped += 1;
             continue;
@@ -339,7 +340,7 @@ async fn scan_tvshows(
     let http = reqwest::Client::new();
     let tmdb_limiter = RateLimiter::new(config.tmdb.rate_limit, config.tmdb.rate_window_secs);
     let tvdb_limiter = RateLimiter::new(config.tvdb.rate_limit, config.tvdb.rate_window_secs);
-    let skip_existing = !config.output.overwrite_existing;
+    let skip_existing = !opts.force && !config.output.overwrite_existing;
     let mut stats = ScanStats {
         scanned: 0,
         fetched: 0,
@@ -363,8 +364,9 @@ async fn scan_tvshows(
         let series_name = entry.file_name().to_string_lossy().to_string();
         stats.scanned += 1;
 
-        // Skip if tvshow.nfo already exists and we're not overwriting
-        if !config.output.overwrite_existing && find_series_nfo(&series_dir).is_some() {
+        // Skip if tvshow.nfo already exists and we're not overwriting (unless --force)
+        if !opts.force && !config.output.overwrite_existing && find_series_nfo(&series_dir).is_some()
+        {
             tracing::info!("Skipping '{}' (tvshow.nfo exists)", series_name);
             stats.skipped += 1;
             continue;
@@ -528,7 +530,7 @@ async fn scan_music(
         errors: 0,
     };
 
-    let overwrite = config.output.overwrite_existing;
+    let overwrite = opts.force || config.output.overwrite_existing;
 
     let mb_cache = if no_cache {
         None

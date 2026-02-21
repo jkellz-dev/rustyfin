@@ -252,6 +252,8 @@ fn series_to_metadata(d: TvdbSeriesDetail) -> NfoMetadata {
                 None
             },
             sort_order: ch.sort,
+            image_url: None,
+            provider_person_id: None,
         });
     }
 

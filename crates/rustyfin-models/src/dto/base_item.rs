@@ -57,7 +57,7 @@ pub struct BaseItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genres: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub studios: Option<Vec<String>>,
+    pub studios: Option<Vec<NameGuidPair>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
 

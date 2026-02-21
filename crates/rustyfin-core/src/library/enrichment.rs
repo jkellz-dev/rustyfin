@@ -123,7 +123,15 @@ impl EnrichmentService {
         // Build external_ids JSON
         let external_ids = build_external_ids(meta);
 
+        let sort_name = meta
+            .title
+            .as_ref()
+            .or(meta.sort_name.as_ref())
+            .map(|t| rustyfin_common::naming::make_sort_name(t));
+
         let item_meta = media_items::ItemMetadata {
+            name: meta.title.clone(),
+            sort_name,
             overview: meta.overview.clone(),
             original_title: meta.original_title.clone(),
             community_rating: meta.community_rating,

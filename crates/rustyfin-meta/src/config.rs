@@ -225,11 +225,24 @@ pub struct ServerConfig {
 
 impl MetaConfig {
     pub fn load(path: &Path) -> anyhow::Result<Self> {
-        if path.exists() {
+        let mut config: Self = if path.exists() {
             let content = std::fs::read_to_string(path)?;
-            Ok(toml::from_str(&content)?)
+            toml::from_str(&content)?
         } else {
-            Ok(Self::default())
+            Self::default()
+        };
+
+        // Allow env vars to override API keys
+        if let Ok(val) = std::env::var("TMDB_API_KEY") {
+            config.tmdb.api_key = Some(val);
         }
+        if let Ok(val) = std::env::var("TVDB_API_KEY") {
+            config.tvdb.api_key = Some(val);
+        }
+        if let Ok(val) = std::env::var("FANART_API_KEY") {
+            config.fanart.api_key = Some(val);
+        }
+
+        Ok(config)
     }
 }

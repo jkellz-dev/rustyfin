@@ -275,6 +275,10 @@ pub async fn run_scheduled_task(task_id: &str) -> Result<(), String> {
     post_empty(&format!("/ScheduledTasks/Running/{task_id}")).await
 }
 
+pub async fn stop_scheduled_task(task_id: &str) -> Result<(), String> {
+    delete_path(&format!("/ScheduledTasks/Running/{task_id}")).await
+}
+
 // ── Search API ───────────────────────────────────────────
 
 pub async fn search_hints(term: &str) -> Result<SearchHintResult, String> {

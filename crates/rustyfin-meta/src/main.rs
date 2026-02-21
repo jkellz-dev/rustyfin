@@ -23,6 +23,9 @@ struct Cli {
     /// Skip reading from cache (still writes to cache)
     #[arg(long)]
     no_cache: bool,
+    /// Force re-fetch metadata even if NFO files already exist
+    #[arg(long, short = 'f')]
+    force: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -97,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
         dry_run: cli.dry_run,
         auto_mode: cli.auto,
         no_cache: cli.no_cache,
+        force: cli.force,
     };
 
     match cli.command {

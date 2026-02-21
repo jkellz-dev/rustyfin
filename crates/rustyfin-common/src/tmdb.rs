@@ -344,6 +344,8 @@ fn apply_credits(credits: &TmdbCredits, meta: &mut NfoMetadata) {
             person_type: "Actor".to_string(),
             role: cast.character.clone(),
             sort_order: cast.order.or(Some(i as i32)),
+            image_url: None,
+            provider_person_id: None,
         });
     }
 
@@ -355,6 +357,8 @@ fn apply_credits(credits: &TmdbCredits, meta: &mut NfoMetadata) {
                 person_type: "Director".to_string(),
                 role: None,
                 sort_order: None,
+                image_url: None,
+                provider_person_id: None,
             });
         }
     }
