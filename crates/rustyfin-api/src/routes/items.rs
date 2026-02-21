@@ -202,11 +202,11 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow
     dto.primary_image_aspect_ratio = fields.primary_image_aspect_ratio;
 }
 
-/// Group images by item_id for batch application.
+/// Group images by entity_id for batch application.
 pub(crate) fn group_images_by_item(all_images: Vec<ImageRow>) -> HashMap<Uuid, Vec<ImageRow>> {
     let mut map: HashMap<Uuid, Vec<ImageRow>> = HashMap::new();
     for img in all_images {
-        if let Some(item_id) = img.item_id {
+        if let Some(item_id) = img.entity_id {
             map.entry(item_id).or_default().push(img);
         }
     }

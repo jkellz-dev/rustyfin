@@ -89,7 +89,7 @@ pub async fn search_hints(
         let mut images_map: std::collections::HashMap<Uuid, Vec<_>> =
             std::collections::HashMap::new();
         for img in all_images {
-            if let Some(item_id) = img.item_id {
+            if let Some(item_id) = img.entity_id {
                 images_map.entry(item_id).or_default().push(img);
             }
         }

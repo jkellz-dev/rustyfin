@@ -930,7 +930,7 @@ impl LibraryScanner {
 
         for img in &discovered {
             let new_image = images_repo::NewImage {
-                item_id,
+                entity_id: item_id,
                 image_type: img.image_type.clone(),
                 path: img.path.clone(),
                 image_index: img.image_index,

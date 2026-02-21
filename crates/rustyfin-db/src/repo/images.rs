@@ -4,7 +4,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ImageRow {
     pub id: Uuid,
-    pub item_id: Option<Uuid>,
+    pub entity_id: Option<Uuid>,
     pub user_id: Option<Uuid>,
     pub image_type: String,
     pub path: String,
@@ -15,7 +15,7 @@ pub struct ImageRow {
 }
 
 pub struct NewImage {
-    pub item_id: Uuid,
+    pub entity_id: Uuid,
     pub image_type: String,
     pub path: String,
     pub image_index: i32,
@@ -25,12 +25,12 @@ pub struct NewImage {
 pub async fn insert(pool: &PgPool, image: &NewImage) -> Result<ImageRow, sqlx::Error> {
     sqlx::query_as::<_, ImageRow>(
         r#"
-        INSERT INTO images (item_id, image_type, path, image_index)
+        INSERT INTO images (entity_id, image_type, path, image_index)
         VALUES ($1, $2, $3, $4)
         RETURNING *
         "#,
     )
-    .bind(image.item_id)
+    .bind(image.entity_id)
     .bind(&image.image_type)
     .bind(&image.path)
     .bind(image.image_index)
@@ -38,36 +38,36 @@ pub async fn insert(pool: &PgPool, image: &NewImage) -> Result<ImageRow, sqlx::E
     .await
 }
 
-/// Delete all images for a media item.
+/// Delete all images for an entity (media item, person, studio, artist).
 pub async fn delete_by_item(pool: &PgPool, item_id: Uuid) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query("DELETE FROM images WHERE item_id = $1")
+    let result = sqlx::query("DELETE FROM images WHERE entity_id = $1")
         .bind(item_id)
         .execute(pool)
         .await?;
     Ok(result.rows_affected())
 }
 
-/// Get images for a media item.
+/// Get images for an entity.
 pub async fn list_by_item(pool: &PgPool, item_id: Uuid) -> Result<Vec<ImageRow>, sqlx::Error> {
     sqlx::query_as::<_, ImageRow>(
-        "SELECT * FROM images WHERE item_id = $1 ORDER BY image_type, image_index",
+        "SELECT * FROM images WHERE entity_id = $1 ORDER BY image_type, image_index",
     )
     .bind(item_id)
     .fetch_all(pool)
     .await
 }
 
-/// Get images for multiple media items (batch query to avoid N+1).
+/// Get images for multiple entities (batch query to avoid N+1).
 pub async fn list_by_items(pool: &PgPool, item_ids: &[Uuid]) -> Result<Vec<ImageRow>, sqlx::Error> {
     sqlx::query_as::<_, ImageRow>(
-        "SELECT * FROM images WHERE item_id = ANY($1) ORDER BY item_id, image_type, image_index",
+        "SELECT * FROM images WHERE entity_id = ANY($1) ORDER BY entity_id, image_type, image_index",
     )
     .bind(item_ids)
     .fetch_all(pool)
     .await
 }
 
-/// Get a specific image for an item by type and index.
+/// Get a specific image for an entity by type and index.
 pub async fn find_by_item_and_type(
     pool: &PgPool,
     item_id: Uuid,
@@ -75,7 +75,7 @@ pub async fn find_by_item_and_type(
     image_index: i32,
 ) -> Result<Option<ImageRow>, sqlx::Error> {
     sqlx::query_as::<_, ImageRow>(
-        "SELECT * FROM images WHERE item_id = $1 AND image_type = $2 AND image_index = $3",
+        "SELECT * FROM images WHERE entity_id = $1 AND image_type = $2 AND image_index = $3",
     )
     .bind(item_id)
     .bind(image_type)
