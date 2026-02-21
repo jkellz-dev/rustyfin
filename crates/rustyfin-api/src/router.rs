@@ -394,8 +394,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Persons", get(persons::get_persons))
         .route("/Persons/{name}", get(persons::get_person))
         // ── Years ──────────────────────────────────────────────────
-        .route("/Years", get(stubs::empty_query_result_auth))
-        .route("/Years/{year}", get(stubs::get_year))
+        .route("/Years", get(years::get_years))
+        .route("/Years/{year}", get(years::get_year))
         // ── MusicGenres ────────────────────────────────────────────
         .route("/MusicGenres", get(music_genres::get_music_genres))
         .route("/MusicGenres/{genreName}", get(music_genres::get_music_genre))

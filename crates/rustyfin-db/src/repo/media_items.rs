@@ -520,6 +520,27 @@ pub async fn distinct_years(
     }
 }
 
+/// Count items grouped by type for a given production year, optionally scoped to a library.
+pub async fn count_items_by_year(
+    pool: &PgPool,
+    year: i32,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT item_type, COUNT(*) as cnt
+        FROM media_items
+        WHERE production_year = $1
+          AND ($2::uuid IS NULL OR library_id = $2)
+        GROUP BY item_type
+        "#,
+    )
+    .bind(year)
+    .bind(parent_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Distinct official ratings, optionally scoped to a parent's library.
 pub async fn distinct_official_ratings(
     pool: &PgPool,

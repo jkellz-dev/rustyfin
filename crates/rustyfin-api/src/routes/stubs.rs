@@ -50,20 +50,6 @@ pub async fn not_found_admin(_auth: AdminUser) -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
-// ── Group 2: Years ─────────────────────────────────────────────────
-
-/// `GET /Years/{year}` — return a minimal `BaseItemDto` with the year set.
-pub async fn get_year(_auth: AuthenticatedUser, Path(year): Path<i32>) -> Json<BaseItemDto> {
-    let name = year.to_string();
-    Json(BaseItemDto {
-        name: name.clone(),
-        id: Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes()),
-        item_type: "Year".to_owned(),
-        production_year: Some(year),
-        ..Default::default()
-    })
-}
-
 // ── Group 5: GetUtcTime ─────────────────────────────────────────────
 
 /// UTC time response for client time sync.
