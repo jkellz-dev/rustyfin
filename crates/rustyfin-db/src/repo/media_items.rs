@@ -982,6 +982,51 @@ pub async fn count_songs_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i32
     Ok(row.0 as i32)
 }
 
+/// List upcoming episodes (premiere_date >= today), ordered by premiere_date ASC.
+pub async fn upcoming_episodes(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        SELECT * FROM media_items
+        WHERE item_type = 'Episode'
+          AND premiere_date IS NOT NULL
+          AND premiere_date >= CURRENT_DATE
+          AND ($1::uuid IS NULL OR library_id = $1)
+        ORDER BY premiere_date ASC
+        LIMIT $2 OFFSET $3
+        "#,
+    )
+    .bind(parent_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+/// Count upcoming episodes (premiere_date >= today).
+pub async fn count_upcoming_episodes(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        r#"
+        SELECT COUNT(*) FROM media_items
+        WHERE item_type = 'Episode'
+          AND premiere_date IS NOT NULL
+          AND premiere_date >= CURRENT_DATE
+          AND ($1::uuid IS NULL OR library_id = $1)
+        "#,
+    )
+    .bind(parent_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
 /// Dynamic query builder for GET /Items with filtering, sorting, and pagination.
 pub struct ItemQuery {
     // Scoping

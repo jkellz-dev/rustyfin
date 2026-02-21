@@ -273,6 +273,7 @@ async fn main() -> anyhow::Result<()> {
         image_cache_dir,
         scan_in_flight,
         scan_schedules,
+        user_image_url_template: config.server.user_image_url_template,
     };
 
     // Build router with all API routes

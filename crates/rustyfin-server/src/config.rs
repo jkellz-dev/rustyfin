@@ -29,6 +29,8 @@ pub struct ServerConfig {
     pub base_url: String,
     #[serde(default = "default_server_name")]
     pub server_name: String,
+    #[serde(default)]
+    pub user_image_url_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -404,6 +406,7 @@ fn default_server() -> ServerConfig {
         port: default_port(),
         base_url: default_base_url(),
         server_name: default_server_name(),
+        user_image_url_template: None,
     }
 }
 
@@ -461,6 +464,9 @@ impl Config {
                 base_url: std::env::var("RUSTYFIN_BASE_URL").unwrap_or(config.server.base_url),
                 server_name: std::env::var("RUSTYFIN_SERVER_NAME")
                     .unwrap_or(config.server.server_name),
+                user_image_url_template: std::env::var("RUSTYFIN_USER_IMAGE_URL_TEMPLATE")
+                    .ok()
+                    .or(config.server.user_image_url_template),
             },
             database: DatabaseConfig {
                 url: std::env::var("DATABASE_URL").unwrap_or(config.database.url),

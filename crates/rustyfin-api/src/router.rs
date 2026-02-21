@@ -37,6 +37,7 @@ pub struct AppState {
     pub image_cache_dir: PathBuf,
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
     pub scan_schedules: serde_json::Value,
+    pub user_image_url_template: Option<String>,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -104,16 +105,16 @@ pub fn build_router(state: AppState) -> Router {
             post(stubs::no_content_auth),
         )
         .route("/Users/New", post(stubs::create_user_disabled))
-        // ── User images (stubs) ───────────────────────────────
+        // ── User images ──────────────────────────────────────
         .route(
             "/Users/{userId}/Images/{imageType}",
-            get(stubs::not_found)
+            get(users::get_user_image)
                 .post(stubs::no_content_auth)
                 .delete(stubs::no_content_auth),
         )
         .route(
             "/Users/{userId}/Images/{imageType}/{imageIndex}",
-            get(stubs::not_found),
+            get(users::get_user_image_by_index),
         )
         // ── Media update notifications ─────────────────────────
         .route("/Library/Media/Updated", post(webhooks::post_updated_media))
@@ -342,7 +343,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         // ── TV Shows ─────────────────────────────────────────────
         .route("/Shows/NextUp", get(shows::get_next_up))
-        .route("/Shows/Upcoming", get(stubs::empty_query_result_auth))
+        .route("/Shows/Upcoming", get(shows::get_upcoming))
         .route("/Shows/{seriesId}/Seasons", get(shows::get_seasons))
         .route("/Shows/{seriesId}/Episodes", get(shows::get_episodes))
         // ── Quick Connect ────────────────────────────────────────

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -314,6 +316,57 @@ pub async fn get_episodes(
 
     let mut result = QueryResult::new(dtos, total as i32);
     result.start_index = start as i32;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpcomingQuery {
+    pub parent_id: Option<Uuid>,
+    pub start_index: Option<i64>,
+    pub limit: Option<i64>,
+    pub user_id: Option<Uuid>,
+}
+
+/// `GET /Shows/Upcoming` — Episodes with future air dates, ordered by premiere date.
+pub async fn get_upcoming(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Query(query): Query<UpcomingQuery>,
+) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = query.start_index.unwrap_or(0);
+
+    let items = media_items::upcoming_episodes(&state.pool, query.parent_id, limit, offset)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let total = media_items::count_upcoming_episodes(&state.pool, query.parent_id)
+        .await
+        .map_err(ApiError::Database)? as i32;
+
+    // Batch image loading
+    let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
+    let images_map = if !item_ids.is_empty() {
+        let all_images = images::list_by_items(&state.pool, &item_ids)
+            .await
+            .unwrap_or_default();
+        group_images_by_item(all_images)
+    } else {
+        HashMap::new()
+    };
+
+    let mut dtos = Vec::with_capacity(items.len());
+    for item in &items {
+        let mut dto = media_item_to_dto(item, &state.server_id);
+        if let Some(item_images) = images_map.get(&item.id) {
+            apply_images_to_dto(&mut dto, item_images);
+        }
+        dtos.push(dto);
+    }
+
+    let mut result = QueryResult::new(dtos, total);
+    result.start_index = offset as i32;
     Ok(Json(result))
 }
 

@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
+    response::{IntoResponse, Redirect, Response},
 };
 use uuid::Uuid;
 
@@ -184,4 +185,33 @@ pub async fn update_user_policy(
         .map_err(ApiError::Database)?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /Users/{userId}/Images/{imageType}` — Redirect to configured user image URL.
+pub async fn get_user_image(
+    State(state): State<AppState>,
+    Path((user_id, _image_type)): Path<(Uuid, String)>,
+) -> Result<Response, ApiError> {
+    let Some(ref template) = state.user_image_url_template else {
+        return Err(ApiError::NotFound);
+    };
+
+    let user = users::find_by_id(&state.pool, user_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    let url = template
+        .replace("{username}", &user.username)
+        .replace("{user_id}", &user_id.to_string());
+
+    Ok(Redirect::temporary(&url).into_response())
+}
+
+/// `GET /Users/{userId}/Images/{imageType}/{imageIndex}` — Same as above, ignoring index.
+pub async fn get_user_image_by_index(
+    State(state): State<AppState>,
+    Path((user_id, image_type, _image_index)): Path<(Uuid, String, i32)>,
+) -> Result<Response, ApiError> {
+    get_user_image(State(state), Path((user_id, image_type))).await
 }
