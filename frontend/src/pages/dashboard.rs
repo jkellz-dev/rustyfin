@@ -29,9 +29,8 @@ pub fn Dashboard() -> View {
                 Ok(i) => info.set(Some(i)),
                 Err(e) => error.set(Some(e)),
             }
-            match stats_result {
-                Ok(s) => stats.set(Some(s)),
-                Err(_) => {} // Stats may fail without auth
+            if let Ok(s) = stats_result {
+                stats.set(Some(s));
             }
             loading.set(false);
         }

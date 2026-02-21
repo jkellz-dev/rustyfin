@@ -29,8 +29,7 @@ fn auth_header() -> String {
 
 pub(crate) fn base_url() -> String {
     let location = web_sys::window().unwrap().location();
-    let origin = location.origin().unwrap_or_default();
-    origin
+    location.origin().unwrap_or_default()
 }
 
 async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
@@ -196,9 +195,8 @@ pub async fn get_startup_config() -> Result<StartupConfiguration, String> {
 pub async fn ensure_authenticated() -> Result<(), String> {
     if get_token().is_some() {
         // Already have a token — check if it's still valid
-        match get_json::<serde_json::Value>("/Users/Me").await {
-            Ok(_) => return Ok(()),
-            Err(_) => {} // Token expired, re-auth below
+        if get_json::<serde_json::Value>("/Users/Me").await.is_ok() {
+            return Ok(());
         }
     }
 
@@ -266,6 +264,18 @@ pub async fn get_item(item_id: &str) -> Result<BaseItemDto, String> {
 pub async fn refresh_item(item_id: &str) -> Result<(), String> {
     post_empty(&format!("/Items/{item_id}/Refresh")).await
 }
+
+// ── Scheduled Tasks API ──────────────────────────────────
+
+pub async fn get_scheduled_tasks() -> Result<Vec<TaskInfoDto>, String> {
+    get_json("/ScheduledTasks").await
+}
+
+pub async fn run_scheduled_task(task_id: &str) -> Result<(), String> {
+    post_empty(&format!("/ScheduledTasks/Running/{task_id}")).await
+}
+
+// ── Search API ───────────────────────────────────────────
 
 pub async fn search_hints(term: &str) -> Result<SearchHintResult, String> {
     let encoded = url_encode(term);

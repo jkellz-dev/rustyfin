@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 pub struct SystemInfo {
     pub server_name: String,
     pub version: String,
-    pub startup_wizard_completed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -223,13 +222,41 @@ pub struct ChapterInfoDto {
     pub name: Option<String>,
 }
 
+// ── Scheduled tasks ────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TaskInfoDto {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub category: String,
+    pub state: String,
+    #[serde(default)]
+    pub last_execution_result: Option<TaskResultDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TaskResultDto {
+    #[serde(default)]
+    pub start_time_utc: String,
+    #[serde(default)]
+    pub end_time_utc: Option<String>,
+    pub status: String,
+    #[serde(default)]
+    pub error_message: Option<String>,
+}
+
+// ── Search ─────────────────────────────────────────────
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SearchHintResult {
     #[serde(default)]
     pub search_hints: Vec<SearchHint>,
-    #[serde(default)]
-    pub total_record_count: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

@@ -707,53 +707,53 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [ ] Binary build artifacts (Linux x86_64, aarch64)
 - [ ] Container image build (Docker/OCI)
 
-### 11g. Stub-to-Real Implementation (client compatibility)
+### 11g. Stub-to-Real Implementation (client compatibility) [DONE]
 
 Stubs re-evaluated for real implementation to support major Jellyfin clients (Web, Infuse, Swiftfin, JMP).
 
 **MusicGenres — music-only genre filter:**
-- [ ] Add `distinct_genres_by_item_types(pool, parent_id, &["Audio", "MusicAlbum"])` to `media_items.rs` — filters `WHERE item_type = ANY($1)` before unnesting genres
-- [ ] `GET /MusicGenres` handler — calls the filtered query, returns `QueryResult<BaseItemDto>` with `item_type: "MusicGenre"`
-- [ ] `GET /MusicGenres/{genreName}` — return `BaseItemDto` with `item_type: "MusicGenre"` and music-scoped child counts
+- [x] Add `distinct_genres_by_item_types(pool, parent_id, &["Audio", "MusicAlbum"])` to `media_items.rs` — filters `WHERE item_type = ANY($1)` before unnesting genres
+- [x] `GET /MusicGenres` handler — calls the filtered query, returns `QueryResult<BaseItemDto>` with `item_type: "MusicGenre"`
+- [x] `GET /MusicGenres/{genreName}` — return `BaseItemDto` with `item_type: "MusicGenre"` and music-scoped child counts
 
 **Years — real year-based browsing:**
-- [ ] `GET /Years` — query `distinct_years` from DB, return `QueryResult<BaseItemDto>` with one item per year
-- [ ] Wire year items into client navigation (year filter in `/Items` already works)
+- [x] `GET /Years` — query `distinct_years` from DB, return `QueryResult<BaseItemDto>` with one item per year
+- [x] Wire year items into client navigation (year filter in `/Items` already works)
 
 **Entity images (genres, studios, persons, artists):**
-- [ ] Design: extend `images` table with entity FKs, or use deterministic UUIDs to map entity names → virtual item IDs
-- [ ] `GET /Genres/{name}/Images/{imageType}` — look up genre by name, serve associated image
-- [ ] `GET /Studios/{name}/Images/{imageType}` — same for studios
-- [ ] `GET /Persons/{name}/Images/{imageType}` — same for persons (headshots from TMDB/NFO)
-- [ ] `GET /Artists/{name}/Images/{imageType}` — same for artists (sidecar artist.jpg)
-- [ ] `GET /MusicGenres/{name}/Images/{imageType}` — alias to genres
+- [x] Design: extend `images` table with entity FKs, or use deterministic UUIDs to map entity names → virtual item IDs
+- [ ] `GET /Genres/{name}/Images/{imageType}` — look up genre by name, serve associated image (deferred — genre images not common)
+- [x] `GET /Studios/{name}/Images/{imageType}` — same for studios
+- [x] `GET /Persons/{name}/Images/{imageType}` — same for persons (headshots from TMDB/NFO)
+- [x] `GET /Artists/{name}/Images/{imageType}` — same for artists (sidecar artist.jpg)
+- [ ] `GET /MusicGenres/{name}/Images/{imageType}` — alias to genres (deferred — genre images not common)
 
 **Item images list:**
-- [ ] `GET /Items/{itemId}/Images` — return real `ImageInfo` DTOs (type, index, tag, blurhash, dimensions)
+- [x] `GET /Items/{itemId}/Images` — return real `ImageInfo` DTOs (type, index, tag, blurhash, dimensions)
 
 **Display Preferences persistence:**
-- [ ] DB table for display preferences (user_id, client, sort_by, sort_order, view_type, etc.)
-- [ ] `POST /DisplayPreferences/{id}` — persist to DB instead of no-op
-- [ ] `GET /DisplayPreferences/{id}` — return saved preferences, fall back to defaults
+- [x] DB table for display preferences (user_id, client, sort_by, sort_order, view_type, etc.)
+- [x] `POST /DisplayPreferences/{id}` — persist to DB instead of no-op
+- [x] `GET /DisplayPreferences/{id}` — return saved preferences, fall back to defaults
 
 **Scheduled Tasks REST API + admin view:**
-- [ ] `task_results` DB table (task_key, started_at, ended_at, status, error_message)
-- [ ] Record task results when scheduler runs each task
-- [ ] `GET /ScheduledTasks` — list all registered tasks with state, last result, triggers
-- [ ] `GET /ScheduledTasks/{taskId}` — single task detail
-- [ ] `POST /ScheduledTasks/Running/{taskId}` — manually trigger a task
-- [ ] `DELETE /ScheduledTasks/Running/{taskId}` — cancel a running task (if supported)
-- [ ] Sycamore admin page: scheduled tasks view (table of tasks, status, last run, next run)
-- [ ] Sycamore admin page: task run history with log cleanup integration
-- [ ] Activity log pruning task cleans up old `task_results` rows
+- [x] `task_results` DB table (task_key, started_at, ended_at, status, error_message)
+- [x] Record task results when scheduler runs each task
+- [x] `GET /ScheduledTasks` — list all registered tasks with state, last result, triggers
+- [x] `GET /ScheduledTasks/{taskId}` — single task detail
+- [x] `POST /ScheduledTasks/Running/{taskId}` — manually trigger a task
+- [x] `DELETE /ScheduledTasks/Running/{taskId}` — cancel a running task (if supported)
+- [x] Sycamore admin page: scheduled tasks view (table of tasks, status, last run, next run)
+- [x] Sycamore admin page: task run history with log cleanup integration
+- [x] Activity log pruning task cleans up old `task_results` rows
 
 **User images (config-based):**
-- [ ] Config option `user_image_url_template` in `rustyfin.toml` (e.g., Gravatar URL template)
-- [ ] `GET /Users/{userId}/Images/{imageType}` — redirect to configured avatar URL or return 404
-- [ ] Populate `PrimaryImageTag` in UserDto when avatar URL is configured
+- [x] Config option `user_image_url_template` in `rustyfin.toml` (e.g., Gravatar URL template)
+- [x] `GET /Users/{userId}/Images/{imageType}` — redirect to configured avatar URL or return 404
+- [x] Populate `PrimaryImageTag` in UserDto when avatar URL is configured
 
 **Shows/Upcoming:**
-- [ ] `GET /Shows/Upcoming` — query episodes by air date (requires `premiered` field in DB)
+- [x] `GET /Shows/Upcoming` — query episodes by air date (requires `premiered` field in DB)
 
 ---
 

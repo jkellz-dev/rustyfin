@@ -220,14 +220,13 @@ pub fn Libraries() -> View {
                                     Indexed(
                                         list=move || current_edit_paths.clone(),
                                         view={
-                                            let load_directory = load_directory.clone();
+                                            let load_directory = load_directory;
                                             move |path| {
                                                 let idx = edit_paths.get_clone().iter().position(|p| *p == path).unwrap_or(0);
                                                 let path_val = path.clone();
                                                 view! {
                                                     div(class="path-entry") {
                                                         input(r#type="text", value=path_val.clone(), on:input={
-                                                            let idx = idx;
                                                             move |ev: web_sys::Event| {
                                                                 let target = ev.target().unwrap();
                                                                 let input: web_sys::HtmlInputElement = target.unchecked_into();
@@ -239,8 +238,7 @@ pub fn Libraries() -> View {
                                                             }
                                                         })
                                                         button(class="btn btn-secondary btn-sm", r#type="button", on:click={
-                                                            let load_directory = load_directory.clone();
-                                                            let idx = idx;
+                                                            let load_directory = load_directory;
                                                             move |_| {
                                                                 browse_target_index.set(Some(idx));
                                                                 browse_open.set(true);
@@ -253,7 +251,6 @@ pub fn Libraries() -> View {
                                                             }
                                                         }) { "Browse" }
                                                         button(class="btn btn-danger btn-sm", r#type="button", on:click={
-                                                            let idx = idx;
                                                             move |_| {
                                                                 edit_paths.update(|paths| {
                                                                     if paths.len() > 1 && idx < paths.len() {
@@ -300,7 +297,6 @@ pub fn Libraries() -> View {
 
                             div(class="folder-actions-top") {
                                 button(class="btn btn-secondary btn-sm", on:click={
-                                    let load_directory = load_directory.clone();
                                     let parent = parent.clone();
                                     move |_| load_directory(parent.clone())
                                 }) { "Up" }
@@ -319,15 +315,12 @@ pub fn Libraries() -> View {
                                         Indexed(
                                             list=move || items.clone(),
                                             view={
-                                                let load_directory = load_directory.clone();
                                                 move |entry| {
                                                     let entry_path = entry.path.clone();
                                                     let entry_name = entry.name.clone();
-                                                    let load_directory = load_directory.clone();
                                                     view! {
                                                         div(class="folder-item", on:click={
                                                             let entry_path = entry_path.clone();
-                                                            let load_directory = load_directory.clone();
                                                             move |_| load_directory(entry_path.clone())
                                                         }) {
                                                             span(class="folder-icon") { "\u{1F4C1}" }
@@ -398,14 +391,13 @@ pub fn Libraries() -> View {
                         Indexed(
                             list=move || path_inputs.get_clone(),
                             view={
-                                let load_directory = load_directory.clone();
+                                let load_directory = load_directory;
                                 move |path| {
                                     let idx = path_inputs.get_clone().iter().position(|p| *p == path).unwrap_or(0);
                                     let path_val = path.clone();
                                     view! {
                                         div(class="path-entry") {
                                             input(r#type="text", value=path_val, placeholder="/media/movies", on:input={
-                                                let idx = idx;
                                                 move |ev: web_sys::Event| {
                                                     let target = ev.target().unwrap();
                                                     let input: web_sys::HtmlInputElement = target.unchecked_into();
@@ -417,8 +409,7 @@ pub fn Libraries() -> View {
                                                 }
                                             })
                                             button(class="btn btn-secondary btn-sm", r#type="button", on:click={
-                                                let load_directory = load_directory.clone();
-                                                let idx = idx;
+                                                let load_directory = load_directory;
                                                 move |_| {
                                                     browse_target_index.set(Some(idx));
                                                     browse_open.set(true);

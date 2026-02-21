@@ -229,7 +229,7 @@ impl Default for TasksConfig {
         schedules.insert(
             "weekly".to_string(),
             ScheduleEntry {
-                cron: "0 0 4 * * 0 *".to_string(),
+                cron: "0 0 4 * * 7 *".to_string(),
                 jitter_seconds: None,
             },
         );

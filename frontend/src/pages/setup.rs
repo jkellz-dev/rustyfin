@@ -19,17 +19,13 @@ pub fn Setup() -> View {
     // Check if wizard already complete
     spawn_local({
         async move {
-            match api::get_startup_config().await {
-                Ok(config) => {
-                    if config.startup_wizard_completed {
-                        // Redirect to dashboard
-                        if let Some(window) = web_sys::window() {
-                            let _ = window.location().set_href("/web");
-                        }
-                        return;
-                    }
+            if let Ok(config) = api::get_startup_config().await
+                && config.startup_wizard_completed
+            {
+                if let Some(window) = web_sys::window() {
+                    let _ = window.location().set_href("/web");
                 }
-                Err(_) => {} // Continue with setup
+                return;
             }
             checking.set(false);
         }
@@ -84,7 +80,7 @@ pub fn Setup() -> View {
                     div(class="setup-container") {
                         // Step indicators
                         div(class="steps") {
-                            div(class=if step.get() >= 0 { "step active" } else { "step" }) {}
+                            div(class="step active") {}
                             div(class=if step.get() >= 1 { "step active" } else { "step" }) {}
                             div(class=if step.get() >= 2 { "step active" } else { "step" }) {}
                         }

@@ -6,8 +6,8 @@ mod types;
 use sycamore::prelude::*;
 use sycamore_router::{HistoryIntegration, Route, Router};
 
-use components::nav::Layout;
-use pages::{dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, users::Users};
+use components::nav::Sidebar;
+use pages::{dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, tasks::Tasks, users::Users};
 
 #[derive(Route, Clone)]
 enum AppRoutes {
@@ -21,6 +21,8 @@ enum AppRoutes {
     Media,
     #[to("/web/users")]
     Users,
+    #[to("/web/tasks")]
+    Tasks,
     #[to("/web/setup")]
     Setup,
     #[not_found]
@@ -33,30 +35,22 @@ fn main() {
             Router(
                 integration=HistoryIntegration::new(),
                 view=move |route: ReadSignal<AppRoutes>| {
+                    // Static root node — Router's click handler attaches here and persists
                     view! {
-                        (match route.get_clone() {
-                            AppRoutes::Setup => view! { Setup {} },
-                            AppRoutes::Dashboard | AppRoutes::DashboardIndex | AppRoutes::NotFound => view! {
-                                Layout {
-                                    Dashboard {}
-                                }
-                            },
-                            AppRoutes::Libraries => view! {
-                                Layout {
-                                    Libraries {}
-                                }
-                            },
-                            AppRoutes::Media => view! {
-                                Layout {
-                                    Media {}
-                                }
-                            },
-                            AppRoutes::Users => view! {
-                                Layout {
-                                    Users {}
-                                }
-                            },
-                        })
+                        div(class="app-layout") {
+                            Sidebar {}
+                            main(class="main-content") {
+                                // Only this dynamic block rebuilds on route changes
+                                (match route.get_clone() {
+                                    AppRoutes::Setup => view! { Setup {} },
+                                    AppRoutes::Libraries => view! { Libraries {} },
+                                    AppRoutes::Media => view! { Media {} },
+                                    AppRoutes::Users => view! { Users {} },
+                                    AppRoutes::Tasks => view! { Tasks {} },
+                                    _ => view! { Dashboard {} },
+                                })
+                            }
+                        }
                     }
                 }
             )
