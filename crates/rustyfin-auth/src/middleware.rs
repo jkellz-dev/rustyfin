@@ -160,3 +160,165 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Task 9: MediaBrowser header parsing tests ────────────────────────
+
+    #[test]
+    fn auth_standard_mediabrowser_header() {
+        let header = r#"MediaBrowser Client="Jellyfin Web", Device="Chrome", DeviceId="abc123", Version="10.8.0", Token="secret-token""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("Jellyfin Web"));
+        assert_eq!(auth.device.as_deref(), Some("Chrome"));
+        assert_eq!(auth.device_id.as_deref(), Some("abc123"));
+        assert_eq!(auth.version.as_deref(), Some("10.8.0"));
+        assert_eq!(auth.token.as_deref(), Some("secret-token"));
+    }
+
+    #[test]
+    fn auth_emby_prefix() {
+        let header = r#"Emby Client="Emby Theater", Device="Windows", DeviceId="xyz", Version="3.0", Token="tok""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("Emby Theater"));
+        assert_eq!(auth.device.as_deref(), Some("Windows"));
+        assert_eq!(auth.device_id.as_deref(), Some("xyz"));
+        assert_eq!(auth.version.as_deref(), Some("3.0"));
+        assert_eq!(auth.token.as_deref(), Some("tok"));
+    }
+
+    #[test]
+    fn auth_missing_token() {
+        let header = r#"MediaBrowser Client="App", Device="Phone", DeviceId="d1", Version="1.0""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("App"));
+        assert_eq!(auth.device.as_deref(), Some("Phone"));
+        assert_eq!(auth.device_id.as_deref(), Some("d1"));
+        assert_eq!(auth.version.as_deref(), Some("1.0"));
+        assert!(auth.token.is_none());
+    }
+
+    #[test]
+    fn auth_empty_header() {
+        let auth = parse_mediabrowser_header("");
+
+        assert!(auth.client.is_none());
+        assert!(auth.device.is_none());
+        assert!(auth.device_id.is_none());
+        assert!(auth.version.is_none());
+        assert!(auth.token.is_none());
+    }
+
+    #[test]
+    fn auth_no_prefix() {
+        // Without MediaBrowser/Emby prefix, the function falls back to treating
+        // the whole string as the body (via unwrap_or in strip_prefix chain).
+        let header = r#"Client="Test", Token="abc""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("Test"));
+        assert_eq!(auth.token.as_deref(), Some("abc"));
+    }
+
+    #[test]
+    fn auth_quoted_values_with_special_chars() {
+        let header = r#"MediaBrowser Client="My App (v2)", Device="iPhone 15 Pro", DeviceId="abc-def-ghi", Version="1.0.0-beta", Token="tok123""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("My App (v2)"));
+        assert_eq!(auth.device.as_deref(), Some("iPhone 15 Pro"));
+        assert_eq!(auth.device_id.as_deref(), Some("abc-def-ghi"));
+        assert_eq!(auth.version.as_deref(), Some("1.0.0-beta"));
+        assert_eq!(auth.token.as_deref(), Some("tok123"));
+    }
+
+    #[test]
+    fn auth_extra_whitespace() {
+        let header = r#"MediaBrowser Client = "App" , Device = "Dev" , Token = "tok" "#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("App"));
+        assert_eq!(auth.device.as_deref(), Some("Dev"));
+        assert_eq!(auth.token.as_deref(), Some("tok"));
+    }
+
+    #[test]
+    fn auth_device_name_with_comma() {
+        // Known limitation: the parser splits on ALL commas, including those
+        // inside quoted values. A device name like "Smith, John's Phone" will
+        // be split into two parts at the comma, breaking the value.
+        let header = r#"MediaBrowser Client="App", Device="Smith, John's Phone", Token="tok""#;
+        let auth = parse_mediabrowser_header(header);
+
+        // Because the parser splits on commas naively, "Smith, John's Phone"
+        // becomes Device="Smith" and a dangling ` John's Phone"` part that
+        // doesn't match any key.
+        assert_eq!(auth.client.as_deref(), Some("App"));
+        assert_eq!(auth.device.as_deref(), Some("Smith"));
+        assert_eq!(auth.token.as_deref(), Some("tok"));
+    }
+
+    #[test]
+    fn auth_url_encoded_values() {
+        // Known limitation: the parser does NOT URL-decode values. Percent-
+        // encoded characters are returned as-is.
+        let header = r#"MediaBrowser Client="App%20Name", DeviceId="abc%2F123", Token="tok""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some("App%20Name"));
+        assert_eq!(auth.device_id.as_deref(), Some("abc%2F123"));
+        assert_eq!(auth.token.as_deref(), Some("tok"));
+    }
+
+    #[test]
+    fn auth_case_sensitivity() {
+        // Keys are case-sensitive: "client" (lowercase) does NOT match "Client".
+        let header = r#"MediaBrowser client="App", token="tok""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert!(auth.client.is_none());
+        assert!(auth.token.is_none());
+    }
+
+    #[test]
+    fn auth_duplicate_keys() {
+        // When a key appears more than once, the last value wins because the
+        // parser iterates sequentially and overwrites.
+        let header = r#"MediaBrowser Token="first", Token="second""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.token.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn auth_token_extraction_from_header() {
+        // Verify the exact token value is captured from a full header.
+        // Note: Token extraction priority in from_request_parts is:
+        //   1. Authorization: MediaBrowser ... Token="..." header
+        //   2. X-Emby-Token header
+        //   3. X-MediaBrowser-Token header
+        //   4. ?api_key= query parameter
+        // from_request_parts requires a DB pool so it cannot be unit-tested
+        // here; this test validates the header-parsing leg of that chain.
+        let header = r#"MediaBrowser Client="Web", Token="my-secret-access-token-12345""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.token.as_deref(), Some("my-secret-access-token-12345"));
+    }
+
+    #[test]
+    fn auth_empty_values() {
+        // Empty quoted values should produce Some(""), not None.
+        let header = r#"MediaBrowser Client="", Device="", Token="""#;
+        let auth = parse_mediabrowser_header(header);
+
+        assert_eq!(auth.client.as_deref(), Some(""));
+        assert_eq!(auth.device.as_deref(), Some(""));
+        assert_eq!(auth.token.as_deref(), Some(""));
+    }
+}

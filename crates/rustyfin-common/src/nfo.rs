@@ -995,4 +995,735 @@ mod tests {
             Some("The Many Adventures of Winnie the Pooh".to_string())
         );
     }
+
+    // ── Helper for temp NFO files ───────────────────────────────
+
+    fn write_temp_nfo(name: &str, content: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rustyfin-test-nfo-{name}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{name}.nfo"));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    fn cleanup_temp_nfo(path: &Path) {
+        if let Some(parent) = path.parent() {
+            std::fs::remove_dir_all(parent).ok();
+        }
+    }
+
+    // ── Test 1: Movie NFO — Justice League (comprehensive) ──────
+
+    #[test]
+    fn nfo_movie_justice_league_comprehensive() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<movie>
+    <title>Justice League</title>
+    <originaltitle>Justice League</originaltitle>
+    <ratings>
+        <rating name="imdb" max="10" default="true">
+            <value>6.400000</value>
+            <votes>335583</votes>
+        </rating>
+        <rating name="themoviedb" max="10">
+            <value>6.200000</value>
+        </rating>
+    </ratings>
+    <plot>Fueled by his restored faith in humanity.</plot>
+    <mpaa>Australia:M</mpaa>
+    <uniqueid type="imdb">tt0974015</uniqueid>
+    <uniqueid type="tmdb">141052</uniqueid>
+    <genre>Action</genre>
+    <genre>Adventure</genre>
+    <genre>Fantasy</genre>
+    <genre>Sci-Fi</genre>
+    <premiered>2017-11-15</premiered>
+    <year>2017</year>
+    <studio>DC Comics</studio>
+    <director>Zack Snyder</director>
+    <credits>Jerry Siegel</credits>
+    <credits>Joe Shuster</credits>
+    <actor>
+        <name>Ben Affleck</name>
+        <role>Batman</role>
+        <order>0</order>
+        <thumb>https://example.com/affleck.jpg</thumb>
+    </actor>
+    <actor>
+        <name>Jason Momoa</name>
+        <role>Aquaman</role>
+        <order>5</order>
+        <thumb>https://example.com/momoa.jpg</thumb>
+    </actor>
+</movie>"#;
+
+        let path = write_temp_nfo("justice-league", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        // Title and original title
+        assert_eq!(meta.title.as_deref(), Some("Justice League"));
+        assert_eq!(meta.original_title.as_deref(), Some("Justice League"));
+
+        // Genres
+        assert_eq!(
+            meta.genres,
+            vec!["Action", "Adventure", "Fantasy", "Sci-Fi"]
+        );
+
+        // Studios
+        assert_eq!(meta.studios, vec!["DC Comics"]);
+
+        // Production year
+        assert_eq!(meta.production_year, Some(2017));
+
+        // Premiere date (2017-11-15)
+        let premiere = meta.premiere_date.expect("premiere_date should be set");
+        assert_eq!(premiere.format("%Y-%m-%d").to_string(), "2017-11-15");
+
+        // Provider IDs
+        assert_eq!(meta.imdb_id.as_deref(), Some("tt0974015"));
+        assert_eq!(meta.tmdb_id.as_deref(), Some("141052"));
+
+        // Community rating: apply_ratings takes the first imdb/themoviedb match (IMDB = 6.4)
+        let rating = meta
+            .community_rating
+            .expect("community_rating should be set");
+        assert!(
+            (rating - 6.4).abs() < 0.01,
+            "Expected community_rating ~6.4, got {rating}"
+        );
+
+        // TODO: critic_rating is not parsed because MovieNfo struct lacks a `criticrating` field.
+        // Jellyfin parses <criticrating> but rustyfin currently ignores it.
+        assert!(
+            meta.critic_rating.is_none(),
+            "critic_rating is not currently parsed from movie NFO"
+        );
+
+        // Official rating (mpaa)
+        assert_eq!(meta.official_rating.as_deref(), Some("Australia:M"));
+
+        // Overview
+        assert_eq!(
+            meta.overview.as_deref(),
+            Some("Fueled by his restored faith in humanity.")
+        );
+
+        // People: 2 actors + 1 director + 2 writers = 5
+        assert_eq!(
+            meta.people.len(),
+            5,
+            "Expected 5 people (2 actors + 1 director + 2 writers), got {}",
+            meta.people.len()
+        );
+
+        // Check actor Jason Momoa
+        let momoa = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Jason Momoa")
+            .expect("Jason Momoa should be in people");
+        assert_eq!(momoa.person_type, "Actor");
+        assert_eq!(momoa.role.as_deref(), Some("Aquaman"));
+        assert_eq!(momoa.sort_order, Some(5));
+        assert!(
+            momoa
+                .image_url
+                .as_ref()
+                .map_or(false, |u| u.starts_with("https://")),
+            "Jason Momoa image_url should start with https://"
+        );
+
+        // Check director Zack Snyder
+        let snyder = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Zack Snyder")
+            .expect("Zack Snyder should be in people");
+        assert_eq!(snyder.person_type, "Director");
+
+        // Check writers
+        let siegel = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Jerry Siegel")
+            .expect("Jerry Siegel should be in people");
+        assert_eq!(siegel.person_type, "Writer");
+
+        let shuster = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Joe Shuster")
+            .expect("Joe Shuster should be in people");
+        assert_eq!(shuster.person_type, "Writer");
+    }
+
+    // ── Test 2: Series NFO — American Gods (comprehensive) ──────
+
+    #[test]
+    fn nfo_series_american_gods_comprehensive() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<tvshow>
+    <title>American Gods</title>
+    <originaltitle>American Gods</originaltitle>
+    <plot>An ex-con becomes the traveling partner of a conman.</plot>
+    <ratings>
+        <rating name="themoviedb" max="10" default="true">
+            <value>6.800000</value>
+        </rating>
+    </ratings>
+    <uniqueid type="tmdb" default="true">46639</uniqueid>
+    <uniqueid type="tvdb">253573</uniqueid>
+    <genre>Drama</genre>
+    <genre>Mystery</genre>
+    <genre>Sci-Fi &amp; Fantasy</genre>
+    <premiered>2017-04-30</premiered>
+    <year>2017</year>
+    <studio>Starz</studio>
+    <actor>
+        <name>Ricky Whittle</name>
+        <role>Shadow Moon</role>
+        <order>0</order>
+        <thumb>http://image.tmdb.org/t/p/original/cjeDbVfBp6Qvb3C74Dfy7BKDTQN.jpg</thumb>
+    </actor>
+    <actor>
+        <name>Pablo Schreiber</name>
+        <role>Mad Sweeney</role>
+        <order>3</order>
+        <thumb>http://image.tmdb.org/t/p/original/uo8YljeePz3pbj7gvWXdB4gOOW4.jpg</thumb>
+    </actor>
+</tvshow>"#;
+
+        let path = write_temp_nfo("american-gods", xml);
+        let meta = parse_series_nfo(&path).expect("parse_series_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        // Title
+        assert_eq!(meta.title.as_deref(), Some("American Gods"));
+        assert_eq!(meta.original_title.as_deref(), Some("American Gods"));
+
+        // Genres — XML entity &amp; should decode to &
+        assert_eq!(meta.genres, vec!["Drama", "Mystery", "Sci-Fi & Fantasy"]);
+
+        // Provider IDs
+        assert_eq!(meta.tmdb_id.as_deref(), Some("46639"));
+        assert_eq!(meta.tvdb_id.as_deref(), Some("253573"));
+
+        // Studios
+        assert_eq!(meta.studios, vec!["Starz"]);
+
+        // Premiere date
+        let premiere = meta.premiere_date.expect("premiere_date should be set");
+        assert_eq!(premiere.format("%Y-%m-%d").to_string(), "2017-04-30");
+
+        // Production year
+        assert_eq!(meta.production_year, Some(2017));
+
+        // Community rating
+        let rating = meta
+            .community_rating
+            .expect("community_rating should be set");
+        assert!(
+            (rating - 6.8).abs() < 0.01,
+            "Expected community_rating ~6.8, got {rating}"
+        );
+
+        // Overview
+        assert_eq!(
+            meta.overview.as_deref(),
+            Some("An ex-con becomes the traveling partner of a conman.")
+        );
+
+        // People: 2 actors
+        assert_eq!(meta.people.len(), 2);
+
+        // Check Pablo Schreiber
+        let pablo = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Pablo Schreiber")
+            .expect("Pablo Schreiber should be in people");
+        assert_eq!(pablo.person_type, "Actor");
+        assert_eq!(pablo.role.as_deref(), Some("Mad Sweeney"));
+        assert_eq!(pablo.sort_order, Some(3));
+    }
+
+    // ── Test 3: Episode NFO — Stargate Atlantis ─────────────────
+
+    #[test]
+    fn nfo_episode_stargate_atlantis_rising() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<episodedetails>
+    <title>Rising</title>
+    <season>1</season>
+    <episode>1</episode>
+    <plot>With the discovery of an Ancient outpost in the Antarctic, Dr. Daniel Jackson discovers the location of the mythical city.</plot>
+    <aired>2004-07-16</aired>
+    <uniqueid type="tvdb">55254</uniqueid>
+    <actor>
+        <name>Joe Flanigan</name>
+        <role>Maj. John Sheppard</role>
+        <order>0</order>
+    </actor>
+    <director>Martin Wood</director>
+</episodedetails>"#;
+
+        let path = write_temp_nfo("stargate-rising", xml);
+        let meta = parse_episode_nfo(&path).expect("parse_episode_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        // Title
+        assert_eq!(meta.title.as_deref(), Some("Rising"));
+
+        // Overview contains key text
+        let overview = meta.overview.as_deref().expect("overview should be set");
+        assert!(
+            overview.contains("Ancient outpost"),
+            "Overview should contain 'Ancient outpost', got: {overview}"
+        );
+
+        // Premiere date (aired)
+        let premiere = meta.premiere_date.expect("premiere_date should be set");
+        assert_eq!(premiere.format("%Y-%m-%d").to_string(), "2004-07-16");
+
+        // Provider IDs
+        assert_eq!(meta.tvdb_id.as_deref(), Some("55254"));
+
+        // People: 1 actor + 1 director = 2
+        assert_eq!(
+            meta.people.len(),
+            2,
+            "Expected 2 people (1 actor + 1 director), got {}",
+            meta.people.len()
+        );
+
+        // Check actor
+        let flanigan = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Joe Flanigan")
+            .expect("Joe Flanigan should be in people");
+        assert_eq!(flanigan.person_type, "Actor");
+        assert_eq!(flanigan.role.as_deref(), Some("Maj. John Sheppard"));
+        assert_eq!(flanigan.sort_order, Some(0));
+
+        // Check director
+        let wood = meta
+            .people
+            .iter()
+            .find(|p| p.name == "Martin Wood")
+            .expect("Martin Wood should be in people");
+        assert_eq!(wood.person_type, "Director");
+    }
+
+    // ── Test 4: Movie NFO — Minimal (edge case) ────────────────
+
+    #[test]
+    fn nfo_movie_minimal() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>Minimal Movie</title>
+</movie>"#;
+
+        let path = write_temp_nfo("minimal-movie", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Minimal Movie"));
+        assert!(meta.original_title.is_none());
+        assert!(meta.overview.is_none());
+        assert!(meta.genres.is_empty());
+        assert!(meta.studios.is_empty());
+        assert!(meta.official_rating.is_none());
+        assert!(meta.community_rating.is_none());
+        assert!(meta.critic_rating.is_none());
+        assert!(meta.production_year.is_none());
+        assert!(meta.premiere_date.is_none());
+        assert!(meta.end_date.is_none());
+        assert!(meta.tmdb_id.is_none());
+        assert!(meta.tvdb_id.is_none());
+        assert!(meta.imdb_id.is_none());
+        assert!(meta.people.is_empty());
+    }
+
+    // ── Test 5: Movie NFO — XML special characters ──────────────
+
+    #[test]
+    fn nfo_movie_xml_special_characters() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>Lilo &amp; Stitch</title>
+    <originaltitle>Lilo &amp; Stitch</originaltitle>
+    <plot>&gt;&gt;A Hawaiian girl&lt;&lt;</plot>
+    <genre>Animation</genre>
+    <year>2002</year>
+</movie>"#;
+
+        let path = write_temp_nfo("lilo-stitch", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        // XML entities should be decoded
+        assert_eq!(meta.title.as_deref(), Some("Lilo & Stitch"));
+        assert_eq!(meta.original_title.as_deref(), Some("Lilo & Stitch"));
+
+        let overview = meta.overview.as_deref().expect("overview should be set");
+        assert!(
+            overview.starts_with(">>"),
+            "Overview should start with >>, got: {overview}"
+        );
+        assert!(
+            overview.ends_with("<<"),
+            "Overview should end with <<, got: {overview}"
+        );
+
+        assert_eq!(meta.genres, vec!["Animation"]);
+        assert_eq!(meta.production_year, Some(2002));
+    }
+
+    // ── Test 6: Series NFO with IMDB ID in <id> tag ─────────────
+
+    #[test]
+    fn nfo_series_id_tag_attributes() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+    <title>Test Series</title>
+    <id IMDB="tt11111" TMDB="46639">253573</id>
+    <uniqueid type="tvdb">253573</uniqueid>
+</tvshow>"#;
+
+        let path = write_temp_nfo("test-series-id", xml);
+        let meta = parse_series_nfo(&path).expect("parse_series_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Test Series"));
+
+        // <uniqueid type="tvdb"> should be captured
+        assert_eq!(meta.tvdb_id.as_deref(), Some("253573"));
+
+        // TODO: Rustyfin does not parse <id IMDB="..." TMDB="..."> attributes.
+        // Jellyfin's Kodi NFO parser does extract these. The IMDB/TMDB attributes
+        // in the <id> tag are not captured by rustyfin's current parser.
+        assert!(
+            meta.imdb_id.is_none(),
+            "IMDB ID from <id> attributes is not parsed (expected behavior)"
+        );
+    }
+
+    // ── Test 7: Music Album NFO ─────────────────────────────────
+
+    #[test]
+    fn nfo_album_best_of_u2() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<album>
+    <title>The Best of 1980-1990</title>
+    <artistdesc>U2</artistdesc>
+    <genre>Rock</genre>
+    <genre>Pop</genre>
+    <year>1998</year>
+    <label>Island Records</label>
+</album>"#;
+
+        let path = write_temp_nfo("u2-best-of", xml);
+        let meta = parse_album_nfo(&path).expect("parse_album_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("The Best of 1980-1990"));
+        assert_eq!(meta.artist_name.as_deref(), Some("U2"));
+        assert_eq!(meta.genres, vec!["Rock", "Pop"]);
+        assert_eq!(meta.production_year, Some(1998));
+        // Label is stored in studios
+        assert_eq!(meta.studios, vec!["Island Records"]);
+    }
+
+    // ── Test 8: Music Artist NFO ────────────────────────────────
+
+    #[test]
+    fn nfo_artist_u2() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<artist>
+    <name>U2</name>
+    <musicbrainzartistid>a3cb23fc-acd3-4ce0-8f36-1e5aa6a18432</musicbrainzartistid>
+    <biography>U2 are an Irish rock band.</biography>
+    <genre>Rock</genre>
+    <genre>Alternative Rock</genre>
+</artist>"#;
+
+        let path = write_temp_nfo("u2-artist", xml);
+        let meta = parse_artist_nfo(&path).expect("parse_artist_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("U2"));
+        assert_eq!(meta.overview.as_deref(), Some("U2 are an Irish rock band."));
+        assert_eq!(meta.genres, vec!["Rock", "Alternative Rock"]);
+        assert_eq!(
+            meta.musicbrainz_artist_id.as_deref(),
+            Some("a3cb23fc-acd3-4ce0-8f36-1e5aa6a18432")
+        );
+    }
+
+    // ── Test 9: Multiple ratings — community_rating selection ───
+
+    #[test]
+    fn nfo_movie_multiple_ratings_picks_first() {
+        // Rustyfin's apply_ratings takes the first imdb/themoviedb match it
+        // encounters, regardless of the `default` attribute. With IMDB listed
+        // first, community_rating should be 6.4 (the IMDB value).
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<movie>
+    <title>Justice League</title>
+    <ratings>
+        <rating name="imdb" max="10" default="true">
+            <value>6.400000</value>
+            <votes>335583</votes>
+        </rating>
+        <rating name="themoviedb" max="10">
+            <value>6.200000</value>
+        </rating>
+    </ratings>
+</movie>"#;
+
+        let path = write_temp_nfo("jl-ratings", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        let rating = meta
+            .community_rating
+            .expect("community_rating should be set");
+        // TODO: Rustyfin picks the first matching rating by order, not by the
+        // `default="true"` attribute. In this case the result is the same (IMDB
+        // is both first and default), but if TMDB were listed first with
+        // default="true" on IMDB, rustyfin would pick TMDB's value instead.
+        // Jellyfin respects the `default` attribute.
+        assert!(
+            (rating - 6.4).abs() < 0.01,
+            "Expected community_rating ~6.4 (first imdb rating), got {rating}"
+        );
+
+        // Verify the TMDB rating (6.2) was NOT selected
+        assert!(
+            (rating - 6.2).abs() > 0.1,
+            "community_rating should NOT be 6.2 (the TMDB value)"
+        );
+    }
+
+    // ── Test 10: Empty/malformed NFO — no crash ─────────────────
+
+    #[test]
+    fn nfo_movie_empty_no_crash() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie></movie>"#;
+
+        let path = write_temp_nfo("empty-movie", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None for empty movie");
+        cleanup_temp_nfo(&path);
+
+        assert!(meta.title.is_none());
+        assert!(meta.original_title.is_none());
+        assert!(meta.overview.is_none());
+        assert!(meta.genres.is_empty());
+        assert!(meta.studios.is_empty());
+        assert!(meta.official_rating.is_none());
+        assert!(meta.community_rating.is_none());
+        assert!(meta.critic_rating.is_none());
+        assert!(meta.production_year.is_none());
+        assert!(meta.premiere_date.is_none());
+        assert!(meta.tmdb_id.is_none());
+        assert!(meta.imdb_id.is_none());
+        assert!(meta.tvdb_id.is_none());
+        assert!(meta.people.is_empty());
+    }
+
+    // ── Additional edge-case tests ──────────────────────────────
+
+    #[test]
+    fn nfo_movie_url_only_returns_none() {
+        // NFO files that are just URLs (e.g., IMDB links) should return None
+        let content = "https://www.imdb.com/title/tt0974015/";
+        let path = write_temp_nfo("url-only", content);
+        let result = parse_movie_nfo(&path);
+        cleanup_temp_nfo(&path);
+
+        assert!(
+            result.is_none(),
+            "URL-only NFO should return None, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn nfo_episode_no_actors() {
+        // Episode with no actors or directors — just metadata
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<episodedetails>
+    <title>Pilot</title>
+    <plot>The beginning.</plot>
+    <aired>2020-01-01</aired>
+</episodedetails>"#;
+
+        let path = write_temp_nfo("pilot-no-actors", xml);
+        let meta = parse_episode_nfo(&path).expect("parse_episode_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Pilot"));
+        assert_eq!(meta.overview.as_deref(), Some("The beginning."));
+        assert!(meta.people.is_empty());
+        let premiere = meta.premiere_date.expect("premiere_date should be set");
+        assert_eq!(premiere.format("%Y-%m-%d").to_string(), "2020-01-01");
+    }
+
+    #[test]
+    fn nfo_series_empty_no_crash() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<tvshow></tvshow>"#;
+
+        let path = write_temp_nfo("empty-series", xml);
+        let meta =
+            parse_series_nfo(&path).expect("parse_series_nfo returned None for empty tvshow");
+        cleanup_temp_nfo(&path);
+
+        assert!(meta.title.is_none());
+        assert!(meta.genres.is_empty());
+        assert!(meta.studios.is_empty());
+        assert!(meta.people.is_empty());
+    }
+
+    #[test]
+    fn nfo_episode_empty_no_crash() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<episodedetails></episodedetails>"#;
+
+        let path = write_temp_nfo("empty-episode", xml);
+        let meta = parse_episode_nfo(&path)
+            .expect("parse_episode_nfo returned None for empty episodedetails");
+        cleanup_temp_nfo(&path);
+
+        assert!(meta.title.is_none());
+        assert!(meta.overview.is_none());
+        assert!(meta.premiere_date.is_none());
+        assert!(meta.people.is_empty());
+    }
+
+    #[test]
+    fn nfo_movie_actor_without_optional_fields() {
+        // Actor with only a name — role, order, thumb should default gracefully
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>Test</title>
+    <actor>
+        <name>Unknown Actor</name>
+    </actor>
+</movie>"#;
+
+        let path = write_temp_nfo("actor-minimal", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.people.len(), 1);
+        let actor = &meta.people[0];
+        assert_eq!(actor.name, "Unknown Actor");
+        assert_eq!(actor.person_type, "Actor");
+        assert!(actor.role.is_none());
+        // When order is not specified, apply_actors falls back to enumeration index
+        assert_eq!(actor.sort_order, Some(0));
+        assert!(actor.image_url.is_none());
+    }
+
+    #[test]
+    fn nfo_movie_nonexistent_file_returns_none() {
+        let path = std::env::temp_dir().join("rustyfin-test-nfo-nonexistent/does-not-exist.nfo");
+        let result = parse_movie_nfo(&path);
+        assert!(result.is_none(), "Nonexistent file should return None");
+    }
+
+    #[test]
+    fn nfo_album_with_tracks() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<album>
+    <title>Abbey Road</title>
+    <artistdesc>The Beatles</artistdesc>
+    <year>1969</year>
+    <genre>Rock</genre>
+    <track>
+        <title>Come Together</title>
+        <position>1</position>
+        <duration>259.0</duration>
+    </track>
+    <track>
+        <title>Something</title>
+        <position>2</position>
+        <duration>182.0</duration>
+    </track>
+</album>"#;
+
+        let path = write_temp_nfo("abbey-road", xml);
+        let meta = parse_album_nfo(&path).expect("parse_album_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Abbey Road"));
+        assert_eq!(meta.artist_name.as_deref(), Some("The Beatles"));
+        assert_eq!(meta.production_year, Some(1969));
+        assert_eq!(meta.tracks.len(), 2);
+        assert_eq!(meta.tracks[0].title, "Come Together");
+        assert_eq!(meta.tracks[0].position, Some(1));
+        assert!((meta.tracks[0].duration.unwrap() - 259.0).abs() < 0.1);
+        assert_eq!(meta.tracks[1].title, "Something");
+        assert_eq!(meta.tracks[1].position, Some(2));
+    }
+
+    #[test]
+    fn nfo_artist_with_formed_and_disbanded() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<artist>
+    <name>The Beatles</name>
+    <biography>The Beatles were an English rock band.</biography>
+    <formed>1960-01-01</formed>
+    <disbanded>1970-04-10</disbanded>
+    <genre>Rock</genre>
+</artist>"#;
+
+        let path = write_temp_nfo("beatles-artist", xml);
+        let meta = parse_artist_nfo(&path).expect("parse_artist_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("The Beatles"));
+        // `formed` is used as premiere_date via born/formed fallback
+        let premiere = meta
+            .premiere_date
+            .expect("premiere_date should be set from formed");
+        assert_eq!(premiere.format("%Y-%m-%d").to_string(), "1960-01-01");
+        // `disbanded` is used as end_date via died/disbanded fallback
+        let end = meta
+            .end_date
+            .expect("end_date should be set from disbanded");
+        assert_eq!(end.format("%Y-%m-%d").to_string(), "1970-04-10");
+    }
+
+    #[test]
+    fn nfo_movie_slash_separated_directors() {
+        // Some NFOs encode multiple directors in a single <director> tag with slashes
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>Test Multi Director</title>
+    <director>Anthony Russo / Joe Russo</director>
+</movie>"#;
+
+        let path = write_temp_nfo("multi-director", xml);
+        let meta = parse_movie_nfo(&path).expect("parse_movie_nfo returned None");
+        cleanup_temp_nfo(&path);
+
+        let directors: Vec<&NfoPerson> = meta
+            .people
+            .iter()
+            .filter(|p| p.person_type == "Director")
+            .collect();
+        assert_eq!(
+            directors.len(),
+            2,
+            "Expected 2 directors from slash-separated value, got {}",
+            directors.len()
+        );
+        assert!(directors.iter().any(|d| d.name == "Anthony Russo"));
+        assert!(directors.iter().any(|d| d.name == "Joe Russo"));
+    }
 }
