@@ -76,16 +76,6 @@ pub async fn create_user_disabled(_auth: AdminUser) -> StatusCode {
     StatusCode::FORBIDDEN
 }
 
-// ── Group 7: Item images list ────────────────────────────────────────
-
-/// `GET /Items/{itemId}/Images` — return empty list (auth required).
-pub async fn get_item_images_list(
-    _auth: AuthenticatedUser,
-    Path(_item_id): Path<Uuid>,
-) -> Json<Vec<()>> {
-    Json(Vec::new())
-}
-
 // ── Group 8: Subtitle remote search stubs ─────────────────────────
 
 /// `GET /Items/{itemId}/RemoteSearch/Subtitles/{language}` — return empty list.

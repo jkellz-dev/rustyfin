@@ -160,7 +160,7 @@ pub fn build_router(state: AppState) -> Router {
             "/Items/{itemId}/Images/{imageType}/{imageIndex}",
             get(images::get_item_image_by_index),
         )
-        .route("/Items/{itemId}/Images", get(stubs::get_item_images_list))
+        .route("/Items/{itemId}/Images", get(images::get_item_images_list))
         // ── Entity image stubs (genres, studios, persons, artists, music genres) ──
         .route("/Genres/{name}/Images/{imageType}", get(stubs::not_found))
         .route(

@@ -1,4 +1,5 @@
 use axum::{
+    Json,
     body::Body,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
@@ -7,8 +8,10 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
+use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::images;
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions};
+use rustyfin_models::dto::ImageInfo;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -56,6 +59,46 @@ pub async fn get_item_image_by_index(
 
     let opts = build_options(&params, &headers);
     serve_image(&image.path, &opts, &state).await
+}
+
+/// `GET /Items/{itemId}/Images` -- List all images for an item.
+pub async fn get_item_images_list(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+) -> Result<Json<Vec<ImageInfo>>, ApiError> {
+    let item_images = images::list_by_item(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let mut infos = Vec::with_capacity(item_images.len());
+    for img in &item_images {
+        let size = tokio::fs::metadata(&img.path)
+            .await
+            .map(|m| m.len() as i64)
+            .unwrap_or(0);
+        let tag = img
+            .blurhash
+            .as_deref()
+            .map(|bh| bh.chars().take(8).collect::<String>())
+            .unwrap_or_else(|| {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                img.path.hash(&mut hasher);
+                format!("{:x}", hasher.finish())
+            });
+        infos.push(ImageInfo {
+            image_type: img.image_type.clone(),
+            image_index: img.image_index,
+            image_tag: tag,
+            blur_hash: img.blurhash.clone(),
+            height: img.height,
+            width: img.width,
+            size,
+        });
+    }
+
+    Ok(Json(infos))
 }
 
 /// Build `ImageOptions` from query parameters and request headers.

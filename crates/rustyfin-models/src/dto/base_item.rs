@@ -468,6 +468,22 @@ pub struct FileSystemEntryInfo {
     pub entry_type: String,
 }
 
+/// Image metadata returned by `GET /Items/{itemId}/Images`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ImageInfo {
+    pub image_type: String,
+    pub image_index: i32,
+    pub image_tag: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blur_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<i32>,
+    pub size: i64,
+}
+
 /// Library options.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
