@@ -236,6 +236,21 @@ pub async fn find_by_path(pool: &PgPool, path: &str) -> Result<Option<MediaItemR
         .await
 }
 
+/// Find a media item by name and type (case-insensitive name match).
+pub async fn find_by_name_and_type(
+    pool: &PgPool,
+    name: &str,
+    item_type: &str,
+) -> Result<Option<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE LOWER(name) = LOWER($1) AND item_type = $2 LIMIT 1",
+    )
+    .bind(name)
+    .bind(item_type)
+    .fetch_optional(pool)
+    .await
+}
+
 /// Find a media item by name, type, and parent.
 pub async fn find_by_name_and_parent(
     pool: &PgPool,

@@ -1,6 +1,8 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::HeaderMap,
+    response::Response,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -11,6 +13,7 @@ use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::ApiError;
 use crate::router::AppState;
+use crate::routes::images::{self as image_routes, ImageParams};
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -126,4 +129,27 @@ pub async fn get_studio(
     }
 
     Ok(Json(dto))
+}
+
+/// `GET /Studios/{name}/Images/{imageType}` -- Serve studio image.
+pub async fn get_studio_image(
+    State(state): State<AppState>,
+    Path((name, image_type)): Path<(String, String)>,
+    Query(params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let entity_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("Studio:{name}").as_bytes());
+    image_routes::serve_entity_image(&state, entity_id, &image_type, 0, &params, &headers).await
+}
+
+/// `GET /Studios/{name}/Images/{imageType}/{imageIndex}` -- Serve studio image by index.
+pub async fn get_studio_image_by_index(
+    State(state): State<AppState>,
+    Path((name, image_type, image_index)): Path<(String, String, i32)>,
+    Query(params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let entity_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("Studio:{name}").as_bytes());
+    image_routes::serve_entity_image(&state, entity_id, &image_type, image_index, &params, &headers)
+        .await
 }

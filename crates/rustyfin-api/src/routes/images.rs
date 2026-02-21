@@ -101,8 +101,26 @@ pub async fn get_item_images_list(
     Ok(Json(infos))
 }
 
+/// Serve an image for any entity by UUID lookup.
+pub(crate) async fn serve_entity_image(
+    state: &AppState,
+    entity_id: Uuid,
+    image_type: &str,
+    image_index: i32,
+    params: &ImageParams,
+    headers: &HeaderMap,
+) -> Result<Response, ApiError> {
+    let image = images::find_by_item_and_type(&state.pool, entity_id, image_type, image_index)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    let opts = build_options(params, headers);
+    serve_image(&image.path, &opts, state).await
+}
+
 /// Build `ImageOptions` from query parameters and request headers.
-fn build_options(params: &ImageParams, headers: &HeaderMap) -> ImageOptions {
+pub(crate) fn build_options(params: &ImageParams, headers: &HeaderMap) -> ImageOptions {
     let format = match params.format.as_deref() {
         Some("webp" | "Webp" | "WEBP") => ImageFormat::Webp,
         Some("png" | "Png" | "PNG") => ImageFormat::Png,
@@ -132,7 +150,7 @@ fn build_options(params: &ImageParams, headers: &HeaderMap) -> ImageOptions {
 }
 
 /// Serve an image, processing (resize/format convert) if needed.
-async fn serve_image(
+pub(crate) async fn serve_image(
     source_path: &str,
     opts: &ImageOptions,
     state: &AppState,

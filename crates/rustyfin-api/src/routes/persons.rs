@@ -1,6 +1,8 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::HeaderMap,
+    response::Response,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -11,6 +13,7 @@ use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::ApiError;
 use crate::router::AppState;
+use crate::routes::images::{self as image_routes, ImageParams};
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -122,4 +125,35 @@ pub async fn get_person(
         overview: person.overview,
         ..Default::default()
     }))
+}
+
+/// `GET /Persons/{name}/Images/{imageType}` -- Serve person image.
+pub async fn get_person_image(
+    State(state): State<AppState>,
+    Path((name, image_type)): Path<(String, String)>,
+    Query(params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let person = people::find_by_name(&state.pool, &name)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    image_routes::serve_entity_image(&state, person.id, &image_type, 0, &params, &headers).await
+}
+
+/// `GET /Persons/{name}/Images/{imageType}/{imageIndex}` -- Serve person image by index.
+pub async fn get_person_image_by_index(
+    State(state): State<AppState>,
+    Path((name, image_type, image_index)): Path<(String, String, i32)>,
+    Query(params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let person = people::find_by_name(&state.pool, &name)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+
+    image_routes::serve_entity_image(&state, person.id, &image_type, image_index, &params, &headers)
+        .await
 }

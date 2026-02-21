@@ -167,20 +167,29 @@ pub fn build_router(state: AppState) -> Router {
             "/Genres/{name}/Images/{imageType}/{imageIndex}",
             get(stubs::not_found),
         )
-        .route("/Studios/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Studios/{name}/Images/{imageType}",
+            get(studios::get_studio_image),
+        )
         .route(
             "/Studios/{name}/Images/{imageType}/{imageIndex}",
-            get(stubs::not_found),
+            get(studios::get_studio_image_by_index),
         )
-        .route("/Persons/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Persons/{name}/Images/{imageType}",
+            get(persons::get_person_image),
+        )
         .route(
             "/Persons/{name}/Images/{imageType}/{imageIndex}",
-            get(stubs::not_found),
+            get(persons::get_person_image_by_index),
         )
-        .route("/Artists/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Artists/{name}/Images/{imageType}",
+            get(artists::get_artist_image),
+        )
         .route(
             "/Artists/{name}/Images/{imageType}/{imageIndex}",
-            get(stubs::not_found),
+            get(artists::get_artist_image_by_index),
         )
         .route(
             "/MusicGenres/{name}/Images/{imageType}",

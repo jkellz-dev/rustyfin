@@ -1,6 +1,8 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
+    http::HeaderMap,
+    response::Response,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -11,6 +13,7 @@ use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::ApiError;
 use crate::router::AppState;
+use crate::routes::images::{self as image_routes, ImageParams};
 use crate::routes::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
 
 #[derive(Debug, Deserialize, Default)]
@@ -81,4 +84,47 @@ async fn get_artists_inner(
     let mut result = QueryResult::new(dtos, total as i32);
     result.start_index = start as i32;
     Ok(Json(result))
+}
+
+/// `GET /Artists/{name}/Images/{imageType}` -- Serve artist image.
+pub async fn get_artist_image(
+    State(state): State<AppState>,
+    Path((name, image_type)): Path<(String, String)>,
+    Query(params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    // Artists are media items -- look up by name
+    let artist = media_items::find_by_name_and_type(&state.pool, &name, "MusicArtist")
+        .await
+        .map_err(ApiError::Database)?;
+
+    let entity_id = match artist {
+        Some(a) => a.id,
+        None => {
+            // Fallback: try deterministic UUID
+            Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("Artist:{name}").as_bytes())
+        }
+    };
+
+    image_routes::serve_entity_image(&state, entity_id, &image_type, 0, &params, &headers).await
+}
+
+/// `GET /Artists/{name}/Images/{imageType}/{imageIndex}` -- Serve artist image by index.
+pub async fn get_artist_image_by_index(
+    State(state): State<AppState>,
+    Path((name, image_type, image_index)): Path<(String, String, i32)>,
+    Query(params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let artist = media_items::find_by_name_and_type(&state.pool, &name, "MusicArtist")
+        .await
+        .map_err(ApiError::Database)?;
+
+    let entity_id = match artist {
+        Some(a) => a.id,
+        None => Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("Artist:{name}").as_bytes()),
+    };
+
+    image_routes::serve_entity_image(&state, entity_id, &image_type, image_index, &params, &headers)
+        .await
 }
