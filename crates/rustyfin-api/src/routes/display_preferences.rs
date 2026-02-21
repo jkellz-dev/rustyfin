@@ -1,12 +1,16 @@
 use axum::{
     Json,
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_db::repo::display_preferences as prefs_repo;
 use rustyfin_models::dto::DisplayPreferencesDto;
+
+use crate::error::ApiError;
+use crate::router::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,24 +19,41 @@ pub struct DisplayPreferencesQuery {
     pub client: Option<String>,
 }
 
-/// `GET /DisplayPreferences/{displayPreferencesId}` — Return default display preferences.
 pub async fn get_display_preferences(
-    _auth: AuthenticatedUser,
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
     Path(display_prefs_id): Path<String>,
     Query(query): Query<DisplayPreferencesQuery>,
-) -> Json<DisplayPreferencesDto> {
+) -> Result<Json<DisplayPreferencesDto>, ApiError> {
     let client = query.client.as_deref().unwrap_or("emby");
-    Json(DisplayPreferencesDto::default_for(
-        &display_prefs_id,
-        client,
-    ))
+
+    if let Some(data) = prefs_repo::get(&state.pool, auth.user_id, &display_prefs_id, client)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        let dto: DisplayPreferencesDto =
+            serde_json::from_value(data).unwrap_or_else(|_| {
+                DisplayPreferencesDto::default_for(&display_prefs_id, client)
+            });
+        Ok(Json(dto))
+    } else {
+        Ok(Json(DisplayPreferencesDto::default_for(
+            &display_prefs_id,
+            client,
+        )))
+    }
 }
 
-/// `POST /DisplayPreferences/{displayPreferencesId}` — Accept and discard (no persistence).
 pub async fn update_display_preferences(
-    _auth: AuthenticatedUser,
-    Path(_display_prefs_id): Path<String>,
-    _body: String,
-) -> StatusCode {
-    StatusCode::NO_CONTENT
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(display_prefs_id): Path<String>,
+    Query(query): Query<DisplayPreferencesQuery>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<StatusCode, ApiError> {
+    let client = query.client.as_deref().unwrap_or("emby");
+    prefs_repo::upsert(&state.pool, auth.user_id, &display_prefs_id, client, &body)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(StatusCode::NO_CONTENT)
 }
