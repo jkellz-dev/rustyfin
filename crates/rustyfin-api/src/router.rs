@@ -397,8 +397,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Years", get(stubs::empty_query_result_auth))
         .route("/Years/{year}", get(stubs::get_year))
         // ── MusicGenres ────────────────────────────────────────────
-        .route("/MusicGenres", get(stubs::empty_query_result_auth))
-        .route("/MusicGenres/{genreName}", get(stubs::get_music_genre))
+        .route("/MusicGenres", get(music_genres::get_music_genres))
+        .route("/MusicGenres/{genreName}", get(music_genres::get_music_genre))
         // ── ScheduledTasks (admin) ─────────────────────────────────
         .route("/ScheduledTasks", get(stubs::empty_array_admin))
         .route("/ScheduledTasks/{taskId}", get(stubs::not_found_admin))

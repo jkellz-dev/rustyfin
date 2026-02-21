@@ -64,21 +64,6 @@ pub async fn get_year(_auth: AuthenticatedUser, Path(year): Path<i32>) -> Json<B
     })
 }
 
-// ── Group 3: MusicGenres ────────────────────────────────────────────
-
-/// `GET /MusicGenres/{genreName}` — return a minimal `BaseItemDto`.
-pub async fn get_music_genre(
-    _auth: AuthenticatedUser,
-    Path(genre_name): Path<String>,
-) -> Json<BaseItemDto> {
-    Json(BaseItemDto {
-        name: genre_name.clone(),
-        id: Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes()),
-        item_type: "MusicGenre".to_owned(),
-        ..Default::default()
-    })
-}
-
 // ── Group 5: GetUtcTime ─────────────────────────────────────────────
 
 /// UTC time response for client time sync.

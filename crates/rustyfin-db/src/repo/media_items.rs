@@ -772,6 +772,52 @@ pub async fn count_items_with_genre(
     }
 }
 
+/// Distinct genre values filtered by item type, optionally scoped to a library.
+pub async fn distinct_genres_by_item_types(
+    pool: &PgPool,
+    parent_id: Option<Uuid>,
+    item_types: &[&str],
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        r#"
+        SELECT DISTINCT unnest(genres) AS genre
+        FROM media_items
+        WHERE item_type = ANY($1)
+          AND ($2::uuid IS NULL OR library_id = $2)
+        ORDER BY genre
+        "#,
+    )
+    .bind(item_types)
+    .bind(parent_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(g,)| g).collect())
+}
+
+/// Count items per type that have a specific genre, filtered by item types, optionally scoped to a library.
+pub async fn count_items_with_genre_by_types(
+    pool: &PgPool,
+    genre: &str,
+    parent_id: Option<Uuid>,
+    item_types: &[&str],
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT item_type, COUNT(*) as cnt
+        FROM media_items
+        WHERE $1 = ANY(genres)
+          AND item_type = ANY($2)
+          AND ($3::uuid IS NULL OR library_id = $3)
+        GROUP BY item_type
+        "#,
+    )
+    .bind(genre)
+    .bind(item_types)
+    .bind(parent_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Distinct studio values, optionally scoped to a library.
 pub async fn distinct_studios(
     pool: &PgPool,

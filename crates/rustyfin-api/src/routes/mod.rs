@@ -15,6 +15,7 @@ pub mod items;
 pub mod libraries;
 pub mod localization;
 pub mod media_info;
+pub mod music_genres;
 pub mod persons;
 pub mod playback;
 pub mod playlists;
