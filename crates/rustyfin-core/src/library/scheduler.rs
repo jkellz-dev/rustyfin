@@ -78,6 +78,7 @@ pub struct TaskScheduler {
     config: SchedulerConfig,
     pool: PgPool,
     in_flight: Arc<RwLock<HashSet<Uuid>>>,
+    people_cache_dir: Option<std::path::PathBuf>,
     static_tasks: RwLock<Vec<(String, Arc<dyn ScheduledTask>)>>, // (schedule_name, task)
 }
 
@@ -86,11 +87,13 @@ impl TaskScheduler {
         config: SchedulerConfig,
         pool: PgPool,
         in_flight: Arc<RwLock<HashSet<Uuid>>>,
+        people_cache_dir: Option<std::path::PathBuf>,
     ) -> Self {
         Self {
             config,
             pool,
             in_flight,
+            people_cache_dir,
             static_tasks: RwLock::new(Vec::new()),
         }
     }
@@ -299,6 +302,7 @@ impl TaskScheduler {
 
             let pool = self.pool.clone();
             let in_flight = self.in_flight.clone();
+            let people_cache_dir = self.people_cache_dir.clone();
             let lib_id = lib.id;
             let lib_name = lib.name.clone();
             let lib_paths = lib.paths.clone();
@@ -322,7 +326,7 @@ impl TaskScheduler {
                 )
                 .await;
 
-                let scanner = LibraryScanner::new(pool.clone());
+                let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
                 match scanner.scan(lib_id, &lib_paths).await {
                     Ok(result) => {
                         tracing::info!(
@@ -371,13 +375,14 @@ impl TaskScheduler {
 
             let pool = self.pool.clone();
             let in_flight = self.in_flight.clone();
+            let people_cache_dir = self.people_cache_dir.clone();
             let lib_id = lib.id;
             let lib_name = lib.name.clone();
             let lib_paths = lib.paths.clone();
 
             tokio::spawn(async move {
                 tracing::info!("Startup scan starting: {lib_name}");
-                let scanner = LibraryScanner::new(pool.clone());
+                let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
                 match scanner.scan(lib_id, &lib_paths).await {
                     Ok(result) => {
                         tracing::info!(
@@ -490,6 +495,7 @@ impl TaskScheduler {
         if task_key == "library_scan" {
             let pool = self.pool.clone();
             let in_flight = self.in_flight.clone();
+            let people_cache_dir = self.people_cache_dir.clone();
             tokio::spawn(async move {
                 let result_id =
                     task_results::insert_running(&pool, "library_scan", "Scan All Libraries")
@@ -506,7 +512,8 @@ impl TaskScheduler {
                         return;
                     }
                 };
-                let scanner = crate::library::scanner::LibraryScanner::new(pool.clone());
+                let scanner =
+                    crate::library::scanner::LibraryScanner::new(pool.clone(), people_cache_dir);
                 let mut had_error = false;
                 for lib in libs {
                     if in_flight.read().await.contains(&lib.id) {

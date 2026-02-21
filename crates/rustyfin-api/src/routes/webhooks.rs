@@ -101,9 +101,10 @@ pub async fn post_updated_media(
         let pool = state.pool.clone();
         let scan_in_flight = state.scan_in_flight.clone();
         let search_service = state.search_service.clone();
+        let people_cache_dir = state.people_cache_dir.clone();
 
         tokio::spawn(async move {
-            let scanner = LibraryScanner::new(pool.clone());
+            let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
             tracing::info!(
                 "Webhook scan starting: library={library_id}, dirs={}",
                 unique_dirs.join(", ")

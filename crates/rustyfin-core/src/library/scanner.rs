@@ -30,8 +30,8 @@ pub struct ScanResult {
 }
 
 impl LibraryScanner {
-    pub fn new(pool: PgPool) -> Self {
-        let enrichment = EnrichmentService::new(pool.clone());
+    pub fn new(pool: PgPool, people_cache_dir: Option<std::path::PathBuf>) -> Self {
+        let enrichment = EnrichmentService::new(pool.clone(), people_cache_dir);
         Self { pool, enrichment }
     }
 

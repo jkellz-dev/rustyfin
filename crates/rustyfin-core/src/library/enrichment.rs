@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -13,11 +13,15 @@ use rustyfin_common::nfo::{
 
 pub struct EnrichmentService {
     pool: PgPool,
+    people_cache_dir: Option<PathBuf>,
 }
 
 impl EnrichmentService {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, people_cache_dir: Option<PathBuf>) -> Self {
+        Self {
+            pool,
+            people_cache_dir,
+        }
     }
 
     /// Enrich a movie item with metadata from NFO.
@@ -190,6 +194,43 @@ impl EnrichmentService {
                                 "Failed to link person {} to {item_id}: {e}",
                                 person.name
                             );
+                        }
+
+                        // Insert image row if headshot cache file exists
+                        if let Some(ref cache_dir) = self.people_cache_dir
+                            && let Some(ref pid) = person_row.provider_person_id
+                        {
+                            let headshot_path = cache_dir.join(format!("{pid}.jpg"));
+                            if headshot_path.is_file() {
+                                let existing =
+                                    rustyfin_db::repo::images::find_by_item_and_type(
+                                        &self.pool,
+                                        person_row.id,
+                                        "Primary",
+                                        0,
+                                    )
+                                    .await;
+                                if matches!(existing, Ok(None)) {
+                                    let new_image = rustyfin_db::repo::images::NewImage {
+                                        entity_id: person_row.id,
+                                        image_type: "Primary".to_string(),
+                                        path: headshot_path
+                                            .to_string_lossy()
+                                            .into_owned(),
+                                        image_index: 0,
+                                    };
+                                    if let Err(e) = rustyfin_db::repo::images::insert(
+                                        &self.pool, &new_image,
+                                    )
+                                    .await
+                                    {
+                                        tracing::error!(
+                                            "Failed to insert headshot image for {}: {e}",
+                                            person.name
+                                        );
+                                    }
+                                }
+                            }
                         }
                     }
                     Err(e) => {

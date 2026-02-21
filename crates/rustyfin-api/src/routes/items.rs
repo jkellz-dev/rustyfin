@@ -686,8 +686,9 @@ pub async fn refresh_item(
         .ok_or(ApiError::NotFound)?;
 
     let pool = state.pool.clone();
+    let people_cache_dir = state.people_cache_dir.clone();
     tokio::spawn(async move {
-        let service = EnrichmentService::new(pool);
+        let service = EnrichmentService::new(pool, people_cache_dir);
         service.refresh_item(item_id).await;
     });
 

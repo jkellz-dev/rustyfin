@@ -113,6 +113,24 @@ async fn main() -> anyhow::Result<()> {
     }
     tracing::info!("Image cache directory: {}", image_cache_dir.display());
 
+    // People cache directory (headshots downloaded by CLI)
+    let people_cache_dir: Option<std::path::PathBuf> =
+        config.metadata.people_cache_dir.as_ref().map(|s| {
+            let expanded = if let Some(rest) = s.strip_prefix("~/") {
+                if let Ok(home) = std::env::var("HOME") {
+                    format!("{home}/{rest}")
+                } else {
+                    s.clone()
+                }
+            } else {
+                s.clone()
+            };
+            std::path::PathBuf::from(expanded)
+        });
+    if let Some(ref dir) = people_cache_dir {
+        tracing::info!("People cache directory: {}", dir.display());
+    }
+
     // Initialize task scheduler
     let mut task_scheduler_for_state: Option<Arc<rustyfin_core::TaskScheduler>> = None;
     if config.tasks.enabled {
@@ -142,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
             scheduler_config,
             db_pool.clone(),
             scan_in_flight.clone(),
+            people_cache_dir.clone(),
         ));
 
         task_scheduler.validate()?;
@@ -280,6 +299,7 @@ async fn main() -> anyhow::Result<()> {
         ldap_config,
         transcode_manager,
         image_cache_dir,
+        people_cache_dir,
         scan_in_flight,
         scan_schedules,
         user_image_url_template: config.server.user_image_url_template,

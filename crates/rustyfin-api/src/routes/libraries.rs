@@ -173,8 +173,9 @@ pub async fn refresh_library(
 
     let search_service = state.search_service.clone();
     let scan_in_flight = state.scan_in_flight.clone();
+    let people_cache_dir = state.people_cache_dir.clone();
     tokio::spawn(async move {
-        let scanner = LibraryScanner::new(pool.clone());
+        let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
         for lib in libs_to_scan {
             if let Err(e) = scanner.scan(lib.id, &lib.paths).await {
                 tracing::error!("Scan failed for library {}: {e}", lib.id);

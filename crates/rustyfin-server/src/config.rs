@@ -48,6 +48,7 @@ pub struct SearchConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct MetadataConfig {
     pub tmdb_api_key: Option<String>,
+    pub people_cache_dir: Option<String>,
 }
 
 // ── Transcode configuration ──────────────────────────────────────────
@@ -476,6 +477,9 @@ impl Config {
                 tmdb_api_key: std::env::var("RUSTYFIN_TMDB_API_KEY")
                     .ok()
                     .or(config.metadata.tmdb_api_key),
+                people_cache_dir: std::env::var("RUSTYFIN_PEOPLE_CACHE_DIR")
+                    .ok()
+                    .or(config.metadata.people_cache_dir),
             },
             auth: Self::apply_auth_env_overrides(config.auth),
             transcode: config.transcode,

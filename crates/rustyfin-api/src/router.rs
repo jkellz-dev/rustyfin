@@ -35,6 +35,7 @@ pub struct AppState {
     pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
     pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
     pub image_cache_dir: PathBuf,
+    pub people_cache_dir: Option<PathBuf>,
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
     pub scan_schedules: serde_json::Value,
     pub user_image_url_template: Option<String>,
