@@ -31,6 +31,8 @@ pub struct ServerConfig {
     pub server_name: String,
     #[serde(default)]
     pub user_image_url_template: Option<String>,
+    #[serde(default)]
+    pub image_cache_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -408,6 +410,7 @@ fn default_server() -> ServerConfig {
         base_url: default_base_url(),
         server_name: default_server_name(),
         user_image_url_template: None,
+        image_cache_dir: None,
     }
 }
 
@@ -436,138 +439,27 @@ impl Config {
     /// Load config from TOML file and/or environment.
     /// Priority: env vars > TOML file > defaults.
     pub fn load() -> anyhow::Result<Self> {
-        // Try loading TOML config file
-        let config = if let Ok(path) = std::env::var("RUSTYFIN_CONFIG") {
-            let contents = std::fs::read_to_string(&path)?;
-            toml::from_str(&contents)?
-        } else if std::path::Path::new("rustyfin.toml").exists() {
-            let contents = std::fs::read_to_string("rustyfin.toml")?;
-            toml::from_str(&contents)?
-        } else {
-            Config {
-                server: default_server(),
-                database: DatabaseConfig::default(),
-                search: None,
-                metadata: MetadataConfig::default(),
-                auth: AuthConfig::default(),
-                transcode: None,
-                tasks: TasksConfig::default(),
-            }
-        };
+        let mut builder = config::Config::builder()
+            // Default config file (rustyfin.toml in cwd)
+            .add_source(config::File::with_name("rustyfin").required(false));
 
-        // Override with environment variables
-        let config = Config {
-            server: ServerConfig {
-                port: std::env::var("RUSTYFIN_PORT")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(config.server.port),
-                base_url: std::env::var("RUSTYFIN_BASE_URL").unwrap_or(config.server.base_url),
-                server_name: std::env::var("RUSTYFIN_SERVER_NAME")
-                    .unwrap_or(config.server.server_name),
-                user_image_url_template: std::env::var("RUSTYFIN_USER_IMAGE_URL_TEMPLATE")
-                    .ok()
-                    .or(config.server.user_image_url_template),
-            },
-            database: DatabaseConfig {
-                url: std::env::var("DATABASE_URL").unwrap_or(config.database.url),
-            },
-            search: config.search,
-            metadata: MetadataConfig {
-                tmdb_api_key: std::env::var("RUSTYFIN_TMDB_API_KEY")
-                    .ok()
-                    .or(config.metadata.tmdb_api_key),
-                people_cache_dir: std::env::var("RUSTYFIN_PEOPLE_CACHE_DIR")
-                    .ok()
-                    .or(config.metadata.people_cache_dir),
-            },
-            auth: Self::apply_auth_env_overrides(config.auth),
-            transcode: config.transcode,
-            tasks: config.tasks,
-        };
+        // Explicit config file path from env
+        if let Ok(path) = std::env::var("RUSTYFIN_CONFIG") {
+            builder = builder.add_source(
+                config::File::new(&path, config::FileFormat::Toml).required(true),
+            );
+        }
 
-        // Validate auth configuration
+        // Environment variables: RUSTYFIN__SERVER__PORT, RUSTYFIN__DATABASE__URL, etc.
+        builder = builder.add_source(
+            config::Environment::with_prefix("RUSTYFIN")
+                .separator("__")
+                .try_parsing(true),
+        );
+
+        let config: Config = builder.build()?.try_deserialize()?;
         Self::validate_auth(&config.auth)?;
-
         Ok(config)
-    }
-
-    /// Apply environment variable overrides to auth config.
-    fn apply_auth_env_overrides(mut auth: AuthConfig) -> AuthConfig {
-        // LDAP env overrides
-        if let Ok(url) = std::env::var("RUSTYFIN_LDAP_URL") {
-            let ldap = auth.ldap.get_or_insert_with(|| LdapAuthConfig {
-                url: String::new(),
-                bind_dn: String::new(),
-                bind_password: String::new(),
-                search_base: String::new(),
-                user_filter: default_user_filter(),
-                mail_attr: default_mail_attr(),
-                display_name_attr: default_display_name_attr(),
-                admin_group_dn: None,
-            });
-            ldap.url = url;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_LDAP_BIND_DN")
-            && let Some(ref mut ldap) = auth.ldap
-        {
-            ldap.bind_dn = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_LDAP_BIND_PASSWORD")
-            && let Some(ref mut ldap) = auth.ldap
-        {
-            ldap.bind_password = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_LDAP_SEARCH_BASE")
-            && let Some(ref mut ldap) = auth.ldap
-        {
-            ldap.search_base = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_LDAP_USER_FILTER")
-            && let Some(ref mut ldap) = auth.ldap
-        {
-            ldap.user_filter = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_LDAP_ADMIN_GROUP_DN")
-            && let Some(ref mut ldap) = auth.ldap
-        {
-            ldap.admin_group_dn = Some(v);
-        }
-
-        // Trusted proxies env override
-        if let Ok(v) = std::env::var("RUSTYFIN_TRUSTED_PROXIES") {
-            let proxies: Vec<String> = v.split(',').map(|s| s.trim().to_string()).collect();
-            let fa = auth.forward_auth.get_or_insert_with(|| ForwardAuthConfig {
-                trusted_proxies: Vec::new(),
-                admin_group: None,
-                headers: ForwardAuthHeadersConfig::default(),
-            });
-            fa.trusted_proxies = proxies;
-        }
-
-        // Forward auth header env overrides
-        if let Ok(v) = std::env::var("RUSTYFIN_FORWARD_AUTH_HEADER_USER")
-            && let Some(ref mut fa) = auth.forward_auth
-        {
-            fa.headers.user = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_FORWARD_AUTH_HEADER_NAME")
-            && let Some(ref mut fa) = auth.forward_auth
-        {
-            fa.headers.name = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_FORWARD_AUTH_HEADER_EMAIL")
-            && let Some(ref mut fa) = auth.forward_auth
-        {
-            fa.headers.email = v;
-        }
-        if let Ok(v) = std::env::var("RUSTYFIN_FORWARD_AUTH_HEADER_GROUPS")
-            && let Some(ref mut fa) = auth.forward_auth
-        {
-            fa.headers.groups = v;
-        }
-
-        auth
     }
 
     /// Validate auth configuration at startup.

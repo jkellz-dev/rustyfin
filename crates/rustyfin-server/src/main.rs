@@ -100,14 +100,12 @@ async fn main() -> anyhow::Result<()> {
     let scan_in_flight = Arc::new(RwLock::new(HashSet::<uuid::Uuid>::new()));
 
     // Image cache directory (computed early so maintenance tasks can reference it)
-    let image_cache_dir = std::path::PathBuf::from(
-        std::env::var("RUSTYFIN_IMAGE_CACHE_DIR").unwrap_or_else(|_| {
-            std::env::temp_dir()
-                .join("rustyfin-image-cache")
-                .to_string_lossy()
-                .into_owned()
-        }),
-    );
+    let image_cache_dir = config
+        .server
+        .image_cache_dir
+        .as_ref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("rustyfin-image-cache"));
     if !image_cache_dir.exists() {
         std::fs::create_dir_all(&image_cache_dir)?;
     }

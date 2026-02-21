@@ -3,6 +3,7 @@
 # port = 8096                              # HTTP listen port
 # base_url = "http://localhost:8096"       # Public URL for links/redirects
 # server_name = "Rustyfin"                 # Display name in API responses
+# image_cache_dir = "/var/cache/rustyfin/images"  # Resized image cache (default: system temp dir)
 
 # ── Database ──────────────────────────────────────────────
 [database]

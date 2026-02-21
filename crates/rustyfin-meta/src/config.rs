@@ -232,24 +232,23 @@ pub struct ServerConfig {
 
 impl MetaConfig {
     pub fn load(path: &Path) -> anyhow::Result<Self> {
-        let mut config: Self = if path.exists() {
-            let content = std::fs::read_to_string(path)?;
-            toml::from_str(&content)?
-        } else {
-            Self::default()
-        };
+        let builder = config::Config::builder()
+            // Config file from CLI arg
+            .add_source(
+                config::File::new(
+                    path.to_str().unwrap_or("rustyfin-meta.toml"),
+                    config::FileFormat::Toml,
+                )
+                .required(false),
+            )
+            // Environment variables: RUSTYFIN_META__TMDB__API_KEY, etc.
+            .add_source(
+                config::Environment::with_prefix("RUSTYFIN_META")
+                    .separator("__")
+                    .try_parsing(true),
+            );
 
-        // Allow env vars to override API keys
-        if let Ok(val) = std::env::var("TMDB_API_KEY") {
-            config.tmdb.api_key = Some(val);
-        }
-        if let Ok(val) = std::env::var("TVDB_API_KEY") {
-            config.tvdb.api_key = Some(val);
-        }
-        if let Ok(val) = std::env::var("FANART_API_KEY") {
-            config.fanart.api_key = Some(val);
-        }
-
+        let config: Self = builder.build()?.try_deserialize()?;
         Ok(config)
     }
 }
