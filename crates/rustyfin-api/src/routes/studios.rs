@@ -150,6 +150,13 @@ pub async fn get_studio_image_by_index(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let entity_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("Studio:{name}").as_bytes());
-    image_routes::serve_entity_image(&state, entity_id, &image_type, image_index, &params, &headers)
-        .await
+    image_routes::serve_entity_image(
+        &state,
+        entity_id,
+        &image_type,
+        image_index,
+        &params,
+        &headers,
+    )
+    .await
 }

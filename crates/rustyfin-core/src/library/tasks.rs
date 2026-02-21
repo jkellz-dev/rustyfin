@@ -25,6 +25,14 @@ impl ScheduledTask for SearchReindexTask {
         "search_reindex"
     }
 
+    fn description(&self) -> &str {
+        "Rebuild search index for all media items"
+    }
+
+    fn category(&self) -> &str {
+        "Library"
+    }
+
     async fn run(&self) -> anyhow::Result<()> {
         self.search_service.reindex_all().await?;
         Ok(())
@@ -51,6 +59,14 @@ impl ActivityLogPruneTask {
 impl ScheduledTask for ActivityLogPruneTask {
     fn name(&self) -> &str {
         "activity_log_prune"
+    }
+
+    fn description(&self) -> &str {
+        "Remove old activity log entries"
+    }
+
+    fn category(&self) -> &str {
+        "Maintenance"
     }
 
     async fn run(&self) -> anyhow::Result<()> {
@@ -96,6 +112,14 @@ impl ScheduledTask for SessionCleanupTask {
         "session_cleanup"
     }
 
+    fn description(&self) -> &str {
+        "Deactivate stale user sessions"
+    }
+
+    fn category(&self) -> &str {
+        "Maintenance"
+    }
+
     async fn run(&self) -> anyhow::Result<()> {
         let deactivated =
             rustyfin_db::repo::sessions::deactivate_stale(&self.pool, self.inactive_days).await?;
@@ -129,6 +153,14 @@ impl TranscodeTempCleanupTask {
 impl ScheduledTask for TranscodeTempCleanupTask {
     fn name(&self) -> &str {
         "transcode_temp_cleanup"
+    }
+
+    fn description(&self) -> &str {
+        "Remove orphaned transcode temp directories"
+    }
+
+    fn category(&self) -> &str {
+        "Maintenance"
     }
 
     async fn run(&self) -> anyhow::Result<()> {
@@ -191,6 +223,14 @@ impl ScheduledTask for DatabaseOptimizeTask {
         "database_optimize"
     }
 
+    fn description(&self) -> &str {
+        "Run ANALYZE on database tables"
+    }
+
+    fn category(&self) -> &str {
+        "Maintenance"
+    }
+
     async fn run(&self) -> anyhow::Result<()> {
         const TABLES: &[&str] = &[
             "media_items",
@@ -232,6 +272,14 @@ impl ScheduledTask for ImageCachePruneTask {
         "image_cache_prune"
     }
 
+    fn description(&self) -> &str {
+        "Remove old cached images"
+    }
+
+    fn category(&self) -> &str {
+        "Maintenance"
+    }
+
     async fn run(&self) -> anyhow::Result<()> {
         let mut removed = 0u64;
         let now = std::time::SystemTime::now();
@@ -253,9 +301,7 @@ impl ScheduledTask for ImageCachePruneTask {
             let Some(name_str) = name.to_str() else {
                 continue;
             };
-            if name_str.len() != 2
-                || !name_str.chars().all(|c| c.is_ascii_hexdigit())
-            {
+            if name_str.len() != 2 || !name_str.chars().all(|c| c.is_ascii_hexdigit()) {
                 continue;
             }
 

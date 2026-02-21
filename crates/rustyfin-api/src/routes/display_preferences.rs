@@ -31,10 +31,8 @@ pub async fn get_display_preferences(
         .await
         .map_err(ApiError::Database)?
     {
-        let dto: DisplayPreferencesDto =
-            serde_json::from_value(data).unwrap_or_else(|_| {
-                DisplayPreferencesDto::default_for(&display_prefs_id, client)
-            });
+        let dto: DisplayPreferencesDto = serde_json::from_value(data)
+            .unwrap_or_else(|_| DisplayPreferencesDto::default_for(&display_prefs_id, client));
         Ok(Json(dto))
     } else {
         Ok(Json(DisplayPreferencesDto::default_for(

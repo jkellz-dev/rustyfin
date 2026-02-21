@@ -51,3 +51,42 @@ pub struct BrandingOptions {
 }
 
 // BrandingOptions uses derive(Default) — all fields default correctly.
+
+/// Scheduled task info DTO for Jellyfin client compat.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TaskInfoDto {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_progress_percentage: Option<f64>,
+    pub last_execution_result: Option<TaskResultDto>,
+    pub triggers: Vec<TaskTriggerDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TaskResultDto {
+    pub start_time_utc: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_time_utc: Option<String>,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TaskTriggerDto {
+    #[serde(rename = "Type")]
+    pub trigger_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_of_day_ticks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval_ticks: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_runtime_ticks: Option<i64>,
+}

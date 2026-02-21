@@ -11,7 +11,7 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{activity_log, libraries};
+use rustyfin_db::repo::{activity_log, libraries, task_results};
 
 use crate::library::scanner::LibraryScanner;
 
@@ -20,7 +20,26 @@ use crate::library::scanner::LibraryScanner;
 #[async_trait]
 pub trait ScheduledTask: Send + Sync {
     fn name(&self) -> &str;
+    fn key(&self) -> &str {
+        self.name()
+    }
+    fn description(&self) -> &str {
+        ""
+    }
+    fn category(&self) -> &str {
+        "General"
+    }
     async fn run(&self) -> anyhow::Result<()>;
+}
+
+// ── TaskInfo ──────────────────────────────────────────────────────────
+
+pub struct TaskInfo {
+    pub key: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub schedule_name: String,
 }
 
 // ── Config types (passed from server config) ──────────────────────────
@@ -199,6 +218,8 @@ impl TaskScheduler {
             if sched == schedule_name {
                 let task = task.clone();
                 let task_name = task.name().to_string();
+                let task_key = task.key().to_string();
+                let pool = self.pool.clone();
                 let jitter_secs = self.resolve_static_task_jitter(schedule_name, &task_name);
                 tokio::spawn(async move {
                     if jitter_secs > 0 {
@@ -206,10 +227,23 @@ impl TaskScheduler {
                         tokio::time::sleep(Duration::from_secs(delay)).await;
                     }
                     tracing::info!("Running scheduled task: {task_name}");
-                    if let Err(e) = task.run().await {
-                        tracing::error!("Scheduled task '{task_name}' failed: {e}");
-                    } else {
-                        tracing::info!("Scheduled task '{task_name}' completed");
+                    let result_id = task_results::insert_running(&pool, &task_key, &task_name)
+                        .await
+                        .unwrap_or(-1);
+                    match task.run().await {
+                        Ok(()) => {
+                            tracing::info!("Scheduled task '{task_name}' completed");
+                            if result_id >= 0 {
+                                let _ = task_results::mark_completed(&pool, result_id).await;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Scheduled task '{task_name}' failed: {e}");
+                            if result_id >= 0 {
+                                let _ = task_results::mark_error(&pool, result_id, &e.to_string())
+                                    .await;
+                            }
+                        }
                     }
                 });
             }
@@ -370,10 +404,26 @@ impl TaskScheduler {
         for (_sched, task) in tasks.iter() {
             let task = task.clone();
             let task_name = task.name().to_string();
+            let task_key = task.key().to_string();
+            let pool = self.pool.clone();
             tokio::spawn(async move {
                 tracing::info!("Running startup task: {task_name}");
-                if let Err(e) = task.run().await {
-                    tracing::error!("Startup task '{task_name}' failed: {e}");
+                let result_id = task_results::insert_running(&pool, &task_key, &task_name)
+                    .await
+                    .unwrap_or(-1);
+                match task.run().await {
+                    Ok(()) => {
+                        if result_id >= 0 {
+                            let _ = task_results::mark_completed(&pool, result_id).await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Startup task '{task_name}' failed: {e}");
+                        if result_id >= 0 {
+                            let _ =
+                                task_results::mark_error(&pool, result_id, &e.to_string()).await;
+                        }
+                    }
                 }
             });
         }
@@ -406,6 +456,122 @@ impl TaskScheduler {
 
         // Tier 3: Default
         self.config.library_scan.default_schedule.clone()
+    }
+
+    /// Return a snapshot of all registered tasks with their schedule info.
+    pub async fn list_task_infos(&self) -> Vec<TaskInfo> {
+        let tasks = self.static_tasks.read().await;
+        let mut infos = Vec::new();
+
+        // Library scan is a built-in task
+        infos.push(TaskInfo {
+            key: "library_scan".to_string(),
+            name: "Scan All Libraries".to_string(),
+            description: "Scan media libraries for new, changed, and removed items".to_string(),
+            category: "Library".to_string(),
+            schedule_name: self.config.library_scan.default_schedule.clone(),
+        });
+
+        for (sched, task) in tasks.iter() {
+            infos.push(TaskInfo {
+                key: task.key().to_string(),
+                name: task.name().to_string(),
+                description: task.description().to_string(),
+                category: task.category().to_string(),
+                schedule_name: sched.clone(),
+            });
+        }
+        infos
+    }
+
+    /// Trigger a task manually by key. Returns true if the task was found and spawned.
+    pub async fn run_task_by_key(&self, task_key: &str) -> bool {
+        // Special case: library_scan
+        if task_key == "library_scan" {
+            let pool = self.pool.clone();
+            let in_flight = self.in_flight.clone();
+            tokio::spawn(async move {
+                let result_id =
+                    task_results::insert_running(&pool, "library_scan", "Scan All Libraries")
+                        .await
+                        .unwrap_or(-1);
+                let libs = match libraries::list_all(&pool).await {
+                    Ok(libs) => libs,
+                    Err(e) => {
+                        tracing::error!("Manual library scan failed to query libraries: {e}");
+                        if result_id >= 0 {
+                            let _ =
+                                task_results::mark_error(&pool, result_id, &e.to_string()).await;
+                        }
+                        return;
+                    }
+                };
+                let scanner = crate::library::scanner::LibraryScanner::new(pool.clone());
+                let mut had_error = false;
+                for lib in libs {
+                    if in_flight.read().await.contains(&lib.id) {
+                        continue;
+                    }
+                    in_flight.write().await.insert(lib.id);
+                    match scanner.scan(lib.id, &lib.paths).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!("Manual scan failed for '{}': {e}", lib.name);
+                            had_error = true;
+                        }
+                    }
+                    in_flight.write().await.remove(&lib.id);
+                }
+                if result_id >= 0 {
+                    if had_error {
+                        let _ = task_results::mark_error(
+                            &pool,
+                            result_id,
+                            "One or more library scans failed",
+                        )
+                        .await;
+                    } else {
+                        let _ = task_results::mark_completed(&pool, result_id).await;
+                    }
+                }
+            });
+            return true;
+        }
+
+        // Look up static task
+        let tasks = self.static_tasks.read().await;
+        for (_sched, task) in tasks.iter() {
+            if task.key() == task_key {
+                let task = task.clone();
+                let task_name = task.name().to_string();
+                let task_key_owned = task_key.to_string();
+                let pool = self.pool.clone();
+                tokio::spawn(async move {
+                    tracing::info!("Running manual task: {task_name}");
+                    let result_id =
+                        task_results::insert_running(&pool, &task_key_owned, &task_name)
+                            .await
+                            .unwrap_or(-1);
+                    match task.run().await {
+                        Ok(()) => {
+                            tracing::info!("Manual task '{task_name}' completed");
+                            if result_id >= 0 {
+                                let _ = task_results::mark_completed(&pool, result_id).await;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Manual task '{task_name}' failed: {e}");
+                            if result_id >= 0 {
+                                let _ = task_results::mark_error(&pool, result_id, &e.to_string())
+                                    .await;
+                            }
+                        }
+                    }
+                });
+                return true;
+            }
+        }
+        false
     }
 }
 

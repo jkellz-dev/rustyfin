@@ -90,6 +90,12 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // Clean up stale task results from previous crash
+    if let Err(e) = rustyfin_db::repo::task_results::cleanup_stale_running(&db_pool).await {
+        tracing::error!("Failed to clean up stale task results: {e}");
+        // Continue startup -- don't block on this
+    }
+
     // Initialize scan in-flight tracking (shared between scheduler and manual scans)
     let scan_in_flight = Arc::new(RwLock::new(HashSet::<uuid::Uuid>::new()));
 
@@ -108,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Image cache directory: {}", image_cache_dir.display());
 
     // Initialize task scheduler
+    let mut task_scheduler_for_state: Option<Arc<rustyfin_core::TaskScheduler>> = None;
     if config.tasks.enabled {
         let raw_schedules: std::collections::HashMap<String, (String, Option<u64>)> = config
             .tasks
@@ -194,6 +201,8 @@ async fn main() -> anyhow::Result<()> {
             )
             .await;
 
+        task_scheduler_for_state = Some(task_scheduler.clone());
+
         tokio::spawn({
             let sched = task_scheduler.clone();
             async move { sched.run().await }
@@ -274,6 +283,7 @@ async fn main() -> anyhow::Result<()> {
         scan_in_flight,
         scan_schedules,
         user_image_url_template: config.server.user_image_url_template,
+        task_scheduler: task_scheduler_for_state,
     };
 
     // Build router with all API routes

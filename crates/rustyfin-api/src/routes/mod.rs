@@ -21,6 +21,7 @@ pub mod playback;
 pub mod playlists;
 pub mod quick_connect;
 pub mod remote_control;
+pub mod scheduled_tasks;
 pub mod search;
 pub mod sessions;
 pub mod shows;

@@ -100,6 +100,8 @@ impl TestApp {
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
             scan_in_flight: Arc::new(RwLock::new(HashSet::new())),
             scan_schedules: serde_json::json!({}),
+            user_image_url_template: None,
+            task_scheduler: None,
         };
 
         let router = build_router(state);

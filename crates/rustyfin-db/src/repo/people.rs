@@ -20,10 +20,7 @@ pub struct MediaItemPersonRow {
 }
 
 /// Find a person by name (case-insensitive exact match).
-pub async fn find_by_name(
-    pool: &PgPool,
-    name: &str,
-) -> Result<Option<PersonRow>, sqlx::Error> {
+pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<PersonRow>, sqlx::Error> {
     sqlx::query_as::<_, PersonRow>("SELECT * FROM people WHERE LOWER(name) = LOWER($1) LIMIT 1")
         .bind(name)
         .fetch_optional(pool)

@@ -1,0 +1,75 @@
+use sqlx::PgPool;
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct TaskResultRow {
+    pub id: i64,
+    pub task_key: String,
+    pub task_name: String,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub status: String,
+    pub error_message: Option<String>,
+}
+
+pub async fn insert_running(
+    pool: &PgPool,
+    task_key: &str,
+    task_name: &str,
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        "INSERT INTO task_results (task_key, task_name, status) VALUES ($1, $2, 'Running') RETURNING id",
+    )
+    .bind(task_key)
+    .bind(task_name)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
+pub async fn mark_completed(pool: &PgPool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE task_results SET status = 'Completed', ended_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn mark_error(pool: &PgPool, id: i64, error: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE task_results SET status = 'Error', ended_at = now(), error_message = $2 WHERE id = $1",
+    )
+    .bind(id)
+    .bind(error)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn mark_cancelled(pool: &PgPool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE task_results SET status = 'Cancelled', ended_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn latest_by_task_key(
+    pool: &PgPool,
+    task_key: &str,
+) -> Result<Option<TaskResultRow>, sqlx::Error> {
+    sqlx::query_as::<_, TaskResultRow>(
+        "SELECT * FROM task_results WHERE task_key = $1 ORDER BY started_at DESC LIMIT 1",
+    )
+    .bind(task_key)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn cleanup_stale_running(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE task_results SET status = 'Error', ended_at = now(), error_message = 'Server shutdown during execution' WHERE status = 'Running'",
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}

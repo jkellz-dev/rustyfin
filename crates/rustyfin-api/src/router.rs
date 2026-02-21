@@ -38,6 +38,7 @@ pub struct AppState {
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
     pub scan_schedules: serde_json::Value,
     pub user_image_url_template: Option<String>,
+    pub task_scheduler: Option<Arc<rustyfin_core::TaskScheduler>>,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -408,10 +409,17 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Years/{year}", get(years::get_year))
         // ── MusicGenres ────────────────────────────────────────────
         .route("/MusicGenres", get(music_genres::get_music_genres))
-        .route("/MusicGenres/{genreName}", get(music_genres::get_music_genre))
+        .route(
+            "/MusicGenres/{genreName}",
+            get(music_genres::get_music_genre),
+        )
         // ── ScheduledTasks (admin) ─────────────────────────────────
-        .route("/ScheduledTasks", get(stubs::empty_array_admin))
-        .route("/ScheduledTasks/{taskId}", get(stubs::not_found_admin))
+        .route("/ScheduledTasks", get(scheduled_tasks::get_tasks))
+        .route("/ScheduledTasks/{taskId}", get(scheduled_tasks::get_task))
+        .route(
+            "/ScheduledTasks/Running/{taskId}",
+            post(scheduled_tasks::start_task).delete(scheduled_tasks::stop_task),
+        )
         // ── Time sync (no auth) ────────────────────────────────────
         .route("/GetUtcTime", get(stubs::get_utc_time))
         .route(

@@ -154,6 +154,13 @@ pub async fn get_person_image_by_index(
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
 
-    image_routes::serve_entity_image(&state, person.id, &image_type, image_index, &params, &headers)
-        .await
+    image_routes::serve_entity_image(
+        &state,
+        person.id,
+        &image_type,
+        image_index,
+        &params,
+        &headers,
+    )
+    .await
 }
