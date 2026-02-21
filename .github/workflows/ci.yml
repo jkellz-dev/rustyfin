@@ -1,0 +1,257 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run unit tests
+        run: cargo test --lib
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: rustyfin_test
+          POSTGRES_USER: rustyfin
+          POSTGRES_PASSWORD: rustyfin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U rustyfin"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgres://rustyfin:rustyfin@localhost:5432/rustyfin_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run integration tests
+        run: cargo test -p rustyfin-api --test '*' -- --test-threads=1
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+
+      - name: Build frontend
+        working-directory: frontend
+        run: trunk build --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test-unit, test-integration, build-frontend]
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: Build binaries
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/rustyfin-server artifacts/rustyfin-server-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/rustyfin artifacts/rustyfin-${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: artifacts/
+          retention-days: 1
+
+  container-push:
+    name: Push Containers
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries-x86_64-unknown-linux-gnu
+          path: artifacts/amd64/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries-aarch64-unknown-linux-gnu
+          path: artifacts/arm64/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare server context
+        run: |
+          mkdir -p docker/context/server/linux/{amd64,arm64}
+          cp artifacts/amd64/rustyfin-server-x86_64-unknown-linux-gnu docker/context/server/linux/amd64/rustyfin-server
+          cp artifacts/arm64/rustyfin-server-aarch64-unknown-linux-gnu docker/context/server/linux/arm64/rustyfin-server
+          chmod +x docker/context/server/linux/*/rustyfin-server
+
+      - name: Prepare meta context
+        run: |
+          mkdir -p docker/context/meta/linux/{amd64,arm64}
+          cp artifacts/amd64/rustyfin-x86_64-unknown-linux-gnu docker/context/meta/linux/amd64/rustyfin
+          cp artifacts/arm64/rustyfin-aarch64-unknown-linux-gnu docker/context/meta/linux/arm64/rustyfin
+          chmod +x docker/context/meta/linux/*/rustyfin
+
+      - name: Build & push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/context/server
+          file: docker/server.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/jkellz-dev/rustyfin-server:latest
+            ghcr.io/jkellz-dev/rustyfin-server:sha-${{ steps.sha.outputs.short }}
+
+      - name: Build & push meta image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/context/meta
+          file: docker/meta.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/jkellz-dev/rustyfin-meta:latest
+            ghcr.io/jkellz-dev/rustyfin-meta:sha-${{ steps.sha.outputs.short }}
+
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [container-push]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate release notes
+        id: changelog
+        run: |
+          NOTES=$(git-cliff --config cliff.toml --latest --strip header 2>/dev/null || git-cliff --config cliff.toml --strip header)
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Generate version tag
+        id: version
+        run: |
+          VERSION="v0.1.0-$(date +%Y%m%d)-$(echo ${{ github.sha }} | cut -c1-7)"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          merge-multiple: true
+          path: release-artifacts/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes "${{ steps.changelog.outputs.notes }}" \
+            --prerelease \
+            release-artifacts/*
