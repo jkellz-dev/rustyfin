@@ -313,6 +313,15 @@ async fn scan_movies(
                     }
                 }
 
+                // Download people headshots
+                download_people_headshots(
+                    &http,
+                    &meta.people,
+                    &config.output.people_cache_dir,
+                    skip_existing,
+                )
+                .await;
+
                 stats.fetched += 1;
             }
             None => {
@@ -496,6 +505,15 @@ async fn scan_tvshows(
                         .await;
                     }
                 }
+
+                // Download people headshots
+                download_people_headshots(
+                    &http,
+                    &meta.people,
+                    &config.output.people_cache_dir,
+                    skip_existing,
+                )
+                .await;
 
                 stats.fetched += 1;
             }
@@ -1077,11 +1095,43 @@ fn merge_metadata(target: &mut nfo::NfoMetadata, source: &nfo::NfoMetadata) {
     }
 }
 
-fn expand_tilde(path: &str) -> String {
+pub(crate) fn expand_tilde(path: &str) -> String {
     if let Some(rest) = path.strip_prefix("~/")
         && let Some(home) = std::env::var_os("HOME")
     {
         return format!("{}/{rest}", home.to_string_lossy());
     }
     path.to_string()
+}
+
+pub(crate) async fn download_people_headshots(
+    http: &reqwest::Client,
+    people: &[rustyfin_common::nfo::NfoPerson],
+    cache_dir: &str,
+    skip_existing: bool,
+) {
+    let expanded = expand_tilde(cache_dir);
+    let dir = Path::new(&expanded);
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        tracing::error!("Failed to create people cache dir {}: {e}", dir.display());
+        return;
+    }
+
+    let mut count = 0u32;
+    for person in people {
+        if count >= 30 {
+            break;
+        }
+        let (Some(url), Some(pid)) = (&person.image_url, &person.provider_person_id)
+        else {
+            continue;
+        };
+        let file_path = dir.join(format!("{pid}.jpg"));
+        if let Err(e) = download_image_with_options(http, url, &file_path, skip_existing).await {
+            tracing::warn!("  Failed to download headshot for {}: {e}", person.name);
+        } else {
+            tracing::debug!("  Headshot: {} → {}", person.name, file_path.display());
+        }
+        count += 1;
+    }
 }

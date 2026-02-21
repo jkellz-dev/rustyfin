@@ -9,6 +9,8 @@ pub struct PersonRow {
     pub person_type: String,
     pub overview: Option<String>,
     pub external_ids: Option<serde_json::Value>,
+    pub image_url: Option<String>,
+    pub provider_person_id: Option<String>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -47,11 +49,13 @@ pub async fn insert(
     person_type: &str,
     sort_name: Option<&str>,
     external_ids: Option<&serde_json::Value>,
+    image_url: Option<&str>,
+    provider_person_id: Option<&str>,
 ) -> Result<PersonRow, sqlx::Error> {
     sqlx::query_as::<_, PersonRow>(
         r#"
-        INSERT INTO people (name, person_type, sort_name, external_ids)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO people (name, person_type, sort_name, external_ids, image_url, provider_person_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         "#,
     )
@@ -59,6 +63,8 @@ pub async fn insert(
     .bind(person_type)
     .bind(sort_name)
     .bind(external_ids)
+    .bind(image_url)
+    .bind(provider_person_id)
     .fetch_one(pool)
     .await
 }
@@ -68,11 +74,32 @@ pub async fn find_or_create(
     pool: &PgPool,
     name: &str,
     person_type: &str,
+    image_url: Option<&str>,
+    provider_person_id: Option<&str>,
 ) -> Result<PersonRow, sqlx::Error> {
-    if let Some(existing) = find_by_name_and_type(pool, name, person_type).await? {
+    if let Some(mut existing) = find_by_name_and_type(pool, name, person_type).await? {
+        // Update image fields if they were previously empty
+        if (existing.image_url.is_none() && image_url.is_some())
+            || (existing.provider_person_id.is_none() && provider_person_id.is_some())
+        {
+            sqlx::query(
+                r#"UPDATE people SET
+                    image_url = COALESCE($2, image_url),
+                    provider_person_id = COALESCE($3, provider_person_id)
+                WHERE id = $1"#,
+            )
+            .bind(existing.id)
+            .bind(image_url)
+            .bind(provider_person_id)
+            .execute(pool)
+            .await?;
+            existing.image_url = image_url.map(|s| s.to_string()).or(existing.image_url);
+            existing.provider_person_id =
+                provider_person_id.map(|s| s.to_string()).or(existing.provider_person_id);
+        }
         return Ok(existing);
     }
-    insert(pool, name, person_type, None, None).await
+    insert(pool, name, person_type, None, None, image_url, provider_person_id).await
 }
 
 /// Link a person to a media item. Uses ON CONFLICT to update role/sort_order if already linked.
@@ -195,11 +222,14 @@ pub async fn list_by_item(
             Option<String>,
             Option<serde_json::Value>,
             Option<String>,
+            Option<String>,
+            Option<String>,
             Option<i32>,
         ),
     >(
         r#"
         SELECT p.id, p.name, p.sort_name, p.person_type, p.overview, p.external_ids,
+               p.image_url, p.provider_person_id,
                mip.role, mip.sort_order
         FROM people p
         JOIN media_item_people mip ON mip.person_id = p.id
@@ -214,7 +244,7 @@ pub async fn list_by_item(
     Ok(rows
         .into_iter()
         .map(
-            |(id, name, sort_name, person_type, overview, external_ids, role, sort_order)| {
+            |(id, name, sort_name, person_type, overview, external_ids, image_url, provider_person_id, role, sort_order)| {
                 (
                     PersonRow {
                         id,
@@ -223,6 +253,8 @@ pub async fn list_by_item(
                         person_type,
                         overview,
                         external_ids,
+                        image_url,
+                        provider_person_id,
                     },
                     role,
                     sort_order,

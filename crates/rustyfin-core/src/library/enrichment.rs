@@ -167,7 +167,15 @@ impl EnrichmentService {
             }
 
             for person in &meta.people {
-                match people::find_or_create(&self.pool, &person.name, &person.person_type).await {
+                match people::find_or_create(
+                    &self.pool,
+                    &person.name,
+                    &person.person_type,
+                    person.image_url.as_deref(),
+                    person.provider_person_id.as_deref(),
+                )
+                .await
+                {
                     Ok(person_row) => {
                         if let Err(e) = people::link_to_item(
                             &self.pool,

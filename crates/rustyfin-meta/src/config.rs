@@ -70,6 +70,8 @@ pub struct OutputConfig {
     pub download_artwork: bool,
     #[serde(default)]
     pub overwrite_existing: bool,
+    #[serde(default = "default_people_cache_dir")]
+    pub people_cache_dir: String,
 }
 
 impl Default for OutputConfig {
@@ -78,6 +80,7 @@ impl Default for OutputConfig {
             write_nfo: true,
             download_artwork: true,
             overwrite_existing: false,
+            people_cache_dir: default_people_cache_dir(),
         }
     }
 }
@@ -155,6 +158,10 @@ impl Default for DiscogsConfig {
             token_file: default_token_file(),
         }
     }
+}
+
+fn default_people_cache_dir() -> String {
+    "~/.cache/rustyfin/people".to_string()
 }
 
 fn default_language() -> String {

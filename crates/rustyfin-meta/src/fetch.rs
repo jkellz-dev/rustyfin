@@ -7,7 +7,7 @@ use rustyfin_common::rate_limit::RateLimiter;
 use rustyfin_common::tmdb::TmdbClient;
 use rustyfin_common::tvdb::TvdbClient;
 
-use crate::scan::{ScanOpts, disambiguate, rename_folder_with_provider_id};
+use crate::scan::{ScanOpts, disambiguate, download_people_headshots, rename_folder_with_provider_id};
 
 pub async fn fetch_metadata(
     path: &Path,
@@ -138,6 +138,15 @@ async fn fetch_movie(path: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<()> {
             }
         }
     }
+
+    // Download people headshots
+    download_people_headshots(
+        &http,
+        &meta.people,
+        &config.output.people_cache_dir,
+        skip_existing,
+    )
+    .await;
 
     Ok(())
 }
@@ -278,6 +287,15 @@ async fn fetch_series(path: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<()> {
             }
         }
     }
+
+    // Download people headshots
+    download_people_headshots(
+        &http,
+        &meta.people,
+        &config.output.people_cache_dir,
+        skip_existing,
+    )
+    .await;
 
     Ok(())
 }

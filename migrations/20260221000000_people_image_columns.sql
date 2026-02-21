@@ -1,0 +1,2 @@
+ALTER TABLE people ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS provider_person_id TEXT;
