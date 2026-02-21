@@ -191,6 +191,8 @@ struct TvdbCharacter {
     sort: Option<i32>,
     #[serde(rename = "type")]
     char_type: Option<String>,
+    people_id: Option<i64>,
+    person_img_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -252,8 +254,8 @@ fn series_to_metadata(d: TvdbSeriesDetail) -> NfoMetadata {
                 None
             },
             sort_order: ch.sort,
-            image_url: None,
-            provider_person_id: None,
+            image_url: ch.person_img_url.clone(),
+            provider_person_id: ch.people_id.map(|id| format!("tvdb-{id}")),
         });
     }
 

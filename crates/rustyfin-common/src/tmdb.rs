@@ -244,15 +244,19 @@ struct TmdbCredits {
 
 #[derive(Deserialize)]
 struct TmdbCast {
+    id: i64,
     name: String,
     character: Option<String>,
     order: Option<i32>,
+    profile_path: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct TmdbCrew {
+    id: i64,
     name: String,
     job: String,
+    profile_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -344,23 +348,26 @@ fn apply_credits(credits: &TmdbCredits, meta: &mut NfoMetadata) {
             person_type: "Actor".to_string(),
             role: cast.character.clone(),
             sort_order: cast.order.or(Some(i as i32)),
-            image_url: None,
-            provider_person_id: None,
+            image_url: cast.profile_path.as_deref().map(|p| tmdb_image_url(p, "h632")),
+            provider_person_id: Some(format!("tmdb-{}", cast.id)),
         });
     }
 
-    // Directors from crew
+    // Directors and writers from crew
     for crew in &credits.crew {
-        if crew.job == "Director" {
-            meta.people.push(NfoPerson {
-                name: crew.name.clone(),
-                person_type: "Director".to_string(),
-                role: None,
-                sort_order: None,
-                image_url: None,
-                provider_person_id: None,
-            });
-        }
+        let person_type = match crew.job.as_str() {
+            "Director" => "Director",
+            "Writer" | "Screenplay" => "Writer",
+            _ => continue,
+        };
+        meta.people.push(NfoPerson {
+            name: crew.name.clone(),
+            person_type: person_type.to_string(),
+            role: None,
+            sort_order: None,
+            image_url: crew.profile_path.as_deref().map(|p| tmdb_image_url(p, "h632")),
+            provider_person_id: Some(format!("tmdb-{}", crew.id)),
+        });
     }
 }
 
