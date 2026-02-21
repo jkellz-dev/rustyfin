@@ -179,6 +179,8 @@ pub struct BaseItemPerson {
     #[serde(rename = "Type")]
     #[serde(default)]
     pub person_type: Option<String>,
+    #[serde(default)]
+    pub primary_image_tag: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

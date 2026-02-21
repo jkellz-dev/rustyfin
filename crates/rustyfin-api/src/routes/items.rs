@@ -444,15 +444,33 @@ pub async fn get_item_by_id(
         .await
         .unwrap_or_default();
     if !people_rows.is_empty() {
+        // Batch-check which people have Primary images
+        let person_ids: Vec<Uuid> = people_rows.iter().map(|(p, _, _)| p.id).collect();
+        let person_images = images::list_by_items(&state.pool, &person_ids)
+            .await
+            .unwrap_or_default();
+        let people_with_images: std::collections::HashSet<Uuid> = person_images
+            .iter()
+            .filter(|img| img.image_type == "Primary")
+            .filter_map(|img| img.entity_id)
+            .collect();
+
         dto.people = Some(
             people_rows
                 .into_iter()
-                .map(|(person, role, _sort_order)| BaseItemPerson {
-                    name: person.name,
-                    id: person.id,
-                    role,
-                    person_type: person.person_type,
-                    primary_image_tag: None,
+                .map(|(person, role, _sort_order)| {
+                    let tag = if people_with_images.contains(&person.id) {
+                        Some(person.id.simple().to_string())
+                    } else {
+                        None
+                    };
+                    BaseItemPerson {
+                        name: person.name,
+                        id: person.id,
+                        role,
+                        person_type: person.person_type,
+                        primary_image_tag: tag,
+                    }
                 })
                 .collect(),
         );

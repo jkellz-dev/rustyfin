@@ -8,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::people;
+use rustyfin_db::repo::{images, people};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::ApiError;
@@ -69,6 +69,17 @@ pub async fn get_persons(
 
     let include_counts = query.include_item_types.is_some();
 
+    // Batch-check which persons have Primary images
+    let person_ids: Vec<uuid::Uuid> = persons.iter().map(|p| p.id).collect();
+    let person_images = images::list_by_items(&state.pool, &person_ids)
+        .await
+        .unwrap_or_default();
+    let people_with_images: std::collections::HashSet<uuid::Uuid> = person_images
+        .iter()
+        .filter(|img| img.image_type == "Primary")
+        .filter_map(|img| img.entity_id)
+        .collect();
+
     let mut dtos = Vec::with_capacity(persons.len());
     for person in &persons {
         let mut dto = BaseItemDto {
@@ -77,6 +88,13 @@ pub async fn get_persons(
             server_id: state.server_id.clone(),
             item_type: "Person".to_string(),
             overview: person.overview.clone(),
+            image_tags: if people_with_images.contains(&person.id) {
+                let mut tags = std::collections::HashMap::new();
+                tags.insert("Primary".to_string(), person.id.simple().to_string());
+                Some(tags)
+            } else {
+                None
+            },
             ..Default::default()
         };
 
@@ -117,12 +135,25 @@ pub async fn get_person(
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
 
+    let has_image = images::find_by_item_and_type(&state.pool, person.id, "Primary", 0)
+        .await
+        .ok()
+        .flatten()
+        .is_some();
+
     Ok(Json(BaseItemDto {
         id: person.id,
         name: person.name,
         server_id: state.server_id.clone(),
         item_type: "Person".to_string(),
         overview: person.overview,
+        image_tags: if has_image {
+            let mut tags = std::collections::HashMap::new();
+            tags.insert("Primary".to_string(), person.id.simple().to_string());
+            Some(tags)
+        } else {
+            None
+        },
         ..Default::default()
     }))
 }

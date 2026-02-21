@@ -100,6 +100,7 @@ impl TestApp {
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
             scan_in_flight: Arc::new(RwLock::new(HashSet::new())),
             scan_schedules: serde_json::json!({}),
+            people_cache_dir: None,
             user_image_url_template: None,
             task_scheduler: None,
         };
