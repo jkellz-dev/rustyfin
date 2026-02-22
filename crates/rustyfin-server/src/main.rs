@@ -114,16 +114,13 @@ async fn main() -> anyhow::Result<()> {
     // People cache directory (headshots downloaded by CLI)
     let people_cache_dir: Option<std::path::PathBuf> =
         config.metadata.people_cache_dir.as_ref().map(|s| {
-            let expanded = if let Some(rest) = s.strip_prefix("~/") {
-                if let Ok(home) = std::env::var("HOME") {
-                    format!("{home}/{rest}")
-                } else {
-                    s.clone()
-                }
+            if let Some(rest) = s.strip_prefix("~/")
+                && let Ok(home) = std::env::var("HOME")
+            {
+                std::path::PathBuf::from(format!("{home}/{rest}"))
             } else {
-                s.clone()
-            };
-            std::path::PathBuf::from(expanded)
+                std::path::PathBuf::from(s)
+            }
         });
     if let Some(ref dir) = people_cache_dir {
         tracing::info!("People cache directory: {}", dir.display());

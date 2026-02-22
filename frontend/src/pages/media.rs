@@ -753,15 +753,63 @@ pub fn Media() -> View {
                                                     list=move || people.clone(),
                                                     view=move |person: BaseItemPerson| {
                                                         let name = person.name.clone();
-                                                        let role = person.role.clone();
+                                                        let has_image = person.id.is_some() && person.primary_image_tag.is_some();
+                                                        let img_url = if has_image {
+                                                            let id = person.id.as_deref().unwrap_or_default();
+                                                            let tag = person.primary_image_tag.as_deref().unwrap_or_default();
+                                                            format!("/Items/{id}/Images/Primary?tag={tag}&maxWidth=160&quality=90")
+                                                        } else {
+                                                            String::new()
+                                                        };
+                                                        let initials = {
+                                                            let parts: Vec<&str> = person.name.split_whitespace().collect();
+                                                            let first = parts.first().and_then(|w| w.chars().next()).unwrap_or(' ');
+                                                            let last = if parts.len() > 1 {
+                                                                parts.last().and_then(|w| w.chars().next()).unwrap_or(' ')
+                                                            } else {
+                                                                ' '
+                                                            };
+                                                            format!("{first}{last}").trim().to_uppercase()
+                                                        };
+                                                        let bg_color = {
+                                                            let hash = person.name.bytes().fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
+                                                            let hue = hash % 360;
+                                                            format!("hsl({hue}, 40%, 30%)")
+                                                        };
+                                                        let subtitle = if person.person_type.as_deref() == Some("Actor") {
+                                                            person.role.clone().unwrap_or_default()
+                                                        } else {
+                                                            person.person_type.clone().unwrap_or_default()
+                                                        };
+                                                        let alt_text = name.clone();
+                                                        let title_text = name.clone();
+                                                        let label_text = name;
                                                         view! {
-                                                            span(class="person-chip") {
-                                                                (name)
-                                                                (if let Some(r) = role {
-                                                                    view! { span(class="role") { " — " (r) } }
+                                                            div(class="person-card") {
+                                                                (if has_image {
+                                                                    let src = img_url.clone();
+                                                                    let alt = alt_text.clone();
+                                                                    view! {
+                                                                        img(class="person-avatar", src=src, alt=alt, loading="lazy")
+                                                                    }
                                                                 } else {
-                                                                    view! {}
+                                                                    let style = format!("background-color: {};", bg_color);
+                                                                    let ini = initials.clone();
+                                                                    view! {
+                                                                        div(class="person-avatar person-initials", style=style) {
+                                                                            (ini)
+                                                                        }
+                                                                    }
                                                                 })
+                                                                div(class="person-info") {
+                                                                    span(class="person-name", title=title_text) { (label_text) }
+                                                                    (if !subtitle.is_empty() {
+                                                                        let sub = subtitle.clone();
+                                                                        view! { span(class="person-role") { (sub) } }
+                                                                    } else {
+                                                                        view! {}
+                                                                    })
+                                                                }
                                                             }
                                                         }
                                                     }

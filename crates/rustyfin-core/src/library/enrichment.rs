@@ -236,6 +236,49 @@ impl EnrichmentService {
             }
         }
     }
+
+    /// Backfill headshot image rows for people who have a cached headshot file
+    /// but no Primary image row yet.  Called after every library scan so that
+    /// newly-downloaded headshots are picked up without requiring a file-change
+    /// triggered re-enrichment.
+    pub async fn backfill_people_headshots(&self) {
+        let Some(ref cache_dir) = self.people_cache_dir else {
+            return;
+        };
+
+        let people = match people::list_missing_headshots(&self.pool).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("Failed to list people missing headshots: {e}");
+                return;
+            }
+        };
+
+        let mut inserted = 0u32;
+        for person in &people {
+            let Some(ref pid) = person.provider_person_id else {
+                continue;
+            };
+            let headshot_path = cache_dir.join(format!("{pid}.jpg"));
+            if !headshot_path.is_file() {
+                continue;
+            }
+            let new_image = rustyfin_db::repo::images::NewImage {
+                entity_id: person.id,
+                image_type: "Primary".to_string(),
+                path: headshot_path.to_string_lossy().into_owned(),
+                image_index: 0,
+            };
+            if let Err(e) = rustyfin_db::repo::images::insert(&self.pool, &new_image).await {
+                tracing::error!("Failed to insert headshot for {}: {e}", person.name);
+            } else {
+                inserted += 1;
+            }
+        }
+        if inserted > 0 {
+            tracing::info!("Backfilled {inserted} people headshot image(s)");
+        }
+    }
 }
 
 fn build_external_ids(meta: &NfoMetadata) -> Option<serde_json::Value> {

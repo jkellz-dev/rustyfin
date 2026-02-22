@@ -198,6 +198,22 @@ pub async fn count_people(
     Ok(row.0)
 }
 
+/// List people that have a provider_person_id but no Primary image row.
+pub async fn list_missing_headshots(pool: &PgPool) -> Result<Vec<PersonRow>, sqlx::Error> {
+    sqlx::query_as::<_, PersonRow>(
+        r#"
+        SELECT p.* FROM people p
+        WHERE p.provider_person_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM images i
+            WHERE i.entity_id = p.id AND i.image_type = 'Primary' AND i.image_index = 0
+          )
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+}
+
 /// Count items by type that a person appears in.
 pub async fn count_items_by_person(
     pool: &PgPool,

@@ -29,7 +29,7 @@ These are **not** on the roadmap — they are intentional exclusions:
 
 File discovery, ffprobe integration, sidecar images, scan orchestrator.
 
-- [x] `LibraryScanner` — recursive media file discovery
+- [x] `LibraryScanner` — recursive media file discovery (NFO-aware etag: sidecar changes trigger re-enrichment)
 - [x] `naming.rs` — movie/episode/audio naming conventions, season parsing, sort name generation
 - [x] `probe.rs` — ffprobe integration (codec, resolution, duration, stream metadata)
 - [x] Sidecar image discovery (poster.jpg, fanart.jpg, etc.)
@@ -700,12 +700,13 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [ ] Rate limiting on auth endpoints
 - [ ] Review CORS / header configuration
 
-### 11f. CI Pipeline
-- [ ] GitHub Actions workflow: `cargo fmt --check`, `cargo clippy`, `cargo test`
-- [ ] Integration test job with Postgres service container
-- [ ] Optional Meilisearch service container for search tests
-- [ ] Binary build artifacts (Linux x86_64, aarch64)
-- [ ] Container image build (Docker/OCI)
+### 11f. CI Pipeline [DONE]
+- [x] GitHub Actions workflow: `cargo fmt --check`, `cargo clippy`, `cargo test`
+- [x] Integration test job with Postgres service container
+- [x] Binary build artifacts (Linux x86_64, aarch64) via `cross`
+- [x] Container images: `ghcr.io/jkellz-dev/rustyfin-server` (with ffmpeg) and `ghcr.io/jkellz-dev/rustyfin-meta`
+- [x] GitHub Releases with git-cliff changelog (annotated tags, `--unreleased` incremental notes)
+- [x] Multi-arch builds: `linux/amd64` + `linux/arm64` via Docker Buildx
 
 ### 11g. Stub-to-Real Implementation (client compatibility) [DONE]
 
@@ -786,6 +787,7 @@ Comprehensive UX pass across the admin UI and client-facing interactions. The ad
 - [ ] Request deduplication (prevent double-submit on button clicks)
 
 ### 12d. Media Browser Polish
+- [x] Cast & crew portrait cards with headshot images (initials fallback)
 - [ ] Sorting controls (by name, date added, year, rating)
 - [ ] Filtering by genre, year, rating, item type
 - [ ] Grid/list view toggle

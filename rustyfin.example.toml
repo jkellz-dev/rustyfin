@@ -1,22 +1,38 @@
+# Rustyfin Server Configuration
+#
+# Copy to rustyfin.toml and edit. All values shown are defaults unless noted.
+# Environment variables override file config: RUSTYFIN__SERVER__PORT=9090, etc.
+
 # ── Server ────────────────────────────────────────────────
-# [server]
-# port = 8096                              # HTTP listen port
-# base_url = "http://localhost:8096"       # Public URL for links/redirects
-# server_name = "Rustyfin"                 # Display name in API responses
+[server]
+port = 8096                                    # HTTP listen port
+base_url = "http://localhost:8096"             # Public URL for links/redirects
+server_name = "Rustyfin"                       # Display name in API responses
 # image_cache_dir = "/var/cache/rustyfin/images"  # Resized image cache (default: system temp dir)
+# user_image_url_template = "https://gravatar.com/avatar/{email_hash}?s=256"  # User avatar URL template
 
 # ── Database ──────────────────────────────────────────────
 [database]
 url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
 
-# ── Metadata Providers ────────────────────────────────────
-# [metadata]
-# tmdb_api_key = "your-tmdb-api-key"       # TMDB v3 API key for poster/metadata fetching
+# ── Metadata ──────────────────────────────────────────────
+[metadata]
+# tmdb_api_key = "your-tmdb-api-key"           # TMDB v3 API key (env: RUSTYFIN__METADATA__TMDB_API_KEY)
+# people_cache_dir = "~/.cache/rustyfin/people" # Headshot cache from rustyfin CLI (must match CLI config)
 
 # ── Search (optional, falls back to Postgres ILIKE) ──────
 # [search]
 # meilisearch_url = "http://localhost:7700"
 # meilisearch_key = "your-master-key"
+
+# ── Transcoding ───────────────────────────────────────────
+# [transcode]
+# ffmpeg_path = "ffmpeg"                       # Path to ffmpeg binary
+# temp_dir = "/tmp/rustyfin-transcode"         # HLS segment output dir (default: system temp)
+# hardware_acceleration = "none"               # "none", "qsv", "vaapi", "nvenc"
+# max_concurrent = 4                           # Max simultaneous transcode jobs (0 = unlimited)
+# segment_duration = 6                         # HLS segment duration in seconds
+# threads_per_job = 0                          # Threads per ffmpeg process (0 = auto)
 
 # ── Authentication ────────────────────────────────────────
 # At least one of [auth.forward_auth] or [auth.ldap] must be configured.
@@ -24,22 +40,61 @@ url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
 # Forward auth: reverse proxy injects identity headers
 [auth.forward_auth]
 trusted_proxies = ["127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-# admin_group = "rustyfin-admins"          # Users with this group are auto-promoted to admin
+# admin_group = "rustyfin-admins"              # Users with this group are auto-promoted to admin
 
 # Custom header names (defaults shown):
 # [auth.forward_auth.headers]
-# user = "Remote-User"                     # Username header (required)
-# name = "Remote-Name"                     # Display name header
-# email = "Remote-Email"                   # Email header
-# groups = "Remote-Groups"                 # Comma-separated groups header
+# user = "Remote-User"                         # Username header (required)
+# name = "Remote-Name"                         # Display name header
+# email = "Remote-Email"                       # Email header
+# groups = "Remote-Groups"                     # Comma-separated groups header
 
 # LDAPS bind authentication
 # [auth.ldap]
-# url = "ldaps://localhost:636"            # Must be ldaps:// (no STARTTLS)
+# url = "ldaps://localhost:636"                # Must be ldaps:// (no STARTTLS)
 # bind_dn = "uid=admin,ou=people,dc=example,dc=com"
 # bind_password = "secret"
 # search_base = "ou=people,dc=example,dc=com"
-# user_filter = "(uid={})"                 # {} is replaced with the username
-# mail_attr = "mail"                       # LDAP attribute for email
-# display_name_attr = "cn"                 # LDAP attribute for display name
+# user_filter = "(uid={})"                     # {} is replaced with the username
+# mail_attr = "mail"                           # LDAP attribute for email
+# display_name_attr = "cn"                     # LDAP attribute for display name
 # admin_group_dn = "cn=admins,ou=groups,dc=example,dc=com"  # Members auto-promoted to admin
+
+# ── Task Scheduler ────────────────────────────────────────
+[tasks]
+enabled = true                                 # Enable scheduled tasks
+run_on_startup = true                          # Run all tasks immediately on boot
+jitter_seconds = 300                           # Random jitter added to schedule times
+
+[tasks.schedules.daily]
+cron = "0 0 3 * * * *"                         # 3:00 AM daily
+
+[tasks.schedules.weekly]
+cron = "0 0 4 * * 7 *"                         # 4:00 AM Sunday
+
+[tasks.library_scan]
+default_schedule = "daily"                     # Schedule name for library scans
+# Per-library schedule overrides (library name → schedule name):
+# [tasks.library_scan.library_schedules]
+# "Movies" = "weekly"
+
+[tasks.search_reindex]
+schedule = "daily"
+
+[tasks.activity_log_prune]
+schedule = "daily"
+retention_days = 90                            # Delete activity log entries older than this
+
+[tasks.session_cleanup]
+schedule = "daily"
+inactive_days = 30                             # Expire sessions inactive longer than this
+
+[tasks.transcode_temp_cleanup]
+schedule = "daily"
+
+[tasks.db_optimize]
+schedule = "weekly"
+
+[tasks.image_cache_prune]
+schedule = "weekly"
+max_age_days = 30                              # Delete cached resized images older than this

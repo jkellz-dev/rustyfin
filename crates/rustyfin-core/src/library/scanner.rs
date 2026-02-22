@@ -14,6 +14,7 @@ use rustyfin_common::naming::{
     is_audio_file, is_video_file, make_sort_name, parse_season_folder, resolve_audio_track,
     resolve_episode, resolve_movie,
 };
+use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
 pub struct LibraryScanner {
     pool: PgPool,
@@ -79,6 +80,9 @@ impl LibraryScanner {
             .await
             .ok();
 
+        // Backfill headshot image rows for people with cached headshots
+        self.enrichment.backfill_people_headshots().await;
+
         result.duration = start.elapsed();
         tracing::info!(
             "Scan complete for library {library_id}: added={}, updated={}, skipped={}, errors={}, duration={:?}",
@@ -114,14 +118,15 @@ impl LibraryScanner {
         library_id: Uuid,
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
-        let etag = compute_etag(file_path)?;
+        let nfo_path = find_movie_nfo(file_path);
+        let etag = compute_etag(file_path, &[nfo_path])?;
 
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
                 return Ok(IngestOutcome::Skipped);
             }
-            // File changed — update
+            // File or NFO changed — update
             let resolved = resolve_movie(file_path);
             let probe_result = probe_file_graceful(file_path).await;
 
@@ -560,7 +565,8 @@ impl LibraryScanner {
         nfo_track: Option<&rustyfin_common::nfo::NfoTrack>,
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
-        let etag = compute_etag(file_path)?;
+        let album_nfo = file_path.parent().and_then(find_album_nfo);
+        let etag = compute_etag(file_path, &[album_nfo])?;
 
         // Prefer NFO track data, fall back to audio tags, then filename parsing
         let resolved = resolve_audio_track(file_path);
@@ -712,7 +718,8 @@ impl LibraryScanner {
         season_name: &str,
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
-        let etag = compute_etag(file_path)?;
+        let nfo_path = find_episode_nfo(file_path);
+        let etag = compute_etag(file_path, &[nfo_path])?;
 
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
@@ -949,7 +956,10 @@ enum IngestOutcome {
     Skipped,
 }
 
-fn compute_etag(path: &Path) -> anyhow::Result<String> {
+/// Compute an etag from the media file's mtime+size, plus the mtime of any
+/// sidecar files (e.g. NFO).  If a sidecar changes, the etag changes and the
+/// item will be re-enriched on the next scan.
+fn compute_etag(path: &Path, sidecars: &[Option<PathBuf>]) -> anyhow::Result<String> {
     let metadata = std::fs::metadata(path)?;
     let mtime = metadata
         .modified()?
@@ -957,7 +967,19 @@ fn compute_etag(path: &Path) -> anyhow::Result<String> {
         .unwrap_or_default()
         .as_secs();
     let size = metadata.len();
-    Ok(format!("{mtime}-{size}"))
+    let mut etag = format!("{mtime}-{size}");
+    for sidecar in sidecars.iter().flatten() {
+        if let Ok(meta) = std::fs::metadata(sidecar) {
+            let sc_mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            etag.push_str(&format!("-{sc_mtime}"));
+        }
+    }
+    Ok(etag)
 }
 
 async fn collect_video_files(dir: &Path) -> Vec<PathBuf> {
