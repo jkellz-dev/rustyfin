@@ -260,10 +260,10 @@ impl MetaConfig {
         let mut config: Self = builder.build()?.try_deserialize()?;
 
         // Allow the shared RUSTYFIN__METADATA__TMDB_API_KEY to fill tmdb.api_key
-        if config.tmdb.api_key.is_none() {
-            if let Some(key) = config.metadata.tmdb_api_key.take() {
-                config.tmdb.api_key = Some(key);
-            }
+        if config.tmdb.api_key.is_none()
+            && let Some(key) = config.metadata.tmdb_api_key.take()
+        {
+            config.tmdb.api_key = Some(key);
         }
 
         Ok(config)
