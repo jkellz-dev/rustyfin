@@ -990,6 +990,9 @@ mod tests {
         let result: Result<MovieNfo, _> = quick_xml::de::from_str(xml);
         assert!(result.is_ok(), "Failed to parse: {result:?}");
         let nfo = result.unwrap();
-        assert_eq!(nfo.title, Some("The Many Adventures of Winnie the Pooh".to_string()));
+        assert_eq!(
+            nfo.title,
+            Some("The Many Adventures of Winnie the Pooh".to_string())
+        );
     }
 }

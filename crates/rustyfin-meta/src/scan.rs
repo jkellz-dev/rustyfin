@@ -374,7 +374,9 @@ async fn scan_tvshows(
         stats.scanned += 1;
 
         // Skip if tvshow.nfo already exists and we're not overwriting (unless --force)
-        if !opts.force && !config.output.overwrite_existing && find_series_nfo(&series_dir).is_some()
+        if !opts.force
+            && !config.output.overwrite_existing
+            && find_series_nfo(&series_dir).is_some()
         {
             tracing::info!("Skipping '{}' (tvshow.nfo exists)", series_name);
             stats.skipped += 1;
@@ -1122,8 +1124,7 @@ pub(crate) async fn download_people_headshots(
         if count >= 30 {
             break;
         }
-        let (Some(url), Some(pid)) = (&person.image_url, &person.provider_person_id)
-        else {
+        let (Some(url), Some(pid)) = (&person.image_url, &person.provider_person_id) else {
             continue;
         };
         let file_path = dir.join(format!("{pid}.jpg"));

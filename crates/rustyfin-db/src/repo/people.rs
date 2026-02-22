@@ -94,12 +94,22 @@ pub async fn find_or_create(
             .execute(pool)
             .await?;
             existing.image_url = image_url.map(|s| s.to_string()).or(existing.image_url);
-            existing.provider_person_id =
-                provider_person_id.map(|s| s.to_string()).or(existing.provider_person_id);
+            existing.provider_person_id = provider_person_id
+                .map(|s| s.to_string())
+                .or(existing.provider_person_id);
         }
         return Ok(existing);
     }
-    insert(pool, name, person_type, None, None, image_url, provider_person_id).await
+    insert(
+        pool,
+        name,
+        person_type,
+        None,
+        None,
+        image_url,
+        provider_person_id,
+    )
+    .await
 }
 
 /// Link a person to a media item. Uses ON CONFLICT to update role/sort_order if already linked.
@@ -244,7 +254,18 @@ pub async fn list_by_item(
     Ok(rows
         .into_iter()
         .map(
-            |(id, name, sort_name, person_type, overview, external_ids, image_url, provider_person_id, role, sort_order)| {
+            |(
+                id,
+                name,
+                sort_name,
+                person_type,
+                overview,
+                external_ids,
+                image_url,
+                provider_person_id,
+                role,
+                sort_order,
+            )| {
                 (
                     PersonRow {
                         id,

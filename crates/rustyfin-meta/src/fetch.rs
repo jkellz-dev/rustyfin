@@ -7,7 +7,9 @@ use rustyfin_common::rate_limit::RateLimiter;
 use rustyfin_common::tmdb::TmdbClient;
 use rustyfin_common::tvdb::TvdbClient;
 
-use crate::scan::{ScanOpts, disambiguate, download_people_headshots, rename_folder_with_provider_id};
+use crate::scan::{
+    ScanOpts, disambiguate, download_people_headshots, rename_folder_with_provider_id,
+};
 
 pub async fn fetch_metadata(
     path: &Path,

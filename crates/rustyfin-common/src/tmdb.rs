@@ -348,7 +348,10 @@ fn apply_credits(credits: &TmdbCredits, meta: &mut NfoMetadata) {
             person_type: "Actor".to_string(),
             role: cast.character.clone(),
             sort_order: cast.order.or(Some(i as i32)),
-            image_url: cast.profile_path.as_deref().map(|p| tmdb_image_url(p, "h632")),
+            image_url: cast
+                .profile_path
+                .as_deref()
+                .map(|p| tmdb_image_url(p, "h632")),
             provider_person_id: Some(format!("tmdb-{}", cast.id)),
         });
     }
@@ -365,7 +368,10 @@ fn apply_credits(credits: &TmdbCredits, meta: &mut NfoMetadata) {
             person_type: person_type.to_string(),
             role: None,
             sort_order: None,
-            image_url: crew.profile_path.as_deref().map(|p| tmdb_image_url(p, "h632")),
+            image_url: crew
+                .profile_path
+                .as_deref()
+                .map(|p| tmdb_image_url(p, "h632")),
             provider_person_id: Some(format!("tmdb-{}", crew.id)),
         });
     }

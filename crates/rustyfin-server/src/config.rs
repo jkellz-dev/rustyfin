@@ -445,9 +445,8 @@ impl Config {
 
         // Explicit config file path from env
         if let Ok(path) = std::env::var("RUSTYFIN_CONFIG") {
-            builder = builder.add_source(
-                config::File::new(&path, config::FileFormat::Toml).required(true),
-            );
+            builder = builder
+                .add_source(config::File::new(&path, config::FileFormat::Toml).required(true));
         }
 
         // Environment variables: RUSTYFIN__SERVER__PORT, RUSTYFIN__DATABASE__URL, etc.

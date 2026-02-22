@@ -202,27 +202,23 @@ impl EnrichmentService {
                         {
                             let headshot_path = cache_dir.join(format!("{pid}.jpg"));
                             if headshot_path.is_file() {
-                                let existing =
-                                    rustyfin_db::repo::images::find_by_item_and_type(
-                                        &self.pool,
-                                        person_row.id,
-                                        "Primary",
-                                        0,
-                                    )
-                                    .await;
+                                let existing = rustyfin_db::repo::images::find_by_item_and_type(
+                                    &self.pool,
+                                    person_row.id,
+                                    "Primary",
+                                    0,
+                                )
+                                .await;
                                 if matches!(existing, Ok(None)) {
                                     let new_image = rustyfin_db::repo::images::NewImage {
                                         entity_id: person_row.id,
                                         image_type: "Primary".to_string(),
-                                        path: headshot_path
-                                            .to_string_lossy()
-                                            .into_owned(),
+                                        path: headshot_path.to_string_lossy().into_owned(),
                                         image_index: 0,
                                     };
-                                    if let Err(e) = rustyfin_db::repo::images::insert(
-                                        &self.pool, &new_image,
-                                    )
-                                    .await
+                                    if let Err(e) =
+                                        rustyfin_db::repo::images::insert(&self.pool, &new_image)
+                                            .await
                                     {
                                         tracing::error!(
                                             "Failed to insert headshot image for {}: {e}",
