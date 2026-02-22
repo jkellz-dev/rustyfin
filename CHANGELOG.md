@@ -4,7 +4,19 @@
 
 ### Bug Fixes
 
+- Unify env var prefix — meta CLI now uses RUSTYFIN__ like server
+- *(ci)* Use --unreleased for release notes instead of --latest
+- Collapse nested if into let-chain for clippy collapsible_if
+
+## [0.1.0-20260222-b9c1ac1] - 2026-02-22
+
+### Bug Fixes
+
 - *(ci)* Commit CHANGELOG.md and create annotated tags
+
+### Documentation
+
+- Update CHANGELOG.md
 
 ## [0.1.0-20260222-ec6c8f6] - 2026-02-22
 
