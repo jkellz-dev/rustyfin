@@ -18,6 +18,15 @@ pub struct MetaConfig {
     pub output: OutputConfig,
     #[serde(default)]
     pub server: ServerConfig,
+    /// Accepts the same `metadata.tmdb_api_key` field as the server config,
+    /// so both binaries can share `RUSTYFIN__METADATA__TMDB_API_KEY`.
+    #[serde(default)]
+    pub metadata: SharedMetadataConfig,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct SharedMetadataConfig {
+    pub tmdb_api_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -241,14 +250,22 @@ impl MetaConfig {
                 )
                 .required(false),
             )
-            // Environment variables: RUSTYFIN_META__TMDB__API_KEY, etc.
+            // Environment variables: RUSTYFIN__TMDB__API_KEY, RUSTYFIN__METADATA__TMDB_API_KEY, etc.
             .add_source(
-                config::Environment::with_prefix("RUSTYFIN_META")
+                config::Environment::with_prefix("RUSTYFIN")
                     .separator("__")
                     .try_parsing(true),
             );
 
-        let config: Self = builder.build()?.try_deserialize()?;
+        let mut config: Self = builder.build()?.try_deserialize()?;
+
+        // Allow the shared RUSTYFIN__METADATA__TMDB_API_KEY to fill tmdb.api_key
+        if config.tmdb.api_key.is_none() {
+            if let Some(key) = config.metadata.tmdb_api_key.take() {
+                config.tmdb.api_key = Some(key);
+            }
+        }
+
         Ok(config)
     }
 }
