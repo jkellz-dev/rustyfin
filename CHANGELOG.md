@@ -2,11 +2,33 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- Test suite completion design (Phase 11b)
+- Update roadmap with Phase 11b test suite completion (361→432 tests)
+
+### Features
+
+- Cast & crew portrait cards with headshot images, NFO-aware scan etag
+
+### Testing
+
+- Add people repo unit tests (10 tests)
+- Add DB repo tests for media_items, user_data, images, libraries
+- Add NFO edge case tests and query param parsing unit tests
+- Add remaining parity tests and DTO serialization tests
+
+## [0.1.0-20260222-2c2bbd5] - 2026-02-22
+
 ### Bug Fixes
 
 - Unify env var prefix — meta CLI now uses RUSTYFIN__ like server
 - *(ci)* Use --unreleased for release notes instead of --latest
 - Collapse nested if into let-chain for clippy collapsible_if
+
+### Documentation
+
+- Update CHANGELOG.md
 
 ## [0.1.0-20260222-b9c1ac1] - 2026-02-22
 
