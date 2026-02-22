@@ -146,10 +146,23 @@ jobs:
           retention-days: 1
 
   container-push:
-    name: Push Containers
+    name: Push Container (${{ matrix.image }})
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build]
+    strategy:
+      matrix:
+        include:
+          - image: rustyfin-server
+            dockerfile: docker/server.Dockerfile
+            binary_amd64: rustyfin-server-x86_64-unknown-linux-gnu
+            binary_arm64: rustyfin-server-aarch64-unknown-linux-gnu
+            binary_name: rustyfin-server
+          - image: rustyfin-meta
+            dockerfile: docker/meta.Dockerfile
+            binary_amd64: rustyfin-x86_64-unknown-linux-gnu
+            binary_arm64: rustyfin-aarch64-unknown-linux-gnu
+            binary_name: rustyfin
     steps:
       - uses: actions/checkout@v4
 
@@ -180,41 +193,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prepare server context
+      - name: Prepare build context
         run: |
-          mkdir -p docker/context/server/linux/{amd64,arm64}
-          cp artifacts/amd64/rustyfin-server-x86_64-unknown-linux-gnu docker/context/server/linux/amd64/rustyfin-server
-          cp artifacts/arm64/rustyfin-server-aarch64-unknown-linux-gnu docker/context/server/linux/arm64/rustyfin-server
-          chmod +x docker/context/server/linux/*/rustyfin-server
+          mkdir -p context/linux/{amd64,arm64}
+          cp artifacts/amd64/${{ matrix.binary_amd64 }} context/linux/amd64/${{ matrix.binary_name }}
+          cp artifacts/arm64/${{ matrix.binary_arm64 }} context/linux/arm64/${{ matrix.binary_name }}
+          chmod +x context/linux/*/${{ matrix.binary_name }}
 
-      - name: Prepare meta context
-        run: |
-          mkdir -p docker/context/meta/linux/{amd64,arm64}
-          cp artifacts/amd64/rustyfin-x86_64-unknown-linux-gnu docker/context/meta/linux/amd64/rustyfin
-          cp artifacts/arm64/rustyfin-aarch64-unknown-linux-gnu docker/context/meta/linux/arm64/rustyfin
-          chmod +x docker/context/meta/linux/*/rustyfin
-
-      - name: Build & push server image
+      - name: Build & push image
         uses: docker/build-push-action@v6
         with:
-          context: docker/context/server
-          file: docker/server.Dockerfile
+          context: context
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/jkellz-dev/rustyfin-server:latest
-            ghcr.io/jkellz-dev/rustyfin-server:sha-${{ steps.sha.outputs.short }}
-
-      - name: Build & push meta image
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/context/meta
-          file: docker/meta.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/jkellz-dev/rustyfin-meta:latest
-            ghcr.io/jkellz-dev/rustyfin-meta:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/jkellz-dev/${{ matrix.image }}:latest
+            ghcr.io/jkellz-dev/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
 
   release:
     name: GitHub Release
