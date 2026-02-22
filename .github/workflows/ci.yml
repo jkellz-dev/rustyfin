@@ -234,7 +234,7 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --latest --strip header
+          args: --unreleased --strip header
 
       - name: Generate version tag
         id: version
