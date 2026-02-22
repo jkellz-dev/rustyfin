@@ -875,3 +875,203 @@ async fn user_items_resume_returns_200() {
     assert!(body["TotalRecordCount"].is_i64());
     app.cleanup().await;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 17: Remaining parity tests
+// ═══════════════════════════════════════════════════════════════════
+
+/// DELETE /Library/VirtualFolders?id={fake_uuid} returns 404 (library doesn't exist).
+#[tokio::test]
+async fn delete_nonexistent_library_returns_404() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("admin", true).await;
+    let fake_id = Uuid::new_v4();
+    let (status, _) = app
+        .delete(&format!("/Library/VirtualFolders?id={fake_id}"), &token)
+        .await;
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::BAD_REQUEST,
+        "expected 404 or 400 for nonexistent library, got {status}"
+    );
+    app.cleanup().await;
+}
+
+/// POST /Library/VirtualFolders then GET /Library/VirtualFolders — verify round-trip.
+#[tokio::test]
+async fn library_create_and_retrieve_round_trip() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("admin", true).await;
+
+    // Create a library via the API
+    let (status, create_body) = app
+        .post(
+            "/Library/VirtualFolders",
+            &serde_json::json!({
+                "Name": "RoundTripLib",
+                "CollectionType": "movies",
+                "Paths": ["/tmp/roundtrip"]
+            }),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "library create failed: {status}");
+    assert_eq!(
+        create_body["Name"].as_str(),
+        Some("RoundTripLib"),
+        "created library name mismatch"
+    );
+
+    // Retrieve and verify it appears
+    let (status, list_body) = app.get("/Library/VirtualFolders", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let folders = list_body
+        .as_array()
+        .expect("VirtualFolders should be array");
+    assert!(
+        folders
+            .iter()
+            .any(|f| f["Name"].as_str() == Some("RoundTripLib")),
+        "created library should appear in VirtualFolders list"
+    );
+
+    app.cleanup().await;
+}
+
+/// GET /Sessions without auth returns 401.
+#[tokio::test]
+async fn sessions_requires_auth() {
+    let app = common::TestApp::new().await;
+    let (status, _) = app.get_no_auth("/Sessions").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    app.cleanup().await;
+}
+
+/// GET /Sessions with auth returns 200 with an array.
+#[tokio::test]
+async fn sessions_with_auth_returns_200() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let (status, body) = app.get("/Sessions", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_array(), "Sessions should return an array");
+    app.cleanup().await;
+}
+
+/// GET /Shows/Upcoming returns 200 with Items array and TotalRecordCount.
+#[tokio::test]
+async fn shows_upcoming_returns_200() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let (status, body) = app.get("/Shows/Upcoming", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["Items"].is_array(), "Upcoming should have Items array");
+    assert!(
+        body["TotalRecordCount"].is_i64(),
+        "Upcoming should have TotalRecordCount"
+    );
+    app.cleanup().await;
+}
+
+/// GET /System/Info/Public returns 200 with ServerName, Id, Version (no auth).
+#[tokio::test]
+async fn system_info_public_no_auth() {
+    let app = common::TestApp::new().await;
+    let (status, body) = app.get_no_auth("/System/Info/Public").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["ServerName"].is_string(),
+        "Public info should have ServerName"
+    );
+    assert!(body["Id"].is_string(), "Public info should have Id");
+    assert!(
+        body["Version"].is_string(),
+        "Public info should have Version"
+    );
+    app.cleanup().await;
+}
+
+/// POST /Sessions/Playing with body returns 204 (or 200).
+#[tokio::test]
+async fn sessions_playing_returns_204() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let fake_item = Uuid::new_v4();
+    let (status, _) = app
+        .post(
+            "/Sessions/Playing",
+            &serde_json::json!({"ItemId": fake_item.to_string()}),
+            &token,
+        )
+        .await;
+    assert!(
+        status == StatusCode::NO_CONTENT || status == StatusCode::OK,
+        "Sessions/Playing should return 204 or 200, got {status}"
+    );
+    app.cleanup().await;
+}
+
+/// POST /Sessions/Playing/Progress with body returns 204 (or 200).
+#[tokio::test]
+async fn sessions_playing_progress_returns_204() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let fake_item = Uuid::new_v4();
+    let (status, _) = app
+        .post(
+            "/Sessions/Playing/Progress",
+            &serde_json::json!({"ItemId": fake_item.to_string()}),
+            &token,
+        )
+        .await;
+    assert!(
+        status == StatusCode::NO_CONTENT || status == StatusCode::OK,
+        "Sessions/Playing/Progress should return 204 or 200, got {status}"
+    );
+    app.cleanup().await;
+}
+
+/// POST /Sessions/Playing/Stopped with body returns 204 (or 200).
+#[tokio::test]
+async fn sessions_playing_stopped_returns_204() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let fake_item = Uuid::new_v4();
+    let (status, _) = app
+        .post(
+            "/Sessions/Playing/Stopped",
+            &serde_json::json!({"ItemId": fake_item.to_string()}),
+            &token,
+        )
+        .await;
+    assert!(
+        status == StatusCode::NO_CONTENT || status == StatusCode::OK,
+        "Sessions/Playing/Stopped should return 204 or 200, got {status}"
+    );
+    app.cleanup().await;
+}
+
+/// GET /Shows/{series_id}/Seasons for an existing series returns 200 with Items array.
+#[tokio::test]
+async fn shows_seasons_for_existing_series() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib_id = app.create_library("TV", "tvshows").await;
+    let series_id = app
+        .create_media_item("Test Series", "Series", lib_id, None)
+        .await;
+
+    let (status, body) = app
+        .get(&format!("/Shows/{series_id}/Seasons"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["Items"].is_array(),
+        "Seasons should have Items array, got: {body}"
+    );
+    assert!(
+        body["TotalRecordCount"].is_i64(),
+        "Seasons should have TotalRecordCount"
+    );
+
+    app.cleanup().await;
+}
