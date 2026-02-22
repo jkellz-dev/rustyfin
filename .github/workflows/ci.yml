@@ -221,6 +221,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate full changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+
       - name: Generate release notes
         id: changelog
         uses: orhun/git-cliff-action@v4
@@ -233,6 +241,22 @@ jobs:
         run: |
           VERSION="v0.1.0-$(date +%Y%m%d)-$(echo ${{ github.sha }} | cut -c1-7)"
           echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --staged --quiet && echo "No changelog changes" || git commit -m "docs: update CHANGELOG.md"
+          git push origin main
+
+      - name: Create annotated tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          NOTES: ${{ steps.changelog.outputs.content }}
+        run: |
+          git tag -a "$TAG" -m "$NOTES"
+          git push origin "$TAG"
 
       - uses: actions/download-artifact@v4
         with:
