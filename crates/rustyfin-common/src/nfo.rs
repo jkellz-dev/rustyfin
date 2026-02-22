@@ -1726,4 +1726,201 @@ mod tests {
         assert!(directors.iter().any(|d| d.name == "Anthony Russo"));
         assert!(directors.iter().any(|d| d.name == "Joe Russo"));
     }
+
+    // ── Edge-case tests (Phase 11b, Task 3) ─────────────────────
+
+    #[test]
+    fn nfo_empty_file_returns_none() {
+        let path = write_temp_nfo("edge-empty", "");
+        let result = parse_movie_nfo(&path);
+        cleanup_temp_nfo(&path);
+        assert!(result.is_none(), "Empty file should return None");
+    }
+
+    #[test]
+    fn nfo_url_only_returns_none_https() {
+        let path = write_temp_nfo("edge-url-https", "https://www.themoviedb.org/movie/12345");
+        let result = parse_movie_nfo(&path);
+        cleanup_temp_nfo(&path);
+        assert!(
+            result.is_none(),
+            "HTTPS URL-only NFO should return None via is_url_only"
+        );
+    }
+
+    #[test]
+    fn nfo_http_url_only_returns_none() {
+        let path = write_temp_nfo("edge-url-http", "http://www.imdb.com/title/tt1234567");
+        let result = parse_movie_nfo(&path);
+        cleanup_temp_nfo(&path);
+        assert!(
+            result.is_none(),
+            "HTTP URL-only NFO should return None via is_url_only"
+        );
+    }
+
+    #[test]
+    fn nfo_malformed_xml_returns_none() {
+        let path = write_temp_nfo("edge-malformed", "<movie><title>Broken<title></movie");
+        let result = parse_movie_nfo(&path);
+        cleanup_temp_nfo(&path);
+        assert!(
+            result.is_none(),
+            "Malformed XML should return None without panicking"
+        );
+    }
+
+    #[test]
+    fn nfo_missing_title_returns_none_title() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <plot>A plot with no title element.</plot>
+    <year>2020</year>
+</movie>"#;
+        let path = write_temp_nfo("edge-no-title", xml);
+        let meta = parse_movie_nfo(&path).expect("parse should succeed even without title");
+        cleanup_temp_nfo(&path);
+
+        assert!(meta.title.is_none(), "title should be None when omitted");
+        assert_eq!(
+            meta.overview.as_deref(),
+            Some("A plot with no title element.")
+        );
+        assert_eq!(meta.production_year, Some(2020));
+    }
+
+    #[test]
+    fn nfo_unicode_in_text_fields() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>千と千尋の神隠し</title>
+    <plot>少女千尋は不思議な町に迷い込む。</plot>
+    <genre>アニメーション</genre>
+    <studio>スタジオジブリ</studio>
+</movie>"#;
+        let path = write_temp_nfo("edge-unicode", xml);
+        let meta = parse_movie_nfo(&path).expect("parse should handle Unicode");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("千と千尋の神隠し"));
+        assert_eq!(
+            meta.overview.as_deref(),
+            Some("少女千尋は不思議な町に迷い込む。")
+        );
+        assert_eq!(meta.genres, vec!["アニメーション"]);
+        assert_eq!(meta.studios, vec!["スタジオジブリ"]);
+    }
+
+    #[test]
+    fn nfo_episode_missing_season_episode_numbers() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<episodedetails>
+    <title>Mystery Episode</title>
+    <plot>No season or episode number provided.</plot>
+</episodedetails>"#;
+        let path = write_temp_nfo("edge-ep-no-numbers", xml);
+        let meta =
+            parse_episode_nfo(&path).expect("episode parse should succeed without season/episode");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Mystery Episode"));
+        assert_eq!(
+            meta.overview.as_deref(),
+            Some("No season or episode number provided.")
+        );
+        // No season/episode fields are captured in NfoMetadata so there is nothing
+        // extra to assert; the key requirement is that parsing does not fail.
+    }
+
+    #[test]
+    fn nfo_duplicate_genres_preserved() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>Duplicate Genre Movie</title>
+    <genre>Action</genre>
+    <genre>Drama</genre>
+    <genre>Action</genre>
+</movie>"#;
+        let path = write_temp_nfo("edge-dup-genres", xml);
+        let meta = parse_movie_nfo(&path).expect("parse should succeed");
+        cleanup_temp_nfo(&path);
+
+        // Documenting current behavior: duplicate genres are preserved (not deduplicated).
+        assert_eq!(
+            meta.genres,
+            vec!["Action", "Drama", "Action"],
+            "All 3 genre entries (including the duplicate) should be preserved"
+        );
+    }
+
+    #[test]
+    fn nfo_empty_genre_and_studio_filtered() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+    <title>Filtered Movie</title>
+    <genre></genre>
+    <genre>Thriller</genre>
+    <genre />
+    <studio />
+    <studio>Warner Bros.</studio>
+    <studio></studio>
+</movie>"#;
+        let path = write_temp_nfo("edge-empty-genre-studio", xml);
+        let meta = parse_movie_nfo(&path).expect("parse should succeed");
+        cleanup_temp_nfo(&path);
+
+        // movie_nfo_to_metadata filters empty strings from genres and studios
+        assert_eq!(
+            meta.genres,
+            vec!["Thriller"],
+            "Empty genre elements should be filtered out"
+        );
+        assert_eq!(
+            meta.studios,
+            vec!["Warner Bros."],
+            "Empty studio elements should be filtered out"
+        );
+    }
+
+    #[test]
+    fn nfo_series_parse_basic() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+    <title>Breaking Bad</title>
+    <plot>A high school chemistry teacher turned meth cook.</plot>
+    <genre>Crime</genre>
+    <genre>Drama</genre>
+    <genre>Thriller</genre>
+    <year>2008</year>
+    <premiered>2008-01-20</premiered>
+</tvshow>"#;
+        let path = write_temp_nfo("edge-series-basic", xml);
+        let meta = parse_series_nfo(&path).expect("parse_series_nfo should succeed");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Breaking Bad"));
+        assert_eq!(
+            meta.overview.as_deref(),
+            Some("A high school chemistry teacher turned meth cook.")
+        );
+        assert_eq!(meta.genres, vec!["Crime", "Drama", "Thriller"]);
+        assert_eq!(meta.production_year, Some(2008));
+        let premiere = meta.premiere_date.expect("premiere_date should be set");
+        assert_eq!(premiere.format("%Y-%m-%d").to_string(), "2008-01-20");
+    }
+
+    #[test]
+    fn nfo_artist_parse_basic() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<artist>
+    <name>Pink Floyd</name>
+    <biography>English rock band.</biography>
+</artist>"#;
+        let path = write_temp_nfo("edge-artist-basic", xml);
+        let meta = parse_artist_nfo(&path).expect("parse_artist_nfo should succeed");
+        cleanup_temp_nfo(&path);
+
+        assert_eq!(meta.title.as_deref(), Some("Pink Floyd"));
+        assert_eq!(meta.overview.as_deref(), Some("English rock band."));
+    }
 }

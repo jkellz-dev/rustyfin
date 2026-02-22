@@ -712,3 +712,114 @@ pub async fn refresh_item(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_comma_delimited ──────────────────────────────────────────
+
+    #[test]
+    fn parse_comma_delimited_multiple() {
+        let input = Some("Movie,Series".to_string());
+        assert_eq!(parse_comma_delimited(&input), vec!["Movie", "Series"]);
+    }
+
+    #[test]
+    fn parse_comma_delimited_single() {
+        let input = Some("Movie".to_string());
+        assert_eq!(parse_comma_delimited(&input), vec!["Movie"]);
+    }
+
+    #[test]
+    fn parse_comma_delimited_empty() {
+        assert!(parse_comma_delimited(&None).is_empty());
+        assert!(parse_comma_delimited(&Some(String::new())).is_empty());
+    }
+
+    #[test]
+    fn parse_comma_delimited_whitespace() {
+        let input = Some(" Movie , Series , Audio ".to_string());
+        assert_eq!(
+            parse_comma_delimited(&input),
+            vec!["Movie", "Series", "Audio"]
+        );
+    }
+
+    // ── parse_pipe_delimited ───────────────────────────────────────────
+
+    #[test]
+    fn parse_pipe_delimited_multiple() {
+        let input = Some("Action|Comedy".to_string());
+        assert_eq!(parse_pipe_delimited(&input), vec!["Action", "Comedy"]);
+    }
+
+    #[test]
+    fn parse_pipe_delimited_empty() {
+        assert!(parse_pipe_delimited(&None).is_empty());
+        assert!(parse_pipe_delimited(&Some(String::new())).is_empty());
+    }
+
+    #[test]
+    fn parse_pipe_delimited_single() {
+        let input = Some("Action".to_string());
+        assert_eq!(parse_pipe_delimited(&input), vec!["Action"]);
+    }
+
+    // ── parse_comma_uuids ──────────────────────────────────────────────
+
+    #[test]
+    fn parse_comma_uuids_valid() {
+        let u1 = Uuid::new_v4();
+        let u2 = Uuid::new_v4();
+        let input = Some(format!("{u1},{u2}"));
+        let result = parse_comma_uuids(&input);
+        assert_eq!(result, vec![u1, u2]);
+    }
+
+    #[test]
+    fn parse_comma_uuids_invalid_filtered() {
+        let valid = Uuid::new_v4();
+        let input = Some(format!("{valid},not-a-uuid"));
+        let result = parse_comma_uuids(&input);
+        assert_eq!(result, vec![valid]);
+    }
+
+    #[test]
+    fn parse_comma_uuids_empty() {
+        assert!(parse_comma_uuids(&None).is_empty());
+        assert!(parse_comma_uuids(&Some(String::new())).is_empty());
+    }
+
+    // ── parse_comma_ints ───────────────────────────────────────────────
+
+    #[test]
+    fn parse_comma_ints_valid() {
+        let input = Some("2020,2021,2022".to_string());
+        assert_eq!(parse_comma_ints(&input), vec![2020, 2021, 2022]);
+    }
+
+    #[test]
+    fn parse_comma_ints_invalid_filtered() {
+        let input = Some("2020,abc,2022".to_string());
+        assert_eq!(parse_comma_ints(&input), vec![2020, 2022]);
+    }
+
+    #[test]
+    fn parse_comma_ints_empty() {
+        assert!(parse_comma_ints(&None).is_empty());
+        assert!(parse_comma_ints(&Some(String::new())).is_empty());
+    }
+
+    #[test]
+    fn parse_comma_ints_whitespace() {
+        let input = Some(" 1 , 2 , 3 ".to_string());
+        assert_eq!(parse_comma_ints(&input), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn parse_comma_ints_negative() {
+        let input = Some("-1,0,42".to_string());
+        assert_eq!(parse_comma_ints(&input), vec![-1, 0, 42]);
+    }
+}
