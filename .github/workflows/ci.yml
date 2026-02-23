@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v[0-9]*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -108,7 +109,7 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     needs: [lint, test-unit, test-integration, build-frontend]
     strategy:
       matrix:
@@ -148,7 +149,7 @@ jobs:
   container-push:
     name: Push Container (${{ matrix.image }})
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     needs: [build]
     strategy:
       matrix:
@@ -166,9 +167,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Short SHA
-        id: sha
-        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+      - name: Determine tags
+        id: tags
+        run: |
+          IMAGE="ghcr.io/jkellz-dev/${{ matrix.image }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAGS="${IMAGE}:sha-${SHORT_SHA}"
+
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+            TAGS="${TAGS},${IMAGE}:${VERSION},${IMAGE}:latest"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
@@ -207,19 +218,26 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/jkellz-dev/${{ matrix.image }}:latest
-            ghcr.io/jkellz-dev/${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
+          tags: ${{ steps.tags.outputs.tags }}
 
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [container-push]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Validate semver tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if ! echo "$TAG" | grep -qE '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$'; then
+            echo "::error::Tag '$TAG' is not a valid semver version"
+            exit 1
+          fi
+          echo "Version: $TAG"
 
       - name: Generate full changelog
         uses: orhun/git-cliff-action@v4
@@ -229,34 +247,53 @@ jobs:
         env:
           OUTPUT: CHANGELOG.md
 
+      - name: Determine changelog range
+        id: cliff_args
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            # Stable release: include everything since last stable tag
+            # (skip prereleases when finding the previous boundary)
+            PREV=$(git tag -l 'v[0-9]*' --sort=-v:refname \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | grep -v "^${TAG}$" \
+              | head -1)
+            if [ -n "$PREV" ]; then
+              echo "args=${PREV}..${TAG} --strip header" >> "$GITHUB_OUTPUT"
+            else
+              echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # Prerelease: just the delta since the last tag (any kind)
+            echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate release notes
         id: changelog
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --unreleased --strip header
-
-      - name: Generate version tag
-        id: version
-        run: |
-          VERSION="v0.1.0-$(date +%Y%m%d)-$(echo ${{ github.sha }} | cut -c1-7)"
-          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          args: ${{ steps.cliff_args.outputs.args }}
 
       - name: Commit changelog
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          git diff --staged --quiet && echo "No changelog changes" || git commit -m "docs: update CHANGELOG.md"
-          git push origin main
+          git diff --staged --quiet && echo "No changelog changes" || {
+            git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
+            git push origin HEAD:main
+          }
 
-      - name: Create annotated tag
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-          NOTES: ${{ steps.changelog.outputs.content }}
+      - name: Determine prerelease
+        id: prerelease
         run: |
-          git tag -a "$TAG" -m "$NOTES"
-          git push origin "$TAG"
+          TAG="${GITHUB_REF_NAME}"
+          if echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=--prerelease" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/download-artifact@v4
         with:
@@ -268,8 +305,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            --title "${{ steps.version.outputs.tag }}" \
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
             --notes "${{ steps.changelog.outputs.content }}" \
-            --prerelease \
+            ${{ steps.prerelease.outputs.flag }} \
             release-artifacts/*
