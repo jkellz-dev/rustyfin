@@ -532,17 +532,18 @@ Endpoints that return hardcoded/empty responses to prevent client 404s. Each wou
 - [x] Unit tests for auth: MediaBrowser header parsing (13), token extraction, admin vs user enforcement (7 integration)
 - [x] Repository tests: people, media_items, user_data, images, libraries (29 tests, per-test Postgres schema)
 - [x] DTO serialization tests: PascalCase output, optional field omission, QueryResult shape (12 tests)
-- [ ] Snapshot tests for key API responses (compare against known-good Jellyfin responses)
+- [x] Media encoding unit tests: probe (seconds_to_ticks, parse_frame_rate, map_stream), subtitles (content_type, format_from_extension) — 25 tests
+- [ ] Snapshot tests for key API responses (compare against known-good Jellyfin responses) — deferred
 
 #### Jellyfin Parity Tests (translated from Jellyfin.Server.Integration.Tests)
 
 Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Reference source: `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/`. Adapt for forward auth (no startup wizard) and Postgres (not SQLite).
 
 **User controller parity** (from `UserControllerTests.cs`, 8 tests):
-- [ ] `GET /Users` — returns seeded users array
+- [x] `GET /Users` — returns seeded users array
 - [x] `GET /Users/Me` — returns authenticated user's own data
 - [x] `POST /Users/New` — returns 403 (forward auth; Jellyfin returns 200)
-- [ ] `POST /Users/New` with invalid names (empty, whitespace) — returns 400/403
+- [x] `POST /Users/New` with invalid names (empty, whitespace) — returns 403 (forward auth)
 - [x] `DELETE /Users/{nonExistentId}` — returns 404
 - [x] `POST /Users/{userId}/Password` — returns 204 no-op (forward auth)
 - [x] `GET /Users/Public` — returns empty array (users hidden by default)
@@ -567,22 +568,22 @@ Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Ref
 **Library structure parity** (from `LibraryStructureControllerTests.cs`, 5 tests):
 - [x] `POST /Library/VirtualFolders` — creates library, round-trip verified
 - [x] `DELETE /Library/VirtualFolders?id=doesntExist` — 404/400
-- [ ] `DELETE /Library/VirtualFolders?name=test` — 204
-- [ ] `POST /Library/VirtualFolders/LibraryOptions` with nonexistent ID — 404
-- [ ] `POST /Library/VirtualFolders/LibraryOptions` with real library — 204 round-trip
+- [x] `DELETE /Library/VirtualFolders?Id=<uuid>` — 204 (verified round-trip)
+- [ ] `POST /Library/VirtualFolders/LibraryOptions` with nonexistent ID — 404 *(route not implemented)*
+- [ ] `POST /Library/VirtualFolders/LibraryOptions` with real library — 204 round-trip *(route not implemented)*
 
 **Library item routes parity** (from `LibraryControllerTests.cs`, 3 tests):
-- [ ] `GET /Items/{nonExistentId}/ThemeSongs`, `/ThemeVideos`, `/Ancestors`, `/Similar` — 404
-- [ ] `DELETE /Items/{id}` without auth — 401
-- [ ] `DELETE /Items/{id}` with auth, nonexistent — 404
+- [ ] `GET /Items/{nonExistentId}/ThemeSongs`, `/ThemeVideos`, `/Ancestors` — 404 *(routes not implemented)*
+- [x] `GET /Items/{nonExistentId}/Similar` — 404 (route exists, tested)
+- N/A `DELETE /Items/{id}` — server is read-only by design
 
 **Media structure parity** (from `MediaStructureControllerTests.cs`, 7 tests):
-- [ ] Rename library with whitespace name → 400
-- [ ] Rename nonexistent library → 404
-- [ ] Add media path that doesn't exist on disk → 404
-- [ ] Update media path with whitespace library name → 400
-- [ ] Remove media path with whitespace name → 400
-- [ ] Remove media path that doesn't exist → 404
+- [ ] Rename library with whitespace name → 400 *(route not implemented)*
+- [ ] Rename nonexistent library → 404 *(route not implemented)*
+- [ ] Add media path that doesn't exist on disk → 404 *(route not implemented)*
+- [ ] Update media path with whitespace library name → 400 *(route not implemented)*
+- [ ] Remove media path with whitespace name → 400 *(route not implemented)*
+- [ ] Remove media path that doesn't exist → 404 *(route not implemented)*
 
 **Branding parity** (from `BrandingControllerTests.cs`, 2 tests):
 - [x] `GET /Branding/Configuration` — 200, JSON shape matches Jellyfin's `BrandingOptions`
@@ -600,7 +601,7 @@ Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Ref
 - [x] `GET /Plugins` with auth — 200, JSON array
 
 **WebSocket parity** (from `WebSocketTests.cs`):
-- [ ] WebSocket connect without auth — rejected
+- [x] WebSocket connect without auth — rejected (400, no upgrade headers)
 
 #### Jellyfin Unit Test Ports (translated from domain test projects)
 
@@ -634,12 +635,12 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [x] Single value (no delimiter) → single-element collection
 
 **Media encoding tests** (from `Jellyfin.MediaEncoding.Tests`, 22 tests):
-- [ ] HLS segment length calculation from runtime ticks
-- [ ] ffprobe output normalization
-- [ ] Subtitle format detection and conversion rules
+- [x] Tick conversion: `seconds_to_ticks` (4 tests) — zero, one second, fractional, large duration
+- [x] ffprobe output normalization: `parse_frame_rate` (5 tests), `map_stream` (5 tests) — video/audio/subtitle/unknown/missing
+- [x] Subtitle format detection: `subtitle_content_type` (5 tests), `format_from_extension` (6 tests) — MIME types, canonical formats, case handling
 
 #### API Integration Test Infrastructure [DONE]
-`TestApp` harness in `crates/rustyfin-api/tests/common/mod.rs` — per-test random Postgres schema, `tower::ServiceExt::oneshot` dispatch, seed helpers, schema cleanup. 113 integration tests across 5 test files.
+`TestApp` harness in `crates/rustyfin-api/tests/common/mod.rs` — per-test random Postgres schema, `tower::ServiceExt::oneshot` dispatch, seed helpers, schema cleanup. 122 integration tests across 5 test files.
 
 - [x] Add `[dev-dependencies]`: `tower` (for `ServiceExt::oneshot`), `tokio`, `serde_json`, `uuid`
 - [x] Test harness: `TestApp` struct with `PgPoolOptions::after_connect` for schema isolation, `build_router()` + `oneshot`
@@ -969,4 +970,4 @@ Theming is file-based config (not DB), consistent with the config boundary. Them
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~90% | Meilisearch + fallback; full filter engine (genre/year/studio/rating/person/tags); 17 sort options |
 | Notifications | ~50% | Activity log + inbound media update webhook + API key auth; no outbound webhooks |
-| Testing | ~65% | 432 tests (common 230 [naming 196, NFO 34], API 132 [parity 62, repo 29, DTO 12, query parsing 15, smoke+CRUD 14], media 44, auth 26); per-test Postgres schema isolation |
+| Testing | ~70% | 462 tests (common 230 [naming 196, NFO 34], API 137 [parity 67, repo 29, DTO 12, query parsing 15, smoke+CRUD 14], media 69 [command 44, probe 14, subtitles 11], auth 26); per-test Postgres schema isolation |
