@@ -283,3 +283,153 @@ fn parse_frame_rate(s: &str) -> Option<f32> {
         s.parse().ok()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── seconds_to_ticks ───────────────────────────────────────────
+
+    #[test]
+    fn seconds_to_ticks_zero() {
+        assert_eq!(seconds_to_ticks(0.0), 0);
+    }
+
+    #[test]
+    fn seconds_to_ticks_one_second() {
+        assert_eq!(seconds_to_ticks(1.0), 10_000_000);
+    }
+
+    #[test]
+    fn seconds_to_ticks_fractional() {
+        assert_eq!(seconds_to_ticks(1.5), 15_000_000);
+    }
+
+    #[test]
+    fn seconds_to_ticks_large_duration() {
+        assert_eq!(seconds_to_ticks(7200.0), 72_000_000_000);
+    }
+
+    // ── parse_frame_rate ───────────────────────────────────────────
+
+    #[test]
+    fn parse_frame_rate_fraction() {
+        let rate = parse_frame_rate("24000/1001").unwrap();
+        assert!((rate - 23.976).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_frame_rate_integer_fraction() {
+        let rate = parse_frame_rate("30/1").unwrap();
+        assert!((rate - 30.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_frame_rate_plain_number() {
+        let rate = parse_frame_rate("25").unwrap();
+        assert!((rate - 25.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parse_frame_rate_zero_denominator() {
+        assert!(parse_frame_rate("30/0").is_none());
+    }
+
+    #[test]
+    fn parse_frame_rate_invalid() {
+        assert!(parse_frame_rate("abc").is_none());
+    }
+
+    // ── map_stream helpers ─────────────────────────────────────────
+
+    fn minimal_ffprobe_stream(codec_type: Option<&str>, codec_name: &str) -> FfprobeStream {
+        FfprobeStream {
+            index: 0,
+            codec_type: codec_type.map(String::from),
+            codec_name: Some(codec_name.to_string()),
+            width: None,
+            height: None,
+            bit_rate: None,
+            bits_per_raw_sample: None,
+            pix_fmt: None,
+            display_aspect_ratio: None,
+            r_frame_rate: None,
+            color_space: None,
+            color_primaries: None,
+            color_transfer: None,
+            channels: None,
+            channel_layout: None,
+            sample_rate: None,
+            disposition: None,
+            tags: None,
+        }
+    }
+
+    // ── map_stream ─────────────────────────────────────────────────
+
+    #[test]
+    fn map_stream_video() {
+        let s = FfprobeStream {
+            width: Some(1920),
+            height: Some(1080),
+            pix_fmt: Some("yuv420p".to_string()),
+            r_frame_rate: Some("24000/1001".to_string()),
+            display_aspect_ratio: Some("16:9".to_string()),
+            ..minimal_ffprobe_stream(Some("video"), "h264")
+        };
+        let ps = map_stream(s).expect("should produce a ProbeStream");
+        assert_eq!(ps.stream_type, "Video");
+        assert_eq!(ps.codec.as_deref(), Some("h264"));
+        assert_eq!(ps.width, Some(1920));
+        assert_eq!(ps.height, Some(1080));
+        assert_eq!(ps.pixel_format.as_deref(), Some("yuv420p"));
+        assert_eq!(ps.aspect_ratio.as_deref(), Some("16:9"));
+        assert!(ps.real_frame_rate.is_some());
+        // Audio-specific fields should be None
+        assert!(ps.channels.is_none());
+        assert!(ps.channel_layout.is_none());
+        assert!(ps.sample_rate.is_none());
+    }
+
+    #[test]
+    fn map_stream_audio() {
+        let s = FfprobeStream {
+            channels: Some(6),
+            channel_layout: Some("5.1".to_string()),
+            sample_rate: Some("48000".to_string()),
+            ..minimal_ffprobe_stream(Some("audio"), "aac")
+        };
+        let ps = map_stream(s).expect("should produce a ProbeStream");
+        assert_eq!(ps.stream_type, "Audio");
+        assert_eq!(ps.codec.as_deref(), Some("aac"));
+        assert_eq!(ps.channels, Some(6));
+        assert_eq!(ps.channel_layout.as_deref(), Some("5.1"));
+        assert_eq!(ps.sample_rate, Some(48000));
+        // Video-specific fields should be None
+        assert!(ps.width.is_none());
+        assert!(ps.height.is_none());
+        assert!(ps.pixel_format.is_none());
+        assert!(ps.aspect_ratio.is_none());
+        assert!(ps.real_frame_rate.is_none());
+    }
+
+    #[test]
+    fn map_stream_subtitle() {
+        let s = minimal_ffprobe_stream(Some("subtitle"), "subrip");
+        let ps = map_stream(s).expect("should produce a ProbeStream");
+        assert_eq!(ps.stream_type, "Subtitle");
+        assert_eq!(ps.codec.as_deref(), Some("subrip"));
+    }
+
+    #[test]
+    fn map_stream_unknown_type_returns_none() {
+        let s = minimal_ffprobe_stream(Some("attachment"), "ttf");
+        assert!(map_stream(s).is_none());
+    }
+
+    #[test]
+    fn map_stream_missing_codec_type_returns_none() {
+        let s = minimal_ffprobe_stream(None, "h264");
+        assert!(map_stream(s).is_none());
+    }
+}

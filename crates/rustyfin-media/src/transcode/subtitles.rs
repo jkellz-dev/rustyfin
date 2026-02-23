@@ -90,3 +90,68 @@ pub fn format_from_extension(ext: &str) -> &str {
         _ => "vtt",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── subtitle_content_type ──────────────────────────────────────
+
+    #[test]
+    fn content_type_vtt() {
+        assert_eq!(subtitle_content_type("vtt"), "text/vtt; charset=utf-8");
+    }
+
+    #[test]
+    fn content_type_webvtt_alias() {
+        assert_eq!(subtitle_content_type("webvtt"), "text/vtt; charset=utf-8");
+    }
+
+    #[test]
+    fn content_type_srt() {
+        assert_eq!(subtitle_content_type("srt"), "text/plain; charset=utf-8");
+    }
+
+    #[test]
+    fn content_type_ass() {
+        assert_eq!(subtitle_content_type("ass"), "text/plain; charset=utf-8");
+    }
+
+    #[test]
+    fn content_type_unknown_fallback() {
+        assert_eq!(subtitle_content_type("xyz"), "text/plain; charset=utf-8");
+    }
+
+    // ── format_from_extension ──────────────────────────────────────
+
+    #[test]
+    fn extension_vtt() {
+        assert_eq!(format_from_extension("vtt"), "vtt");
+    }
+
+    #[test]
+    fn extension_srt() {
+        assert_eq!(format_from_extension("srt"), "srt");
+    }
+
+    #[test]
+    fn extension_ass() {
+        assert_eq!(format_from_extension("ass"), "ass");
+    }
+
+    #[test]
+    fn extension_ssa_maps_to_ass() {
+        assert_eq!(format_from_extension("ssa"), "ass");
+    }
+
+    #[test]
+    fn extension_case_insensitive() {
+        assert_eq!(format_from_extension("VTT"), "vtt");
+        assert_eq!(format_from_extension("SRT"), "srt");
+    }
+
+    #[test]
+    fn extension_unknown_defaults_to_vtt() {
+        assert_eq!(format_from_extension("xyz"), "vtt");
+    }
+}
