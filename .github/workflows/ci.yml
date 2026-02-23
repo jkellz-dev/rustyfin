@@ -285,6 +285,15 @@ jobs:
             git push origin HEAD:main
           }
 
+      - name: Annotate tag with release notes
+        env:
+          NOTES: ${{ steps.changelog.outputs.content }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          git tag -d "$TAG"
+          git tag -a "$TAG" -m "$NOTES"
+          git push origin "$TAG" --force
+
       - name: Determine prerelease
         id: prerelease
         run: |
