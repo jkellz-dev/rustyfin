@@ -1075,3 +1075,120 @@ async fn shows_seasons_for_existing_series() {
 
     app.cleanup().await;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 18: Additional parity tests (users, library delete, websocket)
+// ═══════════════════════════════════════════════════════════════════
+
+/// GET /Users with auth returns a JSON array containing the seeded user.
+#[tokio::test]
+async fn users_list_returns_seeded_users() {
+    let app = common::TestApp::new().await;
+    let (user_id, token) = app.create_user("listuser", false).await;
+
+    let (status, body) = app.get("/Users", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_array(), "GET /Users should return an array");
+    let users = body.as_array().unwrap();
+    assert!(
+        !users.is_empty(),
+        "GET /Users should return at least one user"
+    );
+    assert!(
+        users
+            .iter()
+            .any(|u| u["Id"].as_str() == Some(&user_id.to_string())),
+        "seeded user should appear in the user list"
+    );
+
+    app.cleanup().await;
+}
+
+/// POST /Users/New with empty name body returns 403 (forward auth blocks all user creation).
+#[tokio::test]
+async fn users_new_with_empty_name_returns_403() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("admin", true).await;
+    let (status, _) = app
+        .post("/Users/New", &serde_json::json!({"Name": ""}), &token)
+        .await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "POST /Users/New with empty name should return 403, got {status}"
+    );
+    app.cleanup().await;
+}
+
+/// Create a library, then DELETE /Library/VirtualFolders?id=<id> returns 204.
+#[tokio::test]
+async fn delete_library_by_id_succeeds() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("admin", true).await;
+    let lib_id = app.create_library("ToDelete", "movies").await;
+
+    // Verify it exists first
+    let (status, body) = app.get("/Library/VirtualFolders", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let folders = body.as_array().unwrap();
+    assert!(
+        folders
+            .iter()
+            .any(|f| f["Name"].as_str() == Some("ToDelete")),
+        "library should exist before deletion"
+    );
+
+    // Delete it (query param is PascalCase: Id)
+    let (status, _) = app
+        .delete(&format!("/Library/VirtualFolders?Id={lib_id}"), &token)
+        .await;
+    assert_eq!(
+        status,
+        StatusCode::NO_CONTENT,
+        "DELETE library should return 204, got {status}"
+    );
+
+    // Verify it's gone
+    let (status, body) = app.get("/Library/VirtualFolders", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let folders = body.as_array().unwrap();
+    assert!(
+        !folders
+            .iter()
+            .any(|f| f["Name"].as_str() == Some("ToDelete")),
+        "library should be gone after deletion"
+    );
+
+    app.cleanup().await;
+}
+
+/// GET /socket without auth token and without WebSocket upgrade headers returns an error.
+/// Without the `Upgrade: websocket` headers, Axum's WebSocketUpgrade extractor rejects
+/// the request before the handler runs.
+#[tokio::test]
+async fn websocket_without_upgrade_headers_rejected() {
+    let app = common::TestApp::new().await;
+    let (status, _) = app.get_no_auth("/socket").await;
+    // Without WebSocket upgrade headers, Axum rejects with 400 (Bad Request) or
+    // the handler rejects with 401. Either way, it should NOT be 101 or 200.
+    assert!(
+        status == StatusCode::BAD_REQUEST
+            || status == StatusCode::UPGRADE_REQUIRED
+            || status == StatusCode::UNAUTHORIZED,
+        "GET /socket without upgrade headers should be rejected, got {status}"
+    );
+    app.cleanup().await;
+}
+
+/// GET /Users without auth returns 401.
+#[tokio::test]
+async fn users_list_requires_auth() {
+    let app = common::TestApp::new().await;
+    let (status, _) = app.get_no_auth("/Users").await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "GET /Users without auth should return 401, got {status}"
+    );
+    app.cleanup().await;
+}
