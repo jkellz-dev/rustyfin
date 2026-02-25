@@ -174,9 +174,14 @@ jobs:
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           TAGS="${IMAGE}:sha-${SHORT_SHA}"
 
+          # Always tag main pushes as :latest
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          fi
+
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME}"
-            TAGS="${TAGS},${IMAGE}:${VERSION},${IMAGE}:latest"
+            TAGS="${TAGS},${IMAGE}:${VERSION}"
           fi
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
