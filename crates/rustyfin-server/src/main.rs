@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Connect to database
     tracing::info!("Connecting to database...");
-    let db_pool = pool::create_pool(&config.database.url).await?;
+    let db_pool = pool::create_pool(&config.database.url()).await?;
 
     // Run migrations
     tracing::info!("Running database migrations...");

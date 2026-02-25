@@ -1,4 +1,5 @@
 [env]
+# DATABASE_URL is used by sqlx CLI tools and integration tests (not the server)
 DATABASE_URL = "postgres://rustyfin:rustyfin@localhost:5432/rustyfin_dev"
 
 [tools]
