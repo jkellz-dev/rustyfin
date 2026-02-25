@@ -214,6 +214,7 @@ jobs:
           mkdir -p context/linux/{amd64,arm64}
           cp artifacts/amd64/${{ matrix.binary_amd64 }} context/linux/amd64/${{ matrix.binary_name }}
           cp artifacts/arm64/${{ matrix.binary_arm64 }} context/linux/arm64/${{ matrix.binary_name }}
+          cp -r migrations context/migrations
           chmod +x context/linux/*/${{ matrix.binary_name }}
 
       - name: Build & push image

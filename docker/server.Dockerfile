@@ -7,6 +7,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY linux/${TARGETARCH}/rustyfin-server /usr/local/bin/rustyfin-server
+COPY migrations /app/migrations
+
+WORKDIR /app
 
 EXPOSE 8096
 
