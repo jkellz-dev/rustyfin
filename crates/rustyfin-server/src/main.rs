@@ -43,8 +43,16 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Connect to database
-    tracing::info!("Connecting to database...");
-    let db_pool = pool::create_pool(&config.database.url()).await?;
+    let db_url = config.database.url();
+    tracing::info!(
+        "Connecting to database at {}:{}@{}:{}/{}",
+        config.database.user,
+        "****",
+        config.database.host,
+        config.database.port,
+        config.database.name,
+    );
+    let db_pool = pool::create_pool(&db_url).await?;
 
     // Run migrations
     tracing::info!("Running database migrations...");
