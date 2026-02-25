@@ -482,9 +482,15 @@ impl Config {
                 .add_source(config::File::new(&path, config::FileFormat::Toml).required(true));
         }
 
-        // Environment variables: RUSTYFIN__SERVER__PORT, RUSTYFIN__DATABASE__URL, etc.
+        // Environment variables: RUSTYFIN__SERVER__PORT, RUSTYFIN__DATABASE__HOST, etc.
+        // Note: Kubernetes injects service-discovery env vars like RUSTYFIN_PORT,
+        // RUSTYFIN_SERVICE_HOST, etc. when a Service named "rustyfin" exists.
+        // Using "__" separator ensures only double-underscore vars are parsed,
+        // but we also set prefix_separator to "__" to avoid single-underscore
+        // k8s vars from being picked up.
         builder = builder.add_source(
             config::Environment::with_prefix("RUSTYFIN")
+                .prefix_separator("__")
                 .separator("__")
                 .try_parsing(true),
         );

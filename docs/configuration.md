@@ -13,7 +13,11 @@ base_url = "https://media.example.com"
 server_name = "Rustyfin"
 
 [database]
-url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
+host = "localhost"
+port = 5432
+user = "rustyfin"
+password = "rustyfin"
+name = "rustyfin"
 
 [media]
 paths = ["/data/media"]
@@ -28,14 +32,20 @@ tmdb_api_key = "your-tmdb-api-key"
 
 ## Environment Variables
 
+Environment variables use double-underscore `__` as a separator to map to nested TOML keys. For example, `RUSTYFIN__DATABASE__HOST` maps to `database.host`.
+
 | Variable | Config Equivalent | Default | Description |
 |----------|-------------------|---------|-------------|
 | `RUSTYFIN_CONFIG` | --- | `rustyfin.toml` | Path to config file |
-| `RUSTYFIN_PORT` | `server.port` | `8096` | HTTP listen port |
-| `RUSTYFIN_BASE_URL` | `server.base_url` | `http://localhost:8096` | External URL |
-| `RUSTYFIN_SERVER_NAME` | `server.server_name` | `Rustyfin` | Display name |
-| `DATABASE_URL` | `database.url` | `postgres://rustyfin:rustyfin@localhost/rustyfin` | PostgreSQL connection string |
-| `RUSTYFIN_TMDB_API_KEY` | `metadata.tmdb_api_key` | --- | TMDB API key for metadata |
+| `RUSTYFIN__SERVER__PORT` | `server.port` | `8096` | HTTP listen port |
+| `RUSTYFIN__SERVER__BASE_URL` | `server.base_url` | `http://localhost:8096` | External URL |
+| `RUSTYFIN__SERVER__SERVER_NAME` | `server.server_name` | `Rustyfin` | Display name |
+| `RUSTYFIN__DATABASE__HOST` | `database.host` | `localhost` | PostgreSQL hostname |
+| `RUSTYFIN__DATABASE__PORT` | `database.port` | `5432` | PostgreSQL port |
+| `RUSTYFIN__DATABASE__USER` | `database.user` | `rustyfin` | PostgreSQL username |
+| `RUSTYFIN__DATABASE__PASSWORD` | `database.password` | `rustyfin` | PostgreSQL password |
+| `RUSTYFIN__DATABASE__NAME` | `database.name` | `rustyfin` | PostgreSQL database name |
+| `RUSTYFIN__METADATA__TMDB_API_KEY` | `metadata.tmdb_api_key` | --- | TMDB API key for metadata |
 
 ## Config Sections
 
@@ -51,9 +61,24 @@ tmdb_api_key = "your-tmdb-api-key"
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `url` | `String` | `postgres://rustyfin:rustyfin@localhost/rustyfin` | PostgreSQL connection URL |
+| `host` | `String` | `localhost` | PostgreSQL hostname |
+| `port` | `u16` | `5432` | PostgreSQL port |
+| `user` | `String` | `rustyfin` | PostgreSQL username |
+| `password` | `String` | `rustyfin` | PostgreSQL password |
+| `name` | `String` | `rustyfin` | PostgreSQL database name |
 
-The database must be PostgreSQL 14+. The server creates the schema automatically via migrations at startup.
+The server constructs the connection URL from these fields: `postgres://user:password@host:port/name`.
+
+#### Database Setup
+
+PostgreSQL 14+ is required. Create the database and user before starting the server:
+
+```sql
+CREATE USER rustyfin WITH PASSWORD 'your-secure-password';
+CREATE DATABASE rustyfin OWNER rustyfin;
+```
+
+The server creates all tables automatically via migrations at startup — no manual schema setup is needed.
 
 ### `[media]`
 
@@ -115,21 +140,51 @@ docker compose down        # Stop and remove containers
 docker compose down -v     # Also remove volumes (destroys data)
 ```
 
-## Deployment with Reverse Proxy
+## Deployment
 
-Rustyfin requires a reverse proxy for authentication. Example with Traefik + Authelia:
+### Docker Compose (Standalone)
 
 ```yaml
-# Traefik labels on the rustyfin container
-labels:
-  - "traefik.http.routers.rustyfin.middlewares=authelia@docker"
+services:
+  rustyfin:
+    image: ghcr.io/jkellz-dev/rustyfin-server:latest
+    environment:
+      RUSTYFIN__DATABASE__HOST: postgres
+      RUSTYFIN__DATABASE__USER: rustyfin
+      RUSTYFIN__DATABASE__PASSWORD: rustyfin
+      RUSTYFIN__DATABASE__NAME: rustyfin
+    volumes:
+      - ./rustyfin.toml:/app/rustyfin.toml:ro
+      - ./media:/data/media:ro
+      - rustyfin_config:/data/config
+    ports:
+      - "8096:8096"
+    depends_on:
+      - postgres
+
+volumes:
+  rustyfin_config:
 ```
 
-The reverse proxy must set these headers on authenticated requests:
+### Kubernetes
+
+See the example manifests in your cluster config. Key points:
+
+- **ConfigMap** mounts `rustyfin.toml` at `/app/rustyfin.toml` (set `workingDir: /app`)
+- **Secrets** inject `RUSTYFIN__DATABASE__USER` and `RUSTYFIN__DATABASE__PASSWORD` as env vars
+- Non-secret database fields (`host`, `port`, `name`) go in the TOML file
+- Media volumes should be mounted read-only
+
+### Reverse Proxy (Forward Auth)
+
+Rustyfin requires a reverse proxy for authentication. The proxy must set these headers on authenticated requests:
+
 - `Remote-User` (required) --- unique user identifier
 - `Remote-Name` (optional) --- display name
 - `Remote-Email` (optional) --- email address
 - `Remote-Groups` (optional) --- comma-separated group list
+
+Header names are configurable via `[auth.forward_auth.headers]`. For example, Tailscale sets `Tailscale-User-Login` instead of `Remote-User`.
 
 See [Authentication](authentication.md) for details.
 
