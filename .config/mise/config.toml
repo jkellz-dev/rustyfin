@@ -29,9 +29,9 @@ run = "trap 'exit 0' INT; cargo watch -x 'run --bin rustyfin-server'"
 
 # ── Frontend ─────────────────────────────────────────────────
 [tasks.frontend]
-description = "Serve the Sycamore frontend with Trunk (dev mode)"
+description = "Serve the Sycamore frontend with Trunk (dev mode, access via localhost:8097/web/)"
 dir = "frontend"
-run = "trap 'exit 0' INT; trunk serve --proxy-backend=http://localhost:8096"
+run = "trap 'exit 0' INT; trunk serve"
 
 [tasks."frontend:build"]
 description = "Build the frontend for production"
