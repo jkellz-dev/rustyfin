@@ -22,6 +22,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +31,9 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
+      # Compile cache shared with the other cargo jobs and local builds. After the
+      # toolchain step: cache keys include the rustc on PATH.
+      - uses: jdx/mr-boxington-action@v1
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -38,25 +42,29 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: mbx clippy -- -D warnings
 
   test-unit:
     name: Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: jdx/mr-boxington-action@v1
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
 
       - name: Run unit tests
-        run: cargo test --lib
+        run: mbx test --lib
 
   test-integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:17
@@ -76,10 +84,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: jdx/mr-boxington-action@v1
 
       - name: Run integration tests
-        run: cargo test -p rustyfin-api --test '*' -- --test-threads=1
+        run: mbx test -p rustyfin-api --test '*' -- --test-threads=1
 
   build-frontend:
     name: Build Frontend

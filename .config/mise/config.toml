@@ -6,7 +6,11 @@ RUSTYFIN__DATABASE__USER = "rustyfin"
 
 [tools]
 node = "22"
-rust = "latest"
+# mr_boxington makes mise run every cargo command through mbx (a shared compile cache).
+# The option has to be on this entry: a rust version taken from rust-toolchain.toml
+# alone would drop it. wasm32 is for the frontend (trunk), as in rust-toolchain.toml.
+rust = { version = "latest", mr_boxington = true, components = "clippy,rustfmt", targets = "wasm32-unknown-unknown" }
+mr-boxington = "latest"
 
 # ── Dev ──────────────────────────────────────────────────────
 [tasks.dev]
