@@ -15,6 +15,15 @@ members = [
 exclude = ["frontend"]
 resolver = "2"
 
+# Dev builds keep only line tables: full DWARF (the default, debug = 2) is the
+# single largest share of rustc's peak memory on this workspace, and these
+# builds run inside a container alongside the server and tests. Backtraces
+# and panics still show file:line; stepping through variables in a debugger
+# needs a one-off `CARGO_PROFILE_DEV_DEBUG=2 cargo build`. Release is left at
+# its defaults on purpose: the published image is built in CI, not here.
+[profile.dev]
+debug = "line-tables-only"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
