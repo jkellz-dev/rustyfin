@@ -560,8 +560,8 @@ Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Ref
 - [x] `GET /Items/{itemId}/Intros` — returns empty QueryResult (stub parity)
 
 **Playstate parity** (from `PlaystateControllerTests.cs`, 4 tests):
-- [x] `DELETE /Users/{realId}/PlayedItems/{nonExistentItemId}` — 500 (FK violation)
-- [x] `POST /Users/{realId}/PlayedItems/{nonExistentItemId}` — 500 (FK violation)
+- [x] `DELETE /Users/{realId}/PlayedItems/{nonExistentItemId}` — 404 (FK violation mapped to 404)
+- [x] `POST /Users/{realId}/PlayedItems/{nonExistentItemId}` — 404 (FK violation mapped to 404)
 - [x] `POST /UserPlayedItems/{itemId}` — mark played succeeds
 - [x] `POST /UserFavoriteItems/{itemId}` + `DELETE` — toggle favorite works
 
@@ -681,7 +681,8 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 ### 11c. Error Handling & Edge Cases
 - [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
 - [ ] Verify 404 vs 403 vs 401 is correct for all auth failure modes
-- [ ] Handle malformed UUIDs in path params gracefully (400, not 500)
+- [x] Handle malformed UUIDs in path params gracefully (400, not 500) — axum `Path<Uuid>` rejection already yields 400
+- [x] Map Postgres foreign-key violations to 404 (e.g. mark-played on nonexistent item), matching Jellyfin
 - [ ] Handle missing/corrupt media files during scan (log and skip, don't crash)
 - [ ] Database connection pool exhaustion behavior (graceful degradation)
 - [ ] Large library stress: 10k+ items, deeply nested seasons/episodes

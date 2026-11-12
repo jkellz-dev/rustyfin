@@ -315,7 +315,7 @@ impl TranscodeManager {
         let resume_threshold = 30 * 10_000_000i64; // 30 seconds in ticks
 
         let mut jobs = self.jobs.write().await;
-        for (_, job) in jobs.iter_mut() {
+        for job in jobs.values_mut() {
             if !job.is_alive() {
                 continue;
             }

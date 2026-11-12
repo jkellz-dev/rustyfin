@@ -94,9 +94,9 @@ pub async fn add_items(
             .bind(playlist_id)
             .fetch_one(pool)
             .await?;
-    let mut order = max_order.0.unwrap_or(-1) + 1;
+    let start = max_order.0.unwrap_or(-1) + 1;
 
-    for item_id in item_ids {
+    for (order, item_id) in (start..).zip(item_ids) {
         sqlx::query(
             "INSERT INTO playlist_items (playlist_id, item_id, sort_order) VALUES ($1, $2, $3)",
         )
@@ -105,7 +105,6 @@ pub async fn add_items(
         .bind(order)
         .execute(pool)
         .await?;
-        order += 1;
     }
     Ok(())
 }

@@ -28,7 +28,7 @@ async fn items_comma_separated_include_item_types() {
     // We created a Movie, so it should appear when filtering for Movie,Series
     let items = body["Items"].as_array().unwrap();
     assert!(
-        items.len() >= 1,
+        !items.is_empty(),
         "expected at least 1 item with Movie type, got {}",
         items.len()
     );
@@ -419,7 +419,7 @@ async fn get_item_special_features_returns_empty() {
 
 /// POST /Users/{realId}/PlayedItems/{nonExistentItemId} fails because of FK constraint.
 /// The user_data table has a foreign key on item_id, so inserting with a bogus item_id
-/// returns a DB error (500), not 404.
+/// returns an FK violation, which maps to 404 (matches Jellyfin).
 #[tokio::test]
 async fn mark_played_nonexistent_item_returns_error() {
     let app = common::TestApp::new().await;
@@ -432,11 +432,8 @@ async fn mark_played_nonexistent_item_returns_error() {
             &token,
         )
         .await;
-    // FK constraint on user_data.item_id means this fails with a DB error → 500
-    assert!(
-        status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::NOT_FOUND,
-        "expected 500 (FK violation) or 404, got {status}"
-    );
+    // FK violation on user_data.item_id maps to 404 like Jellyfin
+    assert_eq!(status, StatusCode::NOT_FOUND);
     app.cleanup().await;
 }
 
@@ -449,11 +446,8 @@ async fn unmark_played_nonexistent_item_returns_error() {
     let (status, _) = app
         .delete(&format!("/Users/{user_id}/PlayedItems/{fake_item}"), &token)
         .await;
-    // DELETE sets played=false via upsert; FK constraint on item_id causes DB error → 500
-    assert!(
-        status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::NOT_FOUND,
-        "expected 500 (FK violation) or 404, got {status}"
-    );
+    // DELETE upserts played=false; FK violation maps to 404 like Jellyfin
+    assert_eq!(status, StatusCode::NOT_FOUND);
     app.cleanup().await;
 }
 

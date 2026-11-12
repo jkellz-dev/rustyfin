@@ -1131,7 +1131,7 @@ mod tests {
             momoa
                 .image_url
                 .as_ref()
-                .map_or(false, |u| u.starts_with("https://")),
+                .is_some_and(|u| u.starts_with("https://")),
             "Jason Momoa image_url should start with https://"
         );
 

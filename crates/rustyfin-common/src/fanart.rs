@@ -173,7 +173,7 @@ fn extract_images(
             Some((url, likes))
         })
         .collect();
-    items.sort_by(|a, b| b.1.cmp(&a.1));
+    items.sort_by_key(|item| std::cmp::Reverse(item.1));
 
     if let Some((url, likes)) = items.into_iter().next() {
         out.push(FanartImage {
@@ -203,7 +203,7 @@ fn extract_backdrop_images(body: &serde_json::Value, json_key: &str, out: &mut V
             Some((url, likes))
         })
         .collect();
-    items.sort_by(|a, b| b.1.cmp(&a.1));
+    items.sort_by_key(|item| std::cmp::Reverse(item.1));
 
     for (i, (url, likes)) in items.into_iter().enumerate() {
         let sidecar_name = if i == 0 {
