@@ -3004,7 +3004,6 @@ name = "rustyfin-auth"
 version = "0.1.0"
 dependencies = [
  "axum",
- "axum-extra",
  "chrono",
  "hex",
  "ipnet",
@@ -3072,7 +3071,6 @@ name = "rustyfin-db"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "rustyfin-models",
  "serde",
  "serde_json",
  "sqlx",

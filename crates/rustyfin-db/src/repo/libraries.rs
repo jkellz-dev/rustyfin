@@ -9,6 +9,8 @@ pub struct LibraryRow {
     pub library_type: String,
     pub paths: Vec<String>,
     pub scan_schedule: Option<String>,
+    /// Client-supplied `LibraryOptions` JSON (`{}` until a client sets it).
+    pub library_options: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -26,6 +28,84 @@ pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<LibraryRow>, s
         .bind(id)
         .fetch_optional(pool)
         .await
+}
+
+/// Find a library by name, ignoring case (Jellyfin treats library names that way).
+pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        "SELECT * FROM libraries WHERE lower(name) = lower($1) ORDER BY created_at LIMIT 1",
+    )
+    .bind(name)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Create a library with client-supplied options.
+pub async fn create_with_options(
+    pool: &PgPool,
+    name: &str,
+    library_type: &str,
+    paths: &[String],
+    options: &serde_json::Value,
+) -> Result<LibraryRow, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        r#"
+        INSERT INTO libraries (name, library_type, paths, library_options)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+        "#,
+    )
+    .bind(name)
+    .bind(library_type)
+    .bind(paths)
+    .bind(options)
+    .fetch_one(pool)
+    .await
+}
+
+/// Rename a library; the id (and so everything attached to it) is unchanged.
+pub async fn rename(
+    pool: &PgPool,
+    id: Uuid,
+    new_name: &str,
+) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        "UPDATE libraries SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    )
+    .bind(new_name)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Replace a library's media paths.
+pub async fn set_paths(
+    pool: &PgPool,
+    id: Uuid,
+    paths: &[String],
+) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        "UPDATE libraries SET paths = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    )
+    .bind(paths)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Store a library's options.
+pub async fn set_options(
+    pool: &PgPool,
+    id: Uuid,
+    options: &serde_json::Value,
+) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        "UPDATE libraries SET library_options = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    )
+    .bind(options)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
 }
 
 /// Create a library.

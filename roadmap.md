@@ -410,7 +410,7 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - [x] Meilisearch live test (`crates/rustyfin-search/tests/meili_live.rs`, `#[ignore]`, needs MEILI_URL/MEILI_KEY); cluster deploys it as a pod sidecar with capped indexing memory/threads
 - [ ] Document every remaining 404 that clients hit — prioritize by frequency
 - [x] Query-string keys are case-insensitive like ASP.NET: `query_case` middleware upper-cases the first letter, so camelCase `searchTerm`/`includeItemTypes` from real clients work (previously ignored or 400)
-- [ ] `POST /Library/VirtualFolders` takes a JSON body with `Name`; Jellyfin takes `name`/`collectionType`/`paths` in the query string and `LibraryOptions` in the body (admin UIs like Jellyfin Web will fail)
+- [x] `POST /Library/VirtualFolders` accepts Jellyfin's query-string form (`name`, `collectionType`, `paths`, `refreshLibrary`, 204) alongside the admin UI's JSON-body form; also rename (`/Name`), add/update/remove media path (`/Paths`, `/Paths/Update`), delete by `name`; 409 on duplicate names
 - [x] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — implemented
 - [x] Image endpoint coverage: user avatars, person/genre/studio images — 404 stubs added
 
@@ -572,8 +572,8 @@ Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Ref
 - [x] `POST /Library/VirtualFolders` — creates library, round-trip verified
 - [x] `DELETE /Library/VirtualFolders?id=doesntExist` — 404/400
 - [x] `DELETE /Library/VirtualFolders?Id=<uuid>` — 204 (verified round-trip)
-- [ ] `POST /Library/VirtualFolders/LibraryOptions` with nonexistent ID — 404 *(route not implemented)*
-- [ ] `POST /Library/VirtualFolders/LibraryOptions` with real library — 204 round-trip *(route not implemented)*
+- [x] `POST /Library/VirtualFolders/LibraryOptions` with nonexistent ID — 404
+- [x] `POST /Library/VirtualFolders/LibraryOptions` with real library — 204 round-trip (options stored as JSONB, unknown fields preserved)
 
 **Library item routes parity** (from `LibraryControllerTests.cs`, 3 tests):
 - [ ] `GET /Items/{nonExistentId}/ThemeSongs`, `/ThemeVideos`, `/Ancestors` — 404 *(routes not implemented)*
@@ -581,12 +581,12 @@ Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Ref
 - N/A `DELETE /Items/{id}` — server is read-only by design
 
 **Media structure parity** (from `MediaStructureControllerTests.cs`, 7 tests):
-- [ ] Rename library with whitespace name → 400 *(route not implemented)*
-- [ ] Rename nonexistent library → 404 *(route not implemented)*
-- [ ] Add media path that doesn't exist on disk → 404 *(route not implemented)*
-- [ ] Update media path with whitespace library name → 400 *(route not implemented)*
-- [ ] Remove media path with whitespace name → 400 *(route not implemented)*
-- [ ] Remove media path that doesn't exist → 404 *(route not implemented)*
+- [x] Rename library with whitespace name → 400
+- [x] Rename nonexistent library → 404
+- [x] Add media path that doesn't exist on disk → 404
+- [x] Update media path with whitespace library name → 400
+- [x] Remove media path with whitespace name → 400
+- [x] Remove media path that doesn't exist → 404
 
 **Branding parity** (from `BrandingControllerTests.cs`, 2 tests):
 - [x] `GET /Branding/Configuration` — 200, JSON shape matches Jellyfin's `BrandingOptions`

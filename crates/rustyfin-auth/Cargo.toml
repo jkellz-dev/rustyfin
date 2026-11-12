@@ -9,7 +9,6 @@ rustyfin-db.workspace = true
 rustyfin-models.workspace = true
 
 axum.workspace = true
-axum-extra.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

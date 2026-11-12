@@ -142,6 +142,22 @@ pub fn build_router(state: AppState) -> Router {
             "/Library/VirtualFolders/Update",
             post(libraries::update_virtual_folder),
         )
+        .route(
+            "/Library/VirtualFolders/Name",
+            post(libraries::rename_virtual_folder),
+        )
+        .route(
+            "/Library/VirtualFolders/Paths",
+            post(libraries::add_media_path).delete(libraries::remove_media_path),
+        )
+        .route(
+            "/Library/VirtualFolders/Paths/Update",
+            post(libraries::update_media_path),
+        )
+        .route(
+            "/Library/VirtualFolders/LibraryOptions",
+            post(libraries::update_library_options),
+        )
         // ── Items ───────────────────────────────────────────────
         .route("/Items", get(items::get_items))
         .route("/Items/Latest", get(items::get_latest_items))

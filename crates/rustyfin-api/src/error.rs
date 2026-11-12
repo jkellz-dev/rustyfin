@@ -18,6 +18,9 @@ pub enum ApiError {
     #[error("Bad request: {0}")]
     BadRequest(String),
 
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
@@ -41,6 +44,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            ApiError::Conflict(_) => StatusCode::CONFLICT,
             // A foreign-key violation means the request referenced a row
             // that does not exist (e.g. user data for an unknown item), which
             // Jellyfin reports as 404 rather than a server error.

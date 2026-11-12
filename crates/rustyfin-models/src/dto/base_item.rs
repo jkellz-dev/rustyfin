@@ -484,10 +484,24 @@ pub struct ImageInfo {
     pub size: i64,
 }
 
-/// Library options.
+/// A media path of a library, as Jellyfin models it.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "PascalCase", default)]
+pub struct MediaPathInfo {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_path: Option<String>,
+}
+
+/// Library options.
+///
+/// The fields we act on are typed. Anything else a client sends is kept in `extra`
+/// and returned unchanged, so Jellyfin clients that round-trip the whole options
+/// object lose nothing. A library is enabled unless a client says otherwise.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase", default)]
 pub struct LibraryOptions {
+    pub enabled: bool,
     pub enable_photos: bool,
     pub enable_realtime_monitor: bool,
     pub enable_chapter_image_extraction: bool,
@@ -495,6 +509,26 @@ pub struct LibraryOptions {
     pub automatically_add_to_collection: bool,
     pub enable_internet_providers: bool,
     pub save_local_metadata: bool,
+    pub path_infos: Vec<MediaPathInfo>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl Default for LibraryOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            enable_photos: false,
+            enable_realtime_monitor: false,
+            enable_chapter_image_extraction: false,
+            extract_chapter_images_during_library_scan: false,
+            automatically_add_to_collection: false,
+            enable_internet_providers: false,
+            save_local_metadata: false,
+            path_infos: Vec::new(),
+            extra: HashMap::new(),
+        }
+    }
 }
 
 /// Display preferences per client/user.
