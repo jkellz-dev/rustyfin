@@ -1186,3 +1186,54 @@ async fn users_list_requires_auth() {
     );
     app.cleanup().await;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Query-string key casing (ASP.NET binds query names case-insensitively;
+// real Jellyfin clients send camelCase)
+// ═══════════════════════════════════════════════════════════════════
+
+/// `GET /Search/Hints?searchTerm=` (camelCase, as sent by Jellyfin Web) works.
+#[tokio::test]
+async fn search_hints_accepts_camel_case_query() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib_id = app.create_library("Movies", "movies").await;
+    app.create_media_item("Findable Movie", "Movie", lib_id, None)
+        .await;
+
+    let (status, body) = app.get("/Search/Hints?searchTerm=Findable", &token).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["TotalRecordCount"], 1, "{body}");
+    app.cleanup().await;
+}
+
+/// camelCase filters on `/Items` are honoured, not silently ignored.
+#[tokio::test]
+async fn items_honours_camel_case_filters() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib_id = app.create_library("Movies", "movies").await;
+    app.create_media_item("A Movie", "Movie", lib_id, None)
+        .await;
+
+    let (status, body) = app
+        .get("/Items?recursive=true&includeItemTypes=Episode", &token)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["TotalRecordCount"], 0, "{body}");
+
+    let (_, body) = app
+        .get("/Items?recursive=true&includeItemTypes=Movie", &token)
+        .await;
+    assert_eq!(body["TotalRecordCount"], 1, "{body}");
+    app.cleanup().await;
+}
+
+/// Snake-case keys (`api_key`) must be left untouched by the normalizer.
+#[tokio::test]
+async fn api_key_query_param_is_not_rewritten() {
+    let app = common::TestApp::new().await;
+    let (status, _) = app.get("/Items?api_key=bogus", "").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    app.cleanup().await;
+}

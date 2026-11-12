@@ -13,7 +13,7 @@ use crate::error::ApiError;
 use crate::router::AppState;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "PascalCase")]
 pub struct DisplayPreferencesQuery {
     pub user_id: Option<String>,
     pub client: Option<String>,

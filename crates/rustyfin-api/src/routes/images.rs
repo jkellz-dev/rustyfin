@@ -16,9 +16,9 @@ use rustyfin_models::dto::ImageInfo;
 use crate::error::ApiError;
 use crate::router::AppState;
 
-/// Query parameters for image requests (Jellyfin-compatible, camelCase).
+/// Query parameters for image requests (Jellyfin-compatible; keys are normalized to PascalCase by `query_case`).
 #[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "PascalCase")]
 pub struct ImageParams {
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,

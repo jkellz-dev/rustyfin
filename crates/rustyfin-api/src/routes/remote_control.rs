@@ -18,7 +18,7 @@ use crate::router::AppState;
 
 /// Query parameters for `POST /Sessions/{sessionId}/Playing`.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "PascalCase")]
 pub struct PlayQuery {
     pub play_command: PlayCommand,
     pub item_ids: String,
@@ -31,7 +31,7 @@ pub struct PlayQuery {
 
 /// Query parameters for `POST /Sessions/{sessionId}/Playing/{command}`.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "PascalCase")]
 pub struct PlaystateQuery {
     pub seek_position_ticks: Option<i64>,
     pub controlling_user_id: Option<String>,

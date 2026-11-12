@@ -14,7 +14,7 @@ use crate::router::AppState;
 #[derive(Debug, Deserialize)]
 pub struct SocketQuery {
     pub api_key: Option<String>,
-    #[serde(rename = "deviceId")]
+    #[serde(rename = "DeviceId")]
     pub device_id: Option<String>,
 }
 

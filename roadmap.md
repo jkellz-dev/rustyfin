@@ -408,6 +408,8 @@ Measured: **128 rustyfin handlers vs 398 Jellyfin endpoints (32%)**. Core playba
 - [x] Verify response shapes match Jellyfin exactly (field names, nullability, default values) — BaseItemDto + SessionInfoDto aligned
 - [ ] Test with each major client end-to-end: Jellyfin Web, Infuse, Swiftfin, Jellyfin Media Player
 - [ ] Document every remaining 404 that clients hit — prioritize by frequency
+- [x] Query-string keys are case-insensitive like ASP.NET: `query_case` middleware upper-cases the first letter, so camelCase `searchTerm`/`includeItemTypes` from real clients work (previously ignored or 400)
+- [ ] `POST /Library/VirtualFolders` takes a JSON body with `Name`; Jellyfin takes `name`/`collectionType`/`paths` in the query string and `LibraryOptions` in the body (admin UIs like Jellyfin Web will fail)
 - [x] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — implemented
 - [x] Image endpoint coverage: user avatars, person/genre/studio images — 404 stubs added
 

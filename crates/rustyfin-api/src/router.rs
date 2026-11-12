@@ -449,4 +449,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/socket", get(websocket::websocket_handler))
         // ── State ───────────────────────────────────────────────
         .with_state(state)
+        // Jellyfin clients send camelCase query keys; our extractors expect PascalCase.
+        .layer(axum::middleware::from_fn(
+            crate::query_case::normalize_query_keys,
+        ))
 }

@@ -17,7 +17,7 @@ use crate::router::AppState;
 #[serde(rename_all = "PascalCase")]
 pub struct SuggestionsQuery {
     pub user_id: Option<Uuid>,
-    #[serde(rename = "type")]
+    #[serde(rename = "Type")]
     pub item_type: Option<String>,
     pub media_type: Option<String>,
     pub start_index: Option<i64>,

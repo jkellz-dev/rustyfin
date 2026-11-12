@@ -17,7 +17,7 @@ use crate::router::AppState;
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct StreamQueryParams {
-    #[serde(rename = "static")]
+    #[serde(rename = "Static")]
     pub is_static: Option<bool>,
     pub media_source_id: Option<String>,
     pub play_session_id: Option<String>,
