@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.100.0
         with:
           components: rustfmt, clippy
 
@@ -51,7 +51,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: jdx/mr-boxington-action@v1
 
       - name: Stub frontend dist
@@ -83,7 +83,7 @@ jobs:
       DATABASE_URL: postgres://rustyfin:rustyfin@localhost:5432/rustyfin_test
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: jdx/mr-boxington-action@v1
 
       - name: Run integration tests
@@ -95,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: wasm32-unknown-unknown
 
@@ -127,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.100.0
 
       - name: Install cross
         uses: taiki-e/install-action@v2
