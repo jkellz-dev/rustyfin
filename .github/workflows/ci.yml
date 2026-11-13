@@ -219,6 +219,8 @@ jobs:
       - name: Build binaries
         env:
           TARGET: ${{ matrix.target }}
+          # Diagnostic for one run: why does a warm restore still rebuild ~80 deps?
+          CARGO_LOG: cargo::core::compiler::fingerprint=info
         run: mbx build --release --locked --target "$TARGET"
 
       - name: Prepare artifacts
