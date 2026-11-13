@@ -94,6 +94,13 @@ pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
         channel_layout: s.channel_layout.clone(),
         sample_rate: s.sample_rate,
         path: None, // Don't expose filesystem paths
+        profile: s.profile.clone(),
+        level: s.level,
+        codec_tag: s.codec_tag.clone(),
+        time_base: s.time_base.clone(),
+        ref_frames: s.ref_frames,
+        nal_length_size: s.nal_length_size.clone(),
+        is_interlaced: s.is_interlaced,
         display_title: display_title(s),
         is_avc: is_video && codec == "h264",
         video_range: range.to_string(),
@@ -106,7 +113,7 @@ pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
             ),
         average_frame_rate: if is_video { s.real_frame_rate } else { None },
         reference_frame_rate: if is_video { s.real_frame_rate } else { None },
-        // Plain files: nothing interlaced, anamorphic or external here.
+        // Plain files: nothing anamorphic or external here.
         ..Default::default()
     }
 }

@@ -27,6 +27,13 @@ pub struct MediaStreamRow {
     pub channel_layout: Option<String>,
     pub sample_rate: Option<i32>,
     pub path: Option<String>,
+    pub profile: Option<String>,
+    pub level: Option<i32>,
+    pub codec_tag: Option<String>,
+    pub time_base: Option<String>,
+    pub ref_frames: Option<i32>,
+    pub nal_length_size: Option<String>,
+    pub is_interlaced: bool,
 }
 
 pub struct NewMediaStream {
@@ -52,6 +59,13 @@ pub struct NewMediaStream {
     pub channels: Option<i32>,
     pub channel_layout: Option<String>,
     pub sample_rate: Option<i32>,
+    pub profile: Option<String>,
+    pub level: Option<i32>,
+    pub codec_tag: Option<String>,
+    pub time_base: Option<String>,
+    pub ref_frames: Option<i32>,
+    pub nal_length_size: Option<String>,
+    pub is_interlaced: bool,
 }
 
 /// Insert a media stream.
@@ -63,13 +77,15 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
             is_default, is_forced, is_external,
             width, height, bit_rate, bit_depth, pixel_format, aspect_ratio,
             real_frame_rate, color_space, color_primaries, color_transfer,
-            channels, channel_layout, sample_rate
+            channels, channel_layout, sample_rate,
+            profile, level, codec_tag, time_base, ref_frames, nal_length_size, is_interlaced
         ) VALUES (
             $1, $2, $3, $4, $5, $6,
             $7, $8, $9,
             $10, $11, $12, $13, $14, $15,
             $16, $17, $18, $19,
-            $20, $21, $22
+            $20, $21, $22,
+            $23, $24, $25, $26, $27, $28, $29
         )
         RETURNING *
         "#,
@@ -96,6 +112,13 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
     .bind(stream.channels)
     .bind(&stream.channel_layout)
     .bind(stream.sample_rate)
+    .bind(&stream.profile)
+    .bind(stream.level)
+    .bind(&stream.codec_tag)
+    .bind(&stream.time_base)
+    .bind(stream.ref_frames)
+    .bind(&stream.nal_length_size)
+    .bind(stream.is_interlaced)
     .fetch_one(pool)
     .await
 }

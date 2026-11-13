@@ -56,6 +56,13 @@ pub struct ProbeStream {
     pub channels: Option<i32>,
     pub channel_layout: Option<String>,
     pub sample_rate: Option<i32>,
+    pub profile: Option<String>,
+    pub level: Option<i32>,
+    pub codec_tag: Option<String>,
+    pub time_base: Option<String>,
+    pub ref_frames: Option<i32>,
+    pub nal_length_size: Option<String>,
+    pub is_interlaced: bool,
 }
 
 // Private ffprobe JSON deserialization structs
@@ -93,6 +100,13 @@ struct FfprobeStream {
     channel_layout: Option<String>,
     sample_rate: Option<String>,
     disposition: Option<FfprobeDisposition>,
+    profile: Option<String>,
+    level: Option<i32>,
+    codec_tag_string: Option<String>,
+    time_base: Option<String>,
+    refs: Option<i32>,
+    nal_length_size: Option<String>,
+    field_order: Option<String>,
     tags: Option<HashMap<String, String>>,
 }
 
@@ -271,6 +285,22 @@ fn map_stream(s: FfprobeStream) -> Option<ProbeStream> {
         } else {
             None
         },
+        profile: s.profile.filter(|p| !p.is_empty() && p != "unknown"),
+        // ffprobe writes -99 when the level is unknown.
+        level: s.level.filter(|l| *l >= 0),
+        // "[0][0][0][0]" is ffprobe's spelling of "no tag".
+        codec_tag: s
+            .codec_tag_string
+            .filter(|t| !t.is_empty() && !t.starts_with("[0]")),
+        time_base: s.time_base,
+        ref_frames: if stream_type == "Video" { s.refs } else { None },
+        nal_length_size: if stream_type == "Video" {
+            s.nal_length_size
+        } else {
+            None
+        },
+        is_interlaced: stream_type == "Video"
+            && matches!(s.field_order.as_deref(), Some("tt" | "bb" | "tb" | "bt")),
     })
 }
 

@@ -425,6 +425,8 @@ low-priority admin features.
 - [x] Jellyfin's always-present fields: `/System/Ping` as a JSON string, `SystemInfo` extras, every
       `UserConfiguration`/`UserPolicy` key, default collections and flags on items, `MediaSourceInfo`/`MediaStream`
       flags and `DisplayTitle`, `UnplayedItemCount` on folders, `GET /Users/{userId}/Items/Latest` (parity suite)
+- [x] Stream details from ffprobe: `Profile`, `Level`, `CodecTag`, `TimeBase`, `RefFrames`, `NalLengthSize`,
+      `IsInterlaced` (migration `20261113000000`; rows from older scans fill in on the next scan)
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

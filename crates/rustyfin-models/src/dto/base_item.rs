@@ -393,6 +393,18 @@ pub struct MediaStream {
     pub average_frame_rate: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference_frame_rate: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codec_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_base: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ref_frames: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nal_length_size: Option<String>,
 }
 
 /// Search hint result for `GET /Search/Hints`.

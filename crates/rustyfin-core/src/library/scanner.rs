@@ -881,6 +881,13 @@ impl LibraryScanner {
                 channels: stream.channels,
                 channel_layout: stream.channel_layout.clone(),
                 sample_rate: stream.sample_rate,
+                profile: stream.profile.clone(),
+                level: stream.level,
+                codec_tag: stream.codec_tag.clone(),
+                time_base: stream.time_base.clone(),
+                ref_frames: stream.ref_frames,
+                nal_length_size: stream.nal_length_size.clone(),
+                is_interlaced: stream.is_interlaced,
             };
 
             if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
