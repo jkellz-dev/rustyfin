@@ -261,6 +261,37 @@ impl TestApp {
         (status, body)
     }
 
+    /// Send a GET request with an auth token and return the raw response: the
+    /// status, every header as `(name, value)`, and the body as text. For routes that
+    /// answer with something other than JSON (playlists, redirects).
+    pub async fn get_raw(
+        &self,
+        path: &str,
+        token: &str,
+    ) -> (StatusCode, Vec<(String, String)>, String) {
+        let request = Request::builder()
+            .uri(path)
+            .header("X-Emby-Token", token)
+            .body(Body::empty())
+            .unwrap();
+
+        let response = self.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let headers = response
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_string()))
+            .collect();
+        let bytes = axum::body::to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .unwrap();
+        (
+            status,
+            headers,
+            String::from_utf8_lossy(&bytes).into_owned(),
+        )
+    }
+
     /// Send a POST request with a JSON body and auth token. Returns `(status, body_json)`.
     pub async fn post(&self, path: &str, body: &Value, token: &str) -> (StatusCode, Value) {
         let request = Request::builder()
