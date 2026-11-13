@@ -169,10 +169,11 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
 
     // Derive media_type from item_type for client playback decisions
     let media_type = match item.item_type.as_str() {
-        "Movie" | "Episode" => Some("Video".to_string()),
+        "Movie" | "Episode" | "Video" | "Trailer" | "MusicVideo" => Some("Video".to_string()),
         "Audio" => Some("Audio".to_string()),
         "Photo" => Some("Photo".to_string()),
-        _ => None,
+        // Folders and people: Jellyfin says Unknown rather than leaving it out.
+        _ => Some("Unknown".to_string()),
     };
     // Every video Rustyfin serves is a plain file (no disc folders).
     let video_type = match item.item_type.as_str() {
@@ -186,7 +187,8 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         server_id: server_id.to_string(),
         id: item.id,
         item_type: item.item_type.clone(),
-        parent_id: item.parent_id,
+        // A top-level item hangs off its library.
+        parent_id: item.parent_id.or(item.library_id),
         series_id: item.series_id,
         series_name: item.series_name.clone(),
         season_id: item.season_id,
@@ -224,6 +226,7 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         can_delete: Some(false),
         can_download: Some(true),
         video_type,
+        air_days: (item.item_type == "Series").then(Vec::new),
         // Present and empty when there are none, as Jellyfin sends them.
         image_tags: Some(HashMap::new()),
         backdrop_image_tags: Some(Vec::new()),
