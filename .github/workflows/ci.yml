@@ -17,6 +17,13 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Cargo 1.100 writes fingerprints under build/<pkg>/<hash>/fingerprint. The
+  # mr-boxington action (v1.7.3) saves its cache only when target/ holds a
+  # `.fingerprint` directory, so on 1.100 it found nothing, logged "No reusable
+  # Cargo target state was produced" and never saved. This switch (temporary
+  # in Cargo) restores the layout the action reads. Remove it once the action
+  # understands the new layout.
+  __CARGO_TEMPORARY_BUILD_DIR_NEW_LAYOUT_OPT_OUT: 1
 
 jobs:
   lint:
