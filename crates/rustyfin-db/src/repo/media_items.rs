@@ -266,6 +266,83 @@ pub async fn find_by_path(pool: &PgPool, path: &str) -> Result<Option<MediaItemR
         .await
 }
 
+/// The folder row of `item_type` stored for directory `path` under `parent_id`.
+pub async fn find_folder_by_path(
+    pool: &PgPool,
+    path: &str,
+    item_type: &str,
+    parent_id: Option<Uuid>,
+) -> Result<Option<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE path = $1 AND item_type = $2 \
+         AND parent_id IS NOT DISTINCT FROM $3 LIMIT 1",
+    )
+    .bind(path)
+    .bind(item_type)
+    .bind(parent_id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// A folder row found by name, inside one library. Rows from scans that stored
+/// no directory are found this way once, then get their path.
+pub async fn find_folder_by_name(
+    pool: &PgPool,
+    library_id: Uuid,
+    name: &str,
+    item_type: &str,
+    parent_id: Option<Uuid>,
+) -> Result<Option<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE library_id = $1 AND name = $2 AND item_type = $3 \
+         AND parent_id IS NOT DISTINCT FROM $4 ORDER BY date_created LIMIT 1",
+    )
+    .bind(library_id)
+    .bind(name)
+    .bind(item_type)
+    .bind(parent_id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Bring a folder row up to date with its directory: the clean name (and a new
+/// sort name only when the name changes), the year unless one is already known
+/// (an NFO wins), and the path. A renamed series renames its episodes' series
+/// name too.
+pub async fn update_folder_identity(
+    pool: &PgPool,
+    id: Uuid,
+    name: &str,
+    sort_name: &str,
+    year: Option<i32>,
+    path: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE media_items SET \
+             sort_name = CASE WHEN name <> $2 THEN $3 ELSE sort_name END, \
+             name = $2, \
+             production_year = COALESCE(production_year, $4), \
+             path = $5 \
+         WHERE id = $1",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(sort_name)
+    .bind(year)
+    .bind(path)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE media_items SET series_name = $2 \
+         WHERE series_id = $1 AND series_name IS DISTINCT FROM $2",
+    )
+    .bind(id)
+    .bind(name)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Find a media item by name and type (case-insensitive name match).
 pub async fn find_by_name_and_type(
     pool: &PgPool,

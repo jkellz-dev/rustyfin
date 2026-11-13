@@ -12,7 +12,7 @@ use rustyfin_common::images::discover_images;
 use rustyfin_common::music_tags;
 use rustyfin_common::naming::{
     is_audio_file, is_video_file, make_sort_name, parse_season_folder, resolve_audio_track,
-    resolve_episode, resolve_movie,
+    resolve_episode, resolve_movie, split_folder_year,
 };
 use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
@@ -260,8 +260,11 @@ impl LibraryScanner {
     ) -> anyhow::Result<()> {
         // Find or create Series item
         let series_id = self
-            .find_or_create_folder(series_name, "Series", library_id, None, None)
+            .find_or_create_folder(series_dir, series_name, "Series", library_id, None, None)
             .await?;
+        // Episodes carry the clean series name, not the folder's.
+        let (clean_series_name, _) = split_folder_year(series_name);
+        let series_name = clean_series_name.as_str();
 
         // Discover series-level images
         self.replace_images(series_id, series_dir).await;
@@ -300,6 +303,7 @@ impl LibraryScanner {
 
                 let season_id = self
                     .find_or_create_folder(
+                        subdir,
                         &season_name_str,
                         "Season",
                         library_id,
@@ -342,6 +346,7 @@ impl LibraryScanner {
             let season_name_str = "Season 1".to_string();
             let season_id = self
                 .find_or_create_folder(
+                    series_dir,
                     &season_name_str,
                     "Season",
                     library_id,
@@ -414,7 +419,14 @@ impl LibraryScanner {
         result: &mut ScanResult,
     ) -> anyhow::Result<()> {
         let artist_id = self
-            .find_or_create_folder(artist_name, "MusicArtist", library_id, None, None)
+            .find_or_create_folder(
+                artist_dir,
+                artist_name,
+                "MusicArtist",
+                library_id,
+                None,
+                None,
+            )
             .await?;
 
         self.replace_images(artist_id, artist_dir).await;
@@ -466,7 +478,14 @@ impl LibraryScanner {
         // Process loose audio files directly under the artist as a self-titled album
         if !loose_audio.is_empty() {
             let album_id = self
-                .find_or_create_folder(artist_name, "MusicAlbum", library_id, Some(artist_id), None)
+                .find_or_create_folder(
+                    artist_dir,
+                    artist_name,
+                    "MusicAlbum",
+                    library_id,
+                    Some(artist_id),
+                    None,
+                )
                 .await?;
 
             for audio_file in &loose_audio {
@@ -505,7 +524,14 @@ impl LibraryScanner {
         result: &mut ScanResult,
     ) -> anyhow::Result<()> {
         let album_id = self
-            .find_or_create_folder(album_name, "MusicAlbum", library_id, Some(artist_id), None)
+            .find_or_create_folder(
+                album_dir,
+                album_name,
+                "MusicAlbum",
+                library_id,
+                Some(artist_id),
+                None,
+            )
             .await?;
 
         self.replace_images(album_id, album_dir).await;
@@ -668,28 +694,64 @@ impl LibraryScanner {
         Ok(IngestOutcome::Added)
     }
 
+    /// The folder row for directory `dir`. Series and albums split a trailing
+    /// `(YYYY)` off the name into the year. An existing row is found by its
+    /// directory, or once by name for rows from scans that stored no directory
+    /// (the raw folder name first, then the clean one), and is brought up to date
+    /// in place so its id, user data and favourites survive.
     async fn find_or_create_folder(
         &self,
-        name: &str,
+        dir: &Path,
+        raw_name: &str,
         item_type: &str,
         library_id: Uuid,
         parent_id: Option<Uuid>,
         index_number: Option<i32>,
     ) -> anyhow::Result<Uuid> {
-        if let Some(existing) =
-            media_items::find_by_name_and_parent(&self.pool, name, item_type, parent_id).await?
-        {
-            return Ok(existing.id);
+        let (name, year) = if matches!(item_type, "Series" | "MusicAlbum") {
+            split_folder_year(raw_name)
+        } else {
+            (raw_name.to_string(), None)
+        };
+        let dir_str = dir.to_string_lossy().to_string();
+        let mut existing =
+            media_items::find_folder_by_path(&self.pool, &dir_str, item_type, parent_id).await?;
+        if existing.is_none() {
+            for candidate in [raw_name, name.as_str()] {
+                existing = media_items::find_folder_by_name(
+                    &self.pool, library_id, candidate, item_type, parent_id,
+                )
+                .await?;
+                if existing.is_some() {
+                    break;
+                }
+            }
         }
-
+        if let Some(row) = existing {
+            let stale = row.name != name
+                || row.path.as_deref() != Some(dir_str.as_str())
+                || (row.production_year.is_none() && year.is_some());
+            if stale {
+                media_items::update_folder_identity(
+                    &self.pool,
+                    row.id,
+                    &name,
+                    &make_sort_name(&name),
+                    year,
+                    &dir_str,
+                )
+                .await?;
+            }
+            return Ok(row.id);
+        }
         let item = media_items::NewMediaItem {
             item_type: item_type.to_string(),
             library_id: Some(library_id),
             parent_id,
-            name: name.to_string(),
-            sort_name: Some(make_sort_name(name)),
-            path: None,
-            production_year: None,
+            name: name.clone(),
+            sort_name: Some(make_sort_name(&name)),
+            path: Some(dir_str),
+            production_year: year,
             runtime_ticks: None,
             index_number,
             parent_index_number: None,

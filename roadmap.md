@@ -437,6 +437,9 @@ low-priority admin features.
       (`DisableFirstEpisode`); streams stored before the details existed are probed again on the next scan
 - [x] `Fields=MediaSources` / `Fields=MediaStreams` on `/Items` lists, one query for the page (Infuse and
       Swiftfin ask for it on every browse)
+- [x] Series and album folders split `Name (YYYY)` into name and `ProductionYear`, store their directory as `Path`,
+      are found again by directory (older rows renamed in place, ids kept), and are no longer shared between
+      libraries that hold a folder of the same name
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

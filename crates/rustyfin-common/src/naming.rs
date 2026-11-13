@@ -184,6 +184,31 @@ pub fn resolve_audio_track(path: &Path) -> ResolvedItem {
     }
 }
 
+/// Split a series or album folder name into its name and year, as Jellyfin does:
+/// `"Test Show (2021)"` is `("Test Show", Some(2021))`. Only a trailing `(YYYY)`
+/// counts, after any provider tags (`[tmdbid-1]`) are set aside, so
+/// `"1989 (Taylor's Version)"` and `"Bad (2012 Remaster)"` keep their names.
+pub fn split_folder_year(raw: &str) -> (String, Option<i32>) {
+    let without_tags = RE_PROVIDER_ID.replace_all(raw, "");
+    let trimmed = without_tags.trim();
+    if let Some(open) = trimmed.rfind('(')
+        && trimmed.ends_with(')')
+    {
+        let inner = &trimmed[open + 1..trimmed.len() - 1];
+        if inner.len() == 4
+            && inner.chars().all(|c| c.is_ascii_digit())
+            && let Ok(year) = inner.parse::<i32>()
+            && (1800..=2200).contains(&year)
+        {
+            let name = trimmed[..open].trim();
+            if !name.is_empty() {
+                return (name.to_string(), Some(year));
+            }
+        }
+    }
+    (raw.trim().to_string(), None)
+}
+
 /// Extract a year from an album directory name, e.g. "Album Name (2020)".
 pub fn extract_album_year(name: &str) -> Option<i32> {
     extract_year(name)
@@ -2170,5 +2195,43 @@ mod tests {
         assert!(is_audio_file(Path::new(
             "/music/Artist/Album/Disc 01 (Hugo Wolf)/01 - Track.flac"
         )));
+    }
+}
+
+#[cfg(test)]
+mod split_folder_year_tests {
+    use super::split_folder_year;
+
+    #[test]
+    fn a_trailing_year_is_split_off() {
+        assert_eq!(
+            split_folder_year("Test Show (2021)"),
+            ("Test Show".to_string(), Some(2021))
+        );
+        assert_eq!(
+            split_folder_year("  Album (1999) "),
+            ("Album".to_string(), Some(1999))
+        );
+    }
+
+    #[test]
+    fn provider_tags_do_not_hide_the_year() {
+        assert_eq!(
+            split_folder_year("Show (2010) [tvdbid-123]"),
+            ("Show".to_string(), Some(2010))
+        );
+    }
+
+    #[test]
+    fn other_parentheses_stay_in_the_name() {
+        for raw in [
+            "1989 (Taylor's Version)",
+            "Bad (2012 Remaster)",
+            "Plain",
+            "(2020)",
+            "Show (12345)",
+        ] {
+            assert_eq!(split_folder_year(raw), (raw.to_string(), None), "{raw}");
+        }
     }
 }
