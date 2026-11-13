@@ -174,3 +174,35 @@ jsonpath "$.Policy.RemoteClientBitrateLimit" isNumber
 jsonpath "$.Policy.AuthenticationProviderId" isString
 jsonpath "$.Policy.PasswordResetProviderId" isString
 jsonpath "$.Policy.SyncPlayAccess" isString
+
+GET {{base_url}}/Users/{{user_id}}/GroupingOptions
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$" isCollection
+
+GET {{base_url}}/DisplayPreferences/usersettings
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+userId: {{user_id}}
+client: emby
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.Id" isString
+jsonpath "$.SortBy" isString
+jsonpath "$.RememberIndexing" isBoolean
+jsonpath "$.PrimaryImageHeight" isNumber
+jsonpath "$.PrimaryImageWidth" isNumber
+jsonpath "$.CustomPrefs" exists
+jsonpath "$.CustomPrefs.chromecastVersion" isString
+jsonpath "$.CustomPrefs.skipForwardLength" isString
+jsonpath "$.CustomPrefs.skipBackLength" isString
+jsonpath "$.CustomPrefs.enableNextVideoInfoOverlay" isString
+jsonpath "$.ScrollDirection" isString
+jsonpath "$.ShowBackdrop" isBoolean
+jsonpath "$.RememberSorting" isBoolean
+jsonpath "$.SortOrder" isString
+jsonpath "$.ShowSidebar" isBoolean
+jsonpath "$.Client" isString

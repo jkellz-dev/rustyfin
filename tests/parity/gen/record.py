@@ -81,6 +81,36 @@ REQUESTS = [
     ("library", "GET", "/Users/{user_id}/Items/Latest", {}, True, None),
     ("playback", "POST", "/Items/{movie_id}/PlaybackInfo", {"UserId": "{user_id}"}, True, {}),
     ("sessions", "GET", "/Sessions", {}, True, None),
+    # Second slice: discovery, browsing helpers, per-user lists, localisation.
+    ("system", "GET", "/System/Endpoint", {}, True, None),
+    ("system", "GET", "/ScheduledTasks", {}, True, None),
+    ("system", "GET", "/Plugins", {}, True, None),
+    ("system", "GET", "/Library/PhysicalPaths", {}, True, None),
+    ("localization", "GET", "/Localization/Countries", {}, True, None),
+    ("localization", "GET", "/Localization/Cultures", {}, True, None),
+    ("localization", "GET", "/Localization/Options", {}, True, None),
+    ("localization", "GET", "/Localization/ParentalRatings", {}, True, None),
+    ("users", "GET", "/Users/{user_id}/GroupingOptions", {}, True, None),
+    ("users", "GET", "/DisplayPreferences/usersettings", {"userId": "{user_id}", "client": "emby"}, True, None),
+    ("browse", "GET", "/Studios", {}, True, None),
+    ("browse", "GET", "/Persons", {}, True, None),
+    ("browse", "GET", "/Search/Hints", {"searchTerm": "movie"}, True, None),
+    ("browse", "GET", "/Shows/NextUp", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/Shows/Upcoming", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/UserItems/Resume", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/Users/{user_id}/Items/Resume", {}, True, None),
+    ("browse", "GET", "/Movies/Recommendations", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/Items/{movie_id}/Similar", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/Items/{movie_id}/Ancestors", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/Items/{movie_id}/ThemeMedia", {"UserId": "{user_id}"}, True, None),
+    ("browse", "GET", "/Items/{series_id}", {}, True, None),
+    ("browse", "GET", "/Items", {"Recursive": "true", "IncludeItemTypes": "Audio"}, True, None),
+    ("browse", "GET", "/Items", {"Recursive": "true", "IncludeItemTypes": "MusicAlbum"}, True, None),
+    ("browse", "GET", "/Items", {"ParentId": "{series_id}"}, True, None),
+    ("browse", "GET", "/Items", {"Recursive": "true", "SortBy": "SortName", "SortOrder": "Ascending", "Limit": "2"}, True, None),
+    ("browse", "GET", "/Items", {"Recursive": "true", "Filters": "IsUnplayed", "IncludeItemTypes": "Movie"}, True, None),
+    ("browse", "GET", "/Items", {"Recursive": "true", "Fields": "Overview,Genres,People,Studios,MediaSources", "IncludeItemTypes": "Movie"}, True, None),
+    ("browse", "GET", "/Items/{movie_id}/Images", {}, True, None),
 ]
 
 
@@ -170,9 +200,7 @@ def shape(node, path, out, depth=0):
 
 def fetch(method, path, query, auth, body, token, variables):
     """Ask Jellyfin; return (status, content_type, parsed_json_or_None)."""
-    q = "".join(
-        f"{k}: {v}\n" for k, v in query.items()
-    )
+    q = "".join(f"{k}: {v}\n" for k, v in query.items())
     text = f"{method} {{{{base_url}}}}{path}\n"
     if auth:
         text += f"Authorization: {AUTH}\n"
@@ -182,15 +210,23 @@ def fetch(method, path, query, auth, body, token, variables):
         text += "[QueryStringParams]\n" + q
     if body is not None:
         text += json.dumps(body) + "\n"
-    text += "HTTP *\n[Captures]\nstatus: status\nctype: header \"Content-Type\"\nbody: body\n"
+    # Only captures that cannot fail: a header capture on a response without that
+    # header aborts the entry and loses the body with it.
+    text += "HTTP *\n[Captures]\nbody: body\n"
     res = hurl_json(text, {"base_url": JELLYFIN, "token": token, **variables})
-    caps = {c["name"]: c["value"] for c in res["entries"][0]["captures"]}
+    entry0 = res["entries"][0]
+    caps = {c["name"]: c["value"] for c in entry0.get("captures", [])}
+    response = entry0["calls"][-1]["response"]
+    ctype = next(
+        (h["value"] for h in response.get("headers", []) if h["name"].lower() == "content-type"),
+        "",
+    )
     parsed = None
     try:
         parsed = json.loads(caps["body"])
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, KeyError):
         pass
-    return int(caps["status"]), caps.get("ctype") or "", parsed
+    return int(response["status"]), ctype, parsed
 
 
 def entry(method, path, query, auth, body, status, ctype, parsed):

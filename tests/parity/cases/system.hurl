@@ -86,3 +86,32 @@ GET {{base_url}}/QuickConnect/Enabled
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
+
+GET {{base_url}}/System/Endpoint
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.IsLocal" isBoolean
+jsonpath "$.IsInNetwork" isBoolean
+
+GET {{base_url}}/ScheduledTasks
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$" isCollection
+
+GET {{base_url}}/Plugins
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$" isCollection
+
+GET {{base_url}}/Library/PhysicalPaths
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$" isCollection
