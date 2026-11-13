@@ -392,6 +392,13 @@ mod tests {
             sample_rate: None,
             disposition: None,
             tags: None,
+            profile: None,
+            level: None,
+            codec_tag_string: None,
+            time_base: None,
+            refs: None,
+            nal_length_size: None,
+            field_order: None,
         }
     }
 
