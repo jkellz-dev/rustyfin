@@ -43,6 +43,8 @@ jobs:
       # Compile cache shared with the other cargo jobs and local builds. After the
       # toolchain step: cache keys include the rustc on PATH.
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          cache-key-suffix: lint
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -64,6 +66,8 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          cache-key-suffix: unit
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -98,6 +102,8 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          cache-key-suffix: integration
 
       - name: Run integration tests
         run: mbx test -p rustyfin-api --test '*' -- --test-threads=1
