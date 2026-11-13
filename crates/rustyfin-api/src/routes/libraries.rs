@@ -10,7 +10,7 @@ use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
 use rustyfin_db::repo::{activity_log, libraries, user_library_access};
 use rustyfin_models::dto::{
-    BaseItemDto, CreateLibraryRequest, LibraryOptions, MediaPathInfo, QueryResult,
+    BaseItemDto, CreateLibraryRequest, LibraryOptions, MediaPathInfo, NameGuidPair, QueryResult,
     UpdateLibraryRequest, VirtualFolderInfo,
 };
 
@@ -86,6 +86,41 @@ pub async fn get_media_folders(
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     get_user_views(state, auth).await
+}
+
+/// `GET /Library/PhysicalPaths` — every library root, for administrators.
+pub async fn get_physical_paths(
+    State(state): State<AppState>,
+    _auth: AdminUser,
+) -> Result<Json<Vec<String>>, ApiError> {
+    let libs = libraries::list_all(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(libs.into_iter().flat_map(|l| l.paths).collect()))
+}
+
+/// `GET /Users/{userId}/GroupingOptions` — the libraries the caller may group
+/// into a single view.
+pub async fn get_grouping_options(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    axum::extract::Path(_user_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<Json<Vec<NameGuidPair>>, ApiError> {
+    let libs = libraries::list_all(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(
+        libs.into_iter()
+            .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
+            .map(|lib| NameGuidPair {
+                name: lib.name,
+                id: lib.id,
+            })
+            .collect(),
+    ))
 }
 
 /// Jellyfin hangs every library off one root folder; Rustyfin's is derived from

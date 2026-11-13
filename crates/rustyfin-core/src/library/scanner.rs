@@ -124,6 +124,7 @@ impl LibraryScanner {
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
+                self.refresh_stale_streams(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
             }
             // File or NFO changed — update
@@ -596,6 +597,7 @@ impl LibraryScanner {
 
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
+                self.refresh_stale_streams(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
             }
 
@@ -724,6 +726,7 @@ impl LibraryScanner {
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
+                self.refresh_stale_streams(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
             }
 
@@ -846,6 +849,19 @@ impl LibraryScanner {
         self.replace_images(inserted.id, file_path).await;
         self.enrichment.enrich_episode(inserted.id, file_path).await;
         Ok(IngestOutcome::Added)
+    }
+
+    /// Streams stored before the details existed (no time base) are probed again
+    /// even though the file is unchanged.
+    async fn refresh_stale_streams(&self, item_id: Uuid, file_path: &Path) {
+        match media_streams::lacks_details(&self.pool, item_id).await {
+            Ok(true) => {
+                let probe_result = probe_file_graceful(file_path).await;
+                self.replace_streams(item_id, &probe_result).await;
+            }
+            Ok(false) => {}
+            Err(e) => tracing::warn!("Could not check the streams of {item_id}: {e}"),
+        }
     }
 
     async fn replace_streams(&self, item_id: Uuid, probe_result: &Option<probe::ProbeResult>) {

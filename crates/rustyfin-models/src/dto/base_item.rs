@@ -253,7 +253,10 @@ pub struct UserItemDataDto {
     pub likes: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played_date: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unplayed_item_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub played_percentage: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -441,6 +444,13 @@ pub struct SearchHint {
     pub run_time_ticks: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel_id: Option<Uuid>,
+    /// The same id again; clients read either.
+    pub item_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    pub artists: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_image_aspect_ratio: Option<f64>,
 }
 
 /// Virtual folder info for `GET /Library/VirtualFolders`.
@@ -607,6 +617,14 @@ pub struct DisplayPreferencesDto {
     pub show_backdrop: bool,
     pub show_sidebar: bool,
     pub custom_prefs: HashMap<String, String>,
+    #[serde(default = "default_image_size")]
+    pub primary_image_height: i32,
+    #[serde(default = "default_image_size")]
+    pub primary_image_width: i32,
+}
+
+fn default_image_size() -> i32 {
+    250
 }
 
 impl DisplayPreferencesDto {
@@ -622,7 +640,18 @@ impl DisplayPreferencesDto {
             scroll_direction: "Horizontal".to_string(),
             show_backdrop: true,
             show_sidebar: true,
-            custom_prefs: HashMap::new(),
+            // What Jellyfin web starts from; clients read these without checking.
+            custom_prefs: HashMap::from([
+                ("chromecastVersion".to_string(), "stable".to_string()),
+                ("skipForwardLength".to_string(), "30000".to_string()),
+                ("skipBackLength".to_string(), "10000".to_string()),
+                (
+                    "enableNextVideoInfoOverlay".to_string(),
+                    "False".to_string(),
+                ),
+            ]),
+            primary_image_height: default_image_size(),
+            primary_image_width: default_image_size(),
         }
     }
 }

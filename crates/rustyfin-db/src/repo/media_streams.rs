@@ -123,6 +123,18 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
     .await
 }
 
+/// Whether any stream of the item was stored before the details existed. ffprobe
+/// reports a time base for every stream, so a row without one predates them.
+pub async fn lacks_details(pool: &PgPool, item_id: Uuid) -> Result<bool, sqlx::Error> {
+    let (stale,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM media_streams WHERE item_id = $1 AND time_base IS NULL)",
+    )
+    .bind(item_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(stale)
+}
+
 /// Delete all streams for a media item.
 pub async fn delete_by_item(pool: &PgPool, item_id: Uuid) -> Result<u64, sqlx::Error> {
     let result = sqlx::query("DELETE FROM media_streams WHERE item_id = $1")

@@ -117,3 +117,11 @@ pub struct CastReceiverApplication {
     pub id: String,
     pub name: String,
 }
+
+/// Where the caller is, as `GET /System/Endpoint` tells it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct EndPointInfo {
+    pub is_local: bool,
+    pub is_in_network: bool,
+}

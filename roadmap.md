@@ -430,6 +430,11 @@ low-priority admin features.
 - [x] Placement and kind: `ParentId` on top-level items and collection folders (one root folder derived from the
       server id), `ChildCount` and `UserData` on views, `MediaType: Unknown` for folders and people, `AirDays`,
       `SeriesId`/`SeriesName` on seasons, `UserData` on artists (parity suite)
+- [x] Second slice: `GET /Users/{userId}/Items/Resume`, `GET /System/Endpoint`, `GET /Library/PhysicalPaths`,
+      `GET /Users/{userId}/GroupingOptions`; `SearchHint.ItemId/MediaType/Artists`; Jellyfin web's
+      DisplayPreferences defaults; `UnplayedItemCount`/`PlayedPercentage`/`RecursiveItemCount` on folders;
+      seasons in any list name their series; NextUp offers the first episode of unstarted shows
+      (`DisableFirstEpisode`); streams stored before the details existed are probed again on the next scan
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

@@ -682,6 +682,51 @@ pub async fn get_active_series(
     Ok(rows)
 }
 
+/// Series the user has not started: no episode played or in progress. Jellyfin's
+/// NextUp offers their first episode unless the client says DisableFirstEpisode.
+pub async fn series_never_started(
+    pool: &PgPool,
+    user_id: Uuid,
+    library_id: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        r#"
+        SELECT s.id
+        FROM media_items s
+        WHERE s.item_type = 'Series'
+          AND ($2::uuid IS NULL OR s.library_id = $2)
+          AND EXISTS (
+            SELECT 1 FROM media_items e WHERE e.series_id = s.id AND e.item_type = 'Episode'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM media_items e
+            JOIN user_data ud ON (ud.item_id = e.id AND ud.user_id = $1)
+            WHERE e.series_id = s.id AND (ud.played OR ud.playback_position_ticks > 0)
+          )
+        ORDER BY s.date_created DESC
+        LIMIT $3
+        "#,
+    )
+    .bind(user_id)
+    .bind(library_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
+/// The rows for `ids`, in no particular order.
+pub async fn find_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE id = ANY($1)")
+        .bind(ids)
+        .fetch_all(pool)
+        .await
+}
+
 /// Get the last watched (played=true) episode in a series for a user.
 pub async fn get_last_watched_episode(
     pool: &PgPool,
