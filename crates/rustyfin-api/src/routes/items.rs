@@ -300,6 +300,7 @@ pub async fn get_items(
         parent_id: if !is_library { query.parent_id } else { None },
         recursive,
         ids: parse_comma_uuids(&query.ids),
+        accessible_libraries: if is_library { None } else { accessible.clone() },
         include_item_types: parse_comma_delimited(&query.include_item_types),
         exclude_item_types: parse_comma_delimited(&query.exclude_item_types),
         genres: parse_pipe_delimited(&query.genres),

@@ -1070,6 +1070,9 @@ pub struct ItemQuery {
     pub library_id: Option<Uuid>,
     pub recursive: bool,
     pub ids: Vec<Uuid>,
+    /// Libraries the caller may see. `None` means all of them. Applied in the query so a
+    /// page is full of visible items instead of being thinned afterwards.
+    pub accessible_libraries: Option<Vec<Uuid>>,
 
     // Type filters
     pub include_item_types: Vec<String>,
@@ -1110,6 +1113,7 @@ impl Default for ItemQuery {
             library_id: None,
             recursive: false,
             ids: Vec::new(),
+            accessible_libraries: None,
             include_item_types: Vec::new(),
             exclude_item_types: Vec::new(),
             genres: Vec::new(),
@@ -1229,10 +1233,33 @@ impl ItemQuery {
                 qb.push(" AND mi.parent_id IS NULL");
             }
         } else if let Some(parent_id) = self.parent_id {
-            qb.push(" AND mi.parent_id = ");
-            qb.push_bind(parent_id);
-        } else {
+            if self.recursive {
+                // Everything below the parent, however deep (series -> season -> episode).
+                qb.push(
+                    " AND mi.id IN (WITH RECURSIVE below(id, depth) AS (\
+                     SELECT id, 1 FROM media_items WHERE parent_id = ",
+                );
+                qb.push_bind(parent_id);
+                qb.push(
+                    " UNION ALL SELECT m.id, below.depth + 1 FROM media_items m \
+                     JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
+                     SELECT id FROM below)",
+                );
+            } else {
+                qb.push(" AND mi.parent_id = ");
+                qb.push_bind(parent_id);
+            }
+        } else if !self.recursive {
             qb.push(" AND mi.parent_id IS NULL");
+        }
+        // Recursive with no scope at all: every item the caller may see.
+
+        if let Some(libs) = &self.accessible_libraries {
+            // Items that belong to no library (collections, playlists) stay visible,
+            // as they did when this was filtered after the fetch.
+            qb.push(" AND (mi.library_id IS NULL OR mi.library_id = ANY(");
+            qb.push_bind(libs.clone());
+            qb.push("))");
         }
 
         // Type filters
