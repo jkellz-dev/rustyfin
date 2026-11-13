@@ -2978,7 +2978,6 @@ name = "rustyfin-api"
 version = "0.1.0"
 dependencies = [
  "axum",
- "axum-extra",
  "chrono",
  "futures-util",
  "rand 0.9.2",
@@ -3146,7 +3145,6 @@ version = "0.1.0"
 dependencies = [
  "meilisearch-sdk",
  "rustyfin-db",
- "rustyfin-models",
  "serde",
  "serde_json",
  "sqlx",
