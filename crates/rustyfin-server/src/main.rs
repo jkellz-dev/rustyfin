@@ -341,6 +341,9 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// How long open connections get to finish once a shutdown begins.
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Resolves when the server should begin a graceful exit: Ctrl-C, SIGTERM (what
 /// the kubelet and systemd send), or `POST /System/Shutdown` / `/System/Restart`.
 async fn shutdown_signal(requested: std::sync::Arc<tokio::sync::Notify>) {
@@ -371,4 +374,13 @@ async fn shutdown_signal(requested: std::sync::Arc<tokio::sync::Notify>) {
         () = terminate => tracing::info!("SIGTERM received, shutting down"),
         () = requested.notified() => tracing::info!("Shutdown requested, shutting down"),
     }
+
+    // The drain waits for every open connection, and websocket and streaming
+    // clients may never close theirs. Give them a moment, then exit anyway rather
+    // than hang until the supervisor's SIGKILL.
+    tokio::spawn(async {
+        tokio::time::sleep(SHUTDOWN_GRACE).await;
+        tracing::warn!("connections still open after {SHUTDOWN_GRACE:?}, exiting anyway");
+        std::process::exit(0);
+    });
 }
