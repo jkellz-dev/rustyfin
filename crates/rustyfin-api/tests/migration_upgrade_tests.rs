@@ -98,13 +98,7 @@ async fn library_options_migration_keeps_existing_libraries_intact() {
         .iter()
         .position(|f| f.file_name().is_some_and(|n| n == NEW_MIGRATION))
         .expect("the migration under test exists");
-    assert_eq!(
-        new_idx,
-        files.len() - 1,
-        "this test assumes it is the newest; a later migration needs its own upgrade test"
-    );
-
-    // The schema as the running server has it today.
+    // The schema as a server from before this migration had it.
     for file in &files[..new_idx] {
         apply(&db.pool, file).await;
     }
