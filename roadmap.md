@@ -834,7 +834,11 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
   - [ ] Follow-up: `MediaSourceId` and the codec query values are copied unescaped into the redirect and playlist URLs;
         percent-encode them
 - [ ] Verify library access enforcement on every item-returning endpoint
-- [ ] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked)
+- [x] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked). HTTP already re-read
+      the user on every request; `/socket` did not: it accepted any token that existed, with no expiry check and no look
+      at the user, and never re-checked an open socket. Both now go through `rustyfin_auth::session::resolve_token`, and
+      an open socket is re-checked on every keepalive (45 s) and closed when its session expires, is logged out, or its
+      user is disabled or removed
 - [ ] Rate limiting on auth endpoints
 - [ ] Review CORS / header configuration
 

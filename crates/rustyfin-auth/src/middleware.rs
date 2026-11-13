@@ -5,8 +5,10 @@ use axum::{
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{sessions, users};
+use rustyfin_db::repo::sessions;
 use rustyfin_models::dto::MediaBrowserAuth;
+
+use crate::session::{ResolvedToken, TokenError, resolve_token};
 
 /// Authenticated user extracted from the MediaBrowser auth header.
 /// Used as an Axum extractor on any state `S` where `PgPool: FromRef<S>`.
@@ -87,27 +89,14 @@ where
 
         let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
 
-        let session = sessions::find_by_token(&pool, &token)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-
-        // Check expiry
-        if let Some(expires_at) = session.expires_at
-            && expires_at < chrono::Utc::now()
-        {
-            return Err(StatusCode::UNAUTHORIZED);
-        }
-
-        let user = users::find_by_id(&pool, session.user_id)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-
-        // Reject disabled users
-        if user.is_disabled {
-            return Err(StatusCode::UNAUTHORIZED);
-        }
+        let ResolvedToken { session, user } =
+            resolve_token(&pool, &token).await.map_err(|e| match e {
+                TokenError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+                TokenError::Unknown
+                | TokenError::Expired
+                | TokenError::UserMissing
+                | TokenError::UserDisabled => StatusCode::UNAUTHORIZED,
+            })?;
 
         // Touch session activity
         let _ = sessions::touch(&pool, session.id).await;

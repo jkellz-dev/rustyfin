@@ -6,7 +6,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_db::repo::sessions;
+use rustyfin_auth::session::{TokenError, resolve_token};
 use rustyfin_models::dto::{OutboundWebSocketMessage, SessionCommand};
 
 use crate::router::AppState;
@@ -24,27 +24,44 @@ pub async fn websocket_handler(
     Query(query): Query<SocketQuery>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let session = if let Some(ref token) = query.api_key {
-        sessions::find_by_token(&state.pool, token)
-            .await
-            .ok()
-            .flatten()
-    } else {
-        None
+    // The same check HTTP requests get: an unknown, logged-out or expired session,
+    // or a disabled user, must not be able to open a socket.
+    let token = query.api_key.unwrap_or_default();
+    let session = match resolve_token(&state.pool, &token).await {
+        Ok(resolved) => Some(resolved.session),
+        Err(TokenError::Database(e)) => {
+            tracing::error!("WebSocket token lookup failed: {e}");
+            None
+        }
+        Err(e) => {
+            tracing::warn!("WebSocket connection rejected: {e}");
+            None
+        }
     };
 
     let Some(session) = session else {
-        tracing::warn!("WebSocket connection rejected: invalid or missing api_key");
         return ws.on_upgrade(|mut socket| async move {
             let _ = socket.close().await;
         });
     };
 
     let session_id = session.id;
-    ws.on_upgrade(move |socket| handle_socket(socket, state, session_id))
+    ws.on_upgrade(move |socket| handle_socket(socket, state, session_id, token))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid) {
+/// True while the token still works. A database error counts as "still works": a
+/// brief outage should not drop every connected client.
+async fn token_still_valid(state: &AppState, token: &str) -> bool {
+    !matches!(
+        resolve_token(&state.pool, token).await,
+        Err(TokenError::Unknown
+            | TokenError::Expired
+            | TokenError::UserMissing
+            | TokenError::UserDisabled)
+    )
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, token: String) {
     let (mut sender, mut receiver) = socket.split();
 
     // Subscribe to remote control commands for this session
@@ -68,6 +85,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid) {
     loop {
         tokio::select! {
             _ = keepalive.tick() => {
+                // Logging out, expiry or disabling the user must close a socket that
+                // is already open, not only refuse new ones.
+                if !token_still_valid(&state, &token).await {
+                    tracing::info!("closing WebSocket: its session is no longer valid");
+                    break;
+                }
+
                 let msg = OutboundWebSocketMessage::new("ForceKeepAlive", 60);
                 if let Ok(json) = serde_json::to_string(&msg)
                     && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
