@@ -39,6 +39,19 @@ async fn planted() -> Planted {
     std::fs::create_dir_all(&dir).expect("job output dir");
     std::fs::write(dir.join("0.ts"), b"segment-bytes").expect("segment file");
 
+    // The item needs a file behind it. Without one the playlist route answers 404
+    // for the missing path before it ever reaches the code that starts a transcode
+    // (and kills the session's existing job), and the takeover test would pass
+    // whether or not the owner check exists.
+    let media = dir.join("movie.mkv");
+    std::fs::write(&media, b"not really a movie").expect("media file");
+    sqlx::query("UPDATE media_items SET path = $1 WHERE id = $2")
+        .bind(media.to_string_lossy().to_string())
+        .bind(item)
+        .execute(&app.pool)
+        .await
+        .expect("point the item at the file");
+
     let now = Utc::now();
     app.transcodes
         .insert_job(
