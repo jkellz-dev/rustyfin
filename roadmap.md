@@ -926,6 +926,26 @@ Stubs re-evaluated for real implementation to support major Jellyfin clients (We
 
 - [x] `GET /Shows/Upcoming` — query episodes by air date (requires `premiered` field in DB)
 
+### 11h. Hurl Parity Suite
+
+Black-box tests that send the same requests to a real Jellyfin and to Rustyfin and compare the answers. The Rust
+tests check Rustyfin against what we believe Jellyfin does; this suite checks it against Jellyfin itself.
+
+- [ ] Choose how the two servers are run: a pinned Jellyfin container with a small fixed media set, and Rustyfin
+      scanning the same files; decide where it runs (builder Job in `hermes-sandbox`, and CI)
+- [ ] `tests/parity/` of [Hurl](https://hurl.dev) files, one per area (system, users, auth, libraries, items, images,
+      playback info, sessions, playstate, search, collections, playlists, ...), each driven by `{{base_url}}` and
+      `{{token}}` variables so the same file runs against either server
+- [ ] A mise task and hk-free runner that executes the suite against both servers and diffs the results, not just
+      asserts: status code, header names, JSON key set and value types per response
+- [ ] Normalisation for what legitimately differs (ids, timestamps, server name and version, ordering of unordered
+      lists), kept in one file so each exemption is visible and has a reason
+- [ ] A known-differences list: every deliberate divergence (forward-auth only, no plugins, no LiveTV) is named
+      and the suite expects it, so an unplanned one fails
+- [ ] Cover the routes real clients call first (the 11a client-compatibility list), then the rest of the router
+- [ ] Capture Jellyfin's responses as recorded fixtures so the suite can also run offline against Rustyfin alone
+- [ ] Run in CI on a schedule (nightly) rather than every push; report the parity gaps it finds back into 11a
+
 ---
 
 ## Phase 12 — UI Polish & Interactivity
