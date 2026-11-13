@@ -1,0 +1,14 @@
+# yamlfmt settings, used by hk's yamlfmt step (`mise run format`).
+formatter:
+  type: basic
+  # Keep the blank lines that separate commented sections.
+  retain_line_breaks_single: true
+  # Lists stay indented under their key, as the hand-written files have them.
+  indentless_arrays: false
+  # Never rewrap: shell in workflow `run:` blocks, folded scalars and
+  # comments are laid out deliberately.
+  max_line_length: 0
+  scan_folded_as_literal: true
+  # Leave quoting alone: a quoted port mapping or version string must stay a
+  # string.
+  force_quote_style: ""

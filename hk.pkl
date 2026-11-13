@@ -1,0 +1,22 @@
+amends "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtins.pkl"
+// Using a coding agent? See https://hk.jdx.dev/agents
+
+local linters = new Mapping {
+    // Runs once per Cargo.toml that owns a matched file, which is what makes
+    // it reach `frontend/`: that crate is excluded from the workspace, so a
+    // `cargo fmt` at the repo root never formats it.
+    ["cargo_fmt"] = Builtins.cargo_fmt
+    // No clippy step, on purpose: clippy has to compile the workspace to lint
+    // it, and `lint` must stay cheap. It is `mise run clippy`.
+    // Markdown, configured in .rumdl.toml.
+    ["rumdl"] = Builtins.rumdl
+    ["shellcheck"] = Builtins.shellcheck
+    ["shellharden"] = Builtins.shellharden
+    ["shfmt"] = Builtins.shfmt
+    ["yamlfmt"] = Builtins.yamlfmt
+    // Security audit of the GitHub Actions workflows.
+    ["zizmor"] = Builtins.zizmor
+}
+
+steps = linters

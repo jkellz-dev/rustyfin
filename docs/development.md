@@ -32,10 +32,13 @@ cargo build --release        # Release build
 cargo run --bin rustyfin-server     # Build and run the server
 cargo test                   # Run all tests
 cargo test <test_name>       # Run a specific test
-cargo clippy                 # Lint all crates
-cargo fmt                    # Format all code
-cargo fmt -- --check         # Check formatting without modifying
+mise run format              # Format and auto-fix (hk: rustfmt, shell, YAML, workflows)
+mise run lint                # The same checks, changing nothing
+mise run clippy              # Clippy on all crates (compiles the workspace)
 ```
+
+`format` and `lint` run the steps in `hk.pkl`. Clippy is a separate task
+because it has to compile the workspace, which `lint` deliberately does not.
 
 ## Development Services
 
@@ -49,12 +52,14 @@ docker compose logs -f       # Follow logs
 ```
 
 Services:
+
 - **PostgreSQL 17** on `localhost:5432` (user: `rustyfin`, password: `rustyfin`, db: `rustyfin`)
 - **Meilisearch v1.12** on `localhost:7700` (key: `rustyfin-dev-key`)
 
 ### Manual PostgreSQL
 
 If not using Docker:
+
 ```bash
 createdb rustyfin
 export DATABASE_URL="postgres://user:pass@localhost/rustyfin"
@@ -63,7 +68,7 @@ cargo run --bin rustyfin-server     # Migrations run automatically
 
 ## Project Structure
 
-```
+```text
 rustyfin/
 ├── Cargo.toml                  # Workspace definition
 ├── rustyfin.toml               # Server config (optional)
@@ -85,11 +90,13 @@ rustyfin/
 
 ## Authentication During Development
 
-Rustyfin requires at least one auth method. For local development, the easiest approach is forward auth with a Caddy reverse proxy that injects identity headers.
+Rustyfin requires at least one auth method. For local development, the easiest approach is forward auth with a Caddy
+reverse proxy that injects identity headers.
 
 ### Dev Auth Setup
 
-The `docker-compose.yml` includes a Caddy container that proxies `localhost:8097` to `localhost:8096`, injecting `Remote-User` and `Remote-Name` headers on every request.
+The `docker-compose.yml` includes a Caddy container that proxies `localhost:8097` to `localhost:8096`, injecting
+`Remote-User` and `Remote-Name` headers on every request.
 
 ```bash
 # Start all dev services (Postgres, Meilisearch, Caddy)
@@ -99,11 +106,11 @@ docker compose up -d
 cargo run --bin rustyfin-server
 ```
 
-Then open **http://localhost:8097** (not 8096) — Caddy injects the auth headers automatically.
+Then open **<http://localhost:8097>** (not 8096) — Caddy injects the auth headers automatically.
 
 ### How It Works
 
-```
+```text
 Browser → localhost:8097 (Caddy) → localhost:8096 (Rustyfin)
                  │
                  └── Injects: Remote-User: jonathan
@@ -112,7 +119,7 @@ Browser → localhost:8097 (Caddy) → localhost:8096 (Rustyfin)
 
 Caddy is configured in `Caddyfile.dev`:
 
-```
+```text
 :8097 {
     reverse_proxy host.docker.internal:8096 {
         header_up Remote-User "jonathan"
@@ -132,7 +139,7 @@ trusted_proxies = ["127.0.0.1/32", "::1/128", "172.16.0.0/12"]
 
 Edit `Caddyfile.dev` to change the username, add email/groups, or simulate admin group membership:
 
-```
+```text
 :8097 {
     reverse_proxy host.docker.internal:8096 {
         header_up Remote-User "alice"
@@ -151,7 +158,8 @@ docker compose restart caddy
 
 ### Testing API Endpoints Directly
 
-For API testing without the browser, you can bypass Caddy and send headers directly via curl (localhost is in the trusted proxy list):
+For API testing without the browser, you can bypass Caddy and send headers directly via curl (localhost is in the
+trusted proxy list):
 
 ```bash
 # Authenticate (creates user + session)
@@ -194,7 +202,7 @@ search_base = "ou=people,dc=example,dc=com"
 user_filter = "(uid={})"
 ```
 
-Create test users in the LLDAP web UI at http://localhost:17170, then authenticate:
+Create test users in the LLDAP web UI at <http://localhost:17170>, then authenticate:
 
 ```bash
 curl -X POST http://localhost:8096/Users/AuthenticateByName \
@@ -205,7 +213,8 @@ curl -X POST http://localhost:8096/Users/AuthenticateByName \
 
 ### Direct Access (Port 8096)
 
-You can also hit Rustyfin directly on port 8096 without Caddy, but you'll need to provide auth headers yourself (e.g., via a browser extension like ModHeader for Firefox/Chrome, or curl).
+You can also hit Rustyfin directly on port 8096 without Caddy, but you'll need to provide auth headers yourself (e.g.,
+via a browser extension like ModHeader for Firefox/Chrome, or curl).
 
 ## Building the Frontend
 
@@ -226,6 +235,7 @@ cargo build --release
 ```
 
 For development with live reload:
+
 ```bash
 cd frontend
 trunk serve --proxy-backend=http://localhost:8096
@@ -242,7 +252,8 @@ Create a new SQL file in `migrations/`:
 touch migrations/20250201000000_add_new_table.sql
 ```
 
-Migrations run automatically at server startup. They use `sqlx::migrate::Migrator` loaded at runtime (no compile-time database connection needed).
+Migrations run automatically at server startup. They use `sqlx::migrate::Migrator` loaded at runtime (no compile-time
+database connection needed).
 
 ## Adding a New API Endpoint
 
@@ -287,6 +298,7 @@ pub async fn my_handler(
 ### Serde
 
 All DTOs use PascalCase JSON to match Jellyfin:
+
 ```rust
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -298,6 +310,7 @@ pub struct MyDto {
 ### Duration
 
 All durations are in 100-nanosecond ticks:
+
 ```rust
 let ticks = seconds * 10_000_000;
 let seconds = ticks / 10_000_000;
@@ -306,6 +319,7 @@ let seconds = ticks / 10_000_000;
 ### SQL Queries
 
 Use string SQL (not compile-time checked):
+
 ```rust
 sqlx::query_as::<_, MyRow>("SELECT * FROM my_table WHERE id = $1")
     .bind(id)
@@ -318,6 +332,7 @@ This avoids requiring a running database at build time.
 ### Error Handling
 
 Use `ApiError` for route handlers:
+
 ```rust
 pub enum ApiError {
     NotFound,
@@ -332,6 +347,7 @@ pub enum ApiError {
 ### Edition 2024 Features
 
 The project uses Rust edition 2024, which supports:
+
 - **Let chains**: `if let Some(x) = expr && let Some(y) = expr { ... }`
 - Clippy expects these patterns (will warn about nested `if let`)
 
@@ -351,6 +367,7 @@ cargo test -- --nocapture    # Show println output
 ```
 
 Current test coverage focuses on filename parsing in `rustyfin-core`:
+
 - `test_is_video_file` --- video extension detection
 - `test_make_sort_name` --- sort name generation
 - `test_parse_season_folder` --- season folder parsing
@@ -403,10 +420,12 @@ export RUST_LOG="rustyfin=debug,tower_http=debug"
 ### VS Code
 
 Recommended extensions:
+
 - `rust-analyzer` --- Rust language support
 - `Even Better TOML` --- TOML file support
 
 Settings for the workspace:
+
 ```json
 {
   "rust-analyzer.linkedProjects": ["./Cargo.toml"],
@@ -414,4 +433,5 @@ Settings for the workspace:
 }
 ```
 
-Note: The `frontend/` directory is a separate Cargo project. rust-analyzer may need to be configured separately for it if you work on frontend code.
+Note: The `frontend/` directory is a separate Cargo project. rust-analyzer may need to be configured separately for it
+if you work on frontend code.

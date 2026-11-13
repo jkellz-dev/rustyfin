@@ -11,6 +11,16 @@ node = "22"
 # alone would drop it. wasm32 is for the frontend (trunk), as in rust-toolchain.toml.
 rust = { version = "1.100.0", mr_boxington = true, components = "clippy,rustfmt", targets = "wasm32-unknown-unknown" }
 mr-boxington = "latest"
+# What hk.pkl's steps call, declared here so `format`/`lint` do not depend on
+# a tool that happens to be installed globally. rustfmt comes with the rust
+# entry above.
+hk = "latest"
+rumdl = "latest"    # hk: Markdown, configured in .rumdl.toml
+shfmt = "latest"
+shellcheck = "latest"
+shellharden = "latest"
+yamlfmt = "latest"  # hk: YAML, configured in .yamlfmt
+zizmor = "latest"   # hk: GitHub Actions security audit
 
 # ── Dev ──────────────────────────────────────────────────────
 [tasks.dev]
@@ -64,10 +74,23 @@ run = "cargo test --lib"
 description = "Run integration tests (requires Postgres)"
 run = "cargo test -p rustyfin-api --test '*' -- --test-threads=1"
 
-# ── Lint ─────────────────────────────────────────────────────
+# ── Format & lint ────────────────────────────────────────────
+# Both go through hk, so the steps live in one place: hk.pkl.
+[tasks.format]
+description = "Format and auto-fix every file hk knows about"
+# hk's git hooks never fire under jj, which does not run `git commit`, so
+# formatting is a task you run, not a hook that runs itself.
+run = "hk fix --all"
+
 [tasks.lint]
-description = "Run clippy and format check"
-run = "cargo clippy -- -D warnings && cargo fmt -- --check"
+description = "Check formatting and lint without changing anything"
+run = "hk check --all"
+
+[tasks.clippy]
+description = "Run clippy (compiles the workspace)"
+# Not an hk step: clippy cannot lint without compiling, and `lint` should not
+# start a build.
+run = "cargo clippy --workspace --all-targets -- -D warnings"
 
 # ── Docker ───────────────────────────────────────────────────
 [tasks."docker:up"]
