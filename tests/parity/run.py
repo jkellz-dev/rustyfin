@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Run the parity cases against Jellyfin and Rustyfin and report the gaps.
+
+Jellyfin is the oracle: every case must pass against it (if one does not, the
+recording is wrong, not the server). Rustyfin's failures are the parity gaps.
+
+    python3 -I tests/parity/run.py                 # both servers, all areas
+    python3 -I tests/parity/run.py library         # one area
+    python3 -I tests/parity/run.py --write report.md
+
+Needs kubectl and the `hurl-runner`, `jellyfin` and `rustyfin-server` services in
+`hermes-sandbox`, both servers bootstrapped (tests/parity/bootstrap/*.hurl).
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+NS = "hermes-sandbox"
+RUNNER = "hurl-runner"
+KUBECTL = os.environ.get("KUBECTL", "kubectl")
+ROOT = Path(__file__).resolve().parent
+
+SERVERS = {
+    "jellyfin": {
+        "base_url": "http://jellyfin:8096",
+        "login": (
+            'Authorization: MediaBrowser Client="parity", Device="parity", DeviceId="run-1", Version="1.0"\n'
+        ),
+        "body": '{ "Username": "parity", "Pw": "parity-pass" }',
+    },
+    "rustyfin": {
+        "base_url": "http://rustyfin-server",
+        "login": (
+            'Authorization: MediaBrowser Client="parity", Device="parity", DeviceId="run-1", Version="1.0"\n'
+            "Tailscale-User-Login: parity@example.com\nTailscale-User-Name: parity\nTailscale-User-Groups: admin\n"
+        ),
+        "body": '{ "Username": "parity", "Pw": "" }',
+    },
+}
+
+
+def kubectl(*args, stdin=None):
+    return subprocess.run([KUBECTL, "-n", NS, *args], input=stdin, capture_output=True, text=True)
+
+
+def hurl(file_in_runner, variables, *flags):
+    args = ["exec", RUNNER, "--", "hurl", "--json", "--no-color", *flags]
+    for k, v in variables.items():
+        args += ["--variable", f"{k}={v}"]
+    args.append(file_in_runner)
+    run = kubectl(*args)
+    try:
+        return json.loads(run.stdout)
+    except json.JSONDecodeError:
+        sys.exit(f"hurl gave no JSON for {file_in_runner}:\n{run.stdout[:300]}\n{run.stderr[:300]}")
+
+
+def login(server):
+    cfg = SERVERS[server]
+    text = (
+        f"POST {{{{base_url}}}}/Users/AuthenticateByName\nContent-Type: application/json\n{cfg['login']}"
+        f"{cfg['body']}\nHTTP 200\n[Captures]\ntoken: jsonpath \"$.AccessToken\"\n"
+        'user_id: jsonpath "$.User.Id"\n'
+    )
+    kubectl("exec", "-i", RUNNER, "--", "sh", "-c", "cat > /tmp/login.hurl", stdin=text)
+    res = hurl("/tmp/login.hurl", {"base_url": cfg["base_url"]})
+    caps = {c["name"]: c["value"] for c in res["entries"][0]["captures"]}
+    return caps["token"], caps["user_id"]
+
+
+def summarize(message):
+    """One line for a failed assert: what was expected and what was seen."""
+    lines = [l for l in message.splitlines() if l.strip()]
+    head = lines[0] if lines else "assert failed"
+    actual = next((l.strip(" |^") for l in lines if "actual" in l or "not found" in l or "invalid" in l), "")
+    src = next((l.split("|", 1)[1].strip() for l in lines if l.lstrip()[:1].isdigit() and "|" in l), "")
+    return f"{head}: {src} ({actual})" if src else f"{head} ({actual})"
+
+
+def run_server(server, cases):
+    token, user_id = login(server)
+    base = SERVERS[server]["base_url"]
+    results = {}
+    for case in cases:
+        res = hurl(
+            f"/tmp/parity/cases/{case.name}",
+            {"base_url": base, "token": token, "user_id": user_id},
+            "--continue-on-error",
+        )
+        rows = []
+        for e in res["entries"]:
+            call = e["calls"][0]["request"] if e.get("calls") else {}
+            failed = [a for a in e.get("asserts", []) if not a["success"]]
+            rows.append(
+                {
+                    "line": e["line"],
+                    "request": f"{call.get('method', '?')} {call.get('url', '?').replace(base, '')}",
+                    "asserts": len(e.get("asserts", [])),
+                    "failed": [summarize(a["message"]) for a in failed if "message" in a],
+                    "no_response": not e.get("calls"),
+                }
+            )
+        results[case.stem] = rows
+    return results
+
+
+def main():
+    args = [a for a in sys.argv[1:]]
+    out_file = None
+    if "--write" in args:
+        i = args.index("--write")
+        out_file = args[i + 1]
+        del args[i : i + 2]
+    only = args[0] if args else None
+
+    cases = sorted((ROOT / "cases").glob("*.hurl"))
+    cases = [c for c in cases if not only or c.stem == only]
+    if not cases:
+        sys.exit("no cases")
+
+    kubectl("exec", RUNNER, "--", "rm", "-rf", "/tmp/parity")
+    cp = kubectl("cp", str(ROOT), f"{RUNNER}:/tmp/parity")
+    if cp.returncode:
+        sys.exit(f"cannot copy cases: {cp.stderr}")
+
+    report = {s: run_server(s, cases) for s in SERVERS}
+
+    lines = ["# Parity report", ""]
+    for server, per_case in report.items():
+        total = sum(len(r) for r in per_case.values())
+        bad = sum(1 for rows in per_case.values() for r in rows if r["failed"] or r["no_response"])
+        lines.append(f"## {server}: {total - bad}/{total} requests match")
+        for case, rows in per_case.items():
+            for r in rows:
+                if r["failed"] or r["no_response"]:
+                    lines.append(f"- `{case}.hurl:{r['line']}` {r['request']}")
+                    for f in r["failed"][:12]:
+                        lines.append(f"    - {f}")
+                    if len(r["failed"]) > 12:
+                        lines.append(f"    - ... {len(r['failed']) - 12} more")
+        lines.append("")
+    text = "\n".join(lines)
+    print(text)
+    if out_file:
+        Path(out_file).write_text(text)
+
+    # Jellyfin failing its own recording means the case is wrong.
+    jelly_bad = sum(1 for rows in report["jellyfin"].values() for r in rows if r["failed"])
+    sys.exit(2 if jelly_bad else 0)
+
+
+if __name__ == "__main__":
+    main()
