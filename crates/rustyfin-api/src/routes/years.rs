@@ -9,7 +9,7 @@ use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::media_items;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 #[derive(Debug, Deserialize, Default)]
@@ -42,7 +42,7 @@ pub async fn get_years(
 
         let counts = media_items::count_items_by_year(&state.pool, year, query.parent_id)
             .await
-            .unwrap_or_default();
+            .or_log_default("media_items::count_items_by_year");
 
         let mut dto = BaseItemDto {
             id,

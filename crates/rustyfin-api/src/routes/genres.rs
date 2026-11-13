@@ -9,7 +9,7 @@ use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::media_items;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 #[derive(Debug, Deserialize, Default)]
@@ -64,7 +64,7 @@ pub async fn get_genres(
             let counts =
                 media_items::count_items_with_genre(&state.pool, genre_name, query.parent_id)
                     .await
-                    .unwrap_or_default();
+                    .or_log_default("media_items::count_items_with_genre");
             let mut total_children = 0i32;
             for (item_type, cnt) in &counts {
                 let c = *cnt as i32;

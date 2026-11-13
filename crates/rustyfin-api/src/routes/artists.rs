@@ -11,7 +11,7 @@ use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::{images as images_repo, media_items};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 use crate::routes::images::{self as image_routes, ImageParams};
 use crate::routes::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
@@ -63,7 +63,7 @@ async fn get_artists_inner(
     let item_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let all_images = images_repo::list_by_items(&state.pool, &item_ids)
         .await
-        .unwrap_or_default();
+        .or_log_default("images_repo::list_by_items");
     let images_map = group_images_by_item(all_images);
 
     let mut dtos = Vec::with_capacity(rows.len());

@@ -11,7 +11,7 @@ use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::{images, people};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 use crate::routes::images::{self as image_routes, ImageParams};
 
@@ -73,7 +73,7 @@ pub async fn get_persons(
     let person_ids: Vec<uuid::Uuid> = persons.iter().map(|p| p.id).collect();
     let person_images = images::list_by_items(&state.pool, &person_ids)
         .await
-        .unwrap_or_default();
+        .or_log_default("images::list_by_items");
     let people_with_images: std::collections::HashSet<uuid::Uuid> = person_images
         .iter()
         .filter(|img| img.image_type == "Primary")
@@ -101,7 +101,7 @@ pub async fn get_persons(
         if include_counts {
             let counts = people::count_items_by_person(&state.pool, person.id)
                 .await
-                .unwrap_or_default();
+                .or_log_default("people::count_items_by_person");
             let mut total_children = 0i32;
             for (item_type, cnt) in &counts {
                 let c = *cnt as i32;
