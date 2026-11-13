@@ -41,11 +41,15 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # Compile cache shared with the other cargo jobs and local builds. After the
-      # toolchain step: cache keys include the rustc on PATH.
+      # Compile cache, restored and saved per job. The action's restore prefix is
+      # <os>-<arch>-mbx-<generation>-<toolchain>-, so the job name has to sit in
+      # the generation: a suffix after the commit sha names the saved entry but
+      # every job would still restore the newest entry of any job (lint pulled
+      # the 1.2 GB integration tree). After the toolchain step: keys include the
+      # rustc on PATH.
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-key-suffix: lint
+          cache-generation: v1-lint
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -68,7 +72,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-key-suffix: unit
+          cache-generation: v1-unit
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -104,7 +108,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-key-suffix: integration
+          cache-generation: v1-integration
 
       - name: Run integration tests
         run: mbx test -p rustyfin-api --test '*' -- --test-threads=1
@@ -126,7 +130,7 @@ jobs:
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           working-directory: frontend
-          cache-key-suffix: frontend
+          cache-generation: v1-frontend
 
       # trunk runs plain `cargo`, which would bypass mbx. `mbx setup` installs a
       # Cargo shim that runs mbx; putting it first on PATH routes trunk's cargo
@@ -201,7 +205,7 @@ jobs:
 
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-key-suffix: build-${{ matrix.target }}
+          cache-generation: v1-build-${{ matrix.target }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
