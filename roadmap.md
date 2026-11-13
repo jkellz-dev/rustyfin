@@ -837,8 +837,8 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       enforced it; the routes that take an item id did not, so a user limited to one library could stream, read
       PlaybackInfo, mark played and browse the TV routes of any other library. They now share
       `routes::access::require_item_access` (404, like Jellyfin), and suggestions, similar and recommendations are
-      filtered. Not covered: the image fetch routes (public by design, no auth) and HLS segments, which are keyed by
-      session id rather than item
+      filtered. HLS sessions belong to the user who started them (segments, playlists and
+      `DELETE /Videos/ActiveEncodings`). Not covered: the image fetch routes, which are public by design
 - [x] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked). HTTP already re-read
       the user on every request; `/socket` did not: it accepted any token that existed, with no expiry check and no look
       at the user, and never re-checked an open socket. Both now go through `rustyfin_auth::session::resolve_token`, and

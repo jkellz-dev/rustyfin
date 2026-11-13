@@ -140,6 +140,14 @@ pub async fn get_variant_playlist(
 
     let tm = &state.transcode_manager;
 
+    // Starting a transcode for a session id kills the job already using it, so a
+    // session owned by someone else must be refused first.
+    if let Some(owner) = tm.job_owner(&play_session_id).await
+        && owner != auth.user_id
+    {
+        return Err(ApiError::NotFound);
+    }
+
     // Start transcode if not already running
     if !tm.has_active_job(&play_session_id).await {
         let item = media_items::find_by_id(&state.pool, item_id)
@@ -221,15 +229,16 @@ pub async fn get_variant_playlist(
 /// `GET /Videos/{itemId}/hls1/{playSessionId}/{segmentId}.{container}` — HLS segment.
 pub async fn get_segment(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((_item_id, play_session_id, segment_file)): Path<(Uuid, String, String)>,
 ) -> Result<Response, ApiError> {
-    get_segment_inner(&state, &play_session_id, &segment_file).await
+    get_segment_inner(&state, auth.user_id, &play_session_id, &segment_file).await
 }
 
 /// Shared segment-serving logic for both video and audio HLS segments.
 async fn get_segment_inner(
     state: &AppState,
+    user_id: Uuid,
     play_session_id: &str,
     segment_file: &str,
 ) -> Result<Response, ApiError> {
@@ -244,6 +253,12 @@ async fn get_segment_inner(
     }
 
     let tm = &state.transcode_manager;
+
+    // A session belongs to whoever started it. Answer 404, as for an unknown
+    // session, so the id does not confirm that someone else is watching.
+    if tm.job_owner(play_session_id).await != Some(user_id) {
+        return Err(ApiError::NotFound);
+    }
 
     let output_dir = tm
         .get_job_output_dir(play_session_id)
@@ -332,16 +347,26 @@ pub struct DeleteEncodingParams {
 /// `DELETE /Videos/ActiveEncodings` — Kill active transcode jobs.
 pub async fn delete_active_encodings(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(params): Query<DeleteEncodingParams>,
 ) -> StatusCode {
     let tm = &state.transcode_manager;
 
+    // Jobs belong to the user who started them; an administrator may stop any.
+    // Someone else's session is left alone and still answers 204, the same as an
+    // id that matches nothing, so this cannot be used to probe for sessions.
     if let Some(ref session_id) = params.play_session_id {
-        tm.kill_job(session_id).await;
+        let owner = tm.job_owner(session_id).await;
+        if auth.is_administrator || owner == Some(auth.user_id) {
+            tm.kill_job(session_id).await;
+        }
     }
     if let Some(ref device_id) = params.device_id {
-        tm.kill_jobs_for_device(device_id).await;
+        if auth.is_administrator {
+            tm.kill_jobs_for_device(device_id).await;
+        } else {
+            tm.kill_jobs_for_user_device(device_id, auth.user_id).await;
+        }
     }
 
     StatusCode::NO_CONTENT
@@ -413,6 +438,12 @@ pub async fn get_audio_variant_playlist(
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
 
     let tm = &state.transcode_manager;
+
+    if let Some(owner) = tm.job_owner(&play_session_id).await
+        && owner != auth.user_id
+    {
+        return Err(ApiError::NotFound);
+    }
 
     if !tm.has_active_job(&play_session_id).await {
         let item = media_items::find_by_id(&state.pool, item_id)
@@ -486,11 +517,11 @@ pub async fn get_audio_variant_playlist(
 /// `GET /Audio/{itemId}/hls1/{playSessionId}/{segmentFile}` — Audio HLS segment.
 pub async fn get_audio_segment(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((_item_id, play_session_id, segment_file)): Path<(Uuid, String, String)>,
 ) -> Result<Response, ApiError> {
     // Audio segments use the same serving logic as video segments
-    get_segment_inner(&state, &play_session_id, &segment_file).await
+    get_segment_inner(&state, auth.user_id, &play_session_id, &segment_file).await
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
