@@ -808,7 +808,11 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 ### 11c. Error Handling & Edge Cases
 
 - [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
-- [ ] Verify 404 vs 403 vs 401 is correct for all auth failure modes
+- [x] Verify 404 vs 403 vs 401 is correct for all auth failure modes. Anonymous: a test sweeps every route in
+      `router.rs` with GET, POST and DELETE and no credentials and allows only a reasoned list of public routes; it
+      found `GET /System/Info` (documented as requiring auth, had no extractor) answering anyone. Hidden item or
+      library: 404, as Jellyfin. Non-admin on an admin route: 403. Known gap: no equivalent sweep for non-admin callers,
+      which would need each handler's required role
 - [x] Handle malformed UUIDs in path params gracefully (400, not 500) — axum `Path<Uuid>` rejection already yields 400
 - [x] Map Postgres foreign-key violations to 404 (e.g. mark-played on nonexistent item), matching Jellyfin
 - [ ] Handle missing/corrupt media files during scan (log and skip, don't crash)

@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
 };
 
-use rustyfin_auth::middleware::AdminUser;
+use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_db::repo::{libraries, media_items, users};
 use rustyfin_models::dto::{
     DashboardStats, LogFileInfo, PublicSystemInfo, StartupConfiguration, SystemInfo,
@@ -36,7 +36,7 @@ pub async fn get_public_info(State(state): State<AppState>) -> Json<PublicSystem
 }
 
 /// `GET /System/Info` — Requires auth.
-pub async fn get_info(State(state): State<AppState>) -> Json<SystemInfo> {
+pub async fn get_info(State(state): State<AppState>, _auth: AuthenticatedUser) -> Json<SystemInfo> {
     let wizard_complete = is_wizard_complete(&state).await;
     Json(SystemInfo {
         local_address: state.base_url.clone(),

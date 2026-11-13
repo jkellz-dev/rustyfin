@@ -10,15 +10,58 @@
 #[allow(dead_code)]
 mod common;
 
+use std::net::SocketAddr;
+
 use axum::{
     body::Body,
+    extract::ConnectInfo,
     http::{Method, Request, StatusCode},
 };
 use tower::ServiceExt;
 
 /// Routes that are open to anonymous callers on purpose, each with the reason.
 /// Matched against the route pattern as written in `router.rs`.
-const PUBLIC_ON_PURPOSE: &[(&str, &str)] = &[];
+const PUBLIC_ON_PURPOSE: &[(&str, &str)] = &[
+    // Jellyfin serves these without a token: clients read them before signing in.
+    ("/Branding/Configuration", "login screen branding"),
+    ("/Branding/Css", "login screen branding"),
+    ("/GetUtcTime", "clock sync, no user data"),
+    (
+        "/QuickConnect/Enabled",
+        "answers false: quick connect is off by design",
+    ),
+    ("/System/Info/Public", "server discovery"),
+    ("/System/Ping", "liveness probe, GET and POST"),
+    // The setup wizard runs before any user exists.
+    ("/Startup/Configuration", "setup wizard state"),
+    (
+        "/Startup/Complete",
+        "a no-op: rustyfin has no wizard to finish",
+    ),
+    (
+        "/Localization/Countries",
+        "static lists the setup wizard shows",
+    ),
+    (
+        "/Localization/Cultures",
+        "static lists the setup wizard shows",
+    ),
+    (
+        "/Localization/Options",
+        "static lists the setup wizard shows",
+    ),
+    (
+        "/Localization/ParentalRatings",
+        "static lists the setup wizard shows",
+    ),
+    // Login itself. Refuses with 401 unless forward auth or LDAP vouches for the caller.
+    ("/Users/AuthenticateByName", "the login route"),
+    // Empty list unless LDAP is configured, as in Jellyfin's login user picker.
+    (
+        "/Users/Public",
+        "login user picker; empty under forward auth",
+    ),
+];
 
 fn route_patterns() -> Vec<String> {
     let src = include_str!("../src/router.rs");
@@ -93,12 +136,17 @@ async fn anonymous_callers_are_refused_everywhere_except_the_public_routes() {
         }
         let path = concrete(pattern);
         for method in [Method::GET, Method::POST, Method::DELETE] {
-            let request = Request::builder()
+            let mut request = Request::builder()
                 .method(method.clone())
                 .uri(&path)
                 .header("Content-Type", "application/json")
                 .body(Body::from("{}"))
                 .unwrap();
+            // The real server hands handlers the peer address; without it a route
+            // that reads it answers 500 for the missing extension, not for itself.
+            request
+                .extensions_mut()
+                .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40000))));
             let status = app.router.clone().oneshot(request).await.unwrap().status();
             let refused = matches!(
                 status,
