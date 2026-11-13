@@ -184,9 +184,9 @@ pub(crate) struct ImageFields {
 pub(crate) fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
     if item_images.is_empty() {
         return ImageFields {
-            image_tags: None,
-            backdrop_image_tags: None,
-            image_blur_hashes: None,
+            image_tags: Some(HashMap::new()),
+            backdrop_image_tags: Some(Vec::new()),
+            image_blur_hashes: Some(HashMap::new()),
             primary_image_aspect_ratio: None,
         };
     }
