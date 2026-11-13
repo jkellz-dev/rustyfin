@@ -86,6 +86,85 @@ pub(crate) fn user_data_dto(
     dto
 }
 
+/// The one media source a stored file is, with its streams, on the item. Nothing
+/// is attached when the item has no probed streams.
+pub(crate) fn attach_media_source(
+    dto: &mut BaseItemDto,
+    item: &media_items::MediaItemRow,
+    streams: &[media_streams::MediaStreamRow],
+    reveal_path: bool,
+) {
+    if streams.is_empty() {
+        return;
+    }
+    let media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
+    let source = MediaSourceInfo {
+        id: item.id.to_string(),
+        // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.
+        path: if reveal_path { item.path.clone() } else { None },
+        container: item.container.clone(),
+        size: item.size,
+        name: Some(item.name.clone()),
+        bitrate: item.total_bitrate,
+        runtime_ticks: item.runtime_ticks,
+        supports_direct_play: true,
+        supports_direct_stream: true,
+        supports_transcoding: false,
+        is_remote: false,
+        read_at_native_framerate: false,
+        source_type: "Default".to_string(),
+        protocol: "File".to_string(),
+        media_streams: Some(media_stream_dtos.clone()),
+        video_type: source_video_type(&media_stream_dtos),
+        default_audio_stream_index: default_audio_stream_index(&media_stream_dtos),
+        supports_probing: true,
+        e_tag: item.etag.clone(),
+        transcoding_url: None,
+        transcoding_sub_protocol: Some("http".to_string()),
+        transcoding_container: None,
+        direct_stream_url: None,
+        transcode_reasons: None,
+        ..Default::default()
+    };
+    dto.media_sources = Some(vec![source]);
+    dto.media_streams = Some(media_stream_dtos);
+}
+
+/// `Fields=MediaSources` or `Fields=MediaStreams` on a list: clients decide direct
+/// play from the list without a request per item. One query for all the items.
+pub(crate) async fn attach_media_sources_if_asked(
+    pool: &sqlx::PgPool,
+    fields: &Option<String>,
+    items: &[media_items::MediaItemRow],
+    dtos: &mut [BaseItemDto],
+    reveal_path: bool,
+) {
+    let wanted: Vec<String> = parse_comma_delimited(fields);
+    if !wanted
+        .iter()
+        .any(|f| f == "MediaSources" || f == "MediaStreams")
+    {
+        return;
+    }
+    let ids: Vec<Uuid> = items
+        .iter()
+        .filter(|i| !i.is_folder)
+        .map(|i| i.id)
+        .collect();
+    let rows = media_streams::list_by_items(pool, &ids)
+        .await
+        .or_log_default("media_streams::list_by_items");
+    let mut by_item: HashMap<Uuid, Vec<media_streams::MediaStreamRow>> = HashMap::new();
+    for row in rows {
+        by_item.entry(row.item_id).or_default().push(row);
+    }
+    for (item, dto) in items.iter().zip(dtos.iter_mut()) {
+        if let Some(streams) = by_item.get(&item.id) {
+            attach_media_source(dto, item, streams, reveal_path);
+        }
+    }
+}
+
 /// Jellyfin's `MediaType` for an item type: what kind of stream it plays, or
 /// `Unknown` for folders and people rather than leaving the key out.
 pub(crate) fn media_type_for(item_type: &str) -> Option<String> {
@@ -529,6 +608,14 @@ pub async fn get_items(
     }
 
     name_series_for_seasons(&state.pool, &mut dtos).await;
+    attach_media_sources_if_asked(
+        &state.pool,
+        &query.fields,
+        &items,
+        &mut dtos,
+        auth.is_administrator,
+    )
+    .await;
     // Attach user data if requested
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
@@ -636,43 +723,7 @@ pub async fn get_item_by_id(
         let streams = media_streams::list_by_item(&state.pool, item_id)
             .await
             .or_log_default("media_streams::list_by_item");
-        if !streams.is_empty() {
-            let media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
-            let source = MediaSourceInfo {
-                id: item.id.to_string(),
-                // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.
-                path: if auth.is_administrator {
-                    item.path.clone()
-                } else {
-                    None
-                },
-                container: item.container.clone(),
-                size: item.size,
-                name: Some(item.name.clone()),
-                bitrate: item.total_bitrate,
-                runtime_ticks: item.runtime_ticks,
-                supports_direct_play: true,
-                supports_direct_stream: true,
-                supports_transcoding: false,
-                is_remote: false,
-                read_at_native_framerate: false,
-                source_type: "Default".to_string(),
-                protocol: "File".to_string(),
-                media_streams: Some(media_stream_dtos.clone()),
-                video_type: source_video_type(&media_stream_dtos),
-                default_audio_stream_index: default_audio_stream_index(&media_stream_dtos),
-                supports_probing: true,
-                e_tag: item.etag.clone(),
-                transcoding_url: None,
-                transcoding_sub_protocol: Some("http".to_string()),
-                transcoding_container: None,
-                direct_stream_url: None,
-                transcode_reasons: None,
-                ..Default::default()
-            };
-            dto.media_sources = Some(vec![source]);
-            dto.media_streams = Some(media_stream_dtos);
-        }
+        attach_media_source(&mut dto, &item, &streams, auth.is_administrator);
     }
 
     // Load chapters for non-folder items

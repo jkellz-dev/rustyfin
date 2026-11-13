@@ -145,6 +145,22 @@ pub async fn delete_by_item(pool: &PgPool, item_id: Uuid) -> Result<u64, sqlx::E
 }
 
 /// Get all streams for a media item.
+/// Every stream of every item in `item_ids`, in stream order within each item.
+pub async fn list_by_items(
+    pool: &PgPool,
+    item_ids: &[Uuid],
+) -> Result<Vec<MediaStreamRow>, sqlx::Error> {
+    if item_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as::<_, MediaStreamRow>(
+        "SELECT * FROM media_streams WHERE item_id = ANY($1) ORDER BY item_id, stream_index",
+    )
+    .bind(item_ids)
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn list_by_item(
     pool: &PgPool,
     item_id: Uuid,

@@ -435,6 +435,8 @@ low-priority admin features.
       DisplayPreferences defaults; `UnplayedItemCount`/`PlayedPercentage`/`RecursiveItemCount` on folders;
       seasons in any list name their series; NextUp offers the first episode of unstarted shows
       (`DisableFirstEpisode`); streams stored before the details existed are probed again on the next scan
+- [x] `Fields=MediaSources` / `Fields=MediaStreams` on `/Items` lists, one query for the page (Infuse and
+      Swiftfin ask for it on every browse)
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)
