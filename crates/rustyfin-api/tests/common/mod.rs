@@ -28,6 +28,8 @@ pub struct TestApp {
     pub session_manager: Arc<SessionManager>,
     /// What `POST /System/Shutdown` and `/System/Restart` fire.
     pub shutdown: Arc<tokio::sync::Notify>,
+    /// For planting transcode jobs without ffmpeg.
+    pub transcodes: Arc<TranscodeManager>,
 }
 
 impl TestApp {
@@ -88,6 +90,7 @@ impl TestApp {
         ));
 
         let shutdown = Arc::new(tokio::sync::Notify::new());
+        let transcodes = transcode_manager.clone();
 
         let state = AppState {
             pool: pool.clone(),
@@ -118,6 +121,7 @@ impl TestApp {
             schema,
             session_manager,
             shutdown,
+            transcodes,
         }
     }
 

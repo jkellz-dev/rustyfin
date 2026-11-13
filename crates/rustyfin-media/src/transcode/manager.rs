@@ -313,6 +313,23 @@ impl TranscodeManager {
         }
     }
 
+    /// Kill the jobs on a device that belong to `user_id`.
+    pub async fn kill_jobs_for_user_device(&self, device_id: &str, user_id: Uuid) {
+        let mut jobs = self.jobs.write().await;
+        let matching: Vec<String> = jobs
+            .iter()
+            .filter(|(_, j)| j.device_id == device_id && j.user_id == user_id)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        for key in matching {
+            if let Some(mut job) = jobs.remove(&key) {
+                info!(play_session_id = %key, device_id, "killing transcode job for device");
+                job.kill().await;
+            }
+        }
+    }
+
     /// Throttle ffmpeg processes that are too far ahead of playback.
     ///
     /// On a fast machine, ffmpeg can transcode much faster than real-time.
@@ -401,8 +418,18 @@ impl TranscodeManager {
         }
     }
 
+    /// The user who started the job for this play session, if there is one.
+    ///
+    /// A job exists from the moment it is registered, whether or not its ffmpeg
+    /// process is still alive, so this is the right question for "whose session is
+    /// this"; `has_active_job` is about the process.
+    pub async fn job_owner(&self, play_session_id: &str) -> Option<Uuid> {
+        let jobs = self.jobs.read().await;
+        jobs.get(play_session_id).map(|j| j.user_id)
+    }
+
     /// Insert a job into the manager.
-    pub(crate) async fn insert_job(&self, play_session_id: String, job: TranscodeJob) {
+    pub async fn insert_job(&self, play_session_id: String, job: TranscodeJob) {
         let mut jobs = self.jobs.write().await;
         jobs.insert(play_session_id, job);
     }
