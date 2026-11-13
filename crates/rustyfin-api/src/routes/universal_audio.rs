@@ -46,14 +46,21 @@ pub async fn get_universal_audio(
     if protocol.eq_ignore_ascii_case("hls") {
         // Redirect to audio HLS master playlist
         let item_id_string = item_id.to_string();
-        let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
+        // Echoed into the Location header: encode, or a control character makes the
+        // redirect panic.
+        let media_source_id = rustyfin_media::transcode::names::encode_query_value(
+            params.media_source_id.as_deref().unwrap_or(&item_id_string),
+        );
 
         let mut url = format!(
             "/Audio/{item_id}/master.m3u8?PlaySessionId={play_session_id}&MediaSourceId={media_source_id}"
         );
 
         if let Some(ref ac) = params.audio_codec {
-            url.push_str(&format!("&AudioCodec={ac}"));
+            url.push_str(&format!(
+                "&AudioCodec={}",
+                rustyfin_media::transcode::names::encode_query_value(ac)
+            ));
         }
         if let Some(br) = params.max_streaming_bitrate {
             url.push_str(&format!("&MaxStreamingBitrate={br}"));

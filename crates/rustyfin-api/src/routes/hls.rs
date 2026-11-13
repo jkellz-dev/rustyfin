@@ -19,7 +19,7 @@ use rustyfin_media::transcode::{
         rewrite_audio_variant_playlist, rewrite_variant_playlist,
     },
     manager::TranscodeRequest,
-    names::{is_valid_segment_name, is_valid_session_id},
+    names::{encode_query_value, is_valid_segment_name, is_valid_session_id},
     params::*,
 };
 
@@ -82,15 +82,18 @@ pub async fn get_master_playlist(
     let video_codec = parse_video_codec(params.video_codec.as_deref());
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
     let item_id_string = item_id.to_string();
-    let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
+    // Request values that are echoed into the playlist are encoded: a newline would
+    // otherwise add a line to it.
+    let media_source_id =
+        encode_query_value(params.media_source_id.as_deref().unwrap_or(&item_id_string));
 
     // Build extra query string for passthrough
     let mut extra_qs = String::new();
     if let Some(ref vc) = params.video_codec {
-        extra_qs.push_str(&format!("&VideoCodec={vc}"));
+        extra_qs.push_str(&format!("&VideoCodec={}", encode_query_value(vc)));
     }
     if let Some(ref ac) = params.audio_codec {
-        extra_qs.push_str(&format!("&AudioCodec={ac}"));
+        extra_qs.push_str(&format!("&AudioCodec={}", encode_query_value(ac)));
     }
     if let Some(br) = params.max_streaming_bitrate {
         extra_qs.push_str(&format!("&MaxStreamingBitrate={br}"));
@@ -115,7 +118,7 @@ pub async fn get_master_playlist(
         width: video_stream.and_then(|s| s.width),
         height: video_stream.and_then(|s| s.height),
         play_session_id,
-        media_source_id,
+        media_source_id: &media_source_id,
         query_string: &extra_qs,
     });
 
@@ -400,11 +403,12 @@ pub async fn get_audio_master_playlist(
 
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
     let item_id_string = item_id.to_string();
-    let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
+    let media_source_id =
+        encode_query_value(params.media_source_id.as_deref().unwrap_or(&item_id_string));
 
     let mut extra_qs = String::new();
     if let Some(ref ac) = params.audio_codec {
-        extra_qs.push_str(&format!("&AudioCodec={ac}"));
+        extra_qs.push_str(&format!("&AudioCodec={}", encode_query_value(ac)));
     }
     if let Some(br) = params.max_streaming_bitrate {
         extra_qs.push_str(&format!("&MaxStreamingBitrate={br}"));
@@ -415,7 +419,7 @@ pub async fn get_audio_master_playlist(
         audio_codec,
         params.max_streaming_bitrate,
         play_session_id,
-        media_source_id,
+        &media_source_id,
         &extra_qs,
     );
 

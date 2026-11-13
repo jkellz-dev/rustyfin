@@ -841,8 +841,9 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
   the cleanup at an arbitrary directory. Both names are now validated (`transcode::names`: letters, digits, `-`, `_`;
   segments `<stem>.<ext>`) with a 400 before any lookup, at the sink in `start_transcode`, and with a containment check
   on the segment path
-  - [ ] Follow-up: `MediaSourceId` and the codec query values are copied unescaped into the redirect and playlist URLs;
-        percent-encode them
+  - [x] `MediaSourceId` and the codec query values, echoed into generated playlists and the universal-audio redirect,
+        are percent-encoded (`transcode::names::encode_query_value`): a newline no longer adds a playlist line and a
+        control character no longer panics the redirect
 - [x] Verify library access enforcement on every item-returning endpoint. Item lists and `GET /Items/{id}` already
       enforced it; the routes that take an item id did not, so a user limited to one library could stream, read
       PlaybackInfo, mark played and browse the TV routes of any other library. They now share

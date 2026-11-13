@@ -43,6 +43,25 @@ pub fn is_valid_segment_name(name: &str) -> bool {
         && ext.bytes().all(|b| b.is_ascii_alphanumeric())
 }
 
+/// Percent-encodes a request value so it can be echoed into a URL's query string.
+///
+/// Keeps the RFC 3986 unreserved characters (letters, digits, `-`, `.`, `_`, `~`) and
+/// encodes every other byte, so a newline, a space, `&` or `#` in the input cannot
+/// end the value, add a parameter or add a line to a playlist.
+pub fn encode_query_value(value: &str) -> String {
+    use std::fmt::Write;
+
+    let mut out = String::with_capacity(value.len());
+    for b in value.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(char::from(b));
+        } else {
+            let _ = write!(out, "%{b:02X}");
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,5 +135,23 @@ mod tests {
         assert_eq!(session.parent(), Some(base));
         let segment = session.join("0.ts");
         assert_eq!(segment.parent(), Some(session.as_path()));
+    }
+
+    #[test]
+    fn query_values_keep_unreserved_characters_and_encode_the_rest() {
+        assert_eq!(encode_query_value("abc123"), "abc123");
+        assert_eq!(encode_query_value("a-b.c_d~e"), "a-b.c_d~e");
+        assert_eq!(encode_query_value("h264,hevc"), "h264%2Chevc");
+        assert_eq!(encode_query_value("a b"), "a%20b");
+        assert_eq!(encode_query_value("a&b=c#d"), "a%26b%3Dc%23d");
+        assert_eq!(encode_query_value("a\nb\r"), "a%0Ab%0D");
+        assert_eq!(encode_query_value("../x"), "..%2Fx");
+        assert_eq!(encode_query_value(""), "");
+    }
+
+    #[test]
+    fn query_values_encode_non_ascii_bytewise() {
+        assert_eq!(encode_query_value("é"), "%C3%A9");
+        assert_eq!(encode_query_value("\0"), "%00");
     }
 }
