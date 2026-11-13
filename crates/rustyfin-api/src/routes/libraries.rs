@@ -63,19 +63,42 @@ pub async fn get_user_views(
     let dtos: Vec<BaseItemDto> = libs
         .iter()
         .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
-        .map(|lib| BaseItemDto {
-            name: lib.name.clone(),
-            server_id: state.server_id.clone(),
-            id: lib.id,
-            item_type: "CollectionFolder".to_string(),
-            collection_type: Some(lib.library_type.clone()),
-            is_folder: true,
-            ..Default::default()
-        })
+        .map(|lib| collection_folder_dto(lib, &state.server_id))
         .collect();
 
     let total = dtos.len() as i32;
     Ok(Json(QueryResult::new(dtos, total)))
+}
+
+/// `GET /Library/MediaFolders`: every library root the caller may see, as items.
+/// The same objects as the views; Jellyfin's `isHidden` filter has nothing to
+/// filter here, so it is accepted and ignored.
+pub async fn get_media_folders(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    get_user_views(state, auth).await
+}
+
+/// A library as Jellyfin's `CollectionFolder` item.
+fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseItemDto {
+    BaseItemDto {
+        name: lib.name.clone(),
+        server_id: server_id.to_string(),
+        id: lib.id,
+        item_type: "CollectionFolder".to_string(),
+        collection_type: Some(lib.library_type.clone()),
+        is_folder: true,
+        sort_name: Some(lib.name.to_lowercase()),
+        path: lib.paths.first().cloned(),
+        date_created: Some(lib.created_at),
+        // Changes when the library is renamed or its paths or options change.
+        etag: Some(format!("{:x}", lib.updated_at.timestamp_millis())),
+        can_delete: Some(false),
+        can_download: Some(false),
+        location_type: Some("FileSystem".to_string()),
+        ..Default::default()
+    }
 }
 
 /// `GET /Users/{userId}/Views` — Legacy user views route.

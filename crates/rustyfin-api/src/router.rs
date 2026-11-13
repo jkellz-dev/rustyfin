@@ -139,6 +139,7 @@ pub fn build_router(state: AppState) -> Router {
                 .post(libraries::create_virtual_folder)
                 .delete(libraries::delete_virtual_folder),
         )
+        .route("/Library/MediaFolders", get(libraries::get_media_folders))
         .route("/Library/Refresh", post(libraries::refresh_library))
         .route("/Library/Schedules", get(libraries::get_schedules))
         .route(
@@ -167,6 +168,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         // ── Items ───────────────────────────────────────────────
         .route("/Items", get(items::get_items))
+        .route("/Items/Counts", get(items::get_item_counts))
         .route("/Items/Latest", get(items::get_latest_items))
         .route("/Items/{itemId}", get(items::get_item_by_id))
         .route("/Items/{itemId}/Refresh", post(items::refresh_item))

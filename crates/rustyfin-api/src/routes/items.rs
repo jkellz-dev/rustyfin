@@ -394,6 +394,22 @@ pub async fn get_items(
     Ok(Json(result))
 }
 
+/// `GET /Items/Counts`: items of each kind over the libraries the caller may see.
+pub async fn get_item_counts(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+) -> Result<Json<rustyfin_models::dto::ItemCounts>, ApiError> {
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?;
+    let rows = media_items::count_by_type(&state.pool, accessible.as_deref())
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(rustyfin_models::dto::ItemCounts::from_type_counts(
+        rows.iter().map(|(t, n)| (t.as_str(), *n)),
+    )))
+}
+
 /// `GET /Items/{itemId}` — Single item detail.
 pub async fn get_item_by_id(
     State(state): State<AppState>,

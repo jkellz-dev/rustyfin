@@ -518,6 +518,22 @@ pub async fn update_metadata(
 }
 
 /// Count all media items.
+/// Items per `item_type`, over `libraries` when given (items that belong to no
+/// library, such as collections, are always included), or over everything.
+pub async fn count_by_type(
+    pool: &PgPool,
+    libraries: Option<&[Uuid]>,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT item_type, COUNT(*) FROM media_items \
+         WHERE $1::uuid[] IS NULL OR library_id IS NULL OR library_id = ANY($1) \
+         GROUP BY item_type",
+    )
+    .bind(libraries.map(<[Uuid]>::to_vec))
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn count_all(pool: &PgPool) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM media_items")
         .fetch_one(pool)
