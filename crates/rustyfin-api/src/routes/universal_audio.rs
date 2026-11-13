@@ -31,9 +31,9 @@ pub async fn get_universal_audio(
     Path(item_id): Path<Uuid>,
     Query(params): Query<UniversalAudioParams>,
 ) -> Result<Response, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     // The id is written into the redirect URL below.
     let play_session_id = super::hls::session_id_param(params.play_session_id.as_deref())?;
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
 
     // Verify item exists
     let _item = media_items::find_by_id(&state.pool, item_id)
