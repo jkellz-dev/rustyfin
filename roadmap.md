@@ -931,13 +931,15 @@ Stubs re-evaluated for real implementation to support major Jellyfin clients (We
 Black-box tests that send the same requests to a real Jellyfin and to Rustyfin and compare the answers. The Rust
 tests check Rustyfin against what we believe Jellyfin does; this suite checks it against Jellyfin itself.
 
-- [ ] Choose how the two servers are run: a pinned Jellyfin container with a small fixed media set, and Rustyfin
-      scanning the same files; decide where it runs (builder Job in `hermes-sandbox`, and CI)
-- [ ] `tests/parity/` of [Hurl](https://hurl.dev) files, one per area (system, users, auth, libraries, items, images,
+- [x] Choose how the two servers are run: a pinned Jellyfin 10.10.7 pod and the published Rustyfin image in
+      `hermes-sandbox`, a `hurl-runner` pod beside them (the namespace fence blocks anything outside), both scanning
+      synthetic media from `tests/parity/media/make_media.sh`. Still to decide: running it in CI
+- [ ] `tests/parity/` of [Hurl](https://hurl.dev) files (first slice: system, users, library, playback, sessions;
+      generated from a real Jellyfin by `gen/record.py`), one per area (system, users, auth, libraries, items, images,
       playback info, sessions, playstate, search, collections, playlists, ...), each driven by `{{base_url}}` and
       `{{token}}` variables so the same file runs against either server
-- [ ] A mise task and hk-free runner that executes the suite against both servers and diffs the results, not just
-      asserts: status code, header names, JSON key set and value types per response
+- [x] A runner that executes the suite against both servers and reports the gaps (`tests/parity/run.py`): status code,
+      `Content-Type`, JSON key set and value kinds per response. Jellyfin must pass its own recording. No mise task yet
 - [ ] Normalisation for what legitimately differs (ids, timestamps, server name and version, ordering of unordered
       lists), kept in one file so each exemption is visible and has a reason
 - [ ] A known-differences list: every deliberate divergence (forward-auth only, no plugins, no LiveTV) is named
