@@ -132,7 +132,7 @@ pub struct BaseItemDto {
     pub official_rating: Option<String>,
     #[serde(default)]
     pub production_year: Option<i32>,
-    #[serde(default)]
+    #[serde(default, rename = "RunTimeTicks")]
     pub runtime_ticks: Option<i64>,
     #[serde(default)]
     pub genres: Vec<String>,

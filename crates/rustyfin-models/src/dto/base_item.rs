@@ -50,7 +50,7 @@ pub struct BaseItemDto {
     pub premiere_date: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "RunTimeTicks")]
     pub runtime_ticks: Option<i64>,
 
     // Collections
@@ -270,6 +270,7 @@ pub struct MediaSourceInfo {
     pub size: Option<i64>,
     pub name: Option<String>,
     pub bitrate: Option<i32>,
+    #[serde(rename = "RunTimeTicks")]
     pub runtime_ticks: Option<i64>,
     pub supports_direct_play: bool,
     pub supports_direct_stream: bool,

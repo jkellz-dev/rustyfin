@@ -59,6 +59,44 @@ pub struct ItemsQuery {
     pub enable_total_record_count: Option<bool>,
 }
 
+/// The caller's `UserData` for an item: their row when they have one, otherwise
+/// the zeros Jellyfin sends for an item they never touched. Clients read these
+/// fields without checking for their presence.
+pub(crate) fn user_data_dto(
+    item_id: Uuid,
+    row: Option<&user_data::UserDataRow>,
+) -> UserItemDataDto {
+    let mut dto = match row {
+        Some(ud) => UserItemDataDto {
+            playback_position_ticks: ud.playback_position_ticks,
+            play_count: ud.play_count,
+            is_favorite: ud.is_favorite,
+            played: ud.played,
+            rating: ud.rating,
+            likes: ud.rating.map(|r| r >= 6.5),
+            last_played_date: ud.last_played_date,
+            ..Default::default()
+        },
+        None => UserItemDataDto::default(),
+    };
+    dto.key = Some(item_id.simple().to_string());
+    dto.item_id = Some(item_id.to_string());
+    dto
+}
+
+/// Attach the caller's `UserData` to every item in one query. A failing lookup
+/// leaves the zeros in place and logs: the list is the answer, the user data is
+/// an extra.
+pub(crate) async fn attach_user_data(pool: &sqlx::PgPool, user_id: Uuid, dtos: &mut [BaseItemDto]) {
+    let ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
+    let rows = user_data::get_many(pool, user_id, &ids)
+        .await
+        .or_log_default("user_data::get_many");
+    for dto in dtos.iter_mut() {
+        dto.user_data = Some(user_data_dto(dto.id, rows.get(&dto.id)));
+    }
+}
+
 pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
     // Convert external_ids JSONB to provider_ids HashMap
     let provider_ids = item.external_ids.as_ref().and_then(|v| {

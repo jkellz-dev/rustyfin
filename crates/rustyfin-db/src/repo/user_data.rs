@@ -30,6 +30,26 @@ pub async fn get(
 }
 
 /// Upsert user data (playback position, played status, etc).
+/// The caller's rows for `item_ids`, keyed by item. Items the user never touched
+/// are simply absent.
+pub async fn get_many(
+    pool: &PgPool,
+    user_id: Uuid,
+    item_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, UserDataRow>, sqlx::Error> {
+    if item_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let rows = sqlx::query_as::<_, UserDataRow>(
+        "SELECT * FROM user_data WHERE user_id = $1 AND item_id = ANY($2)",
+    )
+    .bind(user_id)
+    .bind(item_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.item_id, r)).collect())
+}
+
 pub async fn upsert(
     pool: &PgPool,
     user_id: Uuid,
