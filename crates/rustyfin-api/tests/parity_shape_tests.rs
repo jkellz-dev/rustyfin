@@ -262,7 +262,6 @@ async fn media_sources_and_streams_carry_jellyfins_fields() {
 
     for (label, body) in [("item", &single), ("playbackinfo", &pb)] {
         let src = &has(body, "MediaSources")[0];
-        is_string(src, label);
         assert!(src.is_object(), "{label}: {body}");
         is_string(src, "Path");
         assert_eq!(has(src, "RunTimeTicks"), 54_000_000_000_i64, "{label}");
