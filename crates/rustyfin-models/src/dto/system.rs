@@ -90,3 +90,16 @@ pub struct TaskTriggerDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_runtime_ticks: Option<i64>,
 }
+
+/// One entry of `GET /System/Logs`, Jellyfin's `LogFile`.
+///
+/// Rustyfin logs to stdout only, so the list is always empty; the type exists so
+/// the response has the shape clients deserialize.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LogFileInfo {
+    pub date_created: chrono::DateTime<chrono::Utc>,
+    pub date_modified: chrono::DateTime<chrono::Utc>,
+    pub size: i64,
+    pub name: String,
+}

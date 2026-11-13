@@ -26,6 +26,8 @@ pub struct TestApp {
     pub pool: PgPool,
     pub schema: String,
     pub session_manager: Arc<SessionManager>,
+    /// What `POST /System/Shutdown` and `/System/Restart` fire.
+    pub shutdown: Arc<tokio::sync::Notify>,
 }
 
 impl TestApp {
@@ -85,6 +87,8 @@ impl TestApp {
             0,
         ));
 
+        let shutdown = Arc::new(tokio::sync::Notify::new());
+
         let state = AppState {
             pool: pool.clone(),
             server_id: "test-server-id".to_string(),
@@ -103,6 +107,7 @@ impl TestApp {
             people_cache_dir: None,
             user_image_url_template: None,
             task_scheduler: None,
+            shutdown: shutdown.clone(),
         };
 
         let router = build_router(state);
@@ -112,6 +117,7 @@ impl TestApp {
             pool,
             schema,
             session_manager,
+            shutdown,
         }
     }
 
@@ -259,6 +265,29 @@ impl TestApp {
             .header("Content-Type", "application/json")
             .header("X-Emby-Token", token)
             .body(Body::from(serde_json::to_vec(body).unwrap()))
+            .unwrap();
+
+        let response = self.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+
+        let body: Value = if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+        };
+
+        (status, body)
+    }
+
+    /// Send a POST request with no body and no auth token. Returns `(status, body_json)`.
+    pub async fn post_no_auth(&self, path: &str) -> (StatusCode, Value) {
+        let request = Request::builder()
+            .method("POST")
+            .uri(path)
+            .body(Body::empty())
             .unwrap();
 
         let response = self.router.clone().oneshot(request).await.unwrap();

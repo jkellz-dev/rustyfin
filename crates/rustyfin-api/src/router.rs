@@ -40,6 +40,9 @@ pub struct AppState {
     pub scan_schedules: serde_json::Value,
     pub user_image_url_template: Option<String>,
     pub task_scheduler: Option<Arc<rustyfin_core::TaskScheduler>>,
+    /// Fired by `POST /System/Shutdown` and `/System/Restart`; the server binary
+    /// waits on it to begin a graceful exit.
+    pub shutdown: Arc<tokio::sync::Notify>,
 }
 
 impl FromRef<AppState> for PgPool {
@@ -57,6 +60,10 @@ pub fn build_router(state: AppState) -> Router {
         // ── System (auth required) ──────────────────────────────
         .route("/System/Info", get(system::get_info))
         .route("/System/Stats", get(system::get_stats))
+        .route("/System/Shutdown", post(system::shutdown))
+        .route("/System/Restart", post(system::restart))
+        .route("/System/Logs", get(system::get_logs))
+        .route("/System/Logs/Log", get(system::get_log_file))
         .route(
             "/System/ActivityLog/Entries",
             get(activity_log::get_log_entries),

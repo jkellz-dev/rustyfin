@@ -288,6 +288,8 @@ async fn main() -> anyhow::Result<()> {
         serde_json::json!({ "Schedules": serde_json::Value::Object(map) })
     };
 
+    let shutdown = std::sync::Arc::new(tokio::sync::Notify::new());
+
     // Build application state
     let state = AppState {
         pool: db_pool,
@@ -307,6 +309,7 @@ async fn main() -> anyhow::Result<()> {
         scan_schedules,
         user_image_url_template: config.server.user_image_url_template,
         task_scheduler: task_scheduler_for_state,
+        shutdown: shutdown.clone(),
     };
 
     // Build router with all API routes
@@ -332,7 +335,40 @@ async fn main() -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal(shutdown))
     .await?;
 
     Ok(())
+}
+
+/// Resolves when the server should begin a graceful exit: Ctrl-C, SIGTERM (what
+/// the kubelet and systemd send), or `POST /System/Shutdown` / `/System/Restart`.
+async fn shutdown_signal(requested: std::sync::Arc<tokio::sync::Notify>) {
+    let ctrl_c = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!("cannot listen for Ctrl-C: {e}");
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut term) => {
+                term.recv().await;
+            }
+            Err(e) => {
+                tracing::error!("cannot listen for SIGTERM: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => tracing::info!("Ctrl-C received, shutting down"),
+        () = terminate => tracing::info!("SIGTERM received, shutting down"),
+        () = requested.notified() => tracing::info!("Shutdown requested, shutting down"),
+    }
 }

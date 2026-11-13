@@ -1,8 +1,15 @@
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 
 use rustyfin_auth::middleware::AdminUser;
 use rustyfin_db::repo::{libraries, media_items, users};
-use rustyfin_models::dto::{DashboardStats, PublicSystemInfo, StartupConfiguration, SystemInfo};
+use rustyfin_models::dto::{
+    DashboardStats, LogFileInfo, PublicSystemInfo, StartupConfiguration, SystemInfo,
+};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -99,4 +106,55 @@ pub async fn get_stats(
         user_count,
         item_count,
     }))
+}
+
+/// `POST /System/Shutdown` — Stop the server gracefully (admin only).
+///
+/// Answers 204 and then asks the server binary to drain in-flight requests and
+/// exit. Whatever supervises the process (the kubelet, systemd) decides whether it
+/// comes back.
+pub async fn shutdown(State(state): State<AppState>, _admin: AdminUser) -> StatusCode {
+    tracing::warn!("Shutdown requested through POST /System/Shutdown");
+    state.shutdown.notify_one();
+    StatusCode::NO_CONTENT
+}
+
+/// `POST /System/Restart` — Restart the server (admin only).
+///
+/// Rustyfin cannot re-execute itself, so this is a graceful exit and relies on the
+/// supervisor to start it again, which is how it is deployed. The effect is the
+/// same as [`shutdown`].
+pub async fn restart(State(state): State<AppState>, _admin: AdminUser) -> StatusCode {
+    tracing::warn!("Restart requested through POST /System/Restart");
+    state.shutdown.notify_one();
+    StatusCode::NO_CONTENT
+}
+
+/// `GET /System/Logs` — List log files (admin only).
+///
+/// Rustyfin writes its logs to stdout, where the container runtime collects them,
+/// so there are no files to list.
+pub async fn get_logs(_admin: AdminUser) -> Json<Vec<LogFileInfo>> {
+    Json(Vec::new())
+}
+
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "PascalCase", default)]
+pub struct LogFileQuery {
+    pub name: Option<String>,
+}
+
+/// `GET /System/Logs/Log?name=` — Read one log file (admin only).
+///
+/// A missing `name` is a 400. Since there are no log files, every name is a 404,
+/// including ones with path separators or `..`: the name is never used to open a
+/// file.
+pub async fn get_log_file(
+    _admin: AdminUser,
+    Query(query): Query<LogFileQuery>,
+) -> Result<StatusCode, ApiError> {
+    match query.name.as_deref().map(str::trim) {
+        None | Some("") => Err(ApiError::BadRequest("name is required".to_string())),
+        Some(_) => Err(ApiError::NotFound),
+    }
 }

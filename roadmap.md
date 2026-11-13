@@ -437,11 +437,14 @@ low-priority admin features.
 
 - [x] Images (3/30 → stubs for user/genre/studio/person/artist images; still missing upload/management)
 - [x] Sessions (9/16 → 10/16) — viewing stub added
-- [ ] Playback/Playstate (4/14) — start/progress/stop/ping covered; missing mark played via API
+- [x] Playback/Playstate (4/14 → 14/14) — start/progress/stop/ping, and mark played/unplayed and favorite via
+      `/UserPlayedItems`, `/Users/{id}/PlayedItems` and `/UserFavoriteItems` (covered by the Playstate parity tests)
 - [x] Users (7/18 → stubs for password/config/new-user) — forward auth boundary means some are no-ops
 - [x] Subtitles (3/10 → stubs for remote search/download)
 - [x] Genres/Studios/Persons (3/6 → 6/6) — individual GET by name implemented
-- [ ] System (6/10) — missing shutdown, restart, log file endpoints
+- [x] System (6/10 → 10/10) — `POST /System/Shutdown` and `/System/Restart` (admin only, 204, graceful exit; restart
+      relies on the supervisor), `GET /System/Logs` (empty: logs go to stdout) and `GET /System/Logs/Log` (400 without a
+      name, 404 for any name). The server now also drains on SIGTERM and Ctrl-C
 
 **New stubs added (Phase 11a):**
 
