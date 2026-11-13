@@ -22,7 +22,8 @@ env:
   # `.fingerprint` directory, so on 1.100 it found nothing, logged "No reusable
   # Cargo target state was produced" and never saved. This switch (temporary
   # in Cargo) restores the layout the action reads. Remove it once the action
-  # understands the new layout.
+  # understands the new layout. Workflow-wide so every Cargo invocation,
+  # including the ones trunk makes, writes the layout the action saves.
   __CARGO_TEMPORARY_BUILD_DIR_NEW_LAYOUT_OPT_OUT: 1
 
 jobs:
@@ -120,6 +121,21 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      # The frontend is its own Cargo workspace (excluded from the root one), so
+      # its outputs live in frontend/target: name that workspace or nothing is saved.
+      - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        with:
+          working-directory: frontend
+          cache-key-suffix: frontend
+
+      # trunk runs plain `cargo`, which would bypass mbx. `mbx setup` installs a
+      # Cargo shim that runs mbx; putting it first on PATH routes trunk's cargo
+      # through the cache (wasm32 links are cached too, they need no linker).
+      - name: Route plain cargo through mbx
+        run: |
+          mbx setup --yes
+          echo "$HOME/.local/share/mbx/bin" >> "$GITHUB_PATH"
+
       - name: Install trunk
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
@@ -127,7 +143,9 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        run: trunk build --release
+        run: |
+          command -v cargo   # must be the mbx shim, not ~/.cargo/bin/cargo
+          trunk build --release
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -138,24 +156,52 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     runs-on: ubuntu-latest
+    # The same Debian the containers run on (docker/*.Dockerfile: bookworm-slim),
+    # so the binaries link against the glibc they will find at runtime (2.36).
+    # `cross` used to do this inside its own Docker image, where mbx could not
+    # see the compiler; building here lets mbx cache every compilation.
+    container:
+      image: docker.io/library/rust:1.100.0-slim-bookworm@sha256:7c7d4eb4d05b7781187a327809466cfddf29753f6defdc3d19a0e291951b7a37
     if: github.event_name == 'push'
     needs: [lint, test-unit, test-integration, build-frontend]
     strategy:
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
+        include:
+          - target: x86_64-unknown-linux-gnu
+            cross_packages: ''
+          - target: aarch64-unknown-linux-gnu
+            cross_packages: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+    env:
+      # Only consulted when the target is aarch64: the linker for the final
+      # binaries, and the C toolchain for ring's and sqlite's build scripts.
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+      CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+      CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+      AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
     steps:
+      # Before checkout: the slim image has no git, and checkout wants one.
+      - name: Install build packages
+        env:
+          CROSS_PACKAGES: ${{ matrix.cross_packages }}
+        run: |
+          apt-get update -qq
+          # shellcheck disable=SC2086 # a space-separated package list on purpose
+          apt-get install -y -qq --no-install-recommends git ca-certificates pkg-config $CROSS_PACKAGES
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
+      # The image carries the pinned 1.100.0 toolchain (rust-toolchain.toml);
+      # only the cross target needs adding.
+      - name: Add target
+        env:
+          TARGET: ${{ matrix.target }}
+        run: rustup target add "$TARGET"
 
-      - name: Install cross
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+      - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          tool: cross
+          cache-key-suffix: build-${{ matrix.target }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -163,7 +209,9 @@ jobs:
           path: frontend/dist/
 
       - name: Build binaries
-        run: cross build --release --target ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: mbx build --release --locked --target "$TARGET"
 
       - name: Prepare artifacts
         run: |
