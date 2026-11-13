@@ -23,10 +23,11 @@ pub struct SimilarQuery {
 
 pub async fn get_similar(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(query): Query<SimilarQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let limit = query.limit.unwrap_or(12).min(50);
 
     let source = media_items::find_by_id(&state.pool, item_id)
@@ -37,6 +38,8 @@ pub async fn get_similar(
     let items = media_items::find_similar(&state.pool, item_id, &source.item_type, limit)
         .await
         .map_err(ApiError::Database)?;
+
+    let items = super::access::retain_accessible(&state, auth.user_id, items).await?;
 
     let total = items.len() as i32;
     let mut dtos: Vec<BaseItemDto> = items
@@ -82,6 +85,8 @@ pub async fn get_recommendations(
         }
     }
 
+    let mut all_similar =
+        super::access::retain_accessible(&state, auth.user_id, all_similar).await?;
     all_similar.truncate(20);
     let mut dtos: Vec<BaseItemDto> = all_similar
         .iter()

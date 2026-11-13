@@ -183,6 +183,7 @@ pub async fn get_seasons(
     Path(series_id): Path<Uuid>,
     Query(query): Query<SeasonsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, series_id).await?;
     let season_types = vec!["Season".to_string()];
     let items = media_items::list_by_parent(&state.pool, Some(series_id), &season_types, 0, 100)
         .await
@@ -248,6 +249,7 @@ pub async fn get_episodes(
     Path(series_id): Path<Uuid>,
     Query(query): Query<EpisodesQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, series_id).await?;
     let start = query.start_index.unwrap_or(0);
     let limit = query.limit.unwrap_or(100).min(500);
     let episode_types = vec!["Episode".to_string()];

@@ -43,6 +43,7 @@ pub async fn get_suggestions(
         media_items::get_random_items(&state.pool, auth.user_id, &item_types, &[], limit, offset)
             .await
             .map_err(ApiError::Database)?;
+    let items = super::access::retain_accessible(&state, auth.user_id, items).await?;
 
     let total = items.len() as i32;
     let mut dtos: Vec<BaseItemDto> = items

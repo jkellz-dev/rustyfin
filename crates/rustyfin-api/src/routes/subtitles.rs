@@ -16,27 +16,30 @@ use crate::router::AppState;
 /// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt`
 pub async fn get_subtitle_stream(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((item_id, stream_index)): Path<(Uuid, i32)>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     serve_subtitle(&state, item_id, stream_index, "vtt").await
 }
 
 /// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt`
 pub async fn get_subtitle_stream_with_source(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((item_id, _media_source_id, stream_index)): Path<(Uuid, String, i32)>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     serve_subtitle(&state, item_id, stream_index, "vtt").await
 }
 
 /// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}`
 pub async fn get_subtitle_stream_format(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((item_id, stream_index, format)): Path<(Uuid, i32, String)>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let fmt = subtitles::format_from_extension(&format);
     serve_subtitle(&state, item_id, stream_index, fmt).await
 }

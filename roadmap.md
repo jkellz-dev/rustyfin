@@ -833,7 +833,12 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
   on the segment path
   - [ ] Follow-up: `MediaSourceId` and the codec query values are copied unescaped into the redirect and playlist URLs;
         percent-encode them
-- [ ] Verify library access enforcement on every item-returning endpoint
+- [x] Verify library access enforcement on every item-returning endpoint. Item lists and `GET /Items/{id}` already
+      enforced it; the routes that take an item id did not, so a user limited to one library could stream, read
+      PlaybackInfo, mark played and browse the TV routes of any other library. They now share
+      `routes::access::require_item_access` (404, like Jellyfin), and suggestions, similar and recommendations are
+      filtered. Not covered: the image fetch routes (public by design, no auth) and HLS segments, which are keyed by
+      session id rather than item
 - [ ] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked)
 - [ ] Rate limiting on auth endpoints
 - [ ] Review CORS / header configuration

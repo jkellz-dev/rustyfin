@@ -18,6 +18,7 @@ pub async fn get_playback_info(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?
@@ -47,6 +48,7 @@ pub async fn post_playback_info(
     Path(item_id): Path<Uuid>,
     Json(body): Json<PlaybackInfoRequest>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?

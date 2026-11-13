@@ -1,3 +1,4 @@
+pub mod access;
 pub mod activity_log;
 pub mod api_keys;
 pub mod artists;

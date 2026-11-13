@@ -26,60 +26,66 @@ pub struct StreamQueryParams {
 /// `GET /Videos/{itemId}/stream` — Direct play video stream.
 pub async fn stream_video(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(_params): Query<StreamQueryParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     serve_item_file(&state, item_id, &headers).await
 }
 
 /// `GET /Videos/{itemId}/stream.{container}` — Direct play video stream with container suffix.
 pub async fn stream_video_container(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
     Query(_params): Query<StreamQueryParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     serve_item_file(&state, item_id, &headers).await
 }
 
 /// `GET /Audio/{itemId}/stream` — Direct play audio stream.
 pub async fn stream_audio(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     serve_item_file(&state, item_id, &headers).await
 }
 
 /// `GET /Audio/{itemId}/stream.{container}` — Direct play audio stream with container suffix.
 pub async fn stream_audio_container(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     serve_item_file(&state, item_id, &headers).await
 }
 
 /// `HEAD /Videos/{itemId}/stream` — Stream metadata without body.
 pub async fn head_stream(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     head_stream_inner(&state, item_id).await
 }
 
 /// `HEAD /Videos/{itemId}/stream.{container}` — Stream metadata without body (container variant).
 pub async fn head_stream_container(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     head_stream_inner(&state, item_id).await
 }
 

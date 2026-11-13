@@ -60,10 +60,11 @@ pub(super) fn session_id_param(raw: Option<&str>) -> Result<&str, ApiError> {
 /// `GET /Videos/{itemId}/master.m3u8` — HLS master playlist.
 pub async fn get_master_playlist(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let play_session_id = session_id_param(params.play_session_id.as_deref())?;
 
     let item = media_items::find_by_id(&state.pool, item_id)
@@ -134,6 +135,7 @@ pub async fn get_variant_playlist(
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let play_session_id = session_id_param(params.play_session_id.as_deref())?.to_string();
 
     let tm = &state.transcode_manager;
@@ -359,10 +361,11 @@ pub async fn head_master_playlist(_auth: AuthenticatedUser) -> Response {
 /// `GET /Audio/{itemId}/master.m3u8` — Audio HLS master playlist.
 pub async fn get_audio_master_playlist(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let play_session_id = session_id_param(params.play_session_id.as_deref())?;
 
     let _item = media_items::find_by_id(&state.pool, item_id)
@@ -406,6 +409,7 @@ pub async fn get_audio_variant_playlist(
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let play_session_id = session_id_param(params.play_session_id.as_deref())?.to_string();
 
     let tm = &state.transcode_manager;

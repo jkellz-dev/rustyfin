@@ -24,6 +24,7 @@ pub async fn mark_favorite(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = user_data::set_favorite(&state.pool, auth.user_id, item_id, true)
         .await
         .map_err(ApiError::Database)?;
@@ -36,6 +37,7 @@ pub async fn unmark_favorite(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = user_data::set_favorite(&state.pool, auth.user_id, item_id, false)
         .await
         .map_err(ApiError::Database)?;
@@ -48,6 +50,7 @@ pub async fn mark_played(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = user_data::set_played(&state.pool, auth.user_id, item_id, true)
         .await
         .map_err(ApiError::Database)?;
@@ -60,6 +63,7 @@ pub async fn mark_unplayed(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = user_data::set_played(&state.pool, auth.user_id, item_id, false)
         .await
         .map_err(ApiError::Database)?;
@@ -110,6 +114,7 @@ pub async fn update_rating(
     Path(item_id): Path<Uuid>,
     Query(params): Query<RatingParams>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = user_data::set_rating(&state.pool, auth.user_id, item_id, params.likes)
         .await
         .map_err(ApiError::Database)?;
@@ -121,6 +126,7 @@ pub async fn delete_rating(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = user_data::set_rating(&state.pool, auth.user_id, item_id, None)
         .await
         .map_err(ApiError::Database)?;

@@ -64,9 +64,10 @@ pub async fn get_item_image_by_index(
 /// `GET /Items/{itemId}/Images` -- List all images for an item.
 pub async fn get_item_images_list(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<Vec<ImageInfo>>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let item_images = images::list_by_item(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?;
