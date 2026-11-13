@@ -6,6 +6,7 @@ pub mod query_result;
 pub mod remote_control;
 pub mod session;
 pub mod system;
+pub mod theme_media;
 pub mod user;
 pub mod websocket;
 
@@ -17,5 +18,6 @@ pub use query_result::*;
 pub use remote_control::*;
 pub use session::*;
 pub use system::*;
+pub use theme_media::*;
 pub use user::*;
 pub use websocket::*;

@@ -32,6 +32,7 @@ pub mod studios;
 pub mod subtitles;
 pub mod suggestions;
 pub mod system;
+pub mod theme_media;
 pub mod universal_audio;
 pub mod user_data;
 pub mod users;

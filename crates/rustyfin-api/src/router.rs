@@ -411,6 +411,19 @@ pub fn build_router(state: AppState) -> Router {
             get(stubs::search_remote_subtitles).post(stubs::download_remote_subtitles),
         )
         .route("/Items/{itemId}/Similar", get(similar::get_similar))
+        .route(
+            "/Items/{itemId}/ThemeSongs",
+            get(theme_media::get_theme_songs),
+        )
+        .route(
+            "/Items/{itemId}/ThemeVideos",
+            get(theme_media::get_theme_videos),
+        )
+        .route(
+            "/Items/{itemId}/ThemeMedia",
+            get(theme_media::get_theme_media),
+        )
+        .route("/Items/{itemId}/Ancestors", get(theme_media::get_ancestors))
         .route("/Items/Suggestions", get(suggestions::get_suggestions))
         .route("/Movies/Recommendations", get(similar::get_recommendations))
         .route("/Artists", get(artists::get_artists))

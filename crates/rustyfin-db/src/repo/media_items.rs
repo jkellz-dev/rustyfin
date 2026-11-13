@@ -54,6 +54,36 @@ pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<MediaItemRow>,
         .await
 }
 
+/// The most parents `list_ancestors` will follow. Real libraries are a handful
+/// deep (library, series, season); this only bounds a corrupt, looping chain.
+pub const MAX_ANCESTOR_DEPTH: i32 = 64;
+
+/// The parents of an item, nearest first, ending at the top of its tree.
+///
+/// The item itself is not included. A looping `parent_id` chain stops after
+/// [`MAX_ANCESTOR_DEPTH`] rows instead of recursing forever.
+pub async fn list_ancestors(pool: &PgPool, id: Uuid) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        WITH RECURSIVE chain AS (
+            SELECT m.*, 1 AS depth
+            FROM media_items m
+            WHERE m.id = (SELECT parent_id FROM media_items WHERE id = $1)
+          UNION ALL
+            SELECT p.*, c.depth + 1
+            FROM media_items p
+            JOIN chain c ON p.id = c.parent_id
+            WHERE c.depth < $2
+        )
+        SELECT * FROM chain ORDER BY depth
+        "#,
+    )
+    .bind(id)
+    .bind(MAX_ANCESTOR_DEPTH)
+    .fetch_all(pool)
+    .await
+}
+
 /// List items by parent ID with pagination.
 pub async fn list_by_parent(
     pool: &PgPool,

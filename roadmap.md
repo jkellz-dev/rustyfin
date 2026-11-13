@@ -673,7 +673,9 @@ Postgres (not SQLite).
 
 **Library item routes parity** (from `LibraryControllerTests.cs`, 3 tests):
 
-- [ ] `GET /Items/{nonExistentId}/ThemeSongs`, `/ThemeVideos`, `/Ancestors` — 404 *(routes not implemented)*
+- [x] `GET /Items/{nonExistentId}/ThemeSongs`, `/ThemeVideos`, `/ThemeMedia`, `/Ancestors` — 404; an existing item
+      answers an empty `ThemeMediaResult` (with `OwnerId`), and `/Ancestors` returns the parent chain nearest-first,
+      bounded at 64 so a corrupt `parent_id` loop cannot hang the request
 - [x] `GET /Items/{nonExistentId}/Similar` — 404 (route exists, tested)
 - N/A `DELETE /Items/{id}` — server is read-only by design
 
