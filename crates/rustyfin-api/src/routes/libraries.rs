@@ -14,7 +14,7 @@ use rustyfin_models::dto::{
     UpdateLibraryRequest, VirtualFolderInfo,
 };
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 /// `GET /Library/Schedules` — Return configured scan schedules (admin only).
@@ -60,11 +60,19 @@ pub async fn get_user_views(
         .await
         .map_err(ApiError::Database)?;
 
-    let dtos: Vec<BaseItemDto> = libs
+    let mut dtos: Vec<BaseItemDto> = libs
         .iter()
         .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
         .map(|lib| collection_folder_dto(lib, &state.server_id))
         .collect();
+    for dto in &mut dtos {
+        let count =
+            rustyfin_db::repo::media_items::count_top_level_by_library(&state.pool, dto.id, &[])
+                .await
+                .or_log_default("media_items::count_top_level_by_library");
+        dto.child_count = Some(count as i32);
+    }
+    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
 
     let total = dtos.len() as i32;
     Ok(Json(QueryResult::new(dtos, total)))
@@ -78,6 +86,12 @@ pub async fn get_media_folders(
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     get_user_views(state, auth).await
+}
+
+/// Jellyfin hangs every library off one root folder; Rustyfin's is derived from
+/// the server id, so it is stable and the same on every route.
+fn root_folder_id(server_id: &str) -> uuid::Uuid {
+    uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, server_id.as_bytes())
 }
 
 /// A library as Jellyfin's `CollectionFolder` item.
@@ -98,6 +112,7 @@ fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseIt
         can_download: Some(false),
         location_type: Some("FileSystem".to_string()),
         media_type: Some("Unknown".to_string()),
+        parent_id: Some(root_folder_id(server_id)),
         ..Default::default()
     };
     super::items::with_jellyfin_defaults(&mut dto);

@@ -198,6 +198,16 @@ pub async fn get_seasons(
         }
     }
 
+    // A season names its series; its row carries only the parent link.
+    let series = media_items::find_by_id(&state.pool, series_id)
+        .await
+        .or_log_default("media_items::find_by_id");
+    if let Some(series) = series {
+        for dto in &mut dtos {
+            dto.series_id.get_or_insert(series_id);
+            dto.series_name.get_or_insert_with(|| series.name.clone());
+        }
+    }
     // Batch load child counts for seasons (they're folders)
     if !item_ids.is_empty() {
         let counts = media_items::count_children_batch(&state.pool, &item_ids)

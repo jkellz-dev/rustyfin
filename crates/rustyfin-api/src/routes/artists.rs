@@ -14,7 +14,9 @@ use rustyfin_models::dto::{BaseItemDto, QueryResult};
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 use crate::routes::images::{self as image_routes, ImageParams};
-use crate::routes::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
+use crate::routes::items::{
+    apply_images_to_dto, attach_user_data, group_images_by_item, media_item_to_dto,
+};
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -27,23 +29,24 @@ pub struct ArtistQuery {
 /// `GET /Artists` — Browsable artist list.
 pub async fn get_artists(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(params): Query<ArtistQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    get_artists_inner(&state, &params, false).await
+    get_artists_inner(&state, &auth, &params, false).await
 }
 
 /// `GET /Artists/AlbumArtists` — Only artists that have at least one album.
 pub async fn get_album_artists(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(params): Query<ArtistQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    get_artists_inner(&state, &params, true).await
+    get_artists_inner(&state, &auth, &params, true).await
 }
 
 async fn get_artists_inner(
     state: &AppState,
+    auth: &AuthenticatedUser,
     params: &ArtistQuery,
     album_artists_only: bool,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -80,6 +83,7 @@ async fn get_artists_inner(
             .ok();
         dtos.push(dto);
     }
+    attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
 
     let mut result = QueryResult::new(dtos, total as i32);
     result.start_index = start as i32;
