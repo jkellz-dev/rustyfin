@@ -161,7 +161,7 @@ async fn enrich_next_up_dtos(
     }
 
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        attach_user_data(&state.pool, auth.user_id, dtos).await;
     }
 }
 
@@ -370,6 +370,6 @@ async fn enrich_episode_dtos(
     }
 
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        attach_user_data(&state.pool, auth.user_id, dtos).await;
     }
 }
