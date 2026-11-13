@@ -480,8 +480,10 @@ low-priority admin features.
 - [x] Query-string keys are case-insensitive like ASP.NET: `query_case` middleware upper-cases the first letter, so
       camelCase `searchTerm`/`includeItemTypes` from real clients work (previously ignored or 400)
 - [x] `POST /Library/VirtualFolders` accepts Jellyfin's query-string form (`name`, `collectionType`, `paths`,
-      `refreshLibrary`, 204) alongside the admin UI's JSON-body form; also rename (`/Name`), add/update/remove media
-      path (`/Paths`, `/Paths/Update`), delete by `name`; 409 on duplicate names
+- [x] `LibraryOptions.Enabled = false` takes a library out of scanning: the manual refresh (all or by id), the scheduled
+      and startup scans, the manual scan task and the media-updated webhook all skip it. It stays listed and browsable;
+      only scanning stops `refreshLibrary`, 204) alongside the admin UI's JSON-body form; also rename (`/Name`),
+      add/update/remove media path (`/Paths`, `/Paths/Update`), delete by `name`; 409 on duplicate names
 - [x] Individual item endpoints: `GET /Genres/{name}`, `GET /Studios/{name}`, `GET /Persons/{name}` — implemented
 - [x] Image endpoint coverage: user avatars, person/genre/studio images — 404 stubs added
 

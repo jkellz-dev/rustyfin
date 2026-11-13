@@ -1190,3 +1190,94 @@ async fn libraries_touch_updated_at() {
 
     app.cleanup().await;
 }
+
+// ---------------------------------------------------------------------------
+// LibraryOptions.Enabled: a disabled library is not scanned
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn list_scannable_leaves_out_libraries_switched_off() {
+    let app = common::TestApp::new().await;
+    let paths = vec!["/tmp".to_string()];
+
+    let plain = libraries::create(&app.pool, "Plain", "movies", &paths)
+        .await
+        .expect("create plain");
+    let on = libraries::create_with_options(
+        &app.pool,
+        "On",
+        "movies",
+        &paths,
+        &serde_json::json!({ "Enabled": true }),
+    )
+    .await
+    .expect("create enabled");
+    let unrelated = libraries::create_with_options(
+        &app.pool,
+        "Other options",
+        "movies",
+        &paths,
+        &serde_json::json!({ "SaveLocalMetadata": true }),
+    )
+    .await
+    .expect("create with unrelated options");
+    let off = libraries::create_with_options(
+        &app.pool,
+        "Off",
+        "movies",
+        &paths,
+        &serde_json::json!({ "Enabled": false }),
+    )
+    .await
+    .expect("create disabled");
+
+    let scannable: Vec<_> = libraries::list_scannable(&app.pool)
+        .await
+        .expect("list_scannable")
+        .into_iter()
+        .map(|l| l.id)
+        .collect();
+
+    assert!(scannable.contains(&plain.id), "no options means enabled");
+    assert!(scannable.contains(&on.id), "Enabled=true");
+    assert!(scannable.contains(&unrelated.id), "options without Enabled");
+    assert!(
+        !scannable.contains(&off.id),
+        "Enabled=false must not be scanned"
+    );
+
+    // It is still a library: listing and lookup are unaffected.
+    let all = libraries::list_all(&app.pool).await.expect("list_all");
+    assert!(all.iter().any(|l| l.id == off.id));
+
+    assert!(plain.scanning_enabled());
+    assert!(on.scanning_enabled());
+    assert!(unrelated.scanning_enabled());
+    assert!(!off.scanning_enabled());
+
+    app.cleanup().await;
+}
+
+/// `Enabled` can be flipped through the options route and takes effect at once.
+#[tokio::test]
+async fn switching_a_library_off_and_on_through_the_options_route() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("admin", true).await;
+    let lib = app.create_library("Movies", "movies").await;
+
+    for (enabled, expect_scannable) in [(false, false), (true, true)] {
+        let body = serde_json::json!({ "Id": lib, "LibraryOptions": { "Enabled": enabled } });
+        let (status, _) = app
+            .post("/Library/VirtualFolders/LibraryOptions", &body, &token)
+            .await;
+        assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+
+        let scannable = libraries::list_scannable(&app.pool).await.expect("list");
+        assert_eq!(
+            scannable.iter().any(|l| l.id == lib),
+            expect_scannable,
+            "Enabled={enabled}"
+        );
+    }
+    app.cleanup().await;
+}

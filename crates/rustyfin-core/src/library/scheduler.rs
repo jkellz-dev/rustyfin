@@ -271,7 +271,7 @@ impl TaskScheduler {
 
     /// Fire library scans for all libraries assigned to a given schedule.
     async fn fire_library_scans_for_schedule(&self, schedule_name: &str, jitter: u64) {
-        let libraries = match libraries::list_all(&self.pool).await {
+        let libraries = match libraries::list_scannable(&self.pool).await {
             Ok(libs) => libs,
             Err(e) => {
                 tracing::error!("Failed to query libraries for scheduled scan: {e}");
@@ -361,7 +361,7 @@ impl TaskScheduler {
 
     /// Fire scans for ALL libraries (used for run_on_startup).
     async fn fire_all_library_scans(&self) {
-        let libraries = match libraries::list_all(&self.pool).await {
+        let libraries = match libraries::list_scannable(&self.pool).await {
             Ok(libs) => libs,
             Err(e) => {
                 tracing::error!("Failed to query libraries for startup scan: {e}");
@@ -501,7 +501,7 @@ impl TaskScheduler {
                     task_results::insert_running(&pool, "library_scan", "Scan All Libraries")
                         .await
                         .unwrap_or(-1);
-                let libs = match libraries::list_all(&pool).await {
+                let libs = match libraries::list_scannable(&pool).await {
                     Ok(libs) => libs,
                     Err(e) => {
                         tracing::error!("Manual library scan failed to query libraries: {e}");

@@ -22,6 +22,29 @@ pub async fn list_all(pool: &PgPool) -> Result<Vec<LibraryRow>, sqlx::Error> {
         .await
 }
 
+/// Libraries that scans may touch: every library except those a client switched
+/// off with `LibraryOptions.Enabled = false`. A library with no stored options, or
+/// with options that do not mention `Enabled`, is enabled.
+pub async fn list_scannable(pool: &PgPool) -> Result<Vec<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRow>(
+        "SELECT * FROM libraries \
+         WHERE library_options->>'Enabled' IS DISTINCT FROM 'false' \
+         ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+impl LibraryRow {
+    /// False when a client switched the library off with `LibraryOptions.Enabled`.
+    pub fn scanning_enabled(&self) -> bool {
+        self.library_options
+            .get("Enabled")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true)
+    }
+}
+
 /// Find a library by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<LibraryRow>, sqlx::Error> {
     sqlx::query_as::<_, LibraryRow>("SELECT * FROM libraries WHERE id = $1")

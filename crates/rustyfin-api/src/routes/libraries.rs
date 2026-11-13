@@ -114,6 +114,21 @@ pub async fn get_virtual_folders(
 
 /// Start background scans for `libs`, skipping any already in flight.
 async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
+    // A library a client switched off (LibraryOptions.Enabled = false) is not scanned,
+    // even when it is asked for by id.
+    let libs: Vec<_> = libs
+        .into_iter()
+        .filter(|lib| {
+            if !lib.scanning_enabled() {
+                tracing::info!(
+                    "Skipping manual scan for '{}': library is disabled",
+                    lib.name
+                );
+            }
+            lib.scanning_enabled()
+        })
+        .collect();
+
     // Filter out libraries already being scanned
     let mut libs_to_scan = Vec::new();
     {

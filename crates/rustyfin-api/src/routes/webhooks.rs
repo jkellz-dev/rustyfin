@@ -28,7 +28,7 @@ pub async fn post_updated_media(
     _api_key: ApiKeyUser,
     Json(dto): Json<MediaUpdateInfoDto>,
 ) -> Result<StatusCode, ApiError> {
-    let libs = libraries::list_all(&state.pool)
+    let libs = libraries::list_scannable(&state.pool)
         .await
         .map_err(ApiError::Database)?;
 
