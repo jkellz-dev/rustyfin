@@ -10,7 +10,7 @@ use rustyfin_db::repo::{images, media_items};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 #[derive(Debug, Deserialize, Default)]
@@ -51,7 +51,7 @@ pub async fn get_similar(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {
@@ -69,7 +69,7 @@ pub async fn get_recommendations(
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
     let recent = media_items::get_active_series_or_movies(&state.pool, auth.user_id, "Movie", 5)
         .await
-        .unwrap_or_default();
+        .map_err(ApiError::Database)?;
 
     let mut all_similar = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
@@ -77,7 +77,7 @@ pub async fn get_recommendations(
     for movie_id in recent {
         let similar = media_items::find_similar(&state.pool, movie_id, "Movie", 10)
             .await
-            .unwrap_or_default();
+            .map_err(ApiError::Database)?;
         for item in similar {
             if seen_ids.insert(item.id) {
                 all_similar.push(item);
@@ -97,7 +97,7 @@ pub async fn get_recommendations(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {

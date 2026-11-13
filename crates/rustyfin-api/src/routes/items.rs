@@ -20,7 +20,7 @@ use rustyfin_models::dto::{
     UserItemDataDto,
 };
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 /// Query parameters for `GET /Items`.
@@ -363,7 +363,7 @@ pub async fn get_items(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {
@@ -377,7 +377,7 @@ pub async fn get_items(
     if !folder_ids.is_empty() {
         let counts = media_items::count_children_batch(&state.pool, &folder_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("media_items::count_children_batch");
         for dto in &mut dtos {
             if let Some(&count) = counts.get(&dto.id) {
                 dto.child_count = Some(count as i32);
@@ -436,19 +436,19 @@ pub async fn get_item_by_id(
     // Load images
     let item_images = images::list_by_item(&state.pool, item_id)
         .await
-        .unwrap_or_default();
+        .or_log_default("images::list_by_item");
     apply_images_to_dto(&mut dto, &item_images);
 
     // Load people for single-item detail
     let people_rows = people::list_by_item(&state.pool, item_id)
         .await
-        .unwrap_or_default();
+        .or_log_default("people::list_by_item");
     if !people_rows.is_empty() {
         // Batch-check which people have Primary images
         let person_ids: Vec<Uuid> = people_rows.iter().map(|(p, _, _)| p.id).collect();
         let person_images = images::list_by_items(&state.pool, &person_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let people_with_images: std::collections::HashSet<Uuid> = person_images
             .iter()
             .filter(|img| img.image_type == "Primary")
@@ -488,7 +488,7 @@ pub async fn get_item_by_id(
     if !item.is_folder {
         let streams = media_streams::list_by_item(&state.pool, item_id)
             .await
-            .unwrap_or_default();
+            .or_log_default("media_streams::list_by_item");
         if !streams.is_empty() {
             let media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
             let source = MediaSourceInfo {
@@ -523,7 +523,7 @@ pub async fn get_item_by_id(
     if !item.is_folder {
         let chapter_rows = chapters::list_by_item(&state.pool, item_id)
             .await
-            .unwrap_or_default();
+            .or_log_default("chapters::list_by_item");
         if !chapter_rows.is_empty() {
             dto.chapters = Some(
                 chapter_rows
@@ -577,7 +577,7 @@ pub async fn get_latest_items(
         // Get latest across all libraries
         media_items::latest_by_library(&state.pool, Uuid::nil(), limit)
             .await
-            .unwrap_or_default()
+            .map_err(ApiError::Database)?
     };
 
     // Filter by library access
@@ -600,7 +600,7 @@ pub async fn get_latest_items(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {
@@ -657,7 +657,7 @@ pub async fn get_resume_items(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {

@@ -12,7 +12,7 @@ use rustyfin_db::repo::{images, media_items, user_data};
 use rustyfin_models::dto::{BaseItemDto, QueryResult, UserItemDataDto};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 #[derive(Debug, Deserialize, Default)]
@@ -149,7 +149,7 @@ async fn enrich_next_up_dtos(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in dtos.iter_mut() {
             if let Some(item_images) = images_map.get(&dto.id) {
@@ -200,7 +200,7 @@ pub async fn get_seasons(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {
@@ -213,7 +213,7 @@ pub async fn get_seasons(
     if !item_ids.is_empty() {
         let counts = media_items::count_children_batch(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("media_items::count_children_batch");
         for dto in &mut dtos {
             if let Some(&count) = counts.get(&dto.id) {
                 dto.child_count = Some(count as i32);
@@ -286,7 +286,7 @@ pub async fn get_episodes(
             let eps =
                 media_items::list_by_parent(&state.pool, Some(season.id), &episode_types, 0, 500)
                     .await
-                    .unwrap_or_default();
+                    .map_err(ApiError::Database)?;
             all_episodes.extend(eps);
         }
 
@@ -352,7 +352,7 @@ pub async fn get_upcoming(
     let images_map = if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         group_images_by_item(all_images)
     } else {
         HashMap::new()
@@ -384,7 +384,7 @@ async fn enrich_episode_dtos(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
         for dto in dtos.iter_mut() {
             if let Some(item_images) = images_map.get(&dto.id) {

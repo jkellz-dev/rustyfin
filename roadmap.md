@@ -807,7 +807,11 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 
 ### 11c. Error Handling & Edge Cases
 
-- [ ] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface?
+- [x] Audit every `unwrap_or_default()` — are we silently swallowing errors that should surface? 34 sites hid a database
+      error behind a success. The 9 that fetch the route's own data (the filters, latest items, recommendations,
+      episodes per season) now fail with 500; the 25 that fetch optional extras (images, people, streams, chapters,
+      counts) degrade through `DegradeExt::or_log_default`, which logs a warning. The remaining `unwrap_or_default()`
+      calls are on `Option`s and parse results, not queries
 - [x] Verify 404 vs 403 vs 401 is correct for all auth failure modes. Anonymous: a test sweeps every route in
       `router.rs` with GET, POST and DELETE and no credentials and allows only a reasoned list of public routes; it
       found `GET /System/Info` (documented as requiring auth, had no extractor) answering anyone. Hidden item or

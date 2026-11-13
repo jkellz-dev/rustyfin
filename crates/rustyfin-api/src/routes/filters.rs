@@ -29,16 +29,16 @@ pub async fn get_filters_legacy(
 
     let genres = media_items::distinct_genres(&state.pool, parent_id)
         .await
-        .unwrap_or_default();
+        .map_err(ApiError::Database)?;
     let years = media_items::distinct_years(&state.pool, parent_id)
         .await
-        .unwrap_or_default();
+        .map_err(ApiError::Database)?;
     let official_ratings = media_items::distinct_official_ratings(&state.pool, parent_id)
         .await
-        .unwrap_or_default();
+        .map_err(ApiError::Database)?;
     let tags = media_items::distinct_tags(&state.pool, parent_id)
         .await
-        .unwrap_or_default();
+        .map_err(ApiError::Database)?;
 
     Ok(Json(QueryFiltersLegacy {
         genres,
@@ -58,7 +58,7 @@ pub async fn get_filters(
 
     let genre_names = media_items::distinct_genres(&state.pool, parent_id)
         .await
-        .unwrap_or_default();
+        .map_err(ApiError::Database)?;
 
     let genres = genre_names
         .into_iter()

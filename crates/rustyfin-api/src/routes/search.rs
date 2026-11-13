@@ -9,7 +9,7 @@ use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::{images, user_library_access};
 use rustyfin_models::dto::{SearchHint, SearchHintResult};
 
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -83,7 +83,7 @@ pub async fn search_hints(
     if !item_ids.is_empty() {
         let all_images = images::list_by_items(&state.pool, &item_ids)
             .await
-            .unwrap_or_default();
+            .or_log_default("images::list_by_items");
 
         // Group by item_id
         let mut images_map: std::collections::HashMap<Uuid, Vec<_>> =

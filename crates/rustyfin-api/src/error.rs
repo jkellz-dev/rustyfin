@@ -28,6 +28,25 @@ pub enum ApiError {
     Internal(String),
 }
 
+/// Lets a handler carry on without optional data (images, counts, people) when its
+/// query fails, while saying so in the log.
+///
+/// This is for extras only. The data a route exists to return must use `?`, because
+/// `.unwrap_or_default()` turns a database failure into an empty `200` that clients
+/// cannot tell apart from a genuinely empty library.
+pub trait DegradeExt<T> {
+    fn or_log_default(self, what: &str) -> T;
+}
+
+impl<T: Default> DegradeExt<T> for Result<T, sqlx::Error> {
+    fn or_log_default(self, what: &str) -> T {
+        self.unwrap_or_else(|e| {
+            tracing::warn!("{what} failed, continuing without it: {e}");
+            T::default()
+        })
+    }
+}
+
 /// Postgres SQLSTATE for `foreign_key_violation`.
 const PG_FOREIGN_KEY_VIOLATION: &str = "23503";
 
