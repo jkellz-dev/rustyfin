@@ -336,23 +336,8 @@ pub async fn get_items(
         0
     };
 
-    // Filter items by library access for non-library-scoped queries
-    let items: Vec<_> = if !is_library && accessible.is_some() {
-        items
-            .into_iter()
-            .filter(|i| {
-                i.library_id
-                    .is_none_or(|lid| accessible.as_ref().unwrap().contains(&lid))
-            })
-            .collect()
-    } else {
-        items
-    };
-    let total = if !is_library && accessible.is_some() {
-        items.len() as i64
-    } else {
-        total
-    };
+    // Library access is applied in the query (`accessible_libraries`), so `items` and
+    // `total` already cover only what this user may see.
 
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
