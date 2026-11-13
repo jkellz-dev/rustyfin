@@ -219,9 +219,12 @@ jobs:
       - name: Build binaries
         env:
           TARGET: ${{ matrix.target }}
-          # Diagnostic for one run: why does a warm restore still rebuild ~80 deps?
-          CARGO_LOG: cargo::core::compiler::fingerprint=info
+          # Full per-crate cache report: why a warm restore still recompiles deps.
+          MBX_SUMMARY: full
         run: mbx build --release --locked --target "$TARGET"
+      - name: Explain uncached work
+        if: always()
+        run: mbx analyze || true
 
       - name: Prepare artifacts
         run: |
