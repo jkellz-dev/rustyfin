@@ -1,6 +1,7 @@
 # Rustyfin Documentation
 
-Rustyfin is a Jellyfin-compatible media server written in Rust. Existing Jellyfin clients (web UI, Infuse, Swiftfin, Jellyfin Media Player) connect to it seamlessly.
+Rustyfin is a Jellyfin-compatible media server written in Rust. Existing Jellyfin clients (web UI, Infuse, Swiftfin,
+Jellyfin Media Player) connect to it seamlessly.
 
 ## Documentation Index
 
@@ -32,9 +33,11 @@ cargo run --bin rustyfin-server
 
 ## Key Design Decisions
 
-- **Authentication**: Forward auth only --- a reverse proxy (Authelia, Authentik, etc.) handles user authentication. No local passwords, no OIDC.
+- **Authentication**: Forward auth only --- a reverse proxy (Authelia, Authentik, etc.) handles user authentication. No
+  local passwords, no OIDC.
 - **Database**: PostgreSQL via sqlx with runtime migrations.
-- **API Compatibility**: All JSON responses use PascalCase to match Jellyfin's format. Legacy routes preserved for client compatibility.
+- **API Compatibility**: All JSON responses use PascalCase to match Jellyfin's format. Legacy routes preserved for
+  client compatibility.
 - **Frontend**: Sycamore (Rust WASM) admin UI embedded into the binary via `rust-embed`.
 - **Single Binary**: The server, API, and frontend are compiled into one binary with no external file dependencies.
 - **Search**: Optional Meilisearch integration; falls back to Postgres `ILIKE`.

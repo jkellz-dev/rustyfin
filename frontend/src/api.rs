@@ -120,7 +120,9 @@ async fn post_empty(path: &str) -> Result<(), String> {
 }
 
 fn url_encode(s: &str) -> String {
-    js_sys::encode_uri_component(s).as_string().unwrap_or_default()
+    js_sys::encode_uri_component(s)
+        .as_string()
+        .unwrap_or_default()
 }
 
 // ── Public API Functions ────────────────────────────────
@@ -178,10 +180,7 @@ pub async fn delete_user(id: &str) -> Result<(), String> {
     delete_path(&format!("/Users/{id}")).await
 }
 
-pub async fn update_user_policy(
-    id: &str,
-    req: &UpdateUserPolicyRequest,
-) -> Result<(), String> {
+pub async fn update_user_policy(id: &str, req: &UpdateUserPolicyRequest) -> Result<(), String> {
     post_json(&format!("/Users/{id}/Policy"), req).await
 }
 

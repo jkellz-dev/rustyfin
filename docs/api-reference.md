@@ -1,6 +1,7 @@
 # API Reference
 
-All endpoints return JSON with PascalCase field names. Authenticated endpoints require a valid token via one of the [supported auth methods](authentication.md).
+All endpoints return JSON with PascalCase field names. Authenticated endpoints require a valid token via one of the
+[supported auth methods](authentication.md).
 
 ## System
 
@@ -9,6 +10,7 @@ All endpoints return JSON with PascalCase field names. Authenticated endpoints r
 Server discovery. No authentication required.
 
 **Response** `200 OK`:
+
 ```json
 {
   "LocalAddress": "https://media.example.com",
@@ -27,6 +29,7 @@ Server discovery. No authentication required.
 Full system information. Requires authentication.
 
 **Response** `200 OK`:
+
 ```json
 {
   "LocalAddress": "https://media.example.com",
@@ -58,6 +61,7 @@ Full system information. Requires authentication.
 Dashboard statistics. Requires admin.
 
 **Response** `200 OK`:
+
 ```json
 {
   "LibraryCount": 3,
@@ -79,6 +83,7 @@ Health check. No authentication. Returns the server name as plain text.
 Check if the setup wizard has been completed (i.e., libraries exist).
 
 **Response** `200 OK`:
+
 ```json
 {
   "StartupWizardCompleted": false
@@ -100,11 +105,13 @@ Mark startup as complete. No-op (library existence is the actual check).
 Create a session. Requires MediaBrowser header with device info.
 
 **Headers**:
-```
+
+```text
 Authorization: MediaBrowser Client="My App", Device="Desktop", DeviceId="abc123", Version="1.0"
 ```
 
 **Request Body**:
+
 ```json
 {
   "Username": "john",
@@ -112,9 +119,11 @@ Authorization: MediaBrowser Client="My App", Device="Desktop", DeviceId="abc123"
 }
 ```
 
-The password field is ignored (forward auth handles authentication). The username is matched against forward auth headers or existing users.
+The password field is ignored (forward auth handles authentication). The username is matched against forward auth
+headers or existing users.
 
 **Response** `200 OK`:
+
 ```json
 {
   "User": { "Name": "john", "Id": "...", "Policy": { "IsAdministrator": true, ... }, ... },
@@ -132,6 +141,7 @@ The password field is ignored (forward auth handles authentication). The usernam
 List all users. Requires authentication.
 
 **Response** `200 OK`:
+
 ```json
 [
   {
@@ -181,6 +191,7 @@ Delete a user. Requires admin. Cannot delete yourself.
 **Response**: `204 No Content`
 
 **Errors**:
+
 - `400` --- attempting to delete yourself
 - `404` --- user not found
 
@@ -189,6 +200,7 @@ Delete a user. Requires admin. Cannot delete yourself.
 Update a user's admin policy. Requires admin.
 
 **Request Body**:
+
 ```json
 {
   "IsAdministrator": true
@@ -206,6 +218,7 @@ Update a user's admin policy. Requires admin.
 Get library root views. Requires authentication. Returns libraries as `CollectionFolder` items.
 
 **Response** `200 OK`:
+
 ```json
 {
   "Items": [
@@ -232,6 +245,7 @@ Legacy route. Same as `/UserViews`.
 List all libraries with their paths. Requires authentication.
 
 **Response** `200 OK`:
+
 ```json
 [
   {
@@ -258,6 +272,7 @@ List all libraries with their paths. Requires authentication.
 Create a new library. Requires admin.
 
 **Request Body**:
+
 ```json
 {
   "Name": "Movies",
@@ -276,7 +291,8 @@ Delete a library. Requires admin.
 
 ### `POST /Library/Refresh?Id={uuid}`
 
-Trigger a library scan. Requires authentication. If `Id` is omitted, scans all libraries. The scan runs asynchronously in the background.
+Trigger a library scan. Requires authentication. If `Id` is omitted, scans all libraries. The scan runs asynchronously
+in the background.
 
 **Response**: `204 No Content`
 
@@ -289,6 +305,7 @@ Trigger a library scan. Requires authentication. If `Id` is omitted, scans all l
 Query items with filters and pagination.
 
 **Query Parameters**:
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `ParentId` | UUID | Filter by parent item |
@@ -301,6 +318,7 @@ Query items with filters and pagination.
 | `Fields` | String | Extra fields to include |
 
 **Response** `200 OK`:
+
 ```json
 {
   "Items": [
@@ -359,6 +377,7 @@ Get items with in-progress playback for the current user.
 Serve an item's image. No authentication required.
 
 **Path Parameters**:
+
 - `imageType`: `Primary`, `Backdrop`, `Banner`, `Logo`, `Thumb`, `Art`, `Disc`
 
 **Response**: Image bytes with appropriate `Content-Type` header.
@@ -376,6 +395,7 @@ Serve a specific image when multiple exist (e.g., multiple backdrops).
 Get playback information for an item.
 
 **Response** `200 OK`:
+
 ```json
 {
   "MediaSources": [
@@ -419,9 +439,11 @@ Get playback information for an item.
 
 ### `POST /Items/{itemId}/PlaybackInfo`
 
-Same as GET but accepts a device profile in the request body. The server compares the source media against the profile to decide direct play vs transcode.
+Same as GET but accepts a device profile in the request body. The server compares the source media against the profile
+to decide direct play vs transcode.
 
 **Request Body**:
+
 ```json
 {
   "DeviceProfile": {
@@ -440,6 +462,7 @@ Same as GET but accepts a device profile in the request body. The server compare
 ```
 
 When transcoding is needed, the response includes:
+
 ```json
 {
   "MediaSources": [{
@@ -461,6 +484,7 @@ When transcoding is needed, the response includes:
 Direct play a video file. Supports HTTP Range requests for seeking.
 
 **Query Parameters**:
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `static` | bool | If `true`, always direct play |
@@ -468,9 +492,11 @@ Direct play a video file. Supports HTTP Range requests for seeking.
 | `PlaySessionId` | String | Playback session identifier |
 
 **Headers**:
+
 - `Range: bytes=0-` --- standard HTTP Range header
 
 **Response**: `200 OK` (full file) or `206 Partial Content` (range request) with:
+
 - `Content-Type`: video MIME type
 - `Content-Length`: byte count
 - `Content-Range`: `bytes START-END/TOTAL` (for 206)
@@ -497,6 +523,7 @@ Direct play an audio file. Same Range support as video.
 HLS master playlist for video transcoding. Requires authentication.
 
 **Query Parameters**:
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `MediaSourceId` | String | Media source identifier |
@@ -513,7 +540,8 @@ HLS master playlist for video transcoding. Requires authentication.
 | `SegmentContainer` | String | `ts` or `mp4` |
 
 **Response** `200 OK` (`application/x-mpegURL`):
-```
+
+```text
 #EXTM3U
 #EXT-X-STREAM-INF:BANDWIDTH=8000000,RESOLUTION=1920x1080,CODECS="avc1.640029,mp4a.40.2"
 /Videos/{itemId}/main.m3u8?PlaySessionId=...&...
@@ -538,6 +566,7 @@ Serve an HLS segment. Waits for ffmpeg to produce the segment if not yet availab
 Kill an active transcode job.
 
 **Query Parameters**:
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `DeviceId` | String | Device to kill transcodes for |
@@ -558,6 +587,7 @@ Audio equivalents of the above:
 Universal audio endpoint. Redirects to HLS transcoding or direct stream based on query parameters.
 
 **Query Parameters**:
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `Container` | String | Requested container format |
@@ -604,6 +634,7 @@ End the current session.
 Report playback started.
 
 **Request Body**:
+
 ```json
 {
   "ItemId": "...",
@@ -618,6 +649,7 @@ Report playback started.
 Report playback progress (periodic updates).
 
 **Request Body**:
+
 ```json
 {
   "ItemId": "...",
@@ -631,6 +663,7 @@ Report playback progress (periodic updates).
 Report playback stopped.
 
 **Request Body**:
+
 ```json
 {
   "ItemId": "...",
@@ -667,6 +700,7 @@ Mark an item as unplayed.
 ### Legacy Routes
 
 All four operations also available at:
+
 - `POST /Users/{userId}/FavoriteItems/{itemId}`
 - `DELETE /Users/{userId}/FavoriteItems/{itemId}`
 - `POST /Users/{userId}/PlayedItems/{itemId}`
@@ -681,6 +715,7 @@ All four operations also available at:
 Search for items by name.
 
 **Query Parameters**:
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `SearchTerm` | String | Search query (required) |
@@ -688,6 +723,7 @@ Search for items by name.
 | `IncludeItemTypes` | String | Filter by item types |
 
 **Response** `200 OK`:
+
 ```json
 {
   "SearchHints": [
@@ -714,6 +750,7 @@ WebSocket connection for real-time updates.
 **Authentication**: Via `api_key` query parameter (validated against sessions table).
 
 **Server Messages**:
+
 ```json
 {
   "MessageType": "ForceKeepAlive",
@@ -724,6 +761,7 @@ WebSocket connection for real-time updates.
 Sent every 45 seconds. Client must respond within 60 seconds.
 
 **Client Messages**:
+
 ```json
 {
   "MessageType": "KeepAlive"
@@ -739,6 +777,7 @@ Sent every 45 seconds. Client must respond within 60 seconds.
 Returns branding options. No authentication.
 
 **Response** `200 OK`:
+
 ```json
 {
   "LoginDisclaimer": "",

@@ -1,18 +1,19 @@
 # Streaming & Media
 
-Rustyfin supports **direct play** and **HLS transcoding**. Media files are served directly when the client supports the source format; otherwise, ffmpeg transcodes on-the-fly to HLS.
+Rustyfin supports **direct play** and **HLS transcoding**. Media files are served directly when the client supports the
+source format; otherwise, ffmpeg transcodes on-the-fly to HLS.
 
 ## Direct Play
 
 ### Video Streaming
 
-```
+```text
 GET /Videos/{itemId}/stream
 ```
 
 ### Audio Streaming
 
-```
+```text
 GET /Audio/{itemId}/stream
 ```
 
@@ -21,6 +22,7 @@ Both endpoints require authentication and serve the raw media file from disk.
 ## HTTP Range Support
 
 Rustyfin fully supports [RFC 7233 Range Requests](https://tools.ietf.org/html/rfc7233), which enables:
+
 - **Seeking** in media players (jumping to a specific timestamp)
 - **Resuming** interrupted downloads
 - **Parallel downloading** (multiple ranges)
@@ -79,7 +81,8 @@ MIME types are determined by file extension:
 
 ## Media Probing
 
-Media files are probed during library scanning using **ffprobe** (from the FFmpeg suite). ffprobe must be available on `$PATH`.
+Media files are probed during library scanning using **ffprobe** (from the FFmpeg suite). ffprobe must be available on
+`$PATH`.
 
 ### Probe Command
 
@@ -211,14 +214,14 @@ Clients report playback state to the server, which updates `user_data`:
 
 ### Start
 
-```
+```text
 POST /Sessions/Playing
 { "ItemId": "...", "PositionTicks": 0, "PlayMethod": "DirectPlay" }
 ```
 
 ### Progress
 
-```
+```text
 POST /Sessions/Playing/Progress
 { "ItemId": "...", "PositionTicks": 36000000000, "IsPaused": false }
 ```
@@ -227,7 +230,7 @@ Updates `user_data.playback_position_ticks` for resume support.
 
 ### Stop
 
-```
+```text
 POST /Sessions/Playing/Stopped
 { "ItemId": "...", "PositionTicks": 88320000000 }
 ```
@@ -236,7 +239,7 @@ If the position is near the end (>90%), marks the item as played.
 
 ### Ping
 
-```
+```text
 POST /Sessions/Playing/Ping
 ```
 
@@ -246,14 +249,14 @@ Keep-alive during active playback.
 
 ### Favorites
 
-```
+```text
 POST   /UserFavoriteItems/{itemId}    → Mark favorite
 DELETE /UserFavoriteItems/{itemId}    → Remove favorite
 ```
 
 ### Played Status
 
-```
+```text
 POST   /UserPlayedItems/{itemId}     → Mark as played
 DELETE /UserPlayedItems/{itemId}     → Mark as unplayed
 ```
@@ -272,11 +275,13 @@ Both endpoints return the updated `UserItemDataDto`:
 
 ## HLS Transcoding
 
-When a client's device profile indicates it cannot direct-play the source file (incompatible codec, excessive bitrate, unsupported container), the server transcodes via ffmpeg into HLS segments.
+When a client's device profile indicates it cannot direct-play the source file (incompatible codec, excessive bitrate,
+unsupported container), the server transcodes via ffmpeg into HLS segments.
 
 ### Decision Flow
 
-1. Client sends `POST /Items/{itemId}/PlaybackInfo` with a `DeviceProfile` (lists supported containers, video/audio codecs, max bitrate)
+1. Client sends `POST /Items/{itemId}/PlaybackInfo` with a `DeviceProfile` (lists supported containers, video/audio
+   codecs, max bitrate)
 2. Server compares source media streams against the profile
 3. Result is one of:
    - **DirectPlay** — client plays the file as-is
@@ -287,7 +292,7 @@ The response includes `TranscodingUrl` (pointing to the HLS master playlist) whe
 
 ### HLS Endpoints
 
-```
+```text
 GET  /Videos/{itemId}/master.m3u8    — Master playlist (codec/resolution info)
 GET  /Videos/{itemId}/main.m3u8      — Variant playlist (triggers ffmpeg, lists segments)
 GET  /Videos/{itemId}/hls1/{playSessionId}/{segment}.ts  — Individual segment
@@ -300,7 +305,7 @@ Audio equivalents exist at `/Audio/{itemId}/master.m3u8`, `/Audio/{itemId}/main.
 
 ### Universal Audio
 
-```
+```text
 GET /Audio/{itemId}/universal?container=...&audioCodec=...&transcodingProtocol=hls
 ```
 
@@ -309,15 +314,18 @@ Routes to either HLS transcoding or direct stream based on compatibility.
 ### Encoding
 
 **Software (default):**
+
 - Video: `libx264` (preset `veryfast`, CRF 23) or `libx265` (preset `fast`, CRF 28)
 - Audio: `aac`, `ac3`, `libopus`, `libmp3lame`, or copy
 
 **Hardware (optional, via config):**
+
 - Intel QSV: `h264_qsv` / `hevc_qsv`
 - VAAPI: `h264_vaapi` / `hevc_vaapi`
 - NVENC: `h264_nvenc` / `hevc_nvenc`
 
 Configure in `rustyfin.toml`:
+
 ```toml
 [transcode]
 ffmpeg_path = "ffmpeg"        # default: from PATH
@@ -342,7 +350,7 @@ threads_per_job = 0           # 0 = auto
 
 ### Subtitle Delivery
 
-```
+```text
 GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt
 GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt
 GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}

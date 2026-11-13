@@ -208,9 +208,9 @@ pub fn Media() -> View {
                     Ok(item) => {
                         // For albums, fetch child tracks
                         if item.item_type == "MusicAlbum"
-                            && let Ok(result) = api::get_items(
-                                &item.id, None, 0, 500, "IndexNumber", "Ascending",
-                            ).await
+                            && let Ok(result) =
+                                api::get_items(&item.id, None, 0, 500, "IndexNumber", "Ascending")
+                                    .await
                         {
                             detail_tracks.set(result.items);
                         }

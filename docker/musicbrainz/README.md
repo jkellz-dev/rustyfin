@@ -8,7 +8,8 @@ Run a local MusicBrainz instance for unlimited metadata lookups without rate lim
 ./setup.sh
 ```
 
-This clones the [official musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker) project and runs its setup process.
+This clones the [official musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker) project and runs its
+setup process.
 
 ## Usage
 
@@ -40,8 +41,10 @@ The local instance is automatically detected (no rate limiting applied).
 
 ## Maintenance
 
-The official musicbrainz-docker setup includes daily replication to keep the database current. See the [upstream documentation](https://github.com/metabrainz/musicbrainz-docker) for details.
+The official musicbrainz-docker setup includes daily replication to keep the database current. See the
+[upstream documentation](https://github.com/metabrainz/musicbrainz-docker) for details.
 
 ## Standalone Docker Compose
 
-A simplified `docker-compose.yml` is provided for reference. For production use, prefer the official setup script which handles database import and replication.
+A simplified `docker-compose.yml` is provided for reference. For production use, prefer the official setup script which
+handles database import and replication.

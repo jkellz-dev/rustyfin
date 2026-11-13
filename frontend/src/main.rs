@@ -7,7 +7,10 @@ use sycamore::prelude::*;
 use sycamore_router::{HistoryIntegration, Route, Router};
 
 use components::nav::Sidebar;
-use pages::{dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, tasks::Tasks, users::Users};
+use pages::{
+    dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, tasks::Tasks,
+    users::Users,
+};
 
 #[derive(Route, Clone)]
 enum AppRoutes {

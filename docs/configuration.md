@@ -1,10 +1,12 @@
 # Configuration
 
-Rustyfin is configured via a TOML file and/or environment variables. Environment variables take precedence over file values.
+Rustyfin is configured via a TOML file and/or environment variables. Environment variables take precedence over file
+values.
 
 ## Configuration File
 
-By default, Rustyfin looks for `rustyfin.toml` in the current working directory. Set the `RUSTYFIN_CONFIG` environment variable to use a different path.
+By default, Rustyfin looks for `rustyfin.toml` in the current working directory. Set the `RUSTYFIN_CONFIG` environment
+variable to use a different path.
 
 ```toml
 [server]
@@ -32,7 +34,8 @@ tmdb_api_key = "your-tmdb-api-key"
 
 ## Environment Variables
 
-Environment variables use double-underscore `__` as a separator to map to nested TOML keys. For example, `RUSTYFIN__DATABASE__HOST` maps to `database.host`.
+Environment variables use double-underscore `__` as a separator to map to nested TOML keys. For example,
+`RUSTYFIN__DATABASE__HOST` maps to `database.host`.
 
 | Variable | Config Equivalent | Default | Description |
 |----------|-------------------|---------|-------------|
@@ -101,7 +104,8 @@ If omitted, search falls back to PostgreSQL `ILIKE` queries.
 |-------|------|---------|-------------|
 | `tmdb_api_key` | `String` | --- | TMDB API v3 key for metadata enrichment |
 
-Obtain a free key from [themoviedb.org](https://www.themoviedb.org/settings/api). Without it, metadata enrichment relies solely on local NFO files.
+Obtain a free key from [themoviedb.org](https://www.themoviedb.org/settings/api). Without it, metadata enrichment relies
+solely on local NFO files.
 
 ## Docker Compose
 
@@ -184,7 +188,8 @@ Rustyfin requires a reverse proxy for authentication. The proxy must set these h
 - `Remote-Email` (optional) --- email address
 - `Remote-Groups` (optional) --- comma-separated group list
 
-Header names are configurable via `[auth.forward_auth.headers]`. For example, Tailscale sets `Tailscale-User-Login` instead of `Remote-User`.
+Header names are configurable via `[auth.forward_auth.headers]`. For example, Tailscale sets `Tailscale-User-Login`
+instead of `Remote-User`.
 
 See [Authentication](authentication.md) for details.
 
@@ -208,10 +213,11 @@ RUST_LOG="rustyfin_core::library::scanner=trace"
 
 ## Migrations
 
-Database migrations run automatically at server startup. They are located in the `migrations/` directory and loaded at runtime (not compiled in). The migration system uses `sqlx::migrate::Migrator`.
+Database migrations run automatically at server startup. They are located in the `migrations/` directory and loaded at
+runtime (not compiled in). The migration system uses `sqlx::migrate::Migrator`.
 
 To add a new migration, create a file following the naming convention:
 
-```
+```text
 migrations/YYYYMMDDHHMMSS_description.sql
 ```

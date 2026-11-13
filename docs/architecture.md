@@ -2,7 +2,7 @@
 
 ## Crate Structure
 
-```
+```text
 rustyfin/
 ├── Cargo.toml                  # Workspace root (9 members)
 ├── frontend/                   # Sycamore WASM admin UI (NOT a workspace member)
@@ -31,6 +31,7 @@ rustyfin/
 ### `rustyfin-server` (binary)
 
 The entry point. Handles:
+
 - Configuration loading (TOML file + env vars)
 - Database pool creation and migration
 - Router assembly (API routes + frontend)
@@ -39,6 +40,7 @@ The entry point. Handles:
 ### `rustyfin-api` (route handlers)
 
 All Jellyfin-compatible HTTP endpoints. Contains:
+
 - `router.rs` --- `AppState` definition and `build_router()` function
 - `routes/` --- one module per resource (system, users, libraries, items, etc.)
 - `error.rs` --- `ApiError` enum mapped to HTTP status codes
@@ -46,11 +48,14 @@ All Jellyfin-compatible HTTP endpoints. Contains:
 ### `rustyfin-auth` (authentication)
 
 Three authentication mechanisms:
-- **Forward auth** (`forward_auth.rs`) --- extracts identity from reverse proxy headers (`Remote-User`, `Remote-Name`, etc.)
+
+- **Forward auth** (`forward_auth.rs`) --- extracts identity from reverse proxy headers (`Remote-User`, `Remote-Name`,
+  etc.)
 - **MediaBrowser header** (`middleware.rs`) --- parses `Authorization: MediaBrowser ...` for token extraction
 - **Session management** (`session.rs`) --- token creation, validation, expiry
 
 Provides Axum extractors:
+
 - `AuthenticatedUser` --- requires valid token, returns user info
 - `AdminUser` --- requires valid token AND `is_administrator = true`
 - `OptionalUser` --- succeeds even without auth
@@ -58,6 +63,7 @@ Provides Axum extractors:
 ### `rustyfin-core` (domain logic)
 
 Library scanning and metadata enrichment:
+
 - `library/scanner.rs` --- walks filesystem, creates media items, probes files
 - `library/naming.rs` --- filename parsing (movie titles, S01E02 patterns)
 - `library/nfo.rs` --- Kodi-standard NFO XML parsing
@@ -68,6 +74,7 @@ Library scanning and metadata enrichment:
 ### `rustyfin-db` (database layer)
 
 PostgreSQL access via sqlx:
+
 - `pool.rs` --- connection pool creation and runtime migrations
 - `repo/` --- one module per table (users, sessions, libraries, media_items, etc.)
 
@@ -76,7 +83,9 @@ All queries use string SQL (not compile-time checked) to avoid requiring a runni
 ### `rustyfin-models` (shared types)
 
 DTOs shared across crates:
-- `dto/base_item.rs` --- `BaseItemDto` (100+ field central item DTO), `VirtualFolderInfo`, `MediaSourceInfo`, `MediaStream`
+
+- `dto/base_item.rs` --- `BaseItemDto` (100+ field central item DTO), `VirtualFolderInfo`, `MediaSourceInfo`,
+  `MediaStream`
 - `dto/user.rs` --- `UserDto`, `UserPolicy`, `UserConfiguration`
 - `dto/system.rs` --- `SystemInfo`, `PublicSystemInfo`
 - `dto/query_result.rs` --- `QueryResult<T>` wrapper
@@ -89,6 +98,7 @@ All DTOs use `#[serde(rename_all = "PascalCase")]` for Jellyfin JSON compatibili
 ### `rustyfin-search` (search)
 
 Abstraction over search backends:
+
 - Default: Postgres `ILIKE` (always available)
 - Optional: Meilisearch (feature-gated behind `meilisearch` feature flag)
 
@@ -106,7 +116,7 @@ Abstraction over search backends:
 
 ## Dependency Graph
 
-```
+```text
 rustyfin-server
 ├── rustyfin-api
 │   ├── rustyfin-auth
@@ -144,7 +154,8 @@ pub struct AppState {
 }
 ```
 
-`PgPool` is extracted from `AppState` via `FromRef`, enabling auth extractors to access the database without knowing about the full state type.
+`PgPool` is extracted from `AppState` via `FromRef`, enabling auth extractors to access the database without knowing
+about the full state type.
 
 ## Startup Flow
 
@@ -160,7 +171,8 @@ pub struct AppState {
 
 ## Design Principles
 
-- **Jellyfin wire compatibility**: The API speaks the exact same JSON format as Jellyfin. No translation layer needed on clients.
+- **Jellyfin wire compatibility**: The API speaks the exact same JSON format as Jellyfin. No translation layer needed on
+  clients.
 - **Forward auth only**: No password storage, no OIDC complexity. The reverse proxy is the identity provider.
 - **Single binary**: Everything --- API, frontend, migrations --- compiles into one executable.
 - **Runtime migrations**: No compile-time database requirement. Migrations run at startup.

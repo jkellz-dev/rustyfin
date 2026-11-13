@@ -4,7 +4,7 @@ Rustyfin uses PostgreSQL 14+. The schema is created automatically via migrations
 
 ## Entity Relationship Diagram
 
-```
+```text
 users ──────────< sessions
   │
   │ ──────────< user_data >────────── media_items
@@ -125,7 +125,8 @@ Central media catalog. Self-referencing hierarchy: Library → Series → Season
 | `external_ids` | JSONB | Yes | | TMDB/TVDB/IMDb IDs |
 | `extra_data` | JSONB | Yes | | Additional metadata |
 
-**Indexes**: `idx_media_items_type`, `idx_media_items_parent`, `idx_media_items_library`, `idx_media_items_series`, `idx_media_items_path`, `idx_media_items_name`, `idx_media_items_presentation_key`
+**Indexes**: `idx_media_items_type`, `idx_media_items_parent`, `idx_media_items_library`, `idx_media_items_series`,
+`idx_media_items_path`, `idx_media_items_name`, `idx_media_items_presentation_key`
 
 ### `media_streams`
 
@@ -274,15 +275,17 @@ Server activity audit trail.
 ## Cascade Behavior
 
 - Deleting a **library** cascades to all its `media_items`
-- Deleting a **media_item** cascades to its `media_streams`, `images`, `chapters`, `user_data`, `media_item_people`, and child `media_items`
+- Deleting a **media_item** cascades to its `media_streams`, `images`, `chapters`, `user_data`, `media_item_people`, and
+  child `media_items`
 - Deleting a **user** cascades to their `sessions`, `user_data`, and `images`
 - Deleting a **user** sets `activity_log.user_id` to NULL
 
 ## Duration Convention
 
-All duration/position fields (`runtime_ticks`, `playback_position_ticks`, `start_position_ticks`) are stored in **100-nanosecond ticks**, matching the Jellyfin convention:
+All duration/position fields (`runtime_ticks`, `playback_position_ticks`, `start_position_ticks`) are stored in
+**100-nanosecond ticks**, matching the Jellyfin convention:
 
-```
+```text
 seconds * 10,000,000 = ticks
 ticks / 10,000,000 = seconds
 

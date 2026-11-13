@@ -1,12 +1,13 @@
 # Library Scanning
 
-Library scanning discovers media files on disk, probes them with ffprobe, and enriches their metadata from NFO files or TMDB.
+Library scanning discovers media files on disk, probes them with ffprobe, and enriches their metadata from NFO files or
+TMDB.
 
 ## Scan Trigger
 
 Scans are triggered via the API:
 
-```
+```text
 POST /Library/Refresh           # Scan all libraries
 POST /Library/Refresh?Id={uuid} # Scan a specific library
 ```
@@ -15,7 +16,7 @@ Scans run **asynchronously** in a background tokio task. The API returns `204 No
 
 ## Scan Workflow
 
-```
+```text
 1. Load library paths from database
 2. For each path:
    a. Determine library type (movies vs tvshows)
@@ -38,7 +39,8 @@ Scans run **asynchronously** in a background tokio task. The API returns `204 No
 Flat or nested directory structure. Each video file becomes a `Movie` item.
 
 Supported structures:
-```
+
+```text
 /media/movies/
 ├── Inception (2010)/
 │   ├── Inception (2010).mkv          → Movie item
@@ -53,7 +55,7 @@ Supported structures:
 
 Three-level hierarchy: Series → Season → Episode.
 
-```
+```text
 /media/tv/
 └── Breaking Bad/
     ├── tvshow.nfo                    → Series metadata
@@ -83,8 +85,10 @@ resolve_movie("Spirited Away.mp4")
 ```
 
 Cleaning rules:
+
 - Dots and underscores replaced with spaces
-- Quality tags stripped: `2160p`, `1080p`, `720p`, `BluRay`, `WEB-DL`, `HDR`, `REMUX`, `x264`, `x265`, `HEVC`, `AAC`, `DTS`
+- Quality tags stripped: `2160p`, `1080p`, `720p`, `BluRay`, `WEB-DL`, `HDR`, `REMUX`, `x264`, `x265`, `HEVC`, `AAC`,
+  `DTS`
 - Year extracted from `(YYYY)` or `.YYYY.` patterns
 - Everything after the year is discarded
 
@@ -99,6 +103,7 @@ resolve_episode("show.2x03.title.mkv")
 ```
 
 Supported patterns:
+
 - `S01E02` (case-insensitive)
 - `s01e02`
 - `1x02`
@@ -285,7 +290,7 @@ If no NFO file is found and a TMDB API key is configured, the scanner queries TM
 
 ### Enrichment Precedence
 
-```
+```text
 1. NFO file present?  → Use NFO metadata
 2. TMDB key configured? → Query TMDB
 3. Neither? → Skip enrichment (basic filename info only)
@@ -295,11 +300,12 @@ If no NFO file is found and a TMDB API key is configured, the scanner queries TM
 
 Individual items can be re-enriched via:
 
-```
+```text
 POST /Items/{itemId}/Refresh
 ```
 
-This re-runs the full enrichment pipeline (NFO → TMDB) for the specified item, updating metadata, ratings, genres, and people associations.
+This re-runs the full enrichment pipeline (NFO → TMDB) for the specified item, updating metadata, ratings, genres, and
+people associations.
 
 ## Scan Results
 
@@ -313,6 +319,7 @@ The scanner tracks outcomes per item:
 | Error | Failed to process (logged, scan continues) |
 
 Results are logged at completion:
-```
+
+```text
 INFO Scan complete for library "Movies": added=42, updated=3, skipped=120, errors=0, duration=12.3s
 ```

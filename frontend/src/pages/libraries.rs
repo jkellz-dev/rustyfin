@@ -141,10 +141,7 @@ pub fn Libraries() -> View {
             edit_saving.set(true);
             spawn_local({
                 async move {
-                    let req = UpdateLibraryRequest {
-                        name: n,
-                        paths,
-                    };
+                    let req = UpdateLibraryRequest { name: n, paths };
                     match api::update_library(&id, &req).await {
                         Ok(updated_lib) => {
                             libs.update(|l| {

@@ -1,6 +1,7 @@
 # Rustyfin CLI Workflow Guide
 
-The `rustyfin` CLI fetches metadata from online providers and writes Kodi/Jellyfin-compatible NFO sidecar files alongside your media files. The Rustyfin server then reads these files during library scans.
+The `rustyfin` CLI fetches metadata from online providers and writes Kodi/Jellyfin-compatible NFO sidecar files
+alongside your media files. The Rustyfin server then reads these files during library scans.
 
 ## Configuration
 
@@ -35,10 +36,10 @@ overwrite_existing = false
 
 | Provider | Where to get |
 |----------|-------------|
-| TMDB | https://www.themoviedb.org/settings/api |
-| TVDB | https://thetvdb.com/api-information |
-| Fanart.tv | https://fanart.tv/get-an-api-key/ |
-| Discogs | https://www.discogs.com/settings/developers |
+| TMDB | <https://www.themoviedb.org/settings/api> |
+| TVDB | <https://thetvdb.com/api-information> |
+| Fanart.tv | <https://fanart.tv/get-an-api-key/> |
+| Discogs | <https://www.discogs.com/settings/developers> |
 
 ## Scanning Media
 
@@ -49,6 +50,7 @@ rustyfin scan /path/to/movies -t movies
 ```
 
 For each movie, the scanner:
+
 1. Parses the filename/folder for title and year
 2. Searches TMDB (or uses embedded `[tmdbid-12345]` tag)
 3. Writes `<movie>.nfo` with metadata
@@ -62,6 +64,7 @@ rustyfin scan /path/to/tvshows -t tvshows
 ```
 
 For each series folder:
+
 1. Searches TMDB then falls back to TVDB
 2. Writes `tvshow.nfo`
 3. Downloads poster and backdrop artwork
@@ -76,12 +79,14 @@ rustyfin scan /path/to/music -t music
 Expected directory structure: `Artist/Album/tracks.flac`
 
 For each artist:
+
 1. Reads MusicBrainz ID from audio tags (if available)
 2. Fetches artist metadata from MusicBrainz (biography, genres, formed/disbanded dates)
 3. Writes `artist.nfo`
 4. Downloads artist artwork from fanart.tv and Discogs
 
 For each album:
+
 1. Reads tags (MusicBrainz IDs, label, release type, genre, year)
 2. Enriches from MusicBrainz release group data
 3. Writes `album.nfo`
@@ -129,6 +134,7 @@ See `docker/musicbrainz/README.md` for details.
 ## Discogs OAuth Setup
 
 On first run with Discogs credentials configured, the CLI will:
+
 1. Open your browser to authorize the app
 2. Ask you to enter the verification code
 3. Save tokens to `~/.config/rustyfin/discogs_tokens.json`
@@ -138,12 +144,14 @@ Subsequent runs use the saved tokens automatically.
 ## Cron Job Examples
 
 ### Nightly movie/TV scan
+
 ```cron
 0 2 * * * cd /path/to/config && rustyfin scan /media/movies -t movies --auto >> /var/log/rustyfin-scan.log 2>&1
 0 3 * * * cd /path/to/config && rustyfin scan /media/tvshows -t tvshows --auto >> /var/log/rustyfin-scan.log 2>&1
 ```
 
 ### Weekly music scan
+
 ```cron
 0 4 * * 0 cd /path/to/config && rustyfin scan /media/music -t music --auto >> /var/log/rustyfin-scan.log 2>&1
 ```
@@ -152,7 +160,7 @@ Subsequent runs use the saved tokens automatically.
 
 During music scans, the CLI logs warnings for missing metadata:
 
-```
+```text
 WARN  Gap: artist 'Unknown Artist' has no biography
 WARN  Gap: artist 'Unknown Artist' has no MusicBrainz ID
 WARN  Gap: album 'Untitled Album' has no cover art

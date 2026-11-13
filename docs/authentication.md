@@ -1,6 +1,8 @@
 # Authentication
 
-Rustyfin supports two authentication methods: forward auth (via reverse proxy headers) and LDAPS bind. Both are independently configurable, and at least one must be enabled. Rustyfin intentionally does not support local passwords or OIDC — all credential management is delegated to external systems.
+Rustyfin supports two authentication methods: forward auth (via reverse proxy headers) and LDAPS bind. Both are
+independently configurable, and at least one must be enabled. Rustyfin intentionally does not support local passwords or
+OIDC — all credential management is delegated to external systems.
 
 ## Overview
 
@@ -19,6 +21,7 @@ Rustyfin supports two authentication methods: forward auth (via reverse proxy he
 ### No Local Passwords
 
 Rustyfin deliberately excludes:
+
 - Local password database
 - OIDC integration
 - Password reset flows
@@ -29,7 +32,8 @@ All credential management happens outside Rustyfin. This reduces attack surface 
 
 ### How It Works
 
-Forward authentication delegates user authentication to a reverse proxy (Authelia, Authentik, oauth2-proxy, Tailscale, etc.):
+Forward authentication delegates user authentication to a reverse proxy (Authelia, Authentik, oauth2-proxy, Tailscale,
+etc.):
 
 1. Reverse proxy authenticates the user (OIDC, SAML, etc.)
 2. Proxy sets identity headers (username, email, groups)
@@ -38,9 +42,11 @@ Forward authentication delegates user authentication to a reverse proxy (Autheli
 
 ### Trusted Proxy Requirement
 
-**Critical security requirement**: Forward auth headers are only honored when requests originate from trusted proxy IP addresses.
+**Critical security requirement**: Forward auth headers are only honored when requests originate from trusted proxy IP
+addresses.
 
-Why this matters: Without IP validation, any client could spoof headers and impersonate users. The `trusted_proxies` list uses CIDR notation to specify which IPs are authorized to set identity headers.
+Why this matters: Without IP validation, any client could spoof headers and impersonate users. The `trusted_proxies`
+list uses CIDR notation to specify which IPs are authorized to set identity headers.
 
 ### Default Headers
 
@@ -55,13 +61,16 @@ All header names are configurable for non-standard proxy configurations.
 
 ### Admin Group Auto-Mapping
 
-If `admin_group` is configured, users whose `Remote-Groups` header contains the specified group name are automatically promoted to administrator.
+If `admin_group` is configured, users whose `Remote-Groups` header contains the specified group name are automatically
+promoted to administrator.
 
-Example: If `admin_group = "jellyfin-admin"` and a user authenticates with `Remote-Groups: jellyfin-admin,users`, they become an admin.
+Example: If `admin_group = "jellyfin-admin"` and a user authenticates with `Remote-Groups: jellyfin-admin,users`, they
+become an admin.
 
 ### Security Model
 
 Forward auth is only processed when:
+
 1. Request IP matches a trusted proxy CIDR
 2. The `Remote-User` header is present
 
@@ -72,14 +81,17 @@ If either condition fails, Rustyfin falls through to LDAPS authentication (if co
 ### Overview
 
 LDAPS authentication performs a two-step bind:
+
 1. Service account binds and searches for the user DN
 2. User credentials are verified by binding as the user
 
-This approach allows Rustyfin to extract user attributes (email, display name, group membership) while verifying the password.
+This approach allows Rustyfin to extract user attributes (email, display name, group membership) while verifying the
+password.
 
 ### LDAPS Only (No STARTTLS)
 
-Rustyfin only supports `ldaps://` URLs. STARTTLS is intentionally not supported because it allows downgrade attacks where an attacker can intercept the connection before encryption negotiation.
+Rustyfin only supports `ldaps://` URLs. STARTTLS is intentionally not supported because it allows downgrade attacks
+where an attacker can intercept the connection before encryption negotiation.
 
 Configuration URLs **must** start with `ldaps://`. The server will refuse to start otherwise.
 
@@ -94,21 +106,25 @@ Configuration URLs **must** start with `ldaps://`. The server will refuse to sta
 
 ### Username Filter Escaping
 
-The `user_filter` template uses `{}` as a placeholder for the username. Before searching, Rustyfin escapes the username per RFC 4515 to prevent LDAP injection attacks.
+The `user_filter` template uses `{}` as a placeholder for the username. Before searching, Rustyfin escapes the username
+per RFC 4515 to prevent LDAP injection attacks.
 
 Example: User input `admin)(objectClass=*` becomes `admin\29\28objectClass=\2a`, preventing filter manipulation.
 
 ### Admin Group Mapping
 
-If `admin_group_dn` is configured, Rustyfin checks the user's `memberOf` attribute. If any entry matches the configured DN (case-insensitive), the user is promoted to administrator.
+If `admin_group_dn` is configured, Rustyfin checks the user's `memberOf` attribute. If any entry matches the configured
+DN (case-insensitive), the user is promoted to administrator.
 
 Example:
+
 ```toml
 admin_group_dn = "cn=jellyfin-admins,ou=groups,dc=example,dc=com"
 ```
 
 If the user's LDAP entry has:
-```
+
+```text
 memberOf: cn=jellyfin-admins,ou=groups,dc=example,dc=com
 ```
 
@@ -214,6 +230,7 @@ admin_group_dn = "cn=jellyfin_admins,dc=idm,dc=example,dc=com"
 ```
 
 Key differences from generic LDAP:
+
 - `bind_dn = "dn=token"` — Kanidm uses token-based service accounts
 - `user_filter = "(name={})"` — Kanidm uses `name` instead of `uid`
 - `display_name_attr = "displayname"` — Kanidm attribute naming
@@ -270,6 +287,7 @@ admin_group_dn = "cn=lldap_admin,ou=groups,dc=example,dc=com"
 ```
 
 Notes:
+
 - LLDAP admin DN is always `uid=admin,ou=people,dc=example,dc=com`
 - User filter uses `(uid={})` for standard LDAP compatibility
 - Admin group is `cn=lldap_admin,ou=groups,dc=example,dc=com` by default
@@ -450,7 +468,8 @@ email = "Remote-Email"  # Tailscale doesn't provide email
 groups = "Remote-Groups"  # Tailscale doesn't provide groups
 ```
 
-Note: Tailscale headers use the identity from your Tailscale network. Admin promotion must be done manually or via a separate group system.
+Note: Tailscale headers use the identity from your Tailscale network. Admin promotion must be done manually or via a
+separate group system.
 
 ### Combined Setups
 
@@ -524,6 +543,7 @@ admin_group_dn = "cn=jellyfin_admins,dc=idm,dc=example,dc=com"
 ```
 
 This setup allows:
+
 - Web clients: SSO via oauth2-proxy (no password prompt)
 - Native clients: Direct LDAPS authentication (password prompt)
 
@@ -553,6 +573,7 @@ admin_group_dn = "cn=lldap_admin,ou=groups,dc=example,dc=com"
 ```
 
 This allows:
+
 - Tailscale users: Automatic login via Tailscale identity (no password)
 - Local network users: LDAPS authentication with password
 
@@ -560,34 +581,36 @@ This allows:
 
 ### Token Usage
 
-After obtaining a token via `POST /Users/AuthenticateByName`, clients include it in subsequent requests. Rustyfin checks these locations in order:
+After obtaining a token via `POST /Users/AuthenticateByName`, clients include it in subsequent requests. Rustyfin checks
+these locations in order:
 
 #### 1. Authorization Header (preferred)
 
-```
+```text
 Authorization: MediaBrowser Client="Infuse", Device="Apple TV", DeviceId="abc123", Version="7.0", Token="a1b2c3d4e5f6"
 ```
 
 Also accepts the legacy `Emby` prefix:
-```
+
+```text
 Authorization: Emby Client="...", Token="..."
 ```
 
 #### 2. X-Emby-Token Header
 
-```
+```text
 X-Emby-Token: a1b2c3d4e5f6
 ```
 
 #### 3. X-MediaBrowser-Token Header
 
-```
+```text
 X-MediaBrowser-Token: a1b2c3d4e5f6
 ```
 
 #### 4. Query Parameter
 
-```
+```text
 GET /System/Info?api_key=a1b2c3d4e5f6
 GET /System/Info?ApiKey=a1b2c3d4e5f6
 ```
@@ -595,18 +618,20 @@ GET /System/Info?ApiKey=a1b2c3d4e5f6
 ### Session Lifecycle
 
 - **Creation**: `POST /Users/AuthenticateByName` generates a random token and stores it in the `sessions` table
-- **Validation**: Each authenticated request looks up the token, checks expiry, loads the user, and rejects disabled users
+- **Validation**: Each authenticated request looks up the token, checks expiry, loads the user, and rejects disabled
+  users
 - **Activity tracking**: Each authenticated request updates `sessions.last_activity` and `users.last_activity_date`
 - **Expiry**: Sessions have an optional `expires_at` timestamp. Expired sessions are rejected with 401.
 - **Deletion**: When a user is deleted, their sessions are cascade-deleted via foreign key
 
 ### How Forward Auth Connects to Extractors
 
-Forward auth and the Axum extractors operate at **different stages** of the request lifecycle — they never call each other directly.
+Forward auth and the Axum extractors operate at **different stages** of the request lifecycle — they never call each
+other directly.
 
 **Stage 1 — Login (`POST /Users/AuthenticateByName`):**
 
-```
+```text
 Client → Reverse Proxy (Authelia/Authentik/Tailscale)
                 │
                 │ authenticates user, injects headers:
@@ -629,7 +654,7 @@ The client stores this token for all future requests.
 
 **Stage 2 — Every subsequent request (`FromRequestParts`):**
 
-```
+```text
 Client sends: Authorization: MediaBrowser ... Token="a1b2c3..."
                 │
                 ▼
@@ -643,7 +668,8 @@ Client sends: Authorization: MediaBrowser ... Token="a1b2c3..."
                 └─ Return AuthenticatedUser { user_id, is_administrator, ... }
 ```
 
-At this point, **forward auth is completely irrelevant**. The extractor doesn't know or care how the user originally logged in. Forward auth users and LDAP users look identical once they have a session token.
+At this point, **forward auth is completely irrelevant**. The extractor doesn't know or care how the user originally
+logged in. Forward auth users and LDAP users look identical once they have a session token.
 
 **Stage 3 — Admin escalation (`AdminUser`):**
 
@@ -655,7 +681,10 @@ This layering produces distinct error codes: missing/invalid token → 401, vali
 
 **How admin status flows from forward auth:**
 
-The admin bit is set during login based on group membership. When the reverse proxy sends `Remote-Groups: admin,users` and `admin_group = "admin"` is configured, the login handler calls `users::update_policy(..., is_administrator: true)`. All future `FromRequestParts` calls read that persisted flag from the database — the forward auth headers are never re-checked after login.
+The admin bit is set during login based on group membership. When the reverse proxy sends `Remote-Groups: admin,users`
+and `admin_group = "admin"` is configured, the login handler calls `users::update_policy(..., is_administrator: true)`.
+All future `FromRequestParts` calls read that persisted flag from the database — the forward auth headers are never
+re-checked after login.
 
 **The generic state bound:**
 
@@ -668,7 +697,8 @@ where
     S: Send + Sync,
 ```
 
-This means the extractor depends only on the database, not on `AppState` directly. It doesn't need access to config, session managers, or search services. This separation keeps the auth layer decoupled from application concerns.
+This means the extractor depends only on the database, not on `AppState` directly. It doesn't need access to config,
+session managers, or search services. This separation keeps the auth layer decoupled from application concerns.
 
 ### Axum Extractors
 
@@ -687,6 +717,7 @@ pub struct AuthenticatedUser {
 ```
 
 Usage in route handlers:
+
 ```rust
 pub async fn my_handler(
     State(state): State<AppState>,
@@ -705,6 +736,7 @@ pub struct AdminUser(pub AuthenticatedUser);
 ```
 
 Usage:
+
 ```rust
 pub async fn admin_only_handler(
     State(state): State<AppState>,
@@ -726,13 +758,16 @@ pub struct OptionalUser(pub Option<AuthenticatedUser>);
 
 ### Trusted Proxies Are Mandatory
 
-Forward auth headers are **only** processed from IPs matching the `trusted_proxies` CIDR list. This prevents header spoofing attacks where a malicious client sets `Remote-User: admin`.
+Forward auth headers are **only** processed from IPs matching the `trusted_proxies` CIDR list. This prevents header
+spoofing attacks where a malicious client sets `Remote-User: admin`.
 
-Without IP validation, forward auth would be completely insecure. Always configure `trusted_proxies` to match only your reverse proxy IPs, never `0.0.0.0/0`.
+Without IP validation, forward auth would be completely insecure. Always configure `trusted_proxies` to match only your
+reverse proxy IPs, never `0.0.0.0/0`.
 
 ### LDAPS Only (No STARTTLS)
 
-Rustyfin refuses `ldap://` URLs at startup. STARTTLS is not supported because it allows downgrade attacks where an attacker intercepts the connection before TLS negotiation and captures credentials in plaintext.
+Rustyfin refuses `ldap://` URLs at startup. STARTTLS is not supported because it allows downgrade attacks where an
+attacker intercepts the connection before TLS negotiation and captures credentials in plaintext.
 
 Always use `ldaps://` URLs and ensure your LDAP server has a valid TLS certificate.
 
@@ -758,7 +793,8 @@ services:
 
 ### First User Auto-Admin
 
-The first user to authenticate (via forward auth or LDAPS) is automatically promoted to administrator. This simplifies initial setup but requires careful deployment:
+The first user to authenticate (via forward auth or LDAPS) is automatically promoted to administrator. This simplifies
+initial setup but requires careful deployment:
 
 1. Deploy Rustyfin with auth configured
 2. Authenticate as your admin user first
@@ -768,9 +804,11 @@ If you accidentally grant admin to the wrong user, manually demote them via the 
 
 ### Disabled Users Are Rejected
 
-Users with `is_disabled = true` are rejected at authentication time and at session validation. This applies to both forward auth and LDAPS.
+Users with `is_disabled = true` are rejected at authentication time and at session validation. This applies to both
+forward auth and LDAPS.
 
 To disable a user:
+
 1. Set `is_disabled = true` in the database or admin UI
 2. Existing sessions are rejected immediately on next request
 

@@ -42,7 +42,10 @@ pub fn Users() -> View {
         spawn_local({
             async move {
                 let (enable_all, folders) = if let Some(u) = user {
-                    (u.policy.enable_all_folders, u.policy.enabled_folders.clone())
+                    (
+                        u.policy.enable_all_folders,
+                        u.policy.enabled_folders.clone(),
+                    )
                 } else {
                     (true, Vec::new())
                 };

@@ -1,10 +1,11 @@
 # Admin Frontend
 
-The admin frontend is a single-page application built with **Sycamore** (Rust WASM framework). It provides library management, user administration, and a setup wizard.
+The admin frontend is a single-page application built with **Sycamore** (Rust WASM framework). It provides library
+management, user administration, and a setup wizard.
 
 ## Architecture
 
-```
+```text
 frontend/                          # Sycamore app (NOT a workspace member)
 ├── Cargo.toml                     # Separate package targeting wasm32
 ├── Trunk.toml                     # Trunk build configuration
@@ -31,13 +32,15 @@ crates/rustyfin-frontend/          # Workspace member (embedding crate)
 └── src/lib.rs                     # Embeds dist/ + serves via Axum
 ```
 
-The frontend is intentionally **not** a workspace member because it targets `wasm32-unknown-unknown`, while the rest of the project targets the host architecture.
+The frontend is intentionally **not** a workspace member because it targets `wasm32-unknown-unknown`, while the rest of
+the project targets the host architecture.
 
 ## Building
 
 ### Prerequisites
 
 Install Trunk (WASM build tool):
+
 ```bash
 cargo install trunk
 rustup target add wasm32-unknown-unknown
@@ -51,7 +54,8 @@ trunk build --release
 ```
 
 This compiles the Sycamore app to WASM and outputs to `frontend/dist/`:
-```
+
+```text
 frontend/dist/
 ├── index.html
 ├── style.css
@@ -62,6 +66,7 @@ frontend/dist/
 ### Embed into Server
 
 After building the frontend, rebuild the server binary to embed the assets:
+
 ```bash
 cargo build --release
 ```
@@ -71,6 +76,7 @@ The `rust-embed` crate compiles the contents of `frontend/dist/` into the binary
 ### Development
 
 For development with live reload:
+
 ```bash
 cd frontend
 trunk serve --proxy-backend=http://localhost:8096
@@ -116,6 +122,7 @@ The SPA uses `sycamore-router` with `HistoryIntegration`:
 ### Dashboard
 
 Displays:
+
 - Server name and version
 - Statistics cards: library count, user count, media item count
 - "Scan All Libraries" button
@@ -125,16 +132,19 @@ API calls: `GET /System/Info/Public`, `GET /System/Stats`
 ### Libraries
 
 Features:
+
 - **Add Library** form: name, type (movies/tvshows/music/mixed), filesystem path
 - **Libraries table**: name, type badge, paths, Scan/Delete buttons
 - **Delete confirmation** modal
 - **Scan** triggers a background library scan
 
-API calls: `GET /Library/VirtualFolders`, `POST /Library/VirtualFolders`, `DELETE /Library/VirtualFolders?Id=`, `POST /Library/Refresh?Id=`
+API calls: `GET /Library/VirtualFolders`, `POST /Library/VirtualFolders`, `DELETE /Library/VirtualFolders?Id=`,
+`POST /Library/Refresh?Id=`
 
 ### Users
 
 Features:
+
 - **Users table**: username, admin badge, last activity date
 - **Toggle Admin** button per user
 - **Delete** button with confirmation modal
@@ -145,11 +155,13 @@ API calls: `GET /Users`, `POST /Users/{id}/Policy`, `DELETE /Users/{id}`
 ### Setup Wizard
 
 Three-step wizard:
+
 1. **Welcome** --- introduction message
 2. **Add Library** --- form to create first library (name, type, path)
 3. **Done** --- confirmation with link to dashboard
 
 Behavior:
+
 - Checks `GET /Startup/Configuration` on load
 - If `StartupWizardCompleted = true`, redirects to `/web`
 - On library creation, auto-triggers a scan
@@ -162,13 +174,14 @@ All API calls use `gloo-net` for HTTP requests.
 
 The frontend reads the auth token from `localStorage("rustyfin_token")` and includes it in every request:
 
-```
+```text
 Authorization: MediaBrowser Client="Rustyfin Admin", Device="Browser", DeviceId="admin-ui", Version="0.1.0", Token="{token}"
 ```
 
 ### Base URL
 
-The API base URL is derived from `window.location.origin`, so the frontend naturally points to the same server it was loaded from.
+The API base URL is derived from `window.location.origin`, so the frontend naturally points to the same server it was
+loaded from.
 
 ## Styling
 

@@ -2,7 +2,9 @@
 
 ## Design Principles
 
-- **Config boundary**: File-based config (`rustyfin.toml`, env vars) is read-only from the server — never written by the application. Database-based config (libraries, users, preferences) is managed through the UI/API. No crossing the boundary.
+- **Config boundary**: File-based config (`rustyfin.toml`, env vars) is read-only from the server — never written by the
+  application. Database-based config (libraries, users, preferences) is managed through the UI/API. No crossing the
+  boundary.
 - **Auth model**: Forward auth only. No local passwords, no OIDC.
 - **No plugins**: Extensibility is not a goal.
 - **No Live TV / DVR**: Out of scope.
@@ -26,7 +28,8 @@
 
 Blocking — clients won't work properly without these.
 
-- [x] **Transcoding pipeline** — ffmpeg HLS output, software + optional HW accel (QSV/VAAPI/NVENC), throttling, seek support
+- [x] **Transcoding pipeline** — ffmpeg HLS output, software + optional HW accel (QSV/VAAPI/NVENC), throttling, seek
+      support
 - [x] **Device profiles** — clients send capabilities, server decides direct play vs direct stream vs transcode
 - [x] **Subtitle delivery** — extraction from containers, format conversion, burn-in during transcode
 - [x] **PlaybackInfo completeness** — MediaSources with TranscodingUrl, DirectStreamUrl, TranscodeReasons
