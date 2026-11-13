@@ -86,20 +86,76 @@ pub(crate) fn user_data_dto(
     dto
 }
 
+/// Jellyfin's `MediaType` for an item type: what kind of stream it plays, or
+/// `Unknown` for folders and people rather than leaving the key out.
+pub(crate) fn media_type_for(item_type: &str) -> Option<String> {
+    let kind = match item_type {
+        "Movie" | "Episode" | "Video" | "Trailer" | "MusicVideo" => "Video",
+        "Audio" => "Audio",
+        "Photo" => "Photo",
+        _ => "Unknown",
+    };
+    Some(kind.to_string())
+}
+
+/// Item types that hold other items, whether or not the row says `is_folder`.
+fn container_type(item_type: &str) -> bool {
+    matches!(
+        item_type,
+        "Series"
+            | "Season"
+            | "BoxSet"
+            | "MusicAlbum"
+            | "MusicArtist"
+            | "Playlist"
+            | "Folder"
+            | "CollectionFolder"
+    )
+}
+
 /// Folders whose `UserData` carries how many playable items below are unplayed.
 fn counts_children(dto: &BaseItemDto) -> bool {
-    dto.is_folder
-        || matches!(
-            dto.item_type.as_str(),
-            "Series"
-                | "Season"
-                | "BoxSet"
-                | "MusicAlbum"
-                | "MusicArtist"
-                | "Playlist"
-                | "Folder"
-                | "CollectionFolder"
-        )
+    dto.is_folder || container_type(&dto.item_type)
+}
+
+/// Jellyfin's folder progress: items left, how far along, and played once nothing
+/// is left.
+fn folder_user_data(ud: &mut UserItemDataDto, total: i64, unplayed: i64) {
+    ud.unplayed_item_count = Some(unplayed as i32);
+    ud.played_percentage = Some(if total == 0 {
+        0.0
+    } else {
+        (total - unplayed) as f64 * 100.0 / total as f64
+    });
+    ud.played = total > 0 && unplayed == 0;
+}
+
+/// Seasons carry only their parent link; name the series for them in one query.
+pub(crate) async fn name_series_for_seasons(pool: &sqlx::PgPool, dtos: &mut [BaseItemDto]) {
+    let wanted: Vec<Uuid> = dtos
+        .iter()
+        .filter(|d| d.item_type == "Season" && d.series_id.is_none())
+        .filter_map(|d| d.parent_id)
+        .collect();
+    if wanted.is_empty() {
+        return;
+    }
+    let series: HashMap<Uuid, String> = media_items::find_by_ids(pool, &wanted)
+        .await
+        .or_log_default("media_items::find_by_ids")
+        .into_iter()
+        .map(|row| (row.id, row.name))
+        .collect();
+    for dto in dtos.iter_mut() {
+        if dto.item_type == "Season"
+            && dto.series_id.is_none()
+            && let Some(parent) = dto.parent_id
+            && let Some(name) = series.get(&parent)
+        {
+            dto.series_id = Some(parent);
+            dto.series_name = Some(name.clone());
+        }
+    }
 }
 
 /// Attach the caller's `UserData` to every item in two queries (their rows, then
@@ -115,13 +171,14 @@ pub(crate) async fn attach_user_data(pool: &sqlx::PgPool, user_id: Uuid, dtos: &
         .filter(|d| counts_children(d))
         .map(|d| d.id)
         .collect();
-    let unplayed = user_data::unplayed_counts(pool, user_id, &folder_ids)
+    let progress = user_data::folder_progress(pool, user_id, &folder_ids)
         .await
-        .or_log_default("user_data::unplayed_counts");
+        .or_log_default("user_data::folder_progress");
     for dto in dtos.iter_mut() {
         let mut ud = user_data_dto(dto.id, rows.get(&dto.id));
         if counts_children(dto) {
-            ud.unplayed_item_count = Some(unplayed.get(&dto.id).copied().unwrap_or(0) as i32);
+            let (total, unplayed) = progress.get(&dto.id).copied().unwrap_or((0, 0));
+            folder_user_data(&mut ud, total, unplayed);
         }
         dto.user_data = Some(ud);
     }
@@ -167,14 +224,8 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         if map.is_empty() { None } else { Some(map) }
     });
 
-    // Derive media_type from item_type for client playback decisions
-    let media_type = match item.item_type.as_str() {
-        "Movie" | "Episode" | "Video" | "Trailer" | "MusicVideo" => Some("Video".to_string()),
-        "Audio" => Some("Audio".to_string()),
-        "Photo" => Some("Photo".to_string()),
-        // Folders and people: Jellyfin says Unknown rather than leaving it out.
-        _ => Some("Unknown".to_string()),
-    };
+    let media_type = media_type_for(&item.item_type);
+    let folder = item.is_folder || container_type(&item.item_type);
     // Every video Rustyfin serves is a plain file (no disc folders).
     let video_type = match item.item_type.as_str() {
         "Movie" | "Episode" | "Trailer" | "MusicVideo" | "Video" => Some("VideoFile".to_string()),
@@ -219,8 +270,14 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         height: item.height,
         is_folder: item.is_folder,
         date_created: Some(item.date_created),
-        date_last_media_added: item.date_last_media_added,
-        etag: item.etag.clone(),
+        date_last_media_added: item
+            .date_last_media_added
+            .or(folder.then_some(item.date_created)),
+        // Folders have no file etag; their modification time stands in.
+        etag: item.etag.clone().or_else(|| {
+            let changed = item.date_modified.unwrap_or(item.date_created);
+            Some(format!("{:x}", changed.timestamp_millis()))
+        }),
         provider_ids,
         media_type,
         can_delete: Some(false),
@@ -471,6 +528,7 @@ pub async fn get_items(
         }
     }
 
+    name_series_for_seasons(&state.pool, &mut dtos).await;
     // Attach user data if requested
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
@@ -643,10 +701,12 @@ pub async fn get_item_by_id(
         .or_log_default("user_data::get");
     let mut ud = user_data_dto(item_id, row.as_ref());
     if counts_children(&dto) {
-        let unplayed = user_data::unplayed_counts(&state.pool, auth.user_id, &[item_id])
+        let progress = user_data::folder_progress(&state.pool, auth.user_id, &[item_id])
             .await
-            .or_log_default("user_data::unplayed_counts");
-        ud.unplayed_item_count = Some(unplayed.get(&item_id).copied().unwrap_or(0) as i32);
+            .or_log_default("user_data::folder_progress");
+        let (total, unplayed) = progress.get(&item_id).copied().unwrap_or((0, 0));
+        folder_user_data(&mut ud, total, unplayed);
+        dto.recursive_item_count = Some(total as i32);
     }
     dto.user_data = Some(ud);
     // Jellyfin sends these on a single item even when there is nothing in them.
@@ -783,6 +843,16 @@ pub async fn get_user_items_legacy(
     query: Query<ItemsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     get_items(state, auth, query).await
+}
+
+/// `GET /Users/{userId}/Items/Resume` — Legacy resume route.
+pub async fn get_user_resume_items_legacy(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    Path(_user_id): Path<Uuid>,
+    query: Query<ItemsQuery>,
+) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    get_resume_items(state, auth, query).await
 }
 
 /// `GET /Users/{userId}/Items/Latest` — Legacy latest-additions route.

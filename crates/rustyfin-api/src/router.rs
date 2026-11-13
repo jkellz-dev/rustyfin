@@ -59,6 +59,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/System/Ping", get(system::ping).post(system::ping))
         // ── System (auth required) ──────────────────────────────
         .route("/System/Info", get(system::get_info))
+        .route("/System/Endpoint", get(system::get_endpoint))
         .route("/System/Stats", get(system::get_stats))
         .route("/System/Shutdown", post(system::shutdown))
         .route("/System/Restart", post(system::restart))
@@ -130,6 +131,11 @@ pub fn build_router(state: AppState) -> Router {
         // ── Library views ───────────────────────────────────────
         .route("/UserViews", get(libraries::get_user_views))
         .route(
+            "/Users/{userId}/GroupingOptions",
+            get(libraries::get_grouping_options),
+        )
+        .route("/Library/PhysicalPaths", get(libraries::get_physical_paths))
+        .route(
             "/Users/{userId}/Views",
             get(libraries::get_user_views_legacy),
         )
@@ -173,6 +179,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Items/{itemId}", get(items::get_item_by_id))
         .route("/Items/{itemId}/Refresh", post(items::refresh_item))
         .route("/UserItems/Resume", get(items::get_resume_items))
+        .route(
+            "/Users/{userId}/Items/Resume",
+            get(items::get_user_resume_items_legacy),
+        )
         // Legacy item routes
         .route("/Users/{userId}/Items", get(items::get_user_items_legacy))
         .route(

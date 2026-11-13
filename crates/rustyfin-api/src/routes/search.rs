@@ -64,6 +64,10 @@ pub async fn search_hints(
         .into_iter()
         .map(|hit| SearchHint {
             id: hit.id,
+            item_id: hit.id,
+            media_type: super::items::media_type_for(&hit.item_type),
+            artists: Vec::new(),
+            primary_image_aspect_ratio: None,
             name: hit.name,
             item_type: hit.item_type,
             production_year: hit.production_year,

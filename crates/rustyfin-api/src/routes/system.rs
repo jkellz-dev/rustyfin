@@ -8,8 +8,8 @@ use axum::{
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_db::repo::{libraries, media_items, users};
 use rustyfin_models::dto::{
-    CastReceiverApplication, DashboardStats, LogFileInfo, PublicSystemInfo, StartupConfiguration,
-    SystemInfo,
+    CastReceiverApplication, DashboardStats, EndPointInfo, LogFileInfo, PublicSystemInfo,
+    StartupConfiguration, SystemInfo,
 };
 
 use crate::error::ApiError;
@@ -85,6 +85,16 @@ pub async fn get_info(State(state): State<AppState>, _auth: AuthenticatedUser) -
             other => other,
         }
         .to_string(),
+    })
+}
+
+/// `GET /System/Endpoint` — Where the caller is. Every request arrives through the
+/// forward-auth proxy on the tailnet, so nobody is local and everybody is in the
+/// network.
+pub async fn get_endpoint(_auth: AuthenticatedUser) -> Json<EndPointInfo> {
+    Json(EndPointInfo {
+        is_local: false,
+        is_in_network: true,
     })
 }
 

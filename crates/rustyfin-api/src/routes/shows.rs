@@ -29,6 +29,7 @@ pub struct NextUpQuery {
     pub enable_images: Option<bool>,
     pub enable_user_data: Option<bool>,
     pub enable_rewatching: Option<bool>,
+    pub disable_first_episode: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -90,6 +91,23 @@ pub async fn get_next_up(
         }
     }
 
+    // Shows the user never started come after the ones in progress, newest first,
+    // unless the client asked to leave them out.
+    if !query.disable_first_episode.unwrap_or(false) {
+        let fresh = media_items::series_never_started(
+            &state.pool,
+            auth.user_id,
+            query.parent_id,
+            fetch_limit,
+        )
+        .await
+        .map_err(ApiError::Database)?;
+        for series_id in fresh {
+            if let Some(episode) = find_next_for_series(&state, &auth, series_id).await? {
+                next_episodes.push(episode);
+            }
+        }
+    }
     let total = next_episodes.len() as i32;
 
     // Apply pagination
