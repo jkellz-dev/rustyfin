@@ -747,17 +747,21 @@ async fn quick_connect_enabled_returns_false_parity() {
     app.cleanup().await;
 }
 
-/// GET /System/Info returns server metadata (handler has no auth extractor).
+/// GET /System/Info returns server metadata to a signed-in user and refuses an
+/// anonymous caller (`/System/Info/Public` is the open discovery route).
 #[tokio::test]
 async fn system_info_returns_server_metadata() {
     let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", false).await;
 
-    // The handler does not require an auth extractor, so it's accessible without auth
-    let (status, body) = app.get_no_auth("/System/Info").await;
+    let (status, body) = app.get("/System/Info", &token).await;
     assert_eq!(status, StatusCode::OK);
     assert!(body["ServerName"].is_string());
     assert!(body["Id"].is_string());
     assert!(body["Version"].is_string());
+
+    let (status, _) = app.get_no_auth("/System/Info").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     app.cleanup().await;
 }
