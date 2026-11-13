@@ -8,10 +8,12 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, media_items, user_data};
-use rustyfin_models::dto::{BaseItemDto, QueryResult, UserItemDataDto};
+use rustyfin_db::repo::{images, media_items};
+use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
-use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
+use super::items::{
+    apply_images_to_dto, attach_user_data, group_images_by_item, media_item_to_dto,
+};
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
@@ -159,20 +161,7 @@ async fn enrich_next_up_dtos(
     }
 
     if query.enable_user_data.unwrap_or(true) {
-        for dto in dtos.iter_mut() {
-            if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, dto.id).await {
-                dto.user_data = Some(UserItemDataDto {
-                    playback_position_ticks: ud.playback_position_ticks,
-                    play_count: ud.play_count,
-                    is_favorite: ud.is_favorite,
-                    played: ud.played,
-                    rating: ud.rating,
-                    likes: ud.rating.map(|r| r >= 6.5),
-                    last_played_date: ud.last_played_date,
-                    ..Default::default()
-                });
-            }
-        }
+        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
     }
 }
 
@@ -223,20 +212,7 @@ pub async fn get_seasons(
 
     // User data
     if query.enable_user_data.unwrap_or(true) {
-        for dto in &mut dtos {
-            if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, dto.id).await {
-                dto.user_data = Some(UserItemDataDto {
-                    playback_position_ticks: ud.playback_position_ticks,
-                    play_count: ud.play_count,
-                    is_favorite: ud.is_favorite,
-                    played: ud.played,
-                    rating: ud.rating,
-                    likes: ud.rating.map(|r| r >= 6.5),
-                    last_played_date: ud.last_played_date,
-                    ..Default::default()
-                });
-            }
-        }
+        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
     }
 
     Ok(Json(QueryResult::new(dtos, total)))
@@ -394,19 +370,6 @@ async fn enrich_episode_dtos(
     }
 
     if query.enable_user_data.unwrap_or(true) {
-        for dto in dtos.iter_mut() {
-            if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, dto.id).await {
-                dto.user_data = Some(UserItemDataDto {
-                    playback_position_ticks: ud.playback_position_ticks,
-                    play_count: ud.play_count,
-                    is_favorite: ud.is_favorite,
-                    played: ud.played,
-                    rating: ud.rating,
-                    likes: ud.rating.map(|r| r >= 6.5),
-                    last_played_date: ud.last_played_date,
-                    ..Default::default()
-                });
-            }
-        }
+        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
     }
 }

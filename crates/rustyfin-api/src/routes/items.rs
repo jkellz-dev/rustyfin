@@ -115,6 +115,11 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         "Photo" => Some("Photo".to_string()),
         _ => None,
     };
+    // Every video Rustyfin serves is a plain file (no disc folders).
+    let video_type = match item.item_type.as_str() {
+        "Movie" | "Episode" | "Trailer" | "MusicVideo" | "Video" => Some("VideoFile".to_string()),
+        _ => None,
+    };
 
     BaseItemDto {
         name: item.name.clone(),
@@ -159,6 +164,11 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         media_type,
         can_delete: Some(false),
         can_download: Some(true),
+        video_type,
+        // Present and empty when there are none, as Jellyfin sends them.
+        image_tags: Some(HashMap::new()),
+        backdrop_image_tags: Some(Vec::new()),
+        image_blur_hashes: Some(HashMap::new()),
         ..Default::default()
     }
 }
@@ -220,21 +230,9 @@ pub(crate) fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
     }
 
     ImageFields {
-        image_tags: if image_tags.is_empty() {
-            None
-        } else {
-            Some(image_tags)
-        },
-        backdrop_image_tags: if backdrop_tags.is_empty() {
-            None
-        } else {
-            Some(backdrop_tags)
-        },
-        image_blur_hashes: if blur_hashes.is_empty() {
-            None
-        } else {
-            Some(blur_hashes)
-        },
+        image_tags: Some(image_tags),
+        backdrop_image_tags: Some(backdrop_tags),
+        image_blur_hashes: Some(blur_hashes),
         primary_image_aspect_ratio: primary_aspect_ratio,
     }
 }
@@ -411,20 +409,7 @@ pub async fn get_items(
 
     // Attach user data if requested
     if query.enable_user_data.unwrap_or(true) {
-        for dto in &mut dtos {
-            if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, dto.id).await {
-                dto.user_data = Some(UserItemDataDto {
-                    playback_position_ticks: ud.playback_position_ticks,
-                    play_count: ud.play_count,
-                    is_favorite: ud.is_favorite,
-                    played: ud.played,
-                    rating: ud.rating,
-                    likes: ud.rating.map(|r| r >= 6.5),
-                    last_played_date: ud.last_played_date,
-                    ..Default::default()
-                });
-            }
-        }
+        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
     }
 
     let mut result = QueryResult::new(dtos, total as i32);
@@ -579,19 +564,11 @@ pub async fn get_item_by_id(
         }
     }
 
-    // Attach user data
-    if let Ok(Some(ud)) = user_data::get(&state.pool, auth.user_id, item_id).await {
-        dto.user_data = Some(UserItemDataDto {
-            playback_position_ticks: ud.playback_position_ticks,
-            play_count: ud.play_count,
-            is_favorite: ud.is_favorite,
-            played: ud.played,
-            rating: ud.rating,
-            likes: ud.rating.map(|r| r >= 6.5),
-            last_played_date: ud.last_played_date,
-            ..Default::default()
-        });
-    }
+    // The caller's user data, zeros when they never touched the item.
+    let row = user_data::get(&state.pool, auth.user_id, item_id)
+        .await
+        .or_log_default("user_data::get");
+    dto.user_data = Some(user_data_dto(item_id, row.as_ref()));
 
     Ok(Json(dto))
 }

@@ -419,6 +419,9 @@ low-priority admin features.
 - [x] Filters (2/2)
 - [x] Collections (3/3)
 - [x] `GET /Items/Counts`, `GET /Library/MediaFolders` (found missing by the Hurl parity suite)
+- [x] Item shape: `RunTimeTicks` spelled as Jellyfin does (was `RuntimeTicks`, so no client saw a duration);
+      `UserData` on every item, `ImageTags`/`BackdropImageTags`/`ImageBlurHashes` present when empty, `VideoType`
+      on videos (found by the parity suite)
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)
