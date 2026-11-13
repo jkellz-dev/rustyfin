@@ -839,7 +839,11 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       `routes::access::require_item_access` (404, like Jellyfin), and suggestions, similar and recommendations are
       filtered. Not covered: the image fetch routes (public by design, no auth) and HLS segments, which are keyed by
       session id rather than item
-- [ ] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked)
+- [x] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked). HTTP already re-read
+      the user on every request; `/socket` did not: it accepted any token that existed, with no expiry check and no look
+      at the user, and never re-checked an open socket. Both now go through `rustyfin_auth::session::resolve_token`, and
+      an open socket is re-checked on every keepalive (45 s) and closed when its session expires, is logged out, or its
+      user is disabled or removed
 - [ ] Rate limiting on auth endpoints
 - [ ] Review CORS / header configuration
 
