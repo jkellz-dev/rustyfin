@@ -10,9 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only by default: a job that publishes asks for its own write scope.
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,15 +25,17 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
         with:
           components: rustfmt, clippy
 
       # Compile cache shared with the other cargo jobs and local builds. After the
       # toolchain step: cache keys include the rustc on PATH.
-      - uses: jdx/mr-boxington-action@v1
+      - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -50,9 +52,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.100.0
-      - uses: jdx/mr-boxington-action@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
+      - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -82,9 +86,11 @@ jobs:
     env:
       DATABASE_URL: postgres://rustyfin:rustyfin@localhost:5432/rustyfin_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.100.0
-      - uses: jdx/mr-boxington-action@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
+      - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
 
       - name: Run integration tests
         run: mbx test -p rustyfin-api --test '*' -- --test-threads=1
@@ -93,14 +99,16 @@ jobs:
     name: Build Frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
         with:
           targets: wasm32-unknown-unknown
 
       - name: Install trunk
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: trunk
 
@@ -108,7 +116,7 @@ jobs:
         working-directory: frontend
         run: trunk build --release
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: frontend-dist
           path: frontend/dist/
@@ -125,16 +133,18 @@ jobs:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
 
       - name: Install cross
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cross
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: frontend-dist
           path: frontend/dist/
@@ -148,7 +158,7 @@ jobs:
           cp target/${{ matrix.target }}/release/rustyfin-server artifacts/rustyfin-server-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/rustyfin artifacts/rustyfin-${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: binaries-${{ matrix.target }}
           path: artifacts/
@@ -159,6 +169,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     needs: [build]
+    permissions:
+      contents: read
+      packages: write # push images to GHCR
     strategy:
       matrix:
         include:
@@ -173,7 +186,9 @@ jobs:
             binary_arm64: rustyfin-aarch64-unknown-linux-gnu
             binary_name: rustyfin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Determine tags
         id: tags
@@ -183,35 +198,35 @@ jobs:
           TAGS="${IMAGE}:sha-${SHORT_SHA}"
 
           # Always tag main pushes as :latest
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
             TAGS="${TAGS},${IMAGE}:latest"
           fi
 
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME}"
             TAGS="${TAGS},${IMAGE}:${VERSION}"
           fi
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: binaries-x86_64-unknown-linux-gnu
           path: artifacts/amd64/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: binaries-aarch64-unknown-linux-gnu
           path: artifacts/arm64/
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -226,7 +241,7 @@ jobs:
           chmod +x context/linux/*/${{ matrix.binary_name }}
 
       - name: Build & push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: context
           file: ${{ matrix.dockerfile }}
@@ -239,10 +254,14 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [container-push]
+    permissions:
+      contents: write # push the changelog commit and tag, create the release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          # Kept on purpose: later steps `git push` the changelog and the tag.
+          persist-credentials: true
 
       - name: Validate semver tag
         run: |
@@ -254,7 +273,7 @@ jobs:
           echo "Version: $TAG"
 
       - name: Generate full changelog
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
           args: --verbose
@@ -284,7 +303,7 @@ jobs:
 
       - name: Generate release notes
         id: changelog
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
           args: ${{ steps.cliff_args.outputs.args }}
@@ -318,7 +337,7 @@ jobs:
             echo "flag=--prerelease" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: binaries-*
           merge-multiple: true
@@ -327,9 +346,11 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ steps.changelog.outputs.content }}
+          PRERELEASE_FLAG: ${{ steps.prerelease.outputs.flag }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
-            --notes "${{ steps.changelog.outputs.content }}" \
-            ${{ steps.prerelease.outputs.flag }} \
+            --notes "${RELEASE_NOTES}" \
+            ${PRERELEASE_FLAG} \
             release-artifacts/*
