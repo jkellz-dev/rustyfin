@@ -77,6 +77,14 @@ impl TranscodeManager {
             );
         }
 
+        // The session id becomes a directory under `temp_base` that is created,
+        // written by ffmpeg and later removed recursively, so an id that could leave
+        // `temp_base` (a separator, `..`, an absolute path) must never get this far.
+        // The API checks it first; this guards every other caller.
+        if !super::names::is_valid_session_id(&request.play_session_id) {
+            bail!("invalid play session id");
+        }
+
         // Kill any existing job for this session
         self.kill_job(&request.play_session_id).await;
 

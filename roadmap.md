@@ -824,7 +824,15 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 
 ### 11e. Security Review
 
-- [ ] Audit all path parameters for injection (path traversal in streaming, image serving)
+- [x] Audit all path parameters for injection (path traversal in streaming, image serving). Streaming, image and subtitle
+  routes take only an item id and read paths from the database. The HLS routes did not: `PlaySessionId` named the
+  transcode directory (created, written by ffmpeg, then removed recursively) and the segment file name was joined onto
+  it, and Axum decodes `%2F` inside one path segment, so any logged-in user could read arbitrary server files or point
+  the cleanup at an arbitrary directory. Both names are now validated (`transcode::names`: letters, digits, `-`, `_`;
+  segments `<stem>.<ext>`) with a 400 before any lookup, at the sink in `start_transcode`, and with a containment check
+  on the segment path
+  - [ ] Follow-up: `MediaSourceId` and the codec query values are copied unescaped into the redirect and playlist URLs;
+        percent-encode them
 - [ ] Verify library access enforcement on every item-returning endpoint
 - [ ] Ensure disabled users are fully locked out (sessions invalidated, not just new auth blocked)
 - [ ] Rate limiting on auth endpoints

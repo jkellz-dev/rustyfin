@@ -31,6 +31,9 @@ pub async fn get_universal_audio(
     Path(item_id): Path<Uuid>,
     Query(params): Query<UniversalAudioParams>,
 ) -> Result<Response, ApiError> {
+    // The id is written into the redirect URL below.
+    let play_session_id = super::hls::session_id_param(params.play_session_id.as_deref())?;
+
     // Verify item exists
     let _item = media_items::find_by_id(&state.pool, item_id)
         .await
@@ -41,7 +44,6 @@ pub async fn get_universal_audio(
 
     if protocol.eq_ignore_ascii_case("hls") {
         // Redirect to audio HLS master playlist
-        let play_session_id = params.play_session_id.as_deref().unwrap_or("unknown");
         let item_id_string = item_id.to_string();
         let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
 

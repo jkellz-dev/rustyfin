@@ -19,6 +19,7 @@ use rustyfin_media::transcode::{
         rewrite_audio_variant_playlist, rewrite_variant_playlist,
     },
     manager::TranscodeRequest,
+    names::{is_valid_segment_name, is_valid_session_id},
     params::*,
 };
 
@@ -42,6 +43,20 @@ pub struct HlsQueryParams {
     pub max_framerate: Option<f64>,
 }
 
+/// The play session id from the query (`unknown` when absent), checked.
+///
+/// It names the transcode output directory and is written into generated
+/// playlists and redirect URLs, so anything but a plain token is a 400. Call this
+/// before any lookup so a bad id is never confused with an unknown session (404).
+pub(super) fn session_id_param(raw: Option<&str>) -> Result<&str, ApiError> {
+    let id = raw.unwrap_or("unknown");
+    if is_valid_session_id(id) {
+        Ok(id)
+    } else {
+        Err(ApiError::BadRequest("invalid play session id".to_string()))
+    }
+}
+
 /// `GET /Videos/{itemId}/master.m3u8` — HLS master playlist.
 pub async fn get_master_playlist(
     State(state): State<AppState>,
@@ -49,6 +64,8 @@ pub async fn get_master_playlist(
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
+    let play_session_id = session_id_param(params.play_session_id.as_deref())?;
+
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?
@@ -63,7 +80,6 @@ pub async fn get_master_playlist(
 
     let video_codec = parse_video_codec(params.video_codec.as_deref());
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
-    let play_session_id = params.play_session_id.as_deref().unwrap_or("unknown");
     let item_id_string = item_id.to_string();
     let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
 
@@ -118,11 +134,7 @@ pub async fn get_variant_playlist(
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
-    let play_session_id = params
-        .play_session_id
-        .as_deref()
-        .unwrap_or("unknown")
-        .to_string();
+    let play_session_id = session_id_param(params.play_session_id.as_deref())?.to_string();
 
     let tm = &state.transcode_manager;
 
@@ -219,6 +231,16 @@ async fn get_segment_inner(
     play_session_id: &str,
     segment_file: &str,
 ) -> Result<Response, ApiError> {
+    // Both come from the URL, which the router has percent-decoded: `..%2F..%2Fx`
+    // arrives as `../../x`, and an absolute name makes `join` discard its base.
+    // Check them before anything is looked up or touched on disk.
+    if !is_valid_session_id(play_session_id) {
+        return Err(ApiError::BadRequest("invalid play session id".to_string()));
+    }
+    if !is_valid_segment_name(segment_file) {
+        return Err(ApiError::BadRequest("invalid segment name".to_string()));
+    }
+
     let tm = &state.transcode_manager;
 
     let output_dir = tm
@@ -227,6 +249,11 @@ async fn get_segment_inner(
         .ok_or(ApiError::NotFound)?;
 
     let segment_path = output_dir.join(segment_file);
+    // Belt and braces: whatever the names were, the file must sit directly in the
+    // job's output directory.
+    if segment_path.parent() != Some(output_dir.as_path()) {
+        return Err(ApiError::NotFound);
+    }
 
     // If segment exists, serve it directly
     if segment_path.exists() {
@@ -336,13 +363,14 @@ pub async fn get_audio_master_playlist(
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
+    let play_session_id = session_id_param(params.play_session_id.as_deref())?;
+
     let _item = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
 
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
-    let play_session_id = params.play_session_id.as_deref().unwrap_or("unknown");
     let item_id_string = item_id.to_string();
     let media_source_id = params.media_source_id.as_deref().unwrap_or(&item_id_string);
 
@@ -378,11 +406,7 @@ pub async fn get_audio_variant_playlist(
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
 ) -> Result<Response, ApiError> {
-    let play_session_id = params
-        .play_session_id
-        .as_deref()
-        .unwrap_or("unknown")
-        .to_string();
+    let play_session_id = session_id_param(params.play_session_id.as_deref())?.to_string();
 
     let tm = &state.transcode_manager;
 

@@ -2,6 +2,7 @@ pub mod command;
 pub mod hls;
 pub mod job;
 pub mod manager;
+pub mod names;
 pub mod params;
 pub mod profiles;
 pub mod subtitles;
