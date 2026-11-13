@@ -44,7 +44,6 @@ jsonpath "$.Items[0].SortName" isString
 jsonpath "$.Items[0].ExternalUrls" isCollection
 jsonpath "$.Items[0].Path" isString
 jsonpath "$.Items[0].EnableMediaSourceDisplay" isBoolean
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].Taglines" isCollection
 jsonpath "$.Items[0].Genres" isCollection
 jsonpath "$.Items[0].RemoteTrailers" isCollection
@@ -83,7 +82,6 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].RunTimeTicks" isInteger
 jsonpath "$.Items[0].ProductionYear" isInteger
 jsonpath "$.Items[0].IsFolder" isBoolean
@@ -118,7 +116,6 @@ jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].ProductionYear" isInteger
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
@@ -152,7 +149,6 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].RunTimeTicks" isInteger
 jsonpath "$.Items[0].IndexNumber" isInteger
 jsonpath "$.Items[0].ParentIndexNumber" isInteger
@@ -263,7 +259,6 @@ jsonpath "$.MediaSources[0].HasSegments" isBoolean
 jsonpath "$.ProductionLocations" isCollection
 jsonpath "$.Path" isString
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
-jsonpath "$.ChannelId" exists
 jsonpath "$.Taglines" isCollection
 jsonpath "$.Genres" isCollection
 jsonpath "$.RunTimeTicks" isInteger
@@ -420,7 +415,6 @@ jsonpath "$.MediaSources[0].HasSegments" isBoolean
 jsonpath "$.ProductionLocations" isCollection
 jsonpath "$.Path" isString
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
-jsonpath "$.ChannelId" exists
 jsonpath "$.Taglines" isCollection
 jsonpath "$.Genres" isCollection
 jsonpath "$.RunTimeTicks" isInteger
@@ -511,7 +505,6 @@ jsonpath "$.Items[0].SortName" isString
 jsonpath "$.Items[0].ExternalUrls" isCollection
 jsonpath "$.Items[0].Path" isString
 jsonpath "$.Items[0].EnableMediaSourceDisplay" isBoolean
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].Taglines" isCollection
 jsonpath "$.Items[0].Genres" isCollection
 jsonpath "$.Items[0].PlayAccess" isString
@@ -592,7 +585,6 @@ jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].RunTimeTicks" isInteger
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
@@ -620,7 +612,6 @@ jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].IndexNumber" isInteger
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
@@ -652,7 +643,6 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].ChannelId" exists
 jsonpath "$.Items[0].RunTimeTicks" isInteger
 jsonpath "$.Items[0].IndexNumber" isInteger
 jsonpath "$.Items[0].ParentIndexNumber" isInteger

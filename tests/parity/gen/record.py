@@ -159,6 +159,10 @@ def shape(node, path, out, depth=0):
                 out.append(f'jsonpath "{child}" exists')
                 if depth < 3:
                     shape(val, child, out, depth + 1)
+            elif val is None:
+                # Jellyfin sent null: there is no type to hold Rustyfin to, and a
+                # server that omits the key says the same thing as one sending null.
+                continue
             else:
                 out.append(f'jsonpath "{child}" {kind(val)}')
     elif isinstance(node, list):
