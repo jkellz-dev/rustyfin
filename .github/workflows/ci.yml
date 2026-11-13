@@ -210,6 +210,9 @@ jobs:
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           cache-generation: v1-build-${{ matrix.target }}
+          # mbx's own store, not a pruned target/: the target payload left mbx with
+          # nothing to look up (0 hits) and Cargo still recompiled ~90 units a run.
+          github-cache-mode: objects
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
