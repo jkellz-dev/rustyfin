@@ -23,11 +23,19 @@ fn user_row_to_dto(row: &users::UserRow, server_id: &str, ldap_enabled: bool) ->
         has_configured_easy_password: false,
         enable_auto_login: false,
         last_login_date: row.last_login_date,
-        last_activity_date: row.last_activity_date,
+        // Jellyfin always has one; a user who never did anything gets their creation.
+        last_activity_date: Some(
+            row.last_activity_date
+                .or(row.last_login_date)
+                .unwrap_or(row.created_at),
+        ),
         configuration: UserConfiguration {
             audio_language_preference: row.audio_language_preference.clone(),
             play_default_audio_track: row.play_default_audio_track,
-            subtitle_language_preference: row.subtitle_language_preference.clone(),
+            subtitle_language_preference: row
+                .subtitle_language_preference
+                .clone()
+                .or_else(|| Some(String::new())),
             subtitle_mode: "Default".to_string(),
             enable_next_episode_auto_play: row.enable_next_episode_auto_play,
             ..Default::default()

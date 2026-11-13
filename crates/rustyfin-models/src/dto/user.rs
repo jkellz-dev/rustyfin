@@ -23,7 +23,7 @@ pub struct UserDto {
 
 /// User configuration (preferences).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "PascalCase", default)]
 pub struct UserConfiguration {
     pub audio_language_preference: Option<String>,
     pub play_default_audio_track: bool,
@@ -32,6 +32,16 @@ pub struct UserConfiguration {
     pub enable_next_episode_auto_play: bool,
     pub remember_audio_selections: bool,
     pub remember_subtitle_selections: bool,
+    pub display_missing_episodes: bool,
+    pub grouped_folders: Vec<String>,
+    pub display_collections_view: bool,
+    pub enable_local_password: bool,
+    pub ordered_views: Vec<String>,
+    pub latest_items_excludes: Vec<String>,
+    pub my_media_excludes: Vec<String>,
+    pub hide_played_in_latest: bool,
+    /// Jellyfin's stable Chromecast receiver.
+    pub cast_receiver_id: String,
 }
 
 impl Default for UserConfiguration {
@@ -39,18 +49,27 @@ impl Default for UserConfiguration {
         Self {
             audio_language_preference: None,
             play_default_audio_track: true,
-            subtitle_language_preference: None,
+            subtitle_language_preference: Some(String::new()),
             subtitle_mode: "Default".to_string(),
             enable_next_episode_auto_play: true,
             remember_audio_selections: true,
             remember_subtitle_selections: true,
+            display_missing_episodes: false,
+            grouped_folders: Vec::new(),
+            display_collections_view: false,
+            enable_local_password: false,
+            ordered_views: Vec::new(),
+            latest_items_excludes: Vec::new(),
+            my_media_excludes: Vec::new(),
+            hide_played_in_latest: true,
+            cast_receiver_id: "F007D354".to_string(),
         }
     }
 }
 
 /// User policy (permissions).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "PascalCase", default)]
 pub struct UserPolicy {
     pub is_administrator: bool,
     pub is_hidden: bool,
@@ -76,6 +95,26 @@ pub struct UserPolicy {
     pub remote_client_bitrate_limit: i64,
     pub authentication_provider_id: String,
     pub password_reset_provider_id: String,
+    pub enable_collection_management: bool,
+    pub enable_subtitle_management: bool,
+    pub enable_lyric_management: bool,
+    pub blocked_tags: Vec<String>,
+    pub allowed_tags: Vec<String>,
+    pub access_schedules: Vec<serde_json::Value>,
+    pub block_unrated_items: Vec<String>,
+    pub enable_remote_control_of_other_users: bool,
+    pub enable_shared_device_control: bool,
+    pub enable_live_tv_management: bool,
+    pub enable_live_tv_access: bool,
+    pub enable_playback_remuxing: bool,
+    pub force_remote_source_transcoding: bool,
+    pub enable_content_deletion_from_folders: Vec<String>,
+    pub enabled_devices: Vec<String>,
+    pub enabled_channels: Vec<String>,
+    pub blocked_media_folders: Vec<String>,
+    pub blocked_channels: Vec<String>,
+    /// No SyncPlay in Rustyfin, so nobody may create or join groups.
+    pub sync_play_access: String,
 }
 
 impl Default for UserPolicy {
@@ -104,6 +143,25 @@ impl Default for UserPolicy {
             remote_client_bitrate_limit: 0,
             authentication_provider_id: "Rustyfin.Auth.OidcProvider".to_string(),
             password_reset_provider_id: String::new(),
+            enable_collection_management: false,
+            enable_subtitle_management: false,
+            enable_lyric_management: false,
+            blocked_tags: Vec::new(),
+            allowed_tags: Vec::new(),
+            access_schedules: Vec::new(),
+            block_unrated_items: Vec::new(),
+            enable_remote_control_of_other_users: false,
+            enable_shared_device_control: true,
+            enable_live_tv_management: false,
+            enable_live_tv_access: false,
+            enable_playback_remuxing: true,
+            force_remote_source_transcoding: false,
+            enable_content_deletion_from_folders: Vec::new(),
+            enabled_devices: Vec::new(),
+            enabled_channels: Vec::new(),
+            blocked_media_folders: Vec::new(),
+            blocked_channels: Vec::new(),
+            sync_play_access: "None".to_string(),
         }
     }
 }

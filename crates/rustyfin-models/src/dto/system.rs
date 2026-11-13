@@ -11,6 +11,7 @@ pub struct PublicSystemInfo {
     pub product_name: String,
     pub id: String,
     pub startup_wizard_completed: bool,
+    pub operating_system: String,
 }
 
 /// Full system info returned by `GET /System/Info`.
@@ -39,6 +40,11 @@ pub struct SystemInfo {
     pub log_path: String,
     pub internal_metadata_path: String,
     pub transcoding_temp_path: String,
+    pub completed_installations: Vec<String>,
+    pub web_path: String,
+    pub cast_receiver_applications: Vec<CastReceiverApplication>,
+    pub encoder_location: String,
+    pub system_architecture: String,
 }
 
 /// Branding configuration returned by `GET /Branding/Configuration`.
@@ -101,5 +107,13 @@ pub struct LogFileInfo {
     pub date_created: chrono::DateTime<chrono::Utc>,
     pub date_modified: chrono::DateTime<chrono::Utc>,
     pub size: i64,
+    pub name: String,
+}
+
+/// A Chromecast receiver app the server offers (Jellyfin's `CastReceiverApplication`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CastReceiverApplication {
+    pub id: String,
     pub name: String,
 }

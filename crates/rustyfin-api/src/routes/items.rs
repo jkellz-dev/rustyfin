@@ -14,7 +14,9 @@ use rustyfin_db::repo::images::ImageRow;
 use rustyfin_db::repo::{
     chapters, images, libraries, media_items, media_streams, people, user_data, user_library_access,
 };
-use rustyfin_media::playback_info::stream_row_to_dto;
+use rustyfin_media::playback_info::{
+    default_audio_stream_index, source_video_type, stream_row_to_dto,
+};
 use rustyfin_models::dto::{
     BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, NameGuidPair, QueryResult,
     UserItemDataDto,
@@ -84,16 +86,73 @@ pub(crate) fn user_data_dto(
     dto
 }
 
-/// Attach the caller's `UserData` to every item in one query. A failing lookup
-/// leaves the zeros in place and logs: the list is the answer, the user data is
-/// an extra.
+/// Folders whose `UserData` carries how many playable items below are unplayed.
+fn counts_children(dto: &BaseItemDto) -> bool {
+    dto.is_folder
+        || matches!(
+            dto.item_type.as_str(),
+            "Series"
+                | "Season"
+                | "BoxSet"
+                | "MusicAlbum"
+                | "MusicArtist"
+                | "Playlist"
+                | "Folder"
+                | "CollectionFolder"
+        )
+}
+
+/// Attach the caller's `UserData` to every item in two queries (their rows, then
+/// the unplayed counts for folders). A failing lookup leaves the zeros in place
+/// and logs: the list is the answer, the user data is an extra.
 pub(crate) async fn attach_user_data(pool: &sqlx::PgPool, user_id: Uuid, dtos: &mut [BaseItemDto]) {
     let ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
     let rows = user_data::get_many(pool, user_id, &ids)
         .await
         .or_log_default("user_data::get_many");
+    let folder_ids: Vec<Uuid> = dtos
+        .iter()
+        .filter(|d| counts_children(d))
+        .map(|d| d.id)
+        .collect();
+    let unplayed = user_data::unplayed_counts(pool, user_id, &folder_ids)
+        .await
+        .or_log_default("user_data::unplayed_counts");
     for dto in dtos.iter_mut() {
-        dto.user_data = Some(user_data_dto(dto.id, rows.get(&dto.id)));
+        let mut ud = user_data_dto(dto.id, rows.get(&dto.id));
+        if counts_children(dto) {
+            ud.unplayed_item_count = Some(unplayed.get(&dto.id).copied().unwrap_or(0) as i32);
+        }
+        dto.user_data = Some(ud);
+    }
+}
+
+/// The fields Jellyfin sends on every item, filled in where Rustyfin has nothing
+/// to say. Clients index into these without checking.
+pub(crate) fn with_jellyfin_defaults(dto: &mut BaseItemDto) {
+    dto.genres.get_or_insert_with(Vec::new);
+    dto.tags.get_or_insert_with(Vec::new);
+    dto.taglines.get_or_insert_with(Vec::new);
+    dto.studios.get_or_insert_with(Vec::new);
+    dto.people.get_or_insert_with(Vec::new);
+    dto.genre_items.get_or_insert_with(Vec::new);
+    dto.external_urls.get_or_insert_with(Vec::new);
+    dto.remote_trailers.get_or_insert_with(Vec::new);
+    dto.production_locations.get_or_insert_with(Vec::new);
+    dto.locked_fields.get_or_insert_with(Vec::new);
+    dto.provider_ids.get_or_insert_with(HashMap::new);
+    dto.image_tags.get_or_insert_with(HashMap::new);
+    dto.backdrop_image_tags.get_or_insert_with(Vec::new);
+    dto.image_blur_hashes.get_or_insert_with(HashMap::new);
+    dto.lock_data.get_or_insert(false);
+    dto.local_trailer_count.get_or_insert(0);
+    dto.special_feature_count.get_or_insert(0);
+    dto.enable_media_source_display.get_or_insert(true);
+    dto.play_access.get_or_insert_with(|| "Full".to_string());
+    dto.location_type
+        .get_or_insert_with(|| "FileSystem".to_string());
+    if dto.display_preferences_id.is_none() {
+        dto.display_preferences_id = Some(dto.id.simple().to_string());
     }
 }
 
@@ -121,7 +180,7 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         _ => None,
     };
 
-    BaseItemDto {
+    let mut dto = BaseItemDto {
         name: item.name.clone(),
         original_title: item.original_title.clone(),
         server_id: server_id.to_string(),
@@ -170,7 +229,9 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         backdrop_image_tags: Some(Vec::new()),
         image_blur_hashes: Some(HashMap::new()),
         ..Default::default()
-    }
+    };
+    with_jellyfin_defaults(&mut dto);
+    dto
 }
 
 pub(crate) struct ImageFields {
@@ -518,7 +579,12 @@ pub async fn get_item_by_id(
             let media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
             let source = MediaSourceInfo {
                 id: item.id.to_string(),
-                path: None,
+                // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.
+                path: if auth.is_administrator {
+                    item.path.clone()
+                } else {
+                    None
+                },
                 container: item.container.clone(),
                 size: item.size,
                 name: Some(item.name.clone()),
@@ -532,12 +598,16 @@ pub async fn get_item_by_id(
                 source_type: "Default".to_string(),
                 protocol: "File".to_string(),
                 media_streams: Some(media_stream_dtos.clone()),
+                video_type: source_video_type(&media_stream_dtos),
+                default_audio_stream_index: default_audio_stream_index(&media_stream_dtos),
+                supports_probing: true,
                 e_tag: item.etag.clone(),
                 transcoding_url: None,
-                transcoding_sub_protocol: None,
+                transcoding_sub_protocol: Some("http".to_string()),
                 transcoding_container: None,
                 direct_stream_url: None,
                 transcode_reasons: None,
+                ..Default::default()
             };
             dto.media_sources = Some(vec![source]);
             dto.media_streams = Some(media_stream_dtos);
@@ -568,7 +638,20 @@ pub async fn get_item_by_id(
     let row = user_data::get(&state.pool, auth.user_id, item_id)
         .await
         .or_log_default("user_data::get");
-    dto.user_data = Some(user_data_dto(item_id, row.as_ref()));
+    let mut ud = user_data_dto(item_id, row.as_ref());
+    if counts_children(&dto) {
+        let unplayed = user_data::unplayed_counts(&state.pool, auth.user_id, &[item_id])
+            .await
+            .or_log_default("user_data::unplayed_counts");
+        ud.unplayed_item_count = Some(unplayed.get(&item_id).copied().unwrap_or(0) as i32);
+    }
+    dto.user_data = Some(ud);
+    // Jellyfin sends these on a single item even when there is nothing in them.
+    dto.chapters.get_or_insert_with(Vec::new);
+    dto.trickplay.get_or_insert_with(HashMap::new);
+    if auth.is_administrator {
+        dto.path = item.path.clone();
+    }
 
     Ok(Json(dto))
 }
@@ -697,6 +780,16 @@ pub async fn get_user_items_legacy(
     query: Query<ItemsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     get_items(state, auth, query).await
+}
+
+/// `GET /Users/{userId}/Items/Latest` — Legacy latest-additions route.
+pub async fn get_user_latest_items_legacy(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    Path(_user_id): Path<Uuid>,
+    query: Query<ItemsQuery>,
+) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
+    get_latest_items(state, auth, query).await
 }
 
 /// `GET /Users/{userId}/Items/{itemId}` — Legacy item detail route.

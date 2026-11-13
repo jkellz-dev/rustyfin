@@ -8,7 +8,8 @@ use axum::{
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_db::repo::{libraries, media_items, users};
 use rustyfin_models::dto::{
-    DashboardStats, LogFileInfo, PublicSystemInfo, StartupConfiguration, SystemInfo,
+    CastReceiverApplication, DashboardStats, LogFileInfo, PublicSystemInfo, StartupConfiguration,
+    SystemInfo,
 };
 
 use crate::error::ApiError;
@@ -32,6 +33,7 @@ pub async fn get_public_info(State(state): State<AppState>) -> Json<PublicSystem
         product_name: "Rustyfin".to_string(),
         id: state.server_id.clone(),
         startup_wizard_completed: wizard_complete,
+        operating_system: std::env::consts::OS.to_string(),
     })
 }
 
@@ -64,12 +66,33 @@ pub async fn get_info(State(state): State<AppState>, _auth: AuthenticatedUser) -
         log_path: String::new(),
         internal_metadata_path: String::new(),
         transcoding_temp_path: String::new(),
+        completed_installations: Vec::new(),
+        web_path: String::new(),
+        cast_receiver_applications: vec![
+            CastReceiverApplication {
+                id: "F007D354".to_string(),
+                name: "Stable".to_string(),
+            },
+            CastReceiverApplication {
+                id: "6F511C87".to_string(),
+                name: "Unstable".to_string(),
+            },
+        ],
+        encoder_location: "System".to_string(),
+        system_architecture: match std::env::consts::ARCH {
+            "x86_64" => "X64",
+            "aarch64" => "Arm64",
+            other => other,
+        }
+        .to_string(),
     })
 }
 
 /// `GET /System/Ping` and `POST /System/Ping` — No auth required.
+///
+/// Jellyfin answers with a JSON string, so the body is quoted.
 pub async fn ping(State(state): State<AppState>) -> impl IntoResponse {
-    (StatusCode::OK, state.server_name.clone())
+    (StatusCode::OK, Json(state.server_name.clone()))
 }
 
 /// `GET /Startup/Configuration` — Check if startup wizard is complete.

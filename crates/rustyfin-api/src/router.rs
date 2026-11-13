@@ -176,6 +176,10 @@ pub fn build_router(state: AppState) -> Router {
         // Legacy item routes
         .route("/Users/{userId}/Items", get(items::get_user_items_legacy))
         .route(
+            "/Users/{userId}/Items/Latest",
+            get(items::get_user_latest_items_legacy),
+        )
+        .route(
             "/Users/{userId}/Items/{itemId}",
             get(items::get_user_item_legacy),
         )

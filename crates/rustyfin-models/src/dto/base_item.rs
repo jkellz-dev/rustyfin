@@ -223,6 +223,20 @@ pub struct BaseItemDto {
     // Etag
     #[serde(skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_trailers: Option<Vec<MediaUrl>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub production_locations: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locked_fields: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub special_feature_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_media_source_display: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_preferences_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trickplay: Option<HashMap<String, serde_json::Value>>,
 }
 
 /// Per-user item data (played, favorite, progress).
@@ -261,8 +275,8 @@ pub struct BaseItemPerson {
 }
 
 /// Media source info for playback.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "PascalCase", default)]
 pub struct MediaSourceInfo {
     pub id: String,
     pub path: Option<String>,
@@ -296,11 +310,29 @@ pub struct MediaSourceInfo {
     pub direct_stream_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transcode_reasons: Option<Vec<String>>,
+    // Always in Jellyfin's answer; fixed values for the plain files Rustyfin serves.
+    pub ignore_dts: bool,
+    pub ignore_index: bool,
+    pub gen_pts_input: bool,
+    pub is_infinite_stream: bool,
+    pub use_most_compatible_transcoding_profile: bool,
+    pub requires_opening: bool,
+    pub requires_closing: bool,
+    pub requires_looping: bool,
+    pub supports_probing: bool,
+    pub has_segments: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_type: Option<String>,
+    pub media_attachments: Vec<serde_json::Value>,
+    pub formats: Vec<String>,
+    pub required_http_headers: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_audio_stream_index: Option<i32>,
 }
 
 /// Individual media stream (video, audio, subtitle track).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "PascalCase", default)]
 pub struct MediaStream {
     pub index: i32,
     #[serde(rename = "Type")]
@@ -345,6 +377,22 @@ pub struct MediaStream {
     // Subtitle-specific
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    // Present on every stream in Jellyfin's answer.
+    pub display_title: String,
+    pub is_interlaced: bool,
+    #[serde(rename = "IsAVC")]
+    pub is_avc: bool,
+    pub video_range: String,
+    pub video_range_type: String,
+    pub audio_spatial_format: String,
+    pub is_hearing_impaired: bool,
+    pub is_text_subtitle_stream: bool,
+    pub supports_external_stream: bool,
+    pub is_anamorphic: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_frame_rate: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_frame_rate: Option<f32>,
 }
 
 /// Search hint result for `GET /Search/Hints`.
@@ -672,4 +720,13 @@ impl ServerConfiguration {
             image_extraction_timeout_ms: 0,
         }
     }
+}
+
+/// A trailer or other remote media link (Jellyfin's `MediaUrl`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct MediaUrl {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }

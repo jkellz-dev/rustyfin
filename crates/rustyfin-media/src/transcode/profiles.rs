@@ -269,6 +269,7 @@ mod tests {
             transcoding_container: None,
             direct_stream_url: None,
             transcode_reasons: None,
+            ..Default::default()
         }
     }
 
@@ -296,6 +297,7 @@ mod tests {
             channel_layout: None,
             sample_rate: None,
             path: None,
+            ..Default::default()
         }
     }
 
@@ -323,6 +325,7 @@ mod tests {
             channel_layout: Some("stereo".to_string()),
             sample_rate: Some(48000),
             path: None,
+            ..Default::default()
         }
     }
 

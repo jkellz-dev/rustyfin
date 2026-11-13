@@ -50,6 +50,38 @@ pub async fn get_many(
     Ok(rows.into_iter().map(|r| (r.item_id, r)).collect())
 }
 
+/// How many playable items below each of `folder_ids` the user has not played
+/// (Jellyfin's `UnplayedItemCount`). A folder with nothing playable below it is
+/// absent from the map.
+pub async fn unplayed_counts(
+    pool: &PgPool,
+    user_id: Uuid,
+    folder_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, i64>, sqlx::Error> {
+    if folder_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let rows = sqlx::query_as::<_, (Uuid, i64)>(
+        "WITH RECURSIVE below(root, id, depth) AS ( \
+             SELECT id, id, 0 FROM media_items WHERE id = ANY($2) \
+             UNION ALL \
+             SELECT below.root, m.id, below.depth + 1 FROM media_items m \
+             JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
+         SELECT below.root, COUNT(*) FROM below \
+         JOIN media_items m ON m.id = below.id \
+         LEFT JOIN user_data ud ON ud.item_id = m.id AND ud.user_id = $1 \
+         WHERE below.depth > 0 \
+           AND m.item_type IN ('Movie', 'Episode', 'Audio', 'Video', 'MusicVideo', 'Trailer') \
+           AND NOT COALESCE(ud.played, false) \
+         GROUP BY below.root",
+    )
+    .bind(user_id)
+    .bind(folder_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 pub async fn upsert(
     pool: &PgPool,
     user_id: Uuid,

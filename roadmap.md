@@ -422,6 +422,9 @@ low-priority admin features.
 - [x] Item shape: `RunTimeTicks` spelled as Jellyfin does (was `RuntimeTicks`, so no client saw a duration);
       `UserData` on every item, `ImageTags`/`BackdropImageTags`/`ImageBlurHashes` present when empty, `VideoType`
       on videos (found by the parity suite)
+- [x] Jellyfin's always-present fields: `/System/Ping` as a JSON string, `SystemInfo` extras, every
+      `UserConfiguration`/`UserPolicy` key, default collections and flags on items, `MediaSourceInfo`/`MediaStream`
+      flags and `DisplayTitle`, `UnplayedItemCount` on folders, `GET /Users/{userId}/Items/Latest` (parity suite)
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

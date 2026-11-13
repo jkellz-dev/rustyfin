@@ -187,7 +187,11 @@ pub async fn authenticate_by_name(
         has_configured_easy_password: false,
         enable_auto_login: false,
         last_login_date: user.last_login_date,
-        last_activity_date: user.last_activity_date,
+        last_activity_date: Some(
+            user.last_activity_date
+                .or(user.last_login_date)
+                .unwrap_or(user.created_at),
+        ),
         configuration: UserConfiguration::default(),
         policy: UserPolicy {
             is_administrator: user.is_administrator,

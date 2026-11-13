@@ -8,7 +8,69 @@ use uuid::Uuid;
 use crate::transcode::profiles::{PlayMethod, decide_play_method};
 
 /// Convert a `MediaStreamRow` to a `MediaStream` DTO.
+/// `SDR`, or `HDR` for the transfer functions HDR formats use: (range, range type).
+fn video_range(s: &MediaStreamRow) -> (&'static str, &'static str) {
+    match s.color_transfer.as_deref() {
+        Some("smpte2084") => ("HDR", "HDR10"),
+        Some("arib-std-b67") => ("HDR", "HLG"),
+        _ => ("SDR", "SDR"),
+    }
+}
+
+fn capitalised(word: &str) -> String {
+    let mut chars = word.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// Jellyfin's `DisplayTitle`: what a client shows in a track picker.
+fn display_title(s: &MediaStreamRow) -> String {
+    let codec = s.codec.as_deref().unwrap_or("").to_uppercase();
+    if s.stream_type == "Video" {
+        let mut parts = Vec::new();
+        if let Some(h) = s.height {
+            parts.push(format!("{h}p"));
+        }
+        if !codec.is_empty() {
+            parts.push(codec);
+        }
+        parts.push(video_range(s).0.to_string());
+        return parts.join(" ");
+    }
+    let mut parts = Vec::new();
+    if let Some(t) = s.title.as_deref().filter(|t| !t.is_empty()) {
+        parts.push(t.to_string());
+    } else if let Some(l) = s.language.as_deref().filter(|l| !l.is_empty()) {
+        parts.push(l.to_string());
+    }
+    if !codec.is_empty() {
+        parts.push(codec);
+    }
+    if let Some(layout) = s.channel_layout.as_deref().filter(|l| !l.is_empty()) {
+        parts.push(capitalised(layout));
+    }
+    if s.is_default {
+        parts.push("Default".to_string());
+    }
+    if s.is_forced {
+        parts.push("Forced".to_string());
+    }
+    if s.is_external {
+        parts.push("External".to_string());
+    }
+    parts.join(" - ")
+}
+
 pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
+    let is_video = s.stream_type == "Video";
+    let (range, range_type) = if is_video {
+        video_range(s)
+    } else {
+        ("Unknown", "Unknown")
+    };
+    let codec = s.codec.as_deref().unwrap_or("");
     MediaStream {
         index: s.stream_index,
         stream_type: s.stream_type.clone(),
@@ -32,7 +94,38 @@ pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
         channel_layout: s.channel_layout.clone(),
         sample_rate: s.sample_rate,
         path: None, // Don't expose filesystem paths
+        display_title: display_title(s),
+        is_avc: is_video && codec == "h264",
+        video_range: range.to_string(),
+        video_range_type: range_type.to_string(),
+        audio_spatial_format: "None".to_string(),
+        is_text_subtitle_stream: s.stream_type == "Subtitle"
+            && matches!(
+                codec,
+                "subrip" | "srt" | "ass" | "ssa" | "webvtt" | "vtt" | "mov_text" | "text"
+            ),
+        average_frame_rate: if is_video { s.real_frame_rate } else { None },
+        reference_frame_rate: if is_video { s.real_frame_rate } else { None },
+        // Plain files: nothing interlaced, anamorphic or external here.
+        ..Default::default()
     }
+}
+
+/// `VideoFile` when the source has a video stream; audio-only sources carry none.
+pub fn source_video_type(streams: &[MediaStream]) -> Option<String> {
+    streams
+        .iter()
+        .any(|s| s.stream_type == "Video")
+        .then(|| "VideoFile".to_string())
+}
+
+/// The audio stream a player starts with: the default one, else the first.
+pub fn default_audio_stream_index(streams: &[MediaStream]) -> Option<i32> {
+    let audio = || streams.iter().filter(|s| s.stream_type == "Audio");
+    audio()
+        .find(|s| s.is_default)
+        .or_else(|| audio().next())
+        .map(|s| s.index)
 }
 
 /// Build a PlaybackInfoResponse, choosing direct play vs transcode based on the device profile.
@@ -65,12 +158,16 @@ pub fn build_playback_info(
         source_type: "Default".to_string(),
         protocol: "File".to_string(),
         media_streams: Some(media_streams.clone()),
+        video_type: source_video_type(&media_streams),
+        default_audio_stream_index: default_audio_stream_index(&media_streams),
+        supports_probing: true,
         e_tag: item.etag.clone(),
         transcoding_url: None,
-        transcoding_sub_protocol: None,
+        transcoding_sub_protocol: Some("http".to_string()),
         transcoding_container: None,
         direct_stream_url: None,
         transcode_reasons: None,
+        ..Default::default()
     };
 
     // If client sent a device profile, run the decision logic

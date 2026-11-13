@@ -33,12 +33,15 @@ pub async fn get_playback_info(
         .get_device_profile(auth.session_id)
         .await;
 
-    Ok(Json(playback_info::build_playback_info(
-        &item,
-        &streams,
-        None,
-        stored_profile.as_ref(),
-    )))
+    let mut info =
+        playback_info::build_playback_info(&item, &streams, None, stored_profile.as_ref());
+    // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.
+    if auth.is_administrator {
+        for source in &mut info.media_sources {
+            source.path = item.path.clone();
+        }
+    }
+    Ok(Json(info))
 }
 
 /// `POST /Items/{itemId}/PlaybackInfo` — Full playback info with device profile.
@@ -67,10 +70,13 @@ pub async fn post_playback_info(
         None
     };
 
-    Ok(Json(playback_info::build_playback_info(
-        &item,
-        &streams,
-        Some(&body),
-        stored_profile.as_ref(),
-    )))
+    let mut info =
+        playback_info::build_playback_info(&item, &streams, Some(&body), stored_profile.as_ref());
+    // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.
+    if auth.is_administrator {
+        for source in &mut info.media_sources {
+            source.path = item.path.clone();
+        }
+    }
+    Ok(Json(info))
 }

@@ -82,7 +82,7 @@ pub async fn get_media_folders(
 
 /// A library as Jellyfin's `CollectionFolder` item.
 fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseItemDto {
-    BaseItemDto {
+    let mut dto = BaseItemDto {
         name: lib.name.clone(),
         server_id: server_id.to_string(),
         id: lib.id,
@@ -97,8 +97,11 @@ fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseIt
         can_delete: Some(false),
         can_download: Some(false),
         location_type: Some("FileSystem".to_string()),
+        media_type: Some("Unknown".to_string()),
         ..Default::default()
-    }
+    };
+    super::items::with_jellyfin_defaults(&mut dto);
+    dto
 }
 
 /// `GET /Users/{userId}/Views` — Legacy user views route.
