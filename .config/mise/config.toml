@@ -15,6 +15,7 @@ mr-boxington = "latest"
 # a tool that happens to be installed globally. rustfmt comes with the rust
 # entry above.
 hk = "latest"
+oxfmt = "latest"    # hk: frontend HTML and CSS
 rumdl = "latest"    # hk: Markdown, configured in .rumdl.toml
 shfmt = "latest"
 shellcheck = "latest"

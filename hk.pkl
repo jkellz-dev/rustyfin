@@ -9,6 +9,12 @@ local linters = new Mapping {
     ["cargo_fmt"] = Builtins.cargo_fmt
     // No clippy step, on purpose: clippy has to compile the workspace to lint
     // it, and `lint` must stay cheap. It is `mise run clippy`.
+    // The frontend's hand-written HTML and CSS only. The builtin's own glob
+    // also takes YAML, TOML and Markdown, which yamlfmt and rumdl own here:
+    // two formatters on one file undo each other.
+    ["oxfmt"] = (Builtins.oxfmt) {
+        glob = List("frontend/**/*.html", "frontend/**/*.css")
+    }
     // Markdown, configured in .rumdl.toml.
     ["rumdl"] = Builtins.rumdl
     ["shellcheck"] = Builtins.shellcheck
