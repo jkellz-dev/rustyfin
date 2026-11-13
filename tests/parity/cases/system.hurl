@@ -41,7 +41,7 @@ jsonpath "$.OperatingSystemDisplayName" isString
 jsonpath "$.HasPendingRestart" isBoolean
 jsonpath "$.IsShuttingDown" isBoolean
 jsonpath "$.SupportsLibraryMonitor" isBoolean
-jsonpath "$.WebSocketPortNumber" isInteger
+jsonpath "$.WebSocketPortNumber" isNumber
 jsonpath "$.CompletedInstallations" isCollection
 jsonpath "$.CanSelfRestart" isBoolean
 jsonpath "$.CanLaunchWebBrowser" isBoolean

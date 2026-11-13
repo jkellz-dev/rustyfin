@@ -54,8 +54,8 @@ jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].People" isCollection
 jsonpath "$.Items[0].Studios" isCollection
 jsonpath "$.Items[0].GenreItems" isCollection
-jsonpath "$.Items[0].LocalTrailerCount" isInteger
-jsonpath "$.Items[0].SpecialFeatureCount" isInteger
+jsonpath "$.Items[0].LocalTrailerCount" isNumber
+jsonpath "$.Items[0].SpecialFeatureCount" isNumber
 jsonpath "$.Items[0].DisplayPreferencesId" isString
 jsonpath "$.Items[0].Tags" isCollection
 jsonpath "$.Items[0].CollectionType" isString
@@ -66,8 +66,8 @@ jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.Items[0].LockedFields" isCollection
 jsonpath "$.Items[0].LockData" isBoolean
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Items
 Authorization: MediaBrowser Token="{{token}}"
@@ -82,13 +82,13 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].RunTimeTicks" isInteger
-jsonpath "$.Items[0].ProductionYear" isInteger
+jsonpath "$.Items[0].RunTimeTicks" isNumber
+jsonpath "$.Items[0].ProductionYear" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
@@ -101,8 +101,8 @@ jsonpath "$.Items[0].ImageBlurHashes" exists
 jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Items
 Authorization: MediaBrowser Token="{{token}}"
@@ -116,13 +116,13 @@ jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].ProductionYear" isInteger
+jsonpath "$.Items[0].ProductionYear" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.UnplayedItemCount" isInteger
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.UnplayedItemCount" isNumber
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
@@ -133,8 +133,8 @@ jsonpath "$.Items[0].BackdropImageTags" isCollection
 jsonpath "$.Items[0].ImageBlurHashes" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Items
 Authorization: MediaBrowser Token="{{token}}"
@@ -149,14 +149,14 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].RunTimeTicks" isInteger
-jsonpath "$.Items[0].IndexNumber" isInteger
-jsonpath "$.Items[0].ParentIndexNumber" isInteger
+jsonpath "$.Items[0].RunTimeTicks" isNumber
+jsonpath "$.Items[0].IndexNumber" isNumber
+jsonpath "$.Items[0].ParentIndexNumber" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
@@ -173,8 +173,8 @@ jsonpath "$.Items[0].ImageBlurHashes" exists
 jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Items/{{movie_id}}
 Authorization: MediaBrowser Token="{{token}}"
@@ -197,11 +197,11 @@ jsonpath "$.MediaSources[0].Id" isString
 jsonpath "$.MediaSources[0].Path" isString
 jsonpath "$.MediaSources[0].Type" isString
 jsonpath "$.MediaSources[0].Container" isString
-jsonpath "$.MediaSources[0].Size" isInteger
+jsonpath "$.MediaSources[0].Size" isNumber
 jsonpath "$.MediaSources[0].Name" isString
 jsonpath "$.MediaSources[0].IsRemote" isBoolean
 jsonpath "$.MediaSources[0].ETag" isString
-jsonpath "$.MediaSources[0].RunTimeTicks" isInteger
+jsonpath "$.MediaSources[0].RunTimeTicks" isNumber
 jsonpath "$.MediaSources[0].ReadAtNativeFramerate" isBoolean
 jsonpath "$.MediaSources[0].IgnoreDts" isBoolean
 jsonpath "$.MediaSources[0].IgnoreIndex" isBoolean
@@ -228,42 +228,42 @@ jsonpath "$.MediaSources[0].MediaStreams[0].DisplayTitle" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].NalLengthSize" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].IsInterlaced" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsAVC" isBoolean
-jsonpath "$.MediaSources[0].MediaStreams[0].BitRate" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].BitDepth" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].RefFrames" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].BitRate" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].BitDepth" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].RefFrames" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsDefault" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsForced" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsHearingImpaired" isBoolean
-jsonpath "$.MediaSources[0].MediaStreams[0].Height" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].Width" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].AverageFrameRate" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].RealFrameRate" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].ReferenceFrameRate" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].Height" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].Width" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].AverageFrameRate" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].RealFrameRate" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].ReferenceFrameRate" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].Profile" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].Type" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].AspectRatio" isString
-jsonpath "$.MediaSources[0].MediaStreams[0].Index" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].Index" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].PixelFormat" isString
-jsonpath "$.MediaSources[0].MediaStreams[0].Level" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].Level" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.MediaSources[0].MediaAttachments" isCollection
 jsonpath "$.MediaSources[0].Formats" isCollection
-jsonpath "$.MediaSources[0].Bitrate" isInteger
+jsonpath "$.MediaSources[0].Bitrate" isNumber
 jsonpath "$.MediaSources[0].RequiredHttpHeaders" exists
 jsonpath "$.MediaSources[0].TranscodingSubProtocol" isString
-jsonpath "$.MediaSources[0].DefaultAudioStreamIndex" isInteger
+jsonpath "$.MediaSources[0].DefaultAudioStreamIndex" isNumber
 jsonpath "$.MediaSources[0].HasSegments" isBoolean
 jsonpath "$.ProductionLocations" isCollection
 jsonpath "$.Path" isString
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
 jsonpath "$.Taglines" isCollection
 jsonpath "$.Genres" isCollection
-jsonpath "$.RunTimeTicks" isInteger
+jsonpath "$.RunTimeTicks" isNumber
 jsonpath "$.PlayAccess" isString
-jsonpath "$.ProductionYear" isInteger
+jsonpath "$.ProductionYear" isNumber
 jsonpath "$.RemoteTrailers" isCollection
 jsonpath "$.ProviderIds" exists
 jsonpath "$.IsFolder" isBoolean
@@ -272,15 +272,15 @@ jsonpath "$.Type" isString
 jsonpath "$.People" isCollection
 jsonpath "$.Studios" isCollection
 jsonpath "$.GenreItems" isCollection
-jsonpath "$.LocalTrailerCount" isInteger
+jsonpath "$.LocalTrailerCount" isNumber
 jsonpath "$.UserData" exists
-jsonpath "$.UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.UserData.PlayCount" isInteger
+jsonpath "$.UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.UserData.PlayCount" isNumber
 jsonpath "$.UserData.IsFavorite" isBoolean
 jsonpath "$.UserData.Played" isBoolean
 jsonpath "$.UserData.Key" isString
 jsonpath "$.UserData.ItemId" isString
-jsonpath "$.SpecialFeatureCount" isInteger
+jsonpath "$.SpecialFeatureCount" isNumber
 jsonpath "$.DisplayPreferencesId" isString
 jsonpath "$.Tags" isCollection
 jsonpath "$.PrimaryImageAspectRatio" isNumber
@@ -296,26 +296,26 @@ jsonpath "$.MediaStreams[0].DisplayTitle" isString
 jsonpath "$.MediaStreams[0].NalLengthSize" isString
 jsonpath "$.MediaStreams[0].IsInterlaced" isBoolean
 jsonpath "$.MediaStreams[0].IsAVC" isBoolean
-jsonpath "$.MediaStreams[0].BitRate" isInteger
-jsonpath "$.MediaStreams[0].BitDepth" isInteger
-jsonpath "$.MediaStreams[0].RefFrames" isInteger
+jsonpath "$.MediaStreams[0].BitRate" isNumber
+jsonpath "$.MediaStreams[0].BitDepth" isNumber
+jsonpath "$.MediaStreams[0].RefFrames" isNumber
 jsonpath "$.MediaStreams[0].IsDefault" isBoolean
 jsonpath "$.MediaStreams[0].IsForced" isBoolean
 jsonpath "$.MediaStreams[0].IsHearingImpaired" isBoolean
-jsonpath "$.MediaStreams[0].Height" isInteger
-jsonpath "$.MediaStreams[0].Width" isInteger
-jsonpath "$.MediaStreams[0].AverageFrameRate" isInteger
-jsonpath "$.MediaStreams[0].RealFrameRate" isInteger
-jsonpath "$.MediaStreams[0].ReferenceFrameRate" isInteger
+jsonpath "$.MediaStreams[0].Height" isNumber
+jsonpath "$.MediaStreams[0].Width" isNumber
+jsonpath "$.MediaStreams[0].AverageFrameRate" isNumber
+jsonpath "$.MediaStreams[0].RealFrameRate" isNumber
+jsonpath "$.MediaStreams[0].ReferenceFrameRate" isNumber
 jsonpath "$.MediaStreams[0].Profile" isString
 jsonpath "$.MediaStreams[0].Type" isString
 jsonpath "$.MediaStreams[0].AspectRatio" isString
-jsonpath "$.MediaStreams[0].Index" isInteger
+jsonpath "$.MediaStreams[0].Index" isNumber
 jsonpath "$.MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.MediaStreams[0].PixelFormat" isString
-jsonpath "$.MediaStreams[0].Level" isInteger
+jsonpath "$.MediaStreams[0].Level" isNumber
 jsonpath "$.MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.VideoType" isString
 jsonpath "$.ImageTags" exists
@@ -329,8 +329,8 @@ jsonpath "$.LocationType" isString
 jsonpath "$.MediaType" isString
 jsonpath "$.LockedFields" isCollection
 jsonpath "$.LockData" isBoolean
-jsonpath "$.Width" isInteger
-jsonpath "$.Height" isInteger
+jsonpath "$.Width" isNumber
+jsonpath "$.Height" isNumber
 
 GET {{base_url}}/Users/{{user_id}}/Items/{{movie_id}}
 Authorization: MediaBrowser Token="{{token}}"
@@ -353,11 +353,11 @@ jsonpath "$.MediaSources[0].Id" isString
 jsonpath "$.MediaSources[0].Path" isString
 jsonpath "$.MediaSources[0].Type" isString
 jsonpath "$.MediaSources[0].Container" isString
-jsonpath "$.MediaSources[0].Size" isInteger
+jsonpath "$.MediaSources[0].Size" isNumber
 jsonpath "$.MediaSources[0].Name" isString
 jsonpath "$.MediaSources[0].IsRemote" isBoolean
 jsonpath "$.MediaSources[0].ETag" isString
-jsonpath "$.MediaSources[0].RunTimeTicks" isInteger
+jsonpath "$.MediaSources[0].RunTimeTicks" isNumber
 jsonpath "$.MediaSources[0].ReadAtNativeFramerate" isBoolean
 jsonpath "$.MediaSources[0].IgnoreDts" isBoolean
 jsonpath "$.MediaSources[0].IgnoreIndex" isBoolean
@@ -384,42 +384,42 @@ jsonpath "$.MediaSources[0].MediaStreams[0].DisplayTitle" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].NalLengthSize" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].IsInterlaced" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsAVC" isBoolean
-jsonpath "$.MediaSources[0].MediaStreams[0].BitRate" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].BitDepth" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].RefFrames" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].BitRate" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].BitDepth" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].RefFrames" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsDefault" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsForced" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsHearingImpaired" isBoolean
-jsonpath "$.MediaSources[0].MediaStreams[0].Height" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].Width" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].AverageFrameRate" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].RealFrameRate" isInteger
-jsonpath "$.MediaSources[0].MediaStreams[0].ReferenceFrameRate" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].Height" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].Width" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].AverageFrameRate" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].RealFrameRate" isNumber
+jsonpath "$.MediaSources[0].MediaStreams[0].ReferenceFrameRate" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].Profile" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].Type" isString
 jsonpath "$.MediaSources[0].MediaStreams[0].AspectRatio" isString
-jsonpath "$.MediaSources[0].MediaStreams[0].Index" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].Index" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].PixelFormat" isString
-jsonpath "$.MediaSources[0].MediaStreams[0].Level" isInteger
+jsonpath "$.MediaSources[0].MediaStreams[0].Level" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.MediaSources[0].MediaAttachments" isCollection
 jsonpath "$.MediaSources[0].Formats" isCollection
-jsonpath "$.MediaSources[0].Bitrate" isInteger
+jsonpath "$.MediaSources[0].Bitrate" isNumber
 jsonpath "$.MediaSources[0].RequiredHttpHeaders" exists
 jsonpath "$.MediaSources[0].TranscodingSubProtocol" isString
-jsonpath "$.MediaSources[0].DefaultAudioStreamIndex" isInteger
+jsonpath "$.MediaSources[0].DefaultAudioStreamIndex" isNumber
 jsonpath "$.MediaSources[0].HasSegments" isBoolean
 jsonpath "$.ProductionLocations" isCollection
 jsonpath "$.Path" isString
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
 jsonpath "$.Taglines" isCollection
 jsonpath "$.Genres" isCollection
-jsonpath "$.RunTimeTicks" isInteger
+jsonpath "$.RunTimeTicks" isNumber
 jsonpath "$.PlayAccess" isString
-jsonpath "$.ProductionYear" isInteger
+jsonpath "$.ProductionYear" isNumber
 jsonpath "$.RemoteTrailers" isCollection
 jsonpath "$.ProviderIds" exists
 jsonpath "$.IsFolder" isBoolean
@@ -428,15 +428,15 @@ jsonpath "$.Type" isString
 jsonpath "$.People" isCollection
 jsonpath "$.Studios" isCollection
 jsonpath "$.GenreItems" isCollection
-jsonpath "$.LocalTrailerCount" isInteger
+jsonpath "$.LocalTrailerCount" isNumber
 jsonpath "$.UserData" exists
-jsonpath "$.UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.UserData.PlayCount" isInteger
+jsonpath "$.UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.UserData.PlayCount" isNumber
 jsonpath "$.UserData.IsFavorite" isBoolean
 jsonpath "$.UserData.Played" isBoolean
 jsonpath "$.UserData.Key" isString
 jsonpath "$.UserData.ItemId" isString
-jsonpath "$.SpecialFeatureCount" isInteger
+jsonpath "$.SpecialFeatureCount" isNumber
 jsonpath "$.DisplayPreferencesId" isString
 jsonpath "$.Tags" isCollection
 jsonpath "$.PrimaryImageAspectRatio" isNumber
@@ -452,26 +452,26 @@ jsonpath "$.MediaStreams[0].DisplayTitle" isString
 jsonpath "$.MediaStreams[0].NalLengthSize" isString
 jsonpath "$.MediaStreams[0].IsInterlaced" isBoolean
 jsonpath "$.MediaStreams[0].IsAVC" isBoolean
-jsonpath "$.MediaStreams[0].BitRate" isInteger
-jsonpath "$.MediaStreams[0].BitDepth" isInteger
-jsonpath "$.MediaStreams[0].RefFrames" isInteger
+jsonpath "$.MediaStreams[0].BitRate" isNumber
+jsonpath "$.MediaStreams[0].BitDepth" isNumber
+jsonpath "$.MediaStreams[0].RefFrames" isNumber
 jsonpath "$.MediaStreams[0].IsDefault" isBoolean
 jsonpath "$.MediaStreams[0].IsForced" isBoolean
 jsonpath "$.MediaStreams[0].IsHearingImpaired" isBoolean
-jsonpath "$.MediaStreams[0].Height" isInteger
-jsonpath "$.MediaStreams[0].Width" isInteger
-jsonpath "$.MediaStreams[0].AverageFrameRate" isInteger
-jsonpath "$.MediaStreams[0].RealFrameRate" isInteger
-jsonpath "$.MediaStreams[0].ReferenceFrameRate" isInteger
+jsonpath "$.MediaStreams[0].Height" isNumber
+jsonpath "$.MediaStreams[0].Width" isNumber
+jsonpath "$.MediaStreams[0].AverageFrameRate" isNumber
+jsonpath "$.MediaStreams[0].RealFrameRate" isNumber
+jsonpath "$.MediaStreams[0].ReferenceFrameRate" isNumber
 jsonpath "$.MediaStreams[0].Profile" isString
 jsonpath "$.MediaStreams[0].Type" isString
 jsonpath "$.MediaStreams[0].AspectRatio" isString
-jsonpath "$.MediaStreams[0].Index" isInteger
+jsonpath "$.MediaStreams[0].Index" isNumber
 jsonpath "$.MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.MediaStreams[0].PixelFormat" isString
-jsonpath "$.MediaStreams[0].Level" isInteger
+jsonpath "$.MediaStreams[0].Level" isNumber
 jsonpath "$.MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.VideoType" isString
 jsonpath "$.ImageTags" exists
@@ -485,8 +485,8 @@ jsonpath "$.LocationType" isString
 jsonpath "$.MediaType" isString
 jsonpath "$.LockedFields" isCollection
 jsonpath "$.LockData" isBoolean
-jsonpath "$.Width" isInteger
-jsonpath "$.Height" isInteger
+jsonpath "$.Width" isNumber
+jsonpath "$.Height" isNumber
 
 GET {{base_url}}/Users/{{user_id}}/Views
 Authorization: MediaBrowser Token="{{token}}"
@@ -516,16 +516,16 @@ jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].People" isCollection
 jsonpath "$.Items[0].Studios" isCollection
 jsonpath "$.Items[0].GenreItems" isCollection
-jsonpath "$.Items[0].LocalTrailerCount" isInteger
+jsonpath "$.Items[0].LocalTrailerCount" isNumber
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
 jsonpath "$.Items[0].UserData.ItemId" isString
-jsonpath "$.Items[0].ChildCount" isInteger
-jsonpath "$.Items[0].SpecialFeatureCount" isInteger
+jsonpath "$.Items[0].ChildCount" isNumber
+jsonpath "$.Items[0].SpecialFeatureCount" isNumber
 jsonpath "$.Items[0].DisplayPreferencesId" isString
 jsonpath "$.Items[0].Tags" isCollection
 jsonpath "$.Items[0].CollectionType" isString
@@ -536,26 +536,26 @@ jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.Items[0].LockedFields" isCollection
 jsonpath "$.Items[0].LockData" isBoolean
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Items/Counts
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
-jsonpath "$.MovieCount" isInteger
-jsonpath "$.SeriesCount" isInteger
-jsonpath "$.EpisodeCount" isInteger
-jsonpath "$.ArtistCount" isInteger
-jsonpath "$.ProgramCount" isInteger
-jsonpath "$.TrailerCount" isInteger
-jsonpath "$.SongCount" isInteger
-jsonpath "$.AlbumCount" isInteger
-jsonpath "$.MusicVideoCount" isInteger
-jsonpath "$.BoxSetCount" isInteger
-jsonpath "$.BookCount" isInteger
-jsonpath "$.ItemCount" isInteger
+jsonpath "$.MovieCount" isNumber
+jsonpath "$.SeriesCount" isNumber
+jsonpath "$.EpisodeCount" isNumber
+jsonpath "$.ArtistCount" isNumber
+jsonpath "$.ProgramCount" isNumber
+jsonpath "$.TrailerCount" isNumber
+jsonpath "$.SongCount" isNumber
+jsonpath "$.AlbumCount" isNumber
+jsonpath "$.MusicVideoCount" isNumber
+jsonpath "$.BoxSetCount" isNumber
+jsonpath "$.BookCount" isNumber
+jsonpath "$.ItemCount" isNumber
 
 GET {{base_url}}/Items/Filters
 Authorization: MediaBrowser Token="{{token}}"
@@ -573,8 +573,8 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$.Items" isCollection
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Artists
 Authorization: MediaBrowser Token="{{token}}"
@@ -585,12 +585,12 @@ jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].RunTimeTicks" isInteger
+jsonpath "$.Items[0].RunTimeTicks" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
@@ -600,8 +600,8 @@ jsonpath "$.Items[0].BackdropImageTags" isCollection
 jsonpath "$.Items[0].ImageBlurHashes" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Shows/{{series_id}}/Seasons
 Authorization: MediaBrowser Token="{{token}}"
@@ -612,13 +612,13 @@ jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].IndexNumber" isInteger
+jsonpath "$.Items[0].IndexNumber" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.UnplayedItemCount" isInteger
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.UnplayedItemCount" isNumber
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
@@ -630,8 +630,8 @@ jsonpath "$.Items[0].BackdropImageTags" isCollection
 jsonpath "$.Items[0].ImageBlurHashes" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Shows/{{series_id}}/Episodes
 Authorization: MediaBrowser Token="{{token}}"
@@ -643,14 +643,14 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].RunTimeTicks" isInteger
-jsonpath "$.Items[0].IndexNumber" isInteger
-jsonpath "$.Items[0].ParentIndexNumber" isInteger
+jsonpath "$.Items[0].RunTimeTicks" isNumber
+jsonpath "$.Items[0].IndexNumber" isNumber
+jsonpath "$.Items[0].ParentIndexNumber" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isInteger
-jsonpath "$.Items[0].UserData.PlayCount" isInteger
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
 jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
 jsonpath "$.Items[0].UserData.Played" isBoolean
 jsonpath "$.Items[0].UserData.Key" isString
@@ -667,8 +667,8 @@ jsonpath "$.Items[0].ImageBlurHashes" exists
 jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
-jsonpath "$.TotalRecordCount" isInteger
-jsonpath "$.StartIndex" isInteger
+jsonpath "$.TotalRecordCount" isNumber
+jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Users/{{user_id}}/Items/Latest
 Authorization: MediaBrowser Token="{{token}}"

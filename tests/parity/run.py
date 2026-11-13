@@ -7,6 +7,7 @@ recording is wrong, not the server). Rustyfin's failures are the parity gaps.
     python3 -I tests/parity/run.py                 # both servers, all areas
     python3 -I tests/parity/run.py library         # one area
     python3 -I tests/parity/run.py --write report.md
+    python3 -I tests/parity/run.py --all           # every failing assert, not the first 12
 
 Needs kubectl and the `hurl-runner`, `jellyfin` and `rustyfin-server` services in
 `hermes-sandbox`, both servers bootstrapped (tests/parity/bootstrap/*.hurl).
@@ -113,6 +114,9 @@ def main():
         i = args.index("--write")
         out_file = args[i + 1]
         del args[i : i + 2]
+    show_all = "--all" in args
+    if show_all:
+        args.remove("--all")
     only = args[0] if args else None
 
     cases = sorted((ROOT / "cases").glob("*.hurl"))
@@ -136,10 +140,11 @@ def main():
             for r in rows:
                 if r["failed"] or r["no_response"]:
                     lines.append(f"- `{case}.hurl:{r['line']}` {r['request']}")
-                    for f in r["failed"][:12]:
+                    shown = r["failed"] if show_all else r["failed"][:12]
+                    for f in shown:
                         lines.append(f"    - {f}")
-                    if len(r["failed"]) > 12:
-                        lines.append(f"    - ... {len(r['failed']) - 12} more")
+                    if len(r["failed"]) > len(shown):
+                        lines.append(f"    - ... {len(r['failed']) - len(shown)} more (--all shows them)")
         lines.append("")
     text = "\n".join(lines)
     print(text)

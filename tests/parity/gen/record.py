@@ -133,9 +133,8 @@ def lookup_ids(token):
 def kind(value):
     if isinstance(value, bool):
         return "isBoolean"
-    if isinstance(value, int):
-        return "isInteger"
-    if isinstance(value, float):
+    if isinstance(value, (int, float)):
+        # C# serialises a whole double as `24`, Rust an f64 as `24.0`: both are numbers.
         return "isNumber"
     if isinstance(value, str):
         return "isString"
