@@ -147,11 +147,13 @@ pub(crate) async fn name_series_for_seasons(pool: &sqlx::PgPool, dtos: &mut [Bas
         .map(|row| (row.id, row.name))
         .collect();
     for dto in dtos.iter_mut() {
-        if dto.item_type == "Season" && dto.series_id.is_none() {
-            if let Some((id, name)) = dto.parent_id.and_then(|p| series.get(&p).map(|n| (p, n))) {
-                dto.series_id = Some(id);
-                dto.series_name = Some(name.clone());
-            }
+        if dto.item_type == "Season"
+            && dto.series_id.is_none()
+            && let Some(parent) = dto.parent_id
+            && let Some(name) = series.get(&parent)
+        {
+            dto.series_id = Some(parent);
+            dto.series_name = Some(name.clone());
         }
     }
 }
