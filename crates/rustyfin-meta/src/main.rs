@@ -1,3 +1,4 @@
+mod artwork;
 mod config;
 mod fetch;
 mod scan;
@@ -43,6 +44,16 @@ enum Command {
         path: PathBuf,
         #[arg(long, short = 't')]
         media_type: String,
+    },
+    /// Download missing posters, fanart and season posters from TMDB, for
+    /// libraries another tool (Sonarr, Radarr) manages. Existing files and NFOs
+    /// are left alone (--force replaces images); folders are matched by the id
+    /// in their name or NFO, never by title.
+    Artwork {
+        path: PathBuf,
+        /// `movies` or `tvshows`
+        #[arg(long, short = 't', default_value = "tvshows")]
+        library_type: String,
     },
     /// Notify the server about changed paths
     Notify {
@@ -123,6 +134,26 @@ async fn main() -> anyhow::Result<()> {
                 config.server.url.as_deref(),
                 config.server.api_key.as_deref(),
             ) && let Err(e) = notify_server(server_url, api_key, &[&path]).await
+            {
+                tracing::warn!("Failed to notify server: {e}");
+            }
+        }
+        Command::Artwork { path, library_type } => {
+            let stats = artwork::fill_missing(&path, &library_type, &opts).await?;
+            tracing::info!(
+                "Done: checked={}, complete={}, downloaded={}, no_id={}, errors={}",
+                stats.checked,
+                stats.complete,
+                stats.downloaded,
+                stats.no_id,
+                stats.errors
+            );
+            if stats.downloaded > 0
+                && let (Some(server_url), Some(api_key)) = (
+                    config.server.url.as_deref(),
+                    config.server.api_key.as_deref(),
+                )
+                && let Err(e) = notify_server(server_url, api_key, &[&path]).await
             {
                 tracing::warn!("Failed to notify server: {e}");
             }

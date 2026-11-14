@@ -21,6 +21,124 @@ pub struct SearchResult {
     pub mbid: Option<String>,
 }
 
+/// The artwork TMDB has for a film or show: full-size image URLs.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Artwork {
+    pub poster: Option<String>,
+    pub backdrop: Option<String>,
+    /// Season number and poster, for shows.
+    pub season_posters: Vec<(i32, String)>,
+}
+
+/// What `/movie/{id}` or `/tv/{id}` says about artwork.
+pub fn parse_artwork(json: &str) -> Option<Artwork> {
+    #[derive(Deserialize)]
+    struct Season {
+        season_number: Option<i32>,
+        poster_path: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Detail {
+        poster_path: Option<String>,
+        backdrop_path: Option<String>,
+        #[serde(default)]
+        seasons: Vec<Season>,
+    }
+    let d: Detail = serde_json::from_str(json).ok()?;
+    let url = |p: String| tmdb_image_url(&p, "original");
+    Some(Artwork {
+        poster: d.poster_path.map(url),
+        backdrop: d.backdrop_path.map(url),
+        season_posters: d
+            .seasons
+            .into_iter()
+            .filter_map(|s| Some((s.season_number?, url(s.poster_path?))))
+            .collect(),
+    })
+}
+
+/// The TMDB id `/find/{external id}` returned, for a show (`tv`) or a film.
+pub fn parse_find(json: &str, tv: bool) -> Option<i64> {
+    #[derive(Deserialize)]
+    struct Hit {
+        id: i64,
+    }
+    #[derive(Deserialize)]
+    struct Found {
+        #[serde(default)]
+        movie_results: Vec<Hit>,
+        #[serde(default)]
+        tv_results: Vec<Hit>,
+    }
+    let f: Found = serde_json::from_str(json).ok()?;
+    let hits = if tv { f.tv_results } else { f.movie_results };
+    hits.first().map(|h| h.id)
+}
+
+impl TmdbClient {
+    /// A show's (`tv`) or film's artwork by TMDB id.
+    pub async fn fetch_artwork(&self, id: i64, tv: bool) -> Option<Artwork> {
+        let kind = if tv { "tv" } else { "movie" };
+        let url = format!("{TMDB_BASE_URL}/{kind}/{id}?api_key={}", self.api_key);
+        let body = self.client.get(&url).send().await.ok()?.text().await.ok()?;
+        parse_artwork(&body)
+    }
+
+    /// The TMDB id for a TVDB (`tvdb_id`) or IMDb (`imdb_id`) id.
+    pub async fn find_by_external_id(&self, source: &str, id: &str, tv: bool) -> Option<i64> {
+        let url = format!(
+            "{TMDB_BASE_URL}/find/{}?api_key={}&external_source={source}",
+            urlencoded(id),
+            self.api_key
+        );
+        let body = self.client.get(&url).send().await.ok()?.text().await.ok()?;
+        parse_find(&body, tv)
+    }
+}
+
+#[cfg(test)]
+mod artwork_tests {
+    use super::*;
+
+    #[test]
+    fn a_show_s_posters_backdrop_and_season_posters() {
+        let json = r#"{"id": 1, "poster_path": "/p.jpg", "backdrop_path": null,
+            "seasons": [
+                {"season_number": 0, "poster_path": "/s0.jpg"},
+                {"season_number": 1, "poster_path": "/s1.jpg"},
+                {"season_number": 2, "poster_path": null}
+            ]}"#;
+        let art = parse_artwork(json).expect("parses");
+        assert_eq!(
+            art.poster.as_deref(),
+            Some("https://image.tmdb.org/t/p/original/p.jpg")
+        );
+        assert_eq!(art.backdrop, None);
+        assert_eq!(
+            art.season_posters,
+            vec![
+                (0, "https://image.tmdb.org/t/p/original/s0.jpg".to_string()),
+                (1, "https://image.tmdb.org/t/p/original/s1.jpg".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_film_has_no_seasons() {
+        let art = parse_artwork(r#"{"poster_path": "/m.jpg", "backdrop_path": "/b.jpg"}"#).unwrap();
+        assert!(art.season_posters.is_empty());
+        assert!(art.backdrop.is_some());
+    }
+
+    #[test]
+    fn find_picks_the_show_or_the_film() {
+        let json = r#"{"movie_results": [{"id": 7}], "tv_results": [{"id": 9}]}"#;
+        assert_eq!(parse_find(json, true), Some(9));
+        assert_eq!(parse_find(json, false), Some(7));
+        assert_eq!(parse_find(r#"{"tv_results": []}"#, true), None);
+    }
+}
+
 impl TmdbClient {
     pub fn new(api_key: String) -> Self {
         Self {
