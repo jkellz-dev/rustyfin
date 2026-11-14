@@ -83,13 +83,11 @@ pub async fn get_next_up(
             .await
             .map_err(ApiError::Database)?;
 
-    // For each series, find the next episode
-    let mut next_episodes = Vec::new();
-    for (series_id, _last_played) in &active_series {
-        if let Some(episode) = find_next_for_series(&state, &auth, *series_id).await? {
-            next_episodes.push(episode);
-        }
-    }
+    // The next episode of every series, in one query
+    let active_ids: Vec<Uuid> = active_series.iter().map(|(id, _)| *id).collect();
+    let mut next_episodes = media_items::get_next_episodes(&state.pool, auth.user_id, &active_ids)
+        .await
+        .map_err(ApiError::Database)?;
 
     // Shows the user never started come after the ones in progress, newest first,
     // unless the client asked to leave them out.
@@ -102,11 +100,11 @@ pub async fn get_next_up(
         )
         .await
         .map_err(ApiError::Database)?;
-        for series_id in fresh {
-            if let Some(episode) = find_next_for_series(&state, &auth, series_id).await? {
-                next_episodes.push(episode);
-            }
-        }
+        next_episodes.extend(
+            media_items::get_next_episodes(&state.pool, auth.user_id, &fresh)
+                .await
+                .map_err(ApiError::Database)?,
+        );
     }
     let total = next_episodes.len() as i32;
 

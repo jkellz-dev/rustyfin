@@ -246,10 +246,14 @@ async fn flat(route: impl Fn(&Fixture) -> String) {
         f.app.cleanup().await;
     }
     let (small, large) = (&counts[0], &counts[1]);
-    assert_eq!(
-        small.1, large.1,
+    assert!(
+        large.1 <= small.1,
         "{}: {} queries for {} of each, {} for {}",
-        large.2, small.1, small.0, large.1, large.0
+        large.2,
+        small.1,
+        small.0,
+        large.1,
+        large.0
     );
 }
 

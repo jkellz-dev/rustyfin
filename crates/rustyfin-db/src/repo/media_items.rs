@@ -968,6 +968,63 @@ pub async fn get_next_episode(
     .await
 }
 
+/// The next episode to watch in each of `series_ids`, in that order (series
+/// with nothing left are skipped): the first unplayed episode after the last
+/// played one, specials (season 0) aside. One query for any number of series;
+/// the same rules as `get_last_watched_episode` then `get_next_episode`.
+pub async fn get_next_episodes(
+    pool: &PgPool,
+    user_id: Uuid,
+    series_ids: &[Uuid],
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    if series_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as::<_, MediaItemRow>(
+        r#"
+        WITH wanted AS (
+            SELECT series_id, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS w(series_id, ord)
+        ),
+        last_played AS (
+            SELECT DISTINCT ON (m.series_id)
+                   m.series_id, m.parent_index_number AS season, m.index_number AS episode
+            FROM media_items m
+            JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+            WHERE m.series_id = ANY($2)
+              AND m.item_type = 'Episode'
+              AND ud.played = true
+              AND (m.parent_index_number IS NULL OR m.parent_index_number > 0)
+            ORDER BY m.series_id, m.parent_index_number DESC NULLS LAST,
+                     m.index_number DESC NULLS LAST
+        )
+        SELECT nx.*
+        FROM wanted w
+        LEFT JOIN last_played l ON l.series_id = w.series_id
+        CROSS JOIN LATERAL (
+            SELECT m.*
+            FROM media_items m
+            LEFT JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
+            WHERE m.series_id = w.series_id
+              AND m.item_type = 'Episode'
+              AND (m.parent_index_number IS NULL OR m.parent_index_number > 0)
+              AND (ud.played IS NULL OR ud.played = false)
+              AND (
+                l.season IS NULL
+                OR m.parent_index_number > l.season
+                OR (m.parent_index_number = l.season AND m.index_number > l.episode)
+              )
+            ORDER BY m.parent_index_number ASC NULLS LAST, m.index_number ASC NULLS LAST
+            LIMIT 1
+        ) nx
+        ORDER BY w.ord
+        "#,
+    )
+    .bind(user_id)
+    .bind(series_ids)
+    .fetch_all(pool)
+    .await
+}
+
 /// Get random unplayed items for suggestions.
 pub async fn get_random_items(
     pool: &PgPool,

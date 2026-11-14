@@ -1165,16 +1165,25 @@ pub async fn get_resume_items(
         .await
         .map_err(ApiError::Database)?;
 
+    // The items in one query, then in resume order.
+    let resume_ids: Vec<Uuid> = resume_data.iter().map(|(_, id)| *id).collect();
+    let resume_items: HashMap<Uuid, media_items::MediaItemRow> =
+        media_items::find_by_ids(&state.pool, &resume_ids)
+            .await
+            .map_err(ApiError::Database)?
+            .into_iter()
+            .map(|item| (item.id, item))
+            .collect();
     let mut dtos = Vec::new();
     for (ud, item_id) in &resume_data {
-        if let Ok(Some(item)) = media_items::find_by_id(&state.pool, *item_id).await {
+        if let Some(item) = resume_items.get(item_id) {
             // Filter by library access
             if let Some(ref allowed) = accessible
                 && item.library_id.is_some_and(|lid| !allowed.contains(&lid))
             {
                 continue;
             }
-            let mut dto = media_item_to_dto(&item, &state.server_id);
+            let mut dto = media_item_to_dto(item, &state.server_id);
             dto.user_data = Some(UserItemDataDto {
                 playback_position_ticks: ud.playback_position_ticks,
                 play_count: ud.play_count,

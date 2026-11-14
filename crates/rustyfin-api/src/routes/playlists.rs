@@ -86,9 +86,17 @@ pub async fn get_playlist_items(
     let item_ids: Vec<Uuid> = entries.iter().map(|e| e.item_id).collect();
     let mut dtos = Vec::with_capacity(entries.len());
 
+    // The items in one query, then in playlist order.
+    let found: std::collections::HashMap<Uuid, media_items::MediaItemRow> =
+        media_items::find_by_ids(&state.pool, &item_ids)
+            .await
+            .map_err(ApiError::Database)?
+            .into_iter()
+            .map(|item| (item.id, item))
+            .collect();
     for entry in &entries {
-        if let Ok(Some(item)) = media_items::find_by_id(&state.pool, entry.item_id).await {
-            let mut dto = media_item_to_dto(&item, &state.server_id);
+        if let Some(item) = found.get(&entry.item_id) {
+            let mut dto = media_item_to_dto(item, &state.server_id);
             dto.playlist_item_id = Some(entry.id.to_string());
             dtos.push(dto);
         }
