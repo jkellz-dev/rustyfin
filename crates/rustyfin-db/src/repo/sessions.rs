@@ -65,11 +65,17 @@ pub async fn create(
 }
 
 /// Update last activity for a session.
+/// Record activity on a session. At most once a minute: every authenticated
+/// request calls this, and a page of posters is dozens of requests, so an
+/// unconditional write was one row update per image.
 pub async fn touch(pool: &PgPool, session_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE sessions SET last_activity = NOW() WHERE id = $1")
-        .bind(session_id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE sessions SET last_activity = NOW() \
+         WHERE id = $1 AND last_activity < NOW() - INTERVAL '60 seconds'",
+    )
+    .bind(session_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

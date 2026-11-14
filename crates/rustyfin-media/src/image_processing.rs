@@ -59,19 +59,146 @@ pub async fn process_image(
     opts: &ImageOptions,
     cache_dir: &Path,
 ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    process_image_traced(source_path, opts, cache_dir)
+        .await
+        .map(|(path, _)| path)
+}
+
+/// Resizes run at most this many at once: decoding a large poster takes a CPU
+/// for a moment and a few hundred MB, and a grid of fifty would ask for fifty.
+fn resize_permits() -> &'static tokio::sync::Semaphore {
+    static PERMITS: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    PERMITS.get_or_init(|| {
+        let cpus = std::thread::available_parallelism().map_or(2, |n| n.get());
+        tokio::sync::Semaphore::new(cpus.max(2))
+    })
+}
+
+type InFlight =
+    std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::Arc<tokio::sync::Mutex<()>>>>;
+
+fn in_flight_map() -> std::sync::MutexGuard<
+    'static,
+    std::collections::HashMap<PathBuf, std::sync::Arc<tokio::sync::Mutex<()>>>,
+> {
+    static MAP: std::sync::OnceLock<InFlight> = std::sync::OnceLock::new();
+    MAP.get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+/// One lock per cached file being made, so identical requests wait for the
+/// first one instead of resizing too.
+fn in_flight(path: &Path) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    in_flight_map()
+        .entry(path.to_path_buf())
+        .or_default()
+        .clone()
+}
+
+/// Forget a finished file's lock. Waiters hold their own clone of it, and once
+/// the file exists nobody needs a new one, so the map stays small.
+fn done_in_flight(path: &Path) {
+    in_flight_map().remove(path);
+}
+
+/// `process_image`, also saying whether this call did the resize (false: the
+/// file was cached, or another request made it meanwhile).
+pub async fn process_image_traced(
+    source_path: &str,
+    opts: &ImageOptions,
+    cache_dir: &Path,
+) -> Result<(PathBuf, bool), Box<dyn std::error::Error + Send + Sync>> {
     let cached = cache_path(cache_dir, source_path, opts);
-
     if cached.exists() {
-        return Ok(cached);
+        return Ok((cached, false));
     }
+    let lock = in_flight(&cached);
+    let _guard = lock.lock().await;
+    if cached.exists() {
+        done_in_flight(&cached);
+        return Ok((cached, false));
+    }
+    let _permit = resize_permits().acquire().await?;
 
+    // Written under a temporary name and renamed, so a reader never sees a
+    // half-written file.
+    let tmp = cached.with_file_name(format!(
+        ".{}.{}.tmp",
+        cached
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("image"),
+        uuid::Uuid::new_v4().simple()
+    ));
     let source = source_path.to_string();
     let opts = opts.clone();
-    let cached_clone = cached.clone();
+    let tmp_clone = tmp.clone();
+    let made =
+        tokio::task::spawn_blocking(move || resize_and_save(&source, &opts, &tmp_clone)).await;
+    let result = match made {
+        Ok(Ok(())) => std::fs::rename(&tmp, &cached).map_err(Into::into),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(e.into()),
+    };
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    done_in_flight(&cached);
+    result.map(|()| (cached, true))
+}
 
-    tokio::task::spawn_blocking(move || resize_and_save(&source, &opts, &cached_clone)).await??;
+/// The ETag for `source` served with `opts`: it changes when the file does
+/// (size, mtime) or the requested size or format does.
+pub fn etag_for(source_path: &str, len: u64, mtime_ms: u128, opts: &ImageOptions) -> String {
+    let key = format!(
+        "{source_path}:{len}:{mtime_ms}:{}:{}:{}:{}:{}:{:?}:{CACHE_VERSION}",
+        opts.max_width.unwrap_or(0),
+        opts.max_height.unwrap_or(0),
+        opts.width.unwrap_or(0),
+        opts.height.unwrap_or(0),
+        opts.quality,
+        opts.format,
+    );
+    let hash = Sha256::digest(key.as_bytes());
+    let hex: String = hash[..12].iter().map(|b| format!("{b:02x}")).collect();
+    format!("\"{hex}\"")
+}
 
-    Ok(cached)
+/// An image file opened for streaming: its length, the type its first bytes
+/// name, and a stream of its contents.
+pub struct OpenImage {
+    pub len: u64,
+    pub content_type: Option<&'static str>,
+    file: tokio::fs::File,
+}
+
+impl OpenImage {
+    pub async fn open(path: &Path) -> std::io::Result<Self> {
+        use tokio::io::{AsyncReadExt, AsyncSeekExt};
+        let mut file = tokio::fs::File::open(path).await?;
+        let len = file.metadata().await?.len();
+        let mut head = [0u8; 16];
+        let mut read = 0;
+        while read < head.len() {
+            let n = file.read(&mut head[read..]).await?;
+            if n == 0 {
+                break;
+            }
+            read += n;
+        }
+        file.seek(std::io::SeekFrom::Start(0)).await?;
+        Ok(Self {
+            len,
+            content_type: sniff_content_type(&head[..read]),
+            file,
+        })
+    }
+
+    /// The file's contents, read in chunks as they are sent.
+    pub fn into_stream(self) -> tokio_util::io::ReaderStream<tokio::fs::File> {
+        tokio_util::io::ReaderStream::new(self.file)
+    }
 }
 
 fn resize_and_save(

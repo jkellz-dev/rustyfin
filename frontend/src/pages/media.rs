@@ -51,10 +51,17 @@ fn format_chapter_time(ticks: i64) -> String {
     }
 }
 
-fn primary_image_url(item_id: &str) -> String {
-    let base = api::base_url();
+/// The item's primary image at `width`, tagged so the browser keeps it.
+fn primary_image_url(item_id: &str, tag: Option<&str>, width: u32) -> String {
     let token = api::get_token().unwrap_or_default();
-    format!("{base}/Items/{item_id}/Images/Primary?api_key={token}")
+    browse::image_url(&api::base_url(), item_id, tag, width, &token)
+}
+
+fn primary_tag(item: &BaseItemDto) -> Option<String> {
+    item.image_tags
+        .as_ref()
+        .and_then(|tags| tags.get("Primary"))
+        .cloned()
 }
 
 fn has_primary_image(item: &BaseItemDto) -> bool {
@@ -446,7 +453,7 @@ pub fn Media() -> View {
                                                 let year = item.production_year;
                                                 let is_folder = item.is_folder.unwrap_or(false);
                                                 let has_image = has_primary_image(&item);
-                                                let img_url = primary_image_url(&item.id);
+                                                let img_url = primary_image_url(&item.id, primary_tag(&item).as_deref(), browse::CARD_IMAGE_WIDTH);
                                                 let item_type = item.item_type.clone();
                                                 let item_for_click = item.clone();
                                                 let child_count = item.child_count;
@@ -537,7 +544,7 @@ pub fn Media() -> View {
                         view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
                     } else if let Some(item) = detail_item.get_clone() {
                         let has_image = has_primary_image(&item);
-                        let img_url = primary_image_url(&item.id);
+                        let img_url = primary_image_url(&item.id, primary_tag(&item).as_deref(), browse::DETAIL_IMAGE_WIDTH);
                         let refresh_id = detail_id.clone();
                         let detail_item_type = item.item_type.clone();
                         let is_music_detail = matches!(detail_item_type.as_str(), "MusicArtist" | "MusicAlbum" | "Audio");
@@ -927,7 +934,7 @@ pub fn Media() -> View {
                                             let year = hint.production_year;
                                             let series = hint.series_name.clone();
                                             let has_image = hint.primary_image_tag.is_some();
-                                            let img_url = primary_image_url(&hint.id);
+                                            let img_url = primary_image_url(&hint.id, hint.primary_image_tag.as_deref(), browse::THUMB_IMAGE_WIDTH);
 
                                             let mut meta_parts = Vec::new();
                                             meta_parts.push(item_type.clone());

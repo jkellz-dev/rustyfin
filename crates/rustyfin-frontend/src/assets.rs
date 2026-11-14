@@ -17,43 +17,106 @@ pub enum Encoding {
 impl Encoding {
     /// The `Content-Encoding` value, if any.
     pub fn header_value(self) -> Option<&'static str> {
-        todo!()
+        match self {
+            Encoding::Brotli => Some("br"),
+            Encoding::Gzip => Some("gzip"),
+            Encoding::Identity => None,
+        }
     }
 }
 
 /// `Cache-Control` for an embedded file.
 pub fn cache_control(path: &str) -> &'static str {
-    todo!()
+    if path == "index.html" {
+        "no-cache"
+    } else if is_fingerprinted(path) {
+        "public, max-age=31536000, immutable"
+    } else {
+        "public, max-age=3600"
+    }
 }
 
 /// Whether trunk named this file with a content hash.
 pub fn is_fingerprinted(path: &str) -> bool {
-    todo!()
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let stem = name.split('.').next().unwrap_or(name);
+    let stem = stem.strip_suffix("_bg").unwrap_or(stem);
+    stem.rsplit_once('-')
+        .is_some_and(|(_, hash)| hash.len() == 16 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
 /// The best encoding the client accepts: Brotli, then gzip, else none.
 pub fn choose_encoding(accept_encoding: Option<&str>) -> Encoding {
-    todo!()
+    let Some(header) = accept_encoding else {
+        return Encoding::Identity;
+    };
+    let accepts = |name: &str| {
+        header.split(',').any(|part| {
+            let mut bits = part.split(';').map(str::trim);
+            let coding = bits.next().unwrap_or_default();
+            let refused = bits.any(|p| {
+                p.strip_prefix("q=")
+                    .and_then(|q| q.parse::<f32>().ok())
+                    .is_some_and(|q| q <= 0.0)
+            });
+            coding.eq_ignore_ascii_case(name) && !refused
+        })
+    };
+    if accepts("br") {
+        Encoding::Brotli
+    } else if accepts("gzip") {
+        Encoding::Gzip
+    } else {
+        Encoding::Identity
+    }
 }
 
 /// Whether compressing this type pays off (text and WASM; images do not).
 pub fn is_compressible(mime: &str) -> bool {
-    todo!()
+    mime.starts_with("text/")
+        || matches!(
+            mime,
+            "application/wasm" | "application/javascript" | "application/json" | "image/svg+xml"
+        )
 }
 
 /// `data` in `encoding`.
 pub fn compress(data: &[u8], encoding: Encoding) -> Vec<u8> {
-    todo!()
+    use std::io::Write;
+    match encoding {
+        Encoding::Brotli => {
+            let mut out = Vec::new();
+            {
+                // Quality 11 (the best): each file is compressed once.
+                let mut w = brotli::CompressorWriter::new(&mut out, 4096, 11, 22);
+                w.write_all(data).expect("writing to memory");
+            }
+            out
+        }
+        Encoding::Gzip => {
+            let mut w = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+            w.write_all(data).expect("writing to memory");
+            w.finish().expect("writing to memory")
+        }
+        Encoding::Identity => data.to_vec(),
+    }
 }
 
 /// A strong ETag from a file's SHA-256.
 pub fn etag(sha256: &[u8; 32]) -> String {
-    todo!()
+    let hex: String = sha256[..12].iter().map(|b| format!("{b:02x}")).collect();
+    format!("\"{hex}\"")
 }
 
 /// Whether an `If-None-Match` header names `etag` (or `*`).
 pub fn none_match(if_none_match: Option<&str>, etag: &str) -> bool {
-    todo!()
+    let Some(header) = if_none_match else {
+        return false;
+    };
+    header
+        .split(',')
+        .map(str::trim)
+        .any(|c| c == "*" || c.trim_start_matches("W/") == etag)
 }
 
 #[cfg(test)]

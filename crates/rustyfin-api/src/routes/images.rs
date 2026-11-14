@@ -39,12 +39,13 @@ pub async fn get_item_image(
 ) -> Result<Response, ApiError> {
     check_image_access(&state, &user, item_id).await?;
     let opts = build_options(&params, &headers);
+    let req = ImageRequest::new(&params, &headers);
     match images::find_by_item_and_type(&state.pool, item_id, &image_type, 0)
         .await
         .map_err(ApiError::Database)?
     {
-        Some(image) => serve_image(&image.path, &opts, &state).await,
-        None => serve_placeholder(&state, item_id, &image_type, &opts).await,
+        Some(image) => serve_image(&image.path, &opts, &state, &req).await,
+        None => serve_placeholder(&state, item_id, &image_type, &opts, &req).await,
     }
 }
 
@@ -84,6 +85,7 @@ async fn serve_placeholder(
     item_id: Uuid,
     image_type: &str,
     opts: &ImageOptions,
+    req: &ImageRequest<'_>,
 ) -> Result<Response, ApiError> {
     if !image_type.eq_ignore_ascii_case("Primary") {
         return Err(ApiError::NotFound);
@@ -99,7 +101,7 @@ async fn serve_placeholder(
                 .await
                 .map_err(ApiError::Database)?
         {
-            return serve_image(&poster.path, opts, state).await;
+            return serve_image(&poster.path, opts, state, req).await;
         }
         Placeholder::for_item_type(&item.item_type)
     } else if libraries::find_by_id(&state.pool, item_id)
@@ -115,7 +117,7 @@ async fn serve_placeholder(
         tracing::error!("Could not draw the {shape:?} placeholder: {e}");
         ApiError::Internal(format!("placeholder: {e}"))
     })?;
-    serve_image(&path.to_string_lossy(), opts, state).await
+    serve_image(&path.to_string_lossy(), opts, state, req).await
 }
 /// `GET /Items/{itemId}/Images/{imageType}/{imageIndex}` -- Serve item image by index.
 pub async fn get_item_image_by_index(
@@ -127,12 +129,15 @@ pub async fn get_item_image_by_index(
 ) -> Result<Response, ApiError> {
     check_image_access(&state, &user, item_id).await?;
     let opts = build_options(&params, &headers);
+    let req = ImageRequest::new(&params, &headers);
     match images::find_by_item_and_type(&state.pool, item_id, &image_type, image_index)
         .await
         .map_err(ApiError::Database)?
     {
-        Some(image) => serve_image(&image.path, &opts, &state).await,
-        None if image_index == 0 => serve_placeholder(&state, item_id, &image_type, &opts).await,
+        Some(image) => serve_image(&image.path, &opts, &state, &req).await,
+        None if image_index == 0 => {
+            serve_placeholder(&state, item_id, &image_type, &opts, &req).await
+        }
         None => Err(ApiError::NotFound),
     }
 }
@@ -192,27 +197,20 @@ pub(crate) async fn serve_entity_image(
         .ok_or(ApiError::NotFound)?;
 
     let opts = build_options(params, headers);
-    serve_image(&image.path, &opts, state).await
+    let req = ImageRequest::new(params, headers);
+    serve_image(&image.path, &opts, state, &req).await
 }
 
 /// Build `ImageOptions` from query parameters and request headers.
-pub(crate) fn build_options(params: &ImageParams, headers: &HeaderMap) -> ImageOptions {
+pub(crate) fn build_options(params: &ImageParams, _headers: &HeaderMap) -> ImageOptions {
     let format = match params.format.as_deref() {
         Some("webp" | "Webp" | "WEBP") => ImageFormat::Webp,
         Some("png" | "Png" | "PNG") => ImageFormat::Png,
         Some("jpg" | "jpeg" | "Jpg" | "Jpeg" | "JPEG") => ImageFormat::Jpeg,
-        _ => {
-            // Auto-detect webp support from Accept header
-            if let Some(accept) = headers.get(header::ACCEPT).and_then(|v| v.to_str().ok()) {
-                if accept.contains("image/webp") {
-                    ImageFormat::Webp
-                } else {
-                    ImageFormat::Original
-                }
-            } else {
-                ImageFormat::Original
-            }
-        }
+        // Not from `Accept: image/webp`, which every browser sends: the WebP
+        // encoder is lossless only, so that re-encoded every image, often into
+        // a larger file than the JPEG it came from.
+        _ => ImageFormat::Original,
     };
 
     ImageOptions {
@@ -225,42 +223,103 @@ pub(crate) fn build_options(params: &ImageParams, headers: &HeaderMap) -> ImageO
     }
 }
 
-/// Serve an image, processing (resize/format convert) if needed.
+/// What a request says about caching: the image tag it names, and the ETag it
+/// already holds.
+pub(crate) struct ImageRequest<'a> {
+    tag: Option<&'a str>,
+    if_none_match: Option<&'a str>,
+}
+
+impl<'a> ImageRequest<'a> {
+    pub(crate) fn new(params: &'a ImageParams, headers: &'a HeaderMap) -> Self {
+        Self {
+            tag: params.tag.as_deref().filter(|t| !t.is_empty()),
+            if_none_match: headers
+                .get(header::IF_NONE_MATCH)
+                .and_then(|v| v.to_str().ok()),
+        }
+    }
+}
+
+/// A URL naming the image's tag changes when the image does, so it can be kept
+/// for a year; without one, an hour, then revalidated by ETag.
+const CACHE_TAGGED: &str = "public, max-age=31536000, immutable";
+const CACHE_UNTAGGED: &str = "public, max-age=3600";
+
+fn etag_matches(if_none_match: Option<&str>, etag: &str) -> bool {
+    let Some(header) = if_none_match else {
+        return false;
+    };
+    let bare = etag.trim_start_matches("W/");
+    header
+        .split(',')
+        .map(str::trim)
+        .any(|candidate| candidate == "*" || candidate.trim_start_matches("W/") == bare)
+}
+
+/// Serve an image, processing (resize/format convert) if needed. A request that
+/// already holds the current version gets a 304 before any resizing.
 pub(crate) async fn serve_image(
     source_path: &str,
     opts: &ImageOptions,
     state: &AppState,
+    req: &ImageRequest<'_>,
 ) -> Result<Response, ApiError> {
-    if !opts.needs_processing() {
-        return serve_image_file(source_path).await;
-    }
-
-    let output_path = image_processing::process_image(source_path, opts, &state.image_cache_dir)
-        .await
-        .map_err(|e| {
-            tracing::error!("Image processing failed for {source_path}: {e}");
-            ApiError::Internal(format!("Image processing failed: {e}"))
-        })?;
-
-    serve_image_file(output_path.to_str().unwrap_or(source_path)).await
-}
-
-/// Serve an image file with appropriate content type and caching headers (fast path).
-async fn serve_image_file(path: &str) -> Result<Response, ApiError> {
-    let data = tokio::fs::read(path)
+    let meta = tokio::fs::metadata(source_path)
         .await
         .map_err(|_| ApiError::NotFound)?;
-
-    let content_type = match image_processing::sniff_content_type(&data) {
-        Some(sniffed) => sniffed,
-        None => extension_content_type(path),
+    let mtime_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_millis());
+    let etag = image_processing::etag_for(source_path, meta.len(), mtime_ms, opts);
+    let cache_control = if req.tag.is_some() {
+        CACHE_TAGGED
+    } else {
+        CACHE_UNTAGGED
     };
+    if etag_matches(req.if_none_match, &etag) {
+        return Ok(Response::builder()
+            .status(StatusCode::NOT_MODIFIED)
+            .header(header::ETAG, &etag)
+            .header(header::CACHE_CONTROL, cache_control)
+            .body(Body::empty())
+            .unwrap());
+    }
 
+    let path = if opts.needs_processing() {
+        image_processing::process_image(source_path, opts, &state.image_cache_dir)
+            .await
+            .map_err(|e| {
+                tracing::error!("Image processing failed for {source_path}: {e}");
+                ApiError::Internal(format!("Image processing failed: {e}"))
+            })?
+    } else {
+        std::path::PathBuf::from(source_path)
+    };
+    serve_image_file(&path, &etag, cache_control).await
+}
+
+/// Stream an image file with its type (from its bytes) and caching headers.
+async fn serve_image_file(
+    path: &std::path::Path,
+    etag: &str,
+    cache_control: &str,
+) -> Result<Response, ApiError> {
+    let file = image_processing::OpenImage::open(path)
+        .await
+        .map_err(|_| ApiError::NotFound)?;
+    let content_type = file
+        .content_type
+        .unwrap_or_else(|| extension_content_type(&path.to_string_lossy()));
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::CACHE_CONTROL, "public, max-age=86400")
-        .body(Body::from(data))
+        .header(header::CONTENT_LENGTH, file.len)
+        .header(header::ETAG, etag)
+        .header(header::CACHE_CONTROL, cache_control)
+        .body(Body::from_stream(file.into_stream()))
         .unwrap())
 }
 

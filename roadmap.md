@@ -456,6 +456,11 @@ low-priority admin features.
 - [x] `rustyfin artwork <dir> -t tvshows|movies`: download only missing posters, fanart and season posters from TMDB
       for Sonarr/Radarr-managed libraries; matched by `[tmdbid]`/`[tvdbid]`/NFO ids via TMDB find, never by title;
       existing files and NFOs untouched (`--force` replaces images)
+- [x] Image serving (owner, 2026-11-14): tagged URLs cached a year (`immutable`), others an hour, every image with an
+      ETag and 304s before any resize; `Accept: image/webp` no longer re-encodes (lossless-only encoder); files
+      streamed; resizes capped at the CPU count, deduplicated, written atomically; image rows kept across scans while
+      their files are unchanged (`images.file_mtime`), so tags are stable; the session row is written at most once a
+      minute; the admin asks for display-size images; admin build files cached a year, text/WASM Brotli or gzip
 - [x] A track's release date is its year (owner decision 2026-11-14): `ProductionYear` from the tag, else the
       album's; no `PremiereDate`. Parity lists it in `KNOWN_DIFFERENCES`
 - [x] CORS same-origin by default (owner decision 2026-11-14); `[server] cors_allowed_origins` allowlists web

@@ -12,6 +12,9 @@ pub struct ImageRow {
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub image_index: i32,
+    /// The file's mtime (ms) when scanned; None for rows from older scans.
+    #[sqlx(default)]
+    pub file_mtime: Option<i64>,
 }
 
 pub struct NewImage {
@@ -34,6 +37,25 @@ pub async fn insert(pool: &PgPool, image: &NewImage) -> Result<ImageRow, sqlx::E
     .bind(&image.image_type)
     .bind(&image.path)
     .bind(image.image_index)
+    .fetch_one(pool)
+    .await
+}
+
+/// Insert an image found by a scan, with its file's mtime (ms).
+pub async fn insert_scanned(
+    pool: &PgPool,
+    image: &NewImage,
+    file_mtime: Option<i64>,
+) -> Result<ImageRow, sqlx::Error> {
+    sqlx::query_as::<_, ImageRow>(
+        "INSERT INTO images (entity_id, image_type, path, image_index, file_mtime) \
+         VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    )
+    .bind(image.entity_id)
+    .bind(&image.image_type)
+    .bind(&image.path)
+    .bind(image.image_index)
+    .bind(file_mtime)
     .fetch_one(pool)
     .await
 }

@@ -68,7 +68,28 @@ pub fn image_url(
     max_width: u32,
     token: &str,
 ) -> String {
-    todo!("{base}{item_id}{tag:?}{max_width}{token}")
+    let mut url = format!("{base}/Items/{item_id}/Images/Primary?maxWidth={max_width}&quality=90");
+    if let Some(tag) = tag {
+        url.push_str("&tag=");
+        url.push_str(&encode(tag));
+    }
+    if !token.is_empty() {
+        url.push_str("&api_key=");
+        url.push_str(&encode(token));
+    }
+    url
+}
+
+fn encode(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 #[cfg(test)]

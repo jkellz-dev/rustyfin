@@ -1164,32 +1164,63 @@ impl LibraryScanner {
         self.store_images(season_id, &found).await;
     }
 
-    /// Replace an item's image rows with `found`.
+    /// Make an item's image rows match `found`. When nothing changed (same files,
+    /// same mtimes) the rows are kept, so their ids, the image tags clients cache
+    /// by, stay the same across scans.
     async fn store_images(&self, item_id: Uuid, found: &[DiscoveredImage]) {
+        let mtime = |path: &str| {
+            std::fs::metadata(path)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as i64)
+        };
+        let mut wanted: Vec<(String, i32, String, Option<i64>)> = found
+            .iter()
+            .map(|i| {
+                (
+                    i.image_type.clone(),
+                    i.image_index,
+                    i.path.clone(),
+                    mtime(&i.path),
+                )
+            })
+            .collect();
+        wanted.sort();
+        match images_repo::list_by_item(&self.pool, item_id).await {
+            Ok(rows) => {
+                let mut have: Vec<(String, i32, String, Option<i64>)> = rows
+                    .into_iter()
+                    .map(|r| (r.image_type, r.image_index, r.path, r.file_mtime))
+                    .collect();
+                have.sort();
+                if have == wanted {
+                    return;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to list images for {item_id}: {e}");
+                return;
+            }
+        }
         if let Err(e) = images_repo::delete_by_item(&self.pool, item_id).await {
             tracing::error!("Failed to delete images for {item_id}: {e}");
             return;
         }
-        for img in found {
+        for (image_type, image_index, path, file_mtime) in wanted {
             let new_image = images_repo::NewImage {
                 entity_id: item_id,
-                image_type: img.image_type.clone(),
-                path: img.path.clone(),
-                image_index: img.image_index,
+                image_type,
+                path,
+                image_index,
             };
-            if let Err(e) = images_repo::insert(&self.pool, &new_image).await {
+            if let Err(e) = images_repo::insert_scanned(&self.pool, &new_image, file_mtime).await {
                 tracing::error!("Failed to insert image for {item_id}: {e}");
             }
         }
     }
 
     async fn replace_images(&self, item_id: Uuid, file_or_dir: &Path) {
-        // Delete existing images for this item
-        if let Err(e) = images_repo::delete_by_item(&self.pool, item_id).await {
-            tracing::error!("Failed to delete images for {item_id}: {e}");
-            return;
-        }
-
         let dir = if file_or_dir.is_dir() {
             file_or_dir
         } else {
@@ -1198,26 +1229,12 @@ impl LibraryScanner {
                 None => return,
             }
         };
-
         let item_stem = file_or_dir
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("");
-
         let discovered = discover_images(dir, item_stem);
-
-        for img in &discovered {
-            let new_image = images_repo::NewImage {
-                entity_id: item_id,
-                image_type: img.image_type.clone(),
-                path: img.path.clone(),
-                image_index: img.image_index,
-            };
-
-            if let Err(e) = images_repo::insert(&self.pool, &new_image).await {
-                tracing::error!("Failed to insert image for {item_id}: {e}");
-            }
-        }
+        self.store_images(item_id, &discovered).await;
     }
 }
 
