@@ -26,6 +26,10 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// Too many failed logins: try again after this many seconds.
+    #[error("Too many failed logins; retry in {0} s")]
+    TooManyRequests(u64),
 }
 
 /// Lets a handler carry on without optional data (images, counts, people) when its
@@ -70,6 +74,7 @@ impl IntoResponse for ApiError {
             ApiError::Database(e) if is_foreign_key_violation(e) => StatusCode::NOT_FOUND,
             ApiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
         };
 
         // A missing image or an unknown id is the client's answer, not a fault:
@@ -79,7 +84,13 @@ impl IntoResponse for ApiError {
         } else {
             tracing::debug!("API error: {self}");
         }
-        (status, self.to_string()).into_response()
+        let mut response = (status, self.to_string()).into_response();
+        if let ApiError::TooManyRequests(secs) = self {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, secs.into());
+        }
+        response
     }
 }
 

@@ -120,6 +120,7 @@ impl TestApp {
             user_image_url_template: None,
             task_scheduler: None,
             shutdown: shutdown.clone(),
+            login_limiter: Default::default(),
         };
 
         let router = build_router(state);

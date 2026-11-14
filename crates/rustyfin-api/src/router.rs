@@ -43,6 +43,8 @@ pub struct AppState {
     /// Fired by `POST /System/Shutdown` and `/System/Restart`; the server binary
     /// waits on it to begin a graceful exit.
     pub shutdown: Arc<tokio::sync::Notify>,
+    /// Failed password logins, per name and per address (roadmap 11e).
+    pub login_limiter: Arc<crate::login_limit::LoginLimiter>,
 }
 
 impl FromRef<AppState> for PgPool {

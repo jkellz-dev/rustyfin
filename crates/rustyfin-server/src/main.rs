@@ -310,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
         scan_schedules,
         user_image_url_template: config.server.user_image_url_template,
         task_scheduler: task_scheduler_for_state,
+        login_limiter: Default::default(),
         shutdown: shutdown.clone(),
     };
 

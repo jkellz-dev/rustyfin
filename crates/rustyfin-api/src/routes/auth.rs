@@ -56,93 +56,35 @@ pub async fn authenticate_by_name(
         .map_err(ApiError::Database)?
         == 0;
 
-    // Try forward auth (only from trusted proxies)
-    let user = if let Some(ref fa_config) = state.forward_auth_config
-        && fa_config.trusted_proxies.is_trusted(&addr.ip())
-        && let Some(identity) = forward_auth::extract_identity(&headers, &fa_config.headers)
+    // Logins a trusted forward-auth proxy vouches for are never throttled;
+    // every other attempt (passwords, untrusted callers) is.
+    let vouched = state.forward_auth_config.as_ref().is_some_and(|fa| {
+        fa.trusted_proxies.is_trusted(&addr.ip())
+            && forward_auth::extract_identity(&headers, &fa.headers).is_some()
+    });
+    let name = body.username.as_deref();
+    if !vouched
+        && let Err(wait) = state
+            .login_limiter
+            .check(addr.ip(), name, std::time::Instant::now())
     {
-        let user = users::upsert_from_forward_auth(
-            &state.pool,
-            &identity.remote_user,
-            &identity.remote_user,
-            identity.display_name.as_deref(),
-            identity.email.as_deref(),
-        )
-        .await
-        .map_err(ApiError::Database)?;
-
-        // First user becomes admin
-        if is_first_user {
-            let _ =
-                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
+        tracing::warn!("Login throttled for {} ({name:?})", addr.ip());
+        return Err(ApiError::TooManyRequests(wait.as_secs().max(1)));
+    }
+    let user = match resolve_login(&state, &headers, addr, &body, is_first_user).await {
+        Ok(user) => {
+            state.login_limiter.record_success(name);
+            user
         }
-
-        // Auto-admin from groups
-        if let Some(ref admin_group) = fa_config.admin_group
-            && identity.groups.iter().any(|g| g == admin_group)
-            && !user.is_administrator
-        {
-            let _ =
-                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
-        }
-
-        user
-    } else if let Some(ref ldap_config) = state.ldap_config {
-        // LDAPS authentication path
-        let username = body.username.as_deref().ok_or(ApiError::Unauthorized)?;
-        let password = body.pw.as_deref().ok_or(ApiError::Unauthorized)?;
-
-        let ldap_result = ldap::authenticate(ldap_config, username, password)
-            .await
-            .map_err(|e| {
-                tracing::warn!("LDAP auth failed for '{username}': {e}");
-                // Log failed attempt
-                let pool = state.pool.clone();
-                let username = username.to_string();
-                tokio::spawn(async move {
-                    let _ = activity_log::insert(
-                        &pool,
-                        &format!("Authentication failed for {username}"),
-                        None,
-                        "AuthenticationFailed",
-                        "Error",
-                        None,
-                        None,
-                    )
-                    .await;
-                });
-                ApiError::Unauthorized
-            })?;
-
-        let user = users::upsert_from_ldap(
-            &state.pool,
-            &ldap_result.username,
-            ldap_result.display_name.as_deref(),
-            ldap_result.email.as_deref(),
-        )
-        .await
-        .map_err(ApiError::Database)?;
-
-        // Reject disabled users
-        if user.is_disabled {
+        Err(ApiError::Unauthorized) => {
+            if !vouched {
+                state
+                    .login_limiter
+                    .record_failure(addr.ip(), name, std::time::Instant::now());
+            }
             return Err(ApiError::Unauthorized);
         }
-
-        // First user becomes admin
-        if is_first_user {
-            let _ =
-                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
-        }
-
-        // Auto-admin from LDAP group membership
-        if ldap_result.is_admin && !user.is_administrator {
-            let _ =
-                users::update_policy(&state.pool, user.id, true, user.enable_all_libraries).await;
-        }
-
-        user
-    } else {
-        return Err(ApiError::Unauthorized);
+        Err(e) => return Err(e),
     };
 
     // Create session
@@ -244,4 +186,104 @@ pub async fn authenticate_by_name(
         access_token: token,
         server_id: state.server_id.clone(),
     }))
+}
+
+/// Who is logging in: the forward-auth identity from a trusted proxy, else an
+/// LDAP bind, else nobody (401).
+async fn resolve_login(
+    state: &AppState,
+    headers: &HeaderMap,
+    addr: SocketAddr,
+    body: &AuthenticateByNameRequest,
+    is_first_user: bool,
+) -> Result<users::UserRow, ApiError> {
+    Ok(
+        if let Some(ref fa_config) = state.forward_auth_config
+            && fa_config.trusted_proxies.is_trusted(&addr.ip())
+            && let Some(identity) = forward_auth::extract_identity(headers, &fa_config.headers)
+        {
+            let user = users::upsert_from_forward_auth(
+                &state.pool,
+                &identity.remote_user,
+                &identity.remote_user,
+                identity.display_name.as_deref(),
+                identity.email.as_deref(),
+            )
+            .await
+            .map_err(ApiError::Database)?;
+
+            // First user becomes admin
+            if is_first_user {
+                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                    .await;
+            }
+
+            // Auto-admin from groups
+            if let Some(ref admin_group) = fa_config.admin_group
+                && identity.groups.iter().any(|g| g == admin_group)
+                && !user.is_administrator
+            {
+                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                    .await;
+            }
+
+            user
+        } else if let Some(ref ldap_config) = state.ldap_config {
+            // LDAPS authentication path
+            let username = body.username.as_deref().ok_or(ApiError::Unauthorized)?;
+            let password = body.pw.as_deref().ok_or(ApiError::Unauthorized)?;
+
+            let ldap_result = ldap::authenticate(ldap_config, username, password)
+                .await
+                .map_err(|e| {
+                    tracing::warn!("LDAP auth failed for '{username}': {e}");
+                    // Log failed attempt
+                    let pool = state.pool.clone();
+                    let username = username.to_string();
+                    tokio::spawn(async move {
+                        let _ = activity_log::insert(
+                            &pool,
+                            &format!("Authentication failed for {username}"),
+                            None,
+                            "AuthenticationFailed",
+                            "Error",
+                            None,
+                            None,
+                        )
+                        .await;
+                    });
+                    ApiError::Unauthorized
+                })?;
+
+            let user = users::upsert_from_ldap(
+                &state.pool,
+                &ldap_result.username,
+                ldap_result.display_name.as_deref(),
+                ldap_result.email.as_deref(),
+            )
+            .await
+            .map_err(ApiError::Database)?;
+
+            // Reject disabled users
+            if user.is_disabled {
+                return Err(ApiError::Unauthorized);
+            }
+
+            // First user becomes admin
+            if is_first_user {
+                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                    .await;
+            }
+
+            // Auto-admin from LDAP group membership
+            if ldap_result.is_admin && !user.is_administrator {
+                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                    .await;
+            }
+
+            user
+        } else {
+            return Err(ApiError::Unauthorized);
+        },
+    )
 }
