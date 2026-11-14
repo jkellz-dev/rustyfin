@@ -1,3 +1,4 @@
+pub mod cors;
 pub mod error;
 pub mod query_case;
 pub mod router;

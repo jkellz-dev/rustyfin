@@ -8,7 +8,7 @@ use axum::response::Redirect;
 use ipnet::IpNet;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use rustyfin_api::router::{AppState, ForwardAuthState, build_router};
@@ -291,6 +291,7 @@ async fn main() -> anyhow::Result<()> {
     let shutdown = std::sync::Arc::new(tokio::sync::Notify::new());
 
     // Build application state
+    let cors_origins = config.server.cors_allowed_origins.clone();
     let state = AppState {
         pool: db_pool,
         server_id,
@@ -312,11 +313,18 @@ async fn main() -> anyhow::Result<()> {
         shutdown: shutdown.clone(),
     };
 
+    // Same-origin unless origins are allowlisted (owner decision 2026-11-14).
+    let cors = rustyfin_api::cors::cors_layer(&cors_origins).map_err(anyhow::Error::msg)?;
+    if cors_origins.is_empty() {
+        tracing::info!("CORS: same-origin only");
+    } else {
+        tracing::info!("CORS: allowing {}", cors_origins.join(", "));
+    }
+
     // Build router with all API routes
     let app = build_router(state)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive());
-
+        .layer(cors);
     // Redirect root to admin UI
     let app = app.route(
         "/",

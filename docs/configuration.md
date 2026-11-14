@@ -59,6 +59,7 @@ Environment variables use double-underscore `__` as a separator to map to nested
 | `port` | `u16` | `8096` | Port the HTTP server binds to |
 | `base_url` | `String` | `http://localhost:8096` | External URL clients use to reach the server |
 | `server_name` | `String` | `Rustyfin` | Human-readable server name shown in clients |
+| `cors_allowed_origins` | `[String]` | `[]` | Web origins (`https://host[:port]`) that may call the API from another site. Empty: same-origin only. `["*"]`: any origin. Native apps are unaffected |
 
 ### `[database]`
 

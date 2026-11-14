@@ -450,6 +450,8 @@ low-priority admin features.
       `AlbumArtist(s)`, `Artists` (tags via `media_items.artists`, else the album artist) and `ArtistItems` (artist
       folders of the same library), `HasLyrics: false`; albums name their artist; albums and artists total their
       tracks' `RunTimeTicks`
+- [x] CORS same-origin by default (owner decision 2026-11-14); `[server] cors_allowed_origins` allowlists web
+      clients on other origins, validated at startup
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

@@ -33,8 +33,11 @@ pub struct ServerConfig {
     pub user_image_url_template: Option<String>,
     #[serde(default)]
     pub image_cache_dir: Option<String>,
+    /// Origins of web clients served from elsewhere that may call the API.
+    /// Empty (the default): same-origin only.
+    #[serde(default)]
+    pub cors_allowed_origins: Vec<String>,
 }
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct DatabaseConfig {
     #[serde(default = "default_db_host")]
@@ -427,6 +430,7 @@ fn default_server() -> ServerConfig {
         base_url: default_base_url(),
         server_name: default_server_name(),
         user_image_url_template: None,
+        cors_allowed_origins: Vec::new(),
         image_cache_dir: None,
     }
 }
