@@ -44,7 +44,13 @@ pub async fn get_item_image(
         .await
         .map_err(ApiError::Database)?
     {
-        Some(image) => serve_image(&image.path, &opts, &state, &req).await,
+        // Missing or unreadable artwork falls back as if there were none.
+        Some(image) => match serve_image(&image.path, &opts, &state, &req).await {
+            Err(ApiError::NotFound) => {
+                serve_placeholder(&state, item_id, &image_type, &opts, &req).await
+            }
+            served => served,
+        },
         None => serve_placeholder(&state, item_id, &image_type, &opts, &req).await,
     }
 }
@@ -370,8 +376,16 @@ pub(crate) async fn serve_image(
         image_processing::process_image(source_path, opts, &state.image_cache_dir)
             .await
             .map_err(|e| {
-                tracing::error!("Image processing failed for {source_path}: {e}");
-                ApiError::Internal(format!("Image processing failed: {e}"))
+                // Artwork that is not a readable image is the library's problem,
+                // not the server's: answer as if it were missing (the primary
+                // image route then shows the placeholder) and say which file.
+                if image_processing::is_unreadable_image(e.as_ref()) {
+                    tracing::warn!("Artwork {source_path} is not a readable image: {e}");
+                    ApiError::NotFound
+                } else {
+                    tracing::error!("Image processing failed for {source_path}: {e}");
+                    ApiError::Internal(format!("Image processing failed: {e}"))
+                }
             })?
     } else {
         std::path::PathBuf::from(source_path)
