@@ -554,6 +554,11 @@ pub(crate) async fn attach_music_fields(
                 {
                     dto.album = Some(album.name.clone());
                     dto.album_id = Some(album.id);
+                    // A track's release date is its year (owner decision
+                    // 2026-11-14): the tag's, else the album's.
+                    if dto.production_year.is_none() {
+                        dto.production_year = album.production_year;
+                    }
                     dto.album_primary_image_tag = Some(
                         album_art
                             .get(&album.id)
