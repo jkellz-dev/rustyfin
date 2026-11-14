@@ -8,8 +8,8 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, libraries, media_items};
+use rustyfin_auth::middleware::{AuthenticatedUser, OptionalUser};
+use rustyfin_db::repo::{images, libraries, media_items, user_library_access};
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 
@@ -32,10 +32,12 @@ pub struct ImageParams {
 /// `GET /Items/{itemId}/Images/{imageType}` -- Serve item image.
 pub async fn get_item_image(
     State(state): State<AppState>,
+    user: OptionalUser,
     Path((item_id, image_type)): Path<(Uuid, String)>,
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    check_image_access(&state, &user, item_id).await?;
     let opts = build_options(&params, &headers);
     match images::find_by_item_and_type(&state.pool, item_id, &image_type, 0)
         .await
@@ -43,6 +45,35 @@ pub async fn get_item_image(
     {
         Some(image) => serve_image(&image.path, &opts, &state).await,
         None => serve_placeholder(&state, item_id, &image_type, &opts).await,
+    }
+}
+
+/// When the request names a user, images of items and libraries they may not see
+/// answer 404, as every other item route does. Requests without a user are served
+/// as before: clients load images through plain `<img>` tags that carry no token,
+/// and item ids are random.
+async fn check_image_access(
+    state: &AppState,
+    user: &OptionalUser,
+    item_id: Uuid,
+) -> Result<(), ApiError> {
+    let Some(user) = &user.0 else {
+        return Ok(());
+    };
+    if media_items::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+        .is_some()
+    {
+        return super::access::require_item_access(state, user.user_id, item_id).await;
+    }
+    // Otherwise it may be a library (a collection folder's image).
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user.user_id)
+        .await
+        .map_err(ApiError::Database)?;
+    match accessible {
+        Some(allowed) if !allowed.contains(&item_id) => Err(ApiError::NotFound),
+        _ => Ok(()),
     }
 }
 
@@ -80,10 +111,12 @@ async fn serve_placeholder(
 /// `GET /Items/{itemId}/Images/{imageType}/{imageIndex}` -- Serve item image by index.
 pub async fn get_item_image_by_index(
     State(state): State<AppState>,
+    user: OptionalUser,
     Path((item_id, image_type, image_index)): Path<(Uuid, String, i32)>,
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    check_image_access(&state, &user, item_id).await?;
     let opts = build_options(&params, &headers);
     match images::find_by_item_and_type(&state.pool, item_id, &image_type, image_index)
         .await
