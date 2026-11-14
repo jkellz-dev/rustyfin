@@ -21,11 +21,17 @@ pub struct LibraryScanner {
     enrichment: EnrichmentService,
 }
 
+/// Below this many files under a root, the "more than half are gone" guard does
+/// not apply: a small library losing its only film is normal.
+const PRUNE_GUARD_MIN_FILES: usize = 10;
+
 #[derive(Debug)]
 pub struct ScanResult {
     pub items_added: u64,
     pub items_updated: u64,
     pub items_skipped: u64,
+    /// Items removed because their files or directories are gone.
+    pub items_removed: u64,
     pub errors: u64,
     pub duration: std::time::Duration,
 }
@@ -43,6 +49,7 @@ impl LibraryScanner {
             items_added: 0,
             items_updated: 0,
             items_skipped: 0,
+            items_removed: 0,
             errors: 0,
             duration: std::time::Duration::ZERO,
         };
@@ -72,8 +79,10 @@ impl LibraryScanner {
                 }
                 other => {
                     tracing::warn!("Unknown library type '{other}', skipping");
+                    continue;
                 }
             }
+            self.prune_missing(library_id, &path, &mut result).await;
         }
 
         libraries::touch_updated_at(&self.pool, library_id)
@@ -85,10 +94,11 @@ impl LibraryScanner {
 
         result.duration = start.elapsed();
         tracing::info!(
-            "Scan complete for library {library_id}: added={}, updated={}, skipped={}, errors={}, duration={:?}",
+            "Scan complete for library {library_id}: added={}, updated={}, skipped={}, removed={}, errors={}, duration={:?}",
             result.items_added,
             result.items_updated,
             result.items_skipped,
+            result.items_removed,
             result.errors,
             result.duration
         );
@@ -911,6 +921,89 @@ impl LibraryScanner {
         self.replace_images(inserted.id, file_path).await;
         self.enrichment.enrich_episode(inserted.id, file_path).await;
         Ok(IngestOutcome::Added)
+    }
+
+    /// Remove the library's items under `root` whose file or directory is gone.
+    ///
+    /// Safety rules (owner decision 2026-11-14): nothing happens unless `root`
+    /// is a readable, non-empty directory, so an unmounted share never empties a
+    /// library; only paths under `root` (whole components, so `movies-old` is not
+    /// under `movies`) are considered; and when more than half of a library's
+    /// files under `root` look gone (libraries of `PRUNE_GUARD_MIN_FILES` or
+    /// more), nothing is removed and a warning says why. Series, seasons, albums
+    /// and artists whose directory is gone, or that are left with nothing and
+    /// never had a directory on record, go too. User data cascades.
+    async fn prune_missing(&self, library_id: Uuid, root: &Path, result: &mut ScanResult) {
+        match std::fs::read_dir(root) {
+            Ok(mut entries) => {
+                if entries.next().is_none() {
+                    tracing::warn!(
+                        "Not pruning {}: the library folder is empty (unmounted share?)",
+                        root.display()
+                    );
+                    return;
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Not pruning {}: cannot read it: {e}", root.display());
+                return;
+            }
+        }
+        let rows = match media_items::list_paths_in_library(&self.pool, library_id).await {
+            Ok(rows) => rows,
+            Err(e) => {
+                tracing::error!("Not pruning {}: {e}", root.display());
+                return;
+            }
+        };
+        let under: Vec<_> = rows
+            .into_iter()
+            .filter(|(_, path, _)| Path::new(path).starts_with(root))
+            .collect();
+        let files = under.iter().filter(|(_, _, folder)| !folder).count();
+        let gone_files: Vec<Uuid> = under
+            .iter()
+            .filter(|(_, path, folder)| !folder && !Path::new(path).exists())
+            .map(|(id, _, _)| *id)
+            .collect();
+        if files >= PRUNE_GUARD_MIN_FILES && gone_files.len() * 2 > files {
+            tracing::warn!(
+                "Not pruning {}: {} of {} files look gone, more than half; check the share",
+                root.display(),
+                gone_files.len(),
+                files
+            );
+            return;
+        }
+        let gone_folders: Vec<Uuid> = under
+            .iter()
+            .filter(|(_, path, folder)| *folder && !Path::new(path).is_dir())
+            .map(|(id, _, _)| *id)
+            .collect();
+        let mut removed = 0;
+        for (what, ids) in [("files", &gone_files), ("folders", &gone_folders)] {
+            match media_items::delete_ids(&self.pool, ids).await {
+                Ok(n) => removed += n,
+                Err(e) => {
+                    tracing::error!("Pruning {what} under {} failed: {e}", root.display());
+                    result.errors += 1;
+                }
+            }
+        }
+        match media_items::delete_empty_pathless_folders(&self.pool, library_id).await {
+            Ok(n) => removed += n,
+            Err(e) => {
+                tracing::error!("Pruning empty folders failed: {e}");
+                result.errors += 1;
+            }
+        }
+        if removed > 0 {
+            tracing::info!(
+                "Pruned {removed} items under {} whose files are gone",
+                root.display()
+            );
+        }
+        result.items_removed += removed;
     }
 
     /// Streams stored before the details existed (no time base) are probed again

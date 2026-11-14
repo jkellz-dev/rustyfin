@@ -498,6 +498,57 @@ pub async fn update(
 }
 
 /// Delete a media item by its filesystem path.
+/// Every item of the library that has a path: (id, path, is_folder).
+pub async fn list_paths_in_library(
+    pool: &PgPool,
+    library_id: Uuid,
+) -> Result<Vec<(Uuid, String, bool)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, path, is_folder FROM media_items WHERE library_id = $1 AND path IS NOT NULL",
+    )
+    .bind(library_id)
+    .fetch_all(pool)
+    .await
+}
+
+/// Delete the items in `ids`; their children, streams, images and user data
+/// cascade. Returns how many rows the statement removed directly.
+pub async fn delete_ids(pool: &PgPool, ids: &[Uuid]) -> Result<u64, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    let done = sqlx::query("DELETE FROM media_items WHERE id = ANY($1)")
+        .bind(ids)
+        .execute(pool)
+        .await?;
+    Ok(done.rows_affected())
+}
+
+/// Delete series, seasons, albums and artists of the library that hold nothing
+/// and have no directory on record (rows from scans that stored none), bottom up.
+pub async fn delete_empty_pathless_folders(
+    pool: &PgPool,
+    library_id: Uuid,
+) -> Result<u64, sqlx::Error> {
+    let mut total = 0;
+    // Artist -> album -> track is the deepest chain, so a few passes settle it.
+    for _ in 0..4 {
+        let done = sqlx::query(
+            "DELETE FROM media_items f WHERE f.library_id = $1 AND f.path IS NULL \
+             AND f.item_type IN ('Series', 'Season', 'MusicAlbum', 'MusicArtist') \
+             AND NOT EXISTS (SELECT 1 FROM media_items c WHERE c.parent_id = f.id)",
+        )
+        .bind(library_id)
+        .execute(pool)
+        .await?;
+        if done.rows_affected() == 0 {
+            break;
+        }
+        total += done.rows_affected();
+    }
+    Ok(total)
+}
+
 pub async fn delete_by_path(pool: &PgPool, path: &str) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM media_items WHERE path = $1")
         .bind(path)

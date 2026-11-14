@@ -440,6 +440,9 @@ low-priority admin features.
 - [x] Series and album folders split `Name (YYYY)` into name and `ProductionYear`, store their directory as `Path`,
       are found again by directory (older rows renamed in place, ids kept), and are no longer shared between
       libraries that hold a folder of the same name
+- [x] Scans prune items whose files are gone (owner decision 2026-11-14): only when the library folder is a
+      readable non-empty directory, only under the scanned root, never more than half of a library of 10+ files in
+      one scan; emptied series/seasons/albums/artists go too, user data cascades
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)
