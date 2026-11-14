@@ -117,7 +117,9 @@ async fn fixture(n: usize) -> Fixture {
     let movies = app.create_library("Movies", "movies").await;
     let mut movie_ids = Vec::new();
     for i in 0..n {
-        let id = insert(item("Movie", &format!("Film {i}"), movies)).await;
+        let mut film = item("Movie", &format!("Film {i}"), movies);
+        film.production_year = Some(2000 + i as i32);
+        let id = insert(film).await;
         picture(id).await;
         for who in ["Actor A", &format!("Actor {i}")] {
             let p = people::find_or_create(&app.pool, who, "Actor", None, None)
@@ -196,6 +198,14 @@ async fn fixture(n: usize) -> Fixture {
         season.index_number = Some(s);
         let season = insert(season).await;
         picture(season).await;
+        let mut ep = item("Episode", "Pilot", shows);
+        ep.parent_id = Some(season);
+        ep.series_id = Some(long_series);
+        ep.season_id = Some(season);
+        ep.series_name = Some("Long Show".to_string());
+        ep.index_number = Some(1);
+        ep.parent_index_number = Some(s);
+        insert(ep).await;
     }
 
     let music = app.create_library("Music", "music").await;
