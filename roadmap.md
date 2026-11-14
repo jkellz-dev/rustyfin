@@ -889,7 +889,11 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [ ] Benchmark: library scan time for large libraries (1k, 10k files)
 - [ ] Benchmark: search latency (Meilisearch vs Postgres ILIKE fallback)
 - [ ] Profile memory usage under sustained load
-- [ ] Identify and fix N+1 query patterns (user_data per-item in loops)
+- [ ] Identify and fix N+1 query patterns (user_data per-item in loops) — next, before UI work (owner, 2026-11-14)
+- [ ] Later, once core functionality is in place (owner, 2026-11-14: "get core functionality in place before we
+      truly start optimizing"): benchmark the requests clients make most (home, library grid, item detail, resume,
+      search) in the sandbox: p50/p95 and queries per request. If the numbers call for it, prototype an in-memory
+      catalog (files authoritative, memory the index, Postgres only for user state) behind the same API and compare
 
 ### 11e. Security Review
 
@@ -915,7 +919,8 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       an open socket is re-checked on every keepalive (45 s) and closed when its session expires, is logged out, or its
       user is disabled or removed
 - [ ] Rate limiting on auth endpoints
-- [ ] Review CORS / header configuration
+- [x] Review CORS / header configuration: same-origin by default, optional allowlist in `rustyfin.toml` (owner,
+      2026-11-14); native clients are unaffected
 
 ### 11f. CI Pipeline [DONE]
 
@@ -999,15 +1004,28 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
       `{{token}}` variables so the same file runs against either server
 - [x] A runner that executes the suite against both servers and reports the gaps (`tests/parity/run.py`): status code,
       `Content-Type`, JSON key set and value kinds per response. Jellyfin must pass its own recording. No mise task yet
-- [ ] Normalisation for what legitimately differs (ids, timestamps, server name and version, ordering of unordered
+- [x] Normalisation for what legitimately differs (ids, timestamps, server name and version, ordering of unordered
       lists), kept in one file so each exemption is visible and has a reason
-- [ ] A known-differences list: every deliberate divergence (forward-auth only, no plugins, no LiveTV) is named
+- [x] A known-differences list (`KNOWN_DIFFERENCES` in `gen/record.py`, listed in the suite README): every
+      deliberate divergence (forward-auth only, no plugins, no LiveTV, track dates as years) is named
       and the suite expects it, so an unplanned one fails
 - [ ] Cover the routes real clients call first (the 11a client-compatibility list), then the rest of the router
 - [ ] Capture Jellyfin's responses as recorded fixtures so the suite can also run offline against Rustyfin alone
 - [ ] Run in CI on a schedule (nightly) rather than every push; report the parity gaps it finds back into 11a
 
 ---
+
+### 11i. Metadata Sidecar & Collection Art
+
+Owner decisions (2026-11-14): NFO files (written by Radarr/Sonarr) stay the metadata input; what they lack goes in a
+Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh. Downloaded art is stored as fetched.
+
+- [ ] Check what Radarr's Kodi NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?)
+- [ ] Sidecar file beside each NFO (e.g. `<film>.rustyfin.json`): extra ids only (TMDB collection id, actor TMDB ids),
+      written by `rustyfin artwork`/`fetch`, merged by the scanner; never a second copy of the NFO
+- [ ] Collections keyed by TMDB collection id when known; their poster and backdrop fetched into `rustyfin-cache`
+      (`collections/tmdb-<id>.jpg`), falling back to the earliest film's poster
+- [ ] Cast without an NFO actor id gets its TMDB id from the sidecar, so headshots are `tmdb-<id>.jpg` not `img-<hash>`
 
 ## Phase 12 — UI Polish & Interactivity
 
