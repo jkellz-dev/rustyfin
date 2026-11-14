@@ -7,6 +7,8 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::get,
 };
+pub mod assets;
+
 use rust_embed::Embed;
 
 #[derive(Embed)]

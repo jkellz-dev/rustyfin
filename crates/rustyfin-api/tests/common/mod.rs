@@ -267,11 +267,24 @@ impl TestApp {
         path: &str,
         token: &str,
     ) -> (StatusCode, Vec<(String, String)>, Vec<u8>) {
-        let request = Request::builder()
-            .uri(path)
-            .header("X-Emby-Token", token)
-            .body(Body::empty())
-            .unwrap();
+        self.get_bytes_with(path, token, &[]).await
+    }
+
+    /// `get_bytes` with extra request headers (`If-None-Match`, `Accept`).
+    pub async fn get_bytes_with(
+        &self,
+        path: &str,
+        token: &str,
+        extra: &[(&str, &str)],
+    ) -> (StatusCode, Vec<(String, String)>, Vec<u8>) {
+        let mut builder = Request::builder().uri(path);
+        if !token.is_empty() {
+            builder = builder.header("X-Emby-Token", token);
+        }
+        for (k, v) in extra {
+            builder = builder.header(*k, *v);
+        }
+        let request = builder.body(Body::empty()).unwrap();
         let response = self.router.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let headers = response
