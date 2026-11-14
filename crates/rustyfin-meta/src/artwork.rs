@@ -414,6 +414,29 @@ mod tests {
     }
 
     #[test]
+    fn tmdb_headshots_are_fetched_at_632_px_not_the_original() {
+        let t = Tree::new();
+        let people = [
+            person(
+                "Bryan Cranston",
+                Some("http://image.tmdb.org/t/p/original/cjeDbVfBp6Qvb3C74Dfy7BKDTQN.jpg"),
+            ),
+            person("Aaron Paul", Some("https://artworks.thetvdb.com/a/b.jpg")),
+        ];
+        let urls: Vec<String> = headshots_wanted(&people, &t.0)
+            .into_iter()
+            .map(|(u, _)| u)
+            .collect();
+        assert_eq!(
+            urls,
+            vec![
+                "https://image.tmdb.org/t/p/h632/cjeDbVfBp6Qvb3C74Dfy7BKDTQN.jpg".to_string(),
+                "https://artworks.thetvdb.com/a/b.jpg".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn season_posters_are_named_as_the_server_reads_them() {
         assert_eq!(season_poster_name(0), "season-specials-poster.jpg");
         assert_eq!(season_poster_name(1), "season01-poster.jpg");
