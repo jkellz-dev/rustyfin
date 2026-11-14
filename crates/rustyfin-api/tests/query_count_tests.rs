@@ -124,8 +124,7 @@ async fn queries(app: &common::TestApp, path: &str, token: &str) -> Vec<String> 
         drop(guard);
         assert_eq!(status, StatusCode::OK, "{path}: {body}");
     }
-    let seen = seen.lock().unwrap().clone();
-    seen
+    seen.lock().unwrap().clone()
 }
 
 fn item(kind: &str, name: &str, lib: Uuid) -> media_items::NewMediaItem {
