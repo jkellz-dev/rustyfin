@@ -9,3 +9,5 @@ pub use library::tasks::{
     ActivityLogPruneTask, DatabaseOptimizeTask, ImageCachePruneTask, SessionCleanupTask,
     TranscodeTempCleanupTask,
 };
+/// For the API, which reads the shared people folder (see the CLI's artwork command).
+pub use rustyfin_common::images::headshot_file_name;

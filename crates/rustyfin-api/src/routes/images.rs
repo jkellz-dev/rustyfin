@@ -9,7 +9,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AuthenticatedUser, OptionalUser};
-use rustyfin_db::repo::{images, libraries, media_items, user_library_access};
+use rustyfin_db::repo::{images, libraries, media_items, people, user_library_access};
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 
@@ -78,6 +78,26 @@ async fn check_image_access(
     }
 }
 
+/// A person's headshot in the shared people folder, if the metadata CLI has
+/// fetched one.
+pub(crate) fn headshot_path(state: &AppState, name: &str) -> Option<std::path::PathBuf> {
+    let dir = state.people_cache_dir.as_ref()?;
+    let path = dir.join(rustyfin_core::headshot_file_name(name)?);
+    path.is_file().then_some(path)
+}
+
+/// The image tag of a headshot file: changes when the file is replaced.
+pub(crate) fn headshot_tag(path: &std::path::Path) -> Option<String> {
+    let meta = std::fs::metadata(path).ok()?;
+    let modified = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(format!("hs-{modified:x}-{:x}", meta.len()))
+}
+
 /// The placeholder for an item or library with no primary artwork. Other image
 /// types have no placeholder: clients only require a primary image.
 async fn serve_placeholder(
@@ -133,6 +153,14 @@ async fn serve_placeholder(
         .is_some()
     {
         Placeholder::Landscape
+    } else if let Some(person) = people::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        // People: the headshot from the shared folder, or nothing (clients
+        // draw initials).
+        let path = headshot_path(state, &person.name).ok_or(ApiError::NotFound)?;
+        return serve_image(&path.to_string_lossy(), opts, state, req).await;
     } else {
         return Err(ApiError::NotFound);
     };

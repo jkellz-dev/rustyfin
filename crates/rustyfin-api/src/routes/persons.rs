@@ -170,6 +170,17 @@ pub async fn get_person_image(
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
 
+    if image_type.eq_ignore_ascii_case("Primary")
+        && images::find_by_item_and_type(&state.pool, person.id, "Primary", 0)
+            .await
+            .map_err(ApiError::Database)?
+            .is_none()
+        && let Some(path) = image_routes::headshot_path(&state, &person.name)
+    {
+        let opts = image_routes::build_options(&params, &headers);
+        let req = image_routes::ImageRequest::new(&params, &headers);
+        return image_routes::serve_image(&path.to_string_lossy(), &opts, &state, &req).await;
+    }
     image_routes::serve_entity_image(&state, person.id, &image_type, 0, &params, &headers).await
 }
 

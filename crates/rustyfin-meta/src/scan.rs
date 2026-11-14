@@ -1124,10 +1124,14 @@ pub(crate) async fn download_people_headshots(
         if count >= 30 {
             break;
         }
-        let (Some(url), Some(pid)) = (&person.image_url, &person.provider_person_id) else {
+        // One file per person, shared by every item (see `headshot_file_name`).
+        let (Some(url), Some(file)) = (
+            &person.image_url,
+            rustyfin_common::images::headshot_file_name(&person.name),
+        ) else {
             continue;
         };
-        let file_path = dir.join(format!("{pid}.jpg"));
+        let file_path = dir.join(file);
         if let Err(e) = download_image_with_options(http, url, &file_path, skip_existing).await {
             tracing::warn!("  Failed to download headshot for {}: {e}", person.name);
         } else {

@@ -221,6 +221,24 @@ pub fn discover_episode_images(dir: &Path, episode_stem: &str) -> Vec<Discovered
         .unwrap_or_default()
 }
 
+/// The file a person's headshot is kept in, inside the shared people folder:
+/// their name, lowercased, with every run of other characters made one `-`
+/// ("Robert Downey Jr." is `robert-downey-jr.jpg`). People are one row per name,
+/// as in Jellyfin, so a person in many items has one file. `None` for a name
+/// with no letters or digits. The name can never leave the folder.
+pub fn headshot_file_name(name: &str) -> Option<String> {
+    let mut slug = String::new();
+    for c in name.chars().flat_map(char::to_lowercase) {
+        if c.is_alphanumeric() {
+            slug.push(c);
+        } else if !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_end_matches('-');
+    (!slug.is_empty()).then(|| format!("{slug}.jpg"))
+}
+
 #[cfg(test)]
 mod season_image_tests {
     use super::*;

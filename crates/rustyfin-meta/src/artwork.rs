@@ -128,8 +128,45 @@ pub struct ArtworkStats {
     pub checked: usize,
     pub complete: usize,
     pub downloaded: usize,
+    pub headshots: usize,
     pub no_id: usize,
     pub errors: usize,
+}
+
+/// The headshots to download into the shared `people_dir`: one per person with
+/// an image URL and no file yet (a person listed twice is fetched once).
+pub fn headshots_wanted(people: &[nfo::NfoPerson], people_dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut seen = std::collections::HashSet::new();
+    let mut wanted = Vec::new();
+    for person in people {
+        let (Some(url), Some(file)) = (
+            person.image_url.as_deref().filter(|u| !u.is_empty()),
+            rustyfin_common::images::headshot_file_name(&person.name),
+        ) else {
+            continue;
+        };
+        if !seen.insert(file.clone()) {
+            continue;
+        }
+        let path = people_dir.join(file);
+        if !path.exists() {
+            wanted.push((url.to_string(), path));
+        }
+    }
+    wanted
+}
+
+/// The cast and crew of a show or film folder from its NFO (Radarr and Sonarr
+/// write actor thumbs there).
+fn nfo_people(dir: &Path, tv: bool) -> Vec<nfo::NfoPerson> {
+    let meta = if tv {
+        nfo::find_series_nfo(dir).and_then(|p| nfo::parse_series_nfo(&p))
+    } else {
+        first_video(dir)
+            .and_then(|v| nfo::find_movie_nfo(&v))
+            .and_then(|p| nfo::parse_movie_nfo(&p))
+    };
+    meta.map(|m| m.people).unwrap_or_default()
 }
 
 /// Fill missing artwork for every show (`tvshows`) or film (`movies`) folder in `root`.
@@ -157,7 +194,9 @@ pub async fn fill_missing(
     );
     let http = reqwest::Client::new();
     let skip_existing = !opts.force;
-
+    let people_dir = PathBuf::from(crate::scan::expand_tilde(
+        &opts.config.output.people_cache_dir,
+    ));
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)?
         .flatten()
         .map(|e| e.path())
@@ -178,14 +217,33 @@ pub async fn fill_missing(
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
+        // Headshots: the NFO's cast first (no lookup needed), else TMDB's
+        // credits below. Shared by everyone the person appears with.
+        let local_people = nfo_people(&dir, tv);
+        let mut headshots = headshots_wanted(&local_people, &people_dir);
+        if !headshots.is_empty() {
+            if opts.dry_run {
+                tracing::info!("{name}: {} headshots to fetch", headshots.len());
+            } else {
+                stats.headshots +=
+                    fetch_headshots(&http, &headshots, &name, &mut stats.errors).await;
+            }
+            headshots.clear();
+        }
+        let need_credits = !local_people.iter().any(|p| p.image_url.is_some());
         let missing = missing_art(&dir, tv);
-        if missing.is_empty() && !opts.force {
+        if missing.is_empty() && !opts.force && !need_credits {
             stats.complete += 1;
             continue;
         }
-        tracing::info!("{name}: missing {missing:?}");
         if opts.dry_run {
+            if !missing.is_empty() {
+                tracing::info!("{name}: missing {missing:?}");
+            }
             continue;
+        }
+        if !missing.is_empty() {
+            tracing::info!("{name}: missing {missing:?}");
         }
         let Some(tmdb) = tmdb.as_ref() else { continue };
 
@@ -209,6 +267,24 @@ pub async fn fill_missing(
             stats.no_id += 1;
             continue;
         };
+        limiter.wait().await;
+        if need_credits {
+            limiter.wait().await;
+            let details = if tv {
+                tmdb.fetch_series_by_id(id).await
+            } else {
+                tmdb.fetch_movie_by_id(id).await
+            };
+            if let Some(details) = details {
+                headshots = headshots_wanted(&details.people, &people_dir);
+                stats.headshots +=
+                    fetch_headshots(&http, &headshots, &name, &mut stats.errors).await;
+            }
+            if missing.is_empty() && !opts.force {
+                stats.complete += 1;
+                continue;
+            }
+        }
         limiter.wait().await;
         let Some(art) = tmdb.fetch_artwork(id, tv).await else {
             tracing::error!("{name}: TMDB {id} did not answer");
@@ -242,6 +318,36 @@ pub async fn fill_missing(
         }
     }
     Ok(stats)
+}
+
+/// Download `wanted` headshots; returns how many were saved.
+async fn fetch_headshots(
+    http: &reqwest::Client,
+    wanted: &[(String, PathBuf)],
+    name: &str,
+    errors: &mut usize,
+) -> usize {
+    if let Some(dir) = wanted.first().and_then(|(_, p)| p.parent())
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        tracing::error!("{name}: cannot create {}: {e}", dir.display());
+        *errors += 1;
+        return 0;
+    }
+    let mut saved = 0;
+    for (url, path) in wanted {
+        match download_image_with_options(http, url, path, true).await {
+            Ok(()) => saved += 1,
+            Err(e) => {
+                tracing::warn!("{name}: headshot {}: {e}", path.display());
+                *errors += 1;
+            }
+        }
+    }
+    if saved > 0 {
+        tracing::info!("{name}: saved {saved} headshots");
+    }
+    saved
 }
 
 #[cfg(test)]

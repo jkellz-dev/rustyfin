@@ -963,10 +963,12 @@ pub async fn get_item_by_id(
             people_rows
                 .into_iter()
                 .map(|(person, role, _sort_order)| {
+                    // A stored image first, else the shared headshot folder.
                     let tag = if people_with_images.contains(&person.id) {
                         Some(person.id.simple().to_string())
                     } else {
-                        None
+                        super::images::headshot_path(&state, &person.name)
+                            .and_then(|p| super::images::headshot_tag(&p))
                     };
                     BaseItemPerson {
                         name: person.name,

@@ -198,9 +198,10 @@ impl EnrichmentService {
 
                         // Insert image row if headshot cache file exists
                         if let Some(ref cache_dir) = self.people_cache_dir
-                            && let Some(ref pid) = person_row.provider_person_id
+                            && let Some(file) =
+                                rustyfin_common::images::headshot_file_name(&person_row.name)
                         {
-                            let headshot_path = cache_dir.join(format!("{pid}.jpg"));
+                            let headshot_path = cache_dir.join(file);
                             if headshot_path.is_file() {
                                 let existing = rustyfin_db::repo::images::find_by_item_and_type(
                                     &self.pool,
