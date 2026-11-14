@@ -118,6 +118,58 @@ pub async fn upsert(
     .await
 }
 
+/// Apply a partial update: each `Some` field is set, the rest kept. Setting
+/// `played` to true without a play count counts one play and stamps the date,
+/// as marking played does.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_partial(
+    pool: &PgPool,
+    user_id: Uuid,
+    item_id: Uuid,
+    played: Option<bool>,
+    play_count: Option<i32>,
+    position_ticks: Option<i64>,
+    is_favorite: Option<bool>,
+    rating: Option<f64>,
+    last_played_date: Option<DateTime<Utc>>,
+) -> Result<UserDataRow, sqlx::Error> {
+    sqlx::query_as::<_, UserDataRow>(
+        r#"
+        INSERT INTO user_data (user_id, item_id) VALUES ($1, $2)
+        ON CONFLICT (user_id, item_id) DO NOTHING
+        "#,
+    )
+    .bind(user_id)
+    .bind(item_id)
+    .fetch_optional(pool)
+    .await?;
+    sqlx::query_as::<_, UserDataRow>(
+        r#"
+        UPDATE user_data SET
+            play_count = COALESCE($4,
+                CASE WHEN $3 IS TRUE AND NOT played THEN play_count + 1 ELSE play_count END),
+            last_played_date = COALESCE($8,
+                CASE WHEN $3 IS TRUE AND NOT played THEN NOW() ELSE last_played_date END),
+            played = COALESCE($3, played),
+            playback_position_ticks = COALESCE($5, playback_position_ticks),
+            is_favorite = COALESCE($6, is_favorite),
+            rating = COALESCE($7, rating)
+        WHERE user_id = $1 AND item_id = $2
+        RETURNING *
+        "#,
+    )
+    .bind(user_id)
+    .bind(item_id)
+    .bind(played)
+    .bind(play_count)
+    .bind(position_ticks)
+    .bind(is_favorite)
+    .bind(rating)
+    .bind(last_played_date)
+    .fetch_one(pool)
+    .await
+}
+
 /// Set favorite status for an item.
 pub async fn set_favorite(
     pool: &PgPool,

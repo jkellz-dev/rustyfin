@@ -367,6 +367,14 @@ pub fn build_router(state: AppState) -> Router {
             post(user_data::mark_played_legacy).delete(user_data::mark_unplayed_legacy),
         )
         .route(
+            "/UserItems/{itemId}/UserData",
+            get(user_data::get_user_item_data).post(user_data::update_user_item_data),
+        )
+        .route(
+            "/Users/{userId}/Items/{itemId}/UserData",
+            get(user_data::get_user_item_data_legacy).post(user_data::update_user_item_data_legacy),
+        )
+        .route(
             "/UserItems/{itemId}/Rating",
             post(user_data::update_rating).delete(user_data::delete_rating),
         )
@@ -500,9 +508,21 @@ pub fn build_router(state: AppState) -> Router {
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))
         // ── State ───────────────────────────────────────────────
+        .fallback(unmatched_route)
         .with_state(state)
         // Jellyfin clients send camelCase query keys; our extractors expect PascalCase.
         .layer(axum::middleware::from_fn(
             crate::query_case::normalize_query_keys,
         ))
+}
+
+/// Requests no route matches. Logged at info with the method and path (never
+/// the query, which can carry a token), so a client calling an API Rustyfin
+/// lacks shows up in the log instead of only as "not found" in the client.
+async fn unmatched_route(
+    method: axum::http::Method,
+    uri: axum::http::Uri,
+) -> axum::http::StatusCode {
+    tracing::info!("No route for {method} {}", uri.path());
+    axum::http::StatusCode::NOT_FOUND
 }
