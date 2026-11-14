@@ -11,14 +11,29 @@ mod common;
 use axum::http::StatusCode;
 use rustyfin_db::repo::{images, media_items, people, user_data};
 use serde_json::json;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use tracing::subscriber::Interest;
 use tracing::{Event, Metadata, Subscriber, span};
 use uuid::Uuid;
 
-/// Counts `sqlx::query` events; ignores everything else.
-struct QueryCounter(Arc<AtomicUsize>);
+/// Records the SQL of each `sqlx::query` event; ignores everything else.
+struct QueryCounter(Arc<Mutex<Vec<String>>>);
+
+/// Takes the statement's text from the event (sqlx 0.8: `db.statement`, or
+/// `summary` when the statement is not logged in full).
+#[derive(Default)]
+struct Statement(String);
+
+impl tracing::field::Visit for Statement {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if matches!(field.name(), "db.statement" | "summary") && self.0.len() < 400 {
+            if !self.0.is_empty() {
+                self.0.push_str(" | ");
+            }
+            self.0.push_str(&format!("{value:?}"));
+        }
+    }
+}
 
 impl Subscriber for QueryCounter {
     fn register_callsite(&self, _: &'static Metadata<'static>) -> Interest {
@@ -37,20 +52,23 @@ impl Subscriber for QueryCounter {
     fn record_follows_from(&self, _: &span::Id, _: &span::Id) {}
     fn event(&self, event: &Event<'_>) {
         if event.metadata().target() == "sqlx::query" {
-            self.0.fetch_add(1, Ordering::SeqCst);
+            let mut sql = Statement::default();
+            event.record(&mut sql);
+            let sql: String = sql.0.split_whitespace().collect::<Vec<_>>().join(" ");
+            self.0.lock().unwrap().push(sql);
         }
     }
     fn enter(&self, _: &span::Id) {}
     fn exit(&self, _: &span::Id) {}
 }
 
-/// GET `path` and count the queries it ran (images: any answer but a 5xx).
-async fn queries(app: &common::TestApp, path: &str, token: &str) -> usize {
+/// GET `path` and list the queries it ran (images: any answer but a 5xx).
+async fn queries(app: &common::TestApp, path: &str, token: &str) -> Vec<String> {
     // Once unmeasured first: the session's activity stamp (written at most once
     // a minute) and other first-touch work would otherwise land in the count.
     let _ = app.get_bytes(path, token).await;
-    let count = Arc::new(AtomicUsize::new(0));
-    let guard = tracing::subscriber::set_default(QueryCounter(count.clone()));
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let guard = tracing::subscriber::set_default(QueryCounter(seen.clone()));
     if path.contains("/Images/") {
         let (status, _, _) = app.get_bytes(path, token).await;
         drop(guard);
@@ -60,7 +78,8 @@ async fn queries(app: &common::TestApp, path: &str, token: &str) -> usize {
         drop(guard);
         assert_eq!(status, StatusCode::OK, "{path}: {body}");
     }
-    count.load(Ordering::SeqCst)
+    let seen = seen.lock().unwrap().clone();
+    seen
 }
 
 fn item(kind: &str, name: &str, lib: Uuid) -> media_items::NewMediaItem {
@@ -267,25 +286,34 @@ async fn fixture(n: usize) -> Fixture {
     }
 }
 
-/// The route's query count over 2 items and over 6 must match.
+/// The route's query count over 6 items must not exceed its count over 2. On
+/// failure the message lists the statements only the larger run made.
 async fn flat(route: impl Fn(&Fixture) -> String) {
-    let mut counts = Vec::new();
+    let mut runs = Vec::new();
     for n in [2, 6] {
         let f = fixture(n).await;
         let path = route(&f);
-        counts.push((n, queries(&f.app, &path, &f.token).await, path));
+        runs.push((n, queries(&f.app, &path, &f.token).await, path));
         f.app.cleanup().await;
     }
-    let (small, large) = (&counts[0], &counts[1]);
-    assert!(
-        large.1 <= small.1,
-        "{}: {} queries for {} of each, {} for {}",
-        large.2,
-        small.1,
-        small.0,
-        large.1,
-        large.0
-    );
+    let (small, large) = (&runs[0], &runs[1]);
+    if large.1.len() > small.1.len() {
+        let mut extra = large.1.clone();
+        for sql in &small.1 {
+            if let Some(at) = extra.iter().position(|e| e == sql) {
+                extra.remove(at);
+            }
+        }
+        panic!(
+            "{}: {} queries for {} of each, {} for {}; only in the larger run:\n{}",
+            large.2,
+            small.1.len(),
+            small.0,
+            large.1.len(),
+            large.0,
+            extra.join("\n")
+        );
+    }
 }
 
 #[tokio::test]
