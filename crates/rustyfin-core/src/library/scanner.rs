@@ -4,7 +4,9 @@ use std::time::Instant;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{chapters, images as images_repo, libraries, media_items, media_streams};
+use rustyfin_db::repo::{
+    chapters, collections, images as images_repo, libraries, media_items, media_streams,
+};
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
@@ -87,10 +89,13 @@ impl LibraryScanner {
             self.prune_missing(library_id, &path, &mut result).await;
         }
 
+        if library_type == "movies" {
+            self.sync_movie_collections(library_id).await;
+        }
+
         libraries::touch_updated_at(&self.pool, library_id)
             .await
             .ok();
-
         // Backfill headshot image rows for people with cached headshots
         self.enrichment.backfill_people_headshots().await;
 
@@ -956,6 +961,39 @@ impl LibraryScanner {
     /// more), nothing is removed and a warning says why. Series, seasons, albums
     /// and artists whose directory is gone, or that are left with nothing and
     /// never had a directory on record, go too. User data cascades.
+    /// Group the library's films into collections by the film series their NFO
+    /// names (`<set>`), as Jellyfin does. Every film's NFO is read on each scan,
+    /// so films scanned before this existed, and NFOs Radarr rewrote, are
+    /// picked up without a file change.
+    async fn sync_movie_collections(&self, library_id: Uuid) {
+        let items = match media_items::list_paths_in_library(&self.pool, library_id).await {
+            Ok(items) => items,
+            Err(e) => {
+                tracing::error!("Collections: cannot list library {library_id}: {e}");
+                return;
+            }
+        };
+        let mut sets: std::collections::BTreeMap<String, Vec<Uuid>> = Default::default();
+        for (id, path, is_folder) in items {
+            if is_folder {
+                continue;
+            }
+            if let Some(name) = find_movie_nfo(Path::new(&path))
+                .and_then(|nfo| rustyfin_common::nfo::parse_movie_collection(&nfo))
+            {
+                sets.entry(name).or_default().push(id);
+            }
+        }
+        match collections::sync_auto(&self.pool, library_id, &sets).await {
+            Ok((0, 0)) => {}
+            Ok((created, removed)) => tracing::info!(
+                "Collections in library {library_id}: {} in all, {created} new, {removed} removed",
+                sets.len()
+            ),
+            Err(e) => tracing::error!("Collections: library {library_id}: {e}"),
+        }
+    }
+
     async fn prune_missing(&self, library_id: Uuid, root: &Path, result: &mut ScanResult) {
         match std::fs::read_dir(root) {
             Ok(mut entries) => {

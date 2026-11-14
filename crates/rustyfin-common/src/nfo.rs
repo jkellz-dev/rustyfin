@@ -263,6 +263,36 @@ pub fn parse_movie_nfo(path: &Path) -> Option<NfoMetadata> {
     }
 }
 
+/// Only the film series of a movie NFO.
+#[derive(Debug, Deserialize)]
+struct MovieSetOnly {
+    set: Option<NfoSet>,
+}
+
+/// `<set><name>Alien Collection</name><overview>…</overview></set>` (Radarr,
+/// Kodi 17+) or `<set>Alien Collection</set>` (older tools).
+#[derive(Debug, Deserialize)]
+struct NfoSet {
+    #[serde(rename = "$text")]
+    text: Option<String>,
+    name: Option<String>,
+}
+
+/// The film series (collection) a movie NFO names, if any.
+pub fn parse_movie_collection(path: &Path) -> Option<String> {
+    let content = read_nfo(path)?;
+    if is_url_only(&content) {
+        return None;
+    }
+    let set = quick_xml::de::from_str::<MovieSetOnly>(&content)
+        .ok()?
+        .set?;
+    set.name
+        .or(set.text)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Parse a tvshow NFO file into `NfoMetadata`.
 pub fn parse_series_nfo(path: &Path) -> Option<NfoMetadata> {
     let content = read_nfo(path)?;

@@ -793,6 +793,28 @@ pub async fn get_items(
         return Err(ApiError::NotFound);
     }
 
+    // A collection (BoxSet) lists its films, which are not its children by
+    // parent: they live in their library and may be in several collections.
+    let mut collection_members: Option<Vec<Uuid>> = None;
+    if !is_library
+        && let Some(pid) = query.parent_id
+        && let Some(parent) = media_items::find_by_id(&state.pool, pid)
+            .await
+            .map_err(ApiError::Database)?
+        && parent.item_type == "BoxSet"
+    {
+        super::access::require_item_access(&state, auth.user_id, pid).await?;
+        let members = rustyfin_db::repo::collections::list_item_ids(&state.pool, pid)
+            .await
+            .map_err(ApiError::Database)?;
+        // An empty id list means "no filter" to the query: match nothing instead.
+        collection_members = Some(if members.is_empty() {
+            vec![Uuid::nil()]
+        } else {
+            members
+        });
+    }
+
     // Merge artist_ids and album_artist_ids into person_ids
     let mut person_ids = parse_comma_uuids(&query.person_ids);
     person_ids.extend(parse_comma_uuids(&query.artist_ids));
@@ -801,9 +823,13 @@ pub async fn get_items(
     // Build the query
     let item_query = media_items::ItemQuery {
         library_id: if is_library { query.parent_id } else { None },
-        parent_id: if !is_library { query.parent_id } else { None },
-        recursive,
-        ids: parse_comma_uuids(&query.ids),
+        parent_id: if !is_library && collection_members.is_none() {
+            query.parent_id
+        } else {
+            None
+        },
+        recursive: recursive && collection_members.is_none(),
+        ids: collection_members.unwrap_or_else(|| parse_comma_uuids(&query.ids)),
         accessible_libraries: if is_library { None } else { accessible.clone() },
         include_item_types: parse_comma_delimited(&query.include_item_types),
         exclude_item_types: parse_comma_delimited(&query.exclude_item_types),
@@ -865,9 +891,21 @@ pub async fn get_items(
     // Batch load child counts for folders
     let folder_ids: Vec<Uuid> = items.iter().filter(|i| i.is_folder).map(|i| i.id).collect();
     if !folder_ids.is_empty() {
-        let counts = media_items::count_children_batch(&state.pool, &folder_ids)
+        let mut counts = media_items::count_children_batch(&state.pool, &folder_ids)
             .await
             .or_log_default("media_items::count_children_batch");
+        let boxsets: Vec<Uuid> = items
+            .iter()
+            .filter(|i| i.item_type == "BoxSet")
+            .map(|i| i.id)
+            .collect();
+        if !boxsets.is_empty() {
+            counts.extend(
+                rustyfin_db::repo::collections::count_items_batch(&state.pool, &boxsets)
+                    .await
+                    .or_log_default("collections::count_items_batch"),
+            );
+        }
         for dto in &mut dtos {
             if let Some(&count) = counts.get(&dto.id) {
                 dto.child_count = Some(count as i32);
@@ -982,8 +1020,14 @@ pub async fn get_item_by_id(
         );
     }
 
-    // Child count for folders
-    if item.is_folder {
+    // Child count for folders (a collection counts its films)
+    if item.item_type == "BoxSet" {
+        let count = rustyfin_db::repo::collections::list_item_ids(&state.pool, item_id)
+            .await
+            .map(|ids| ids.len())
+            .unwrap_or(0);
+        dto.child_count = Some(count as i32);
+    } else if item.is_folder {
         let count = media_items::count_by_parent(&state.pool, Some(item_id), &[])
             .await
             .unwrap_or(0);

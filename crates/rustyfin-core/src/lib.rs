@@ -11,3 +11,5 @@ pub use library::tasks::{
 };
 /// For the API, which reads the shared people folder (see the CLI's artwork command).
 pub use rustyfin_common::images::headshot_file_name;
+/// For the API tests and the scanner: the film series a movie NFO names.
+pub use rustyfin_common::nfo::parse_movie_collection;

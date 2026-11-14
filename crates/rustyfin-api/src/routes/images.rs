@@ -137,6 +137,31 @@ async fn serve_placeholder(
                 Err(e) => tracing::debug!("No frame for episode {}: {e}", item.id),
             }
         }
+        // A collection without a cover shows its earliest film's poster.
+        if item.item_type == "BoxSet" {
+            let members = rustyfin_db::repo::collections::list_item_ids(&state.pool, item.id)
+                .await
+                .map_err(ApiError::Database)?;
+            let mut films = Vec::new();
+            for id in members {
+                if let Some(film) = media_items::find_by_id(&state.pool, id)
+                    .await
+                    .map_err(ApiError::Database)?
+                {
+                    films.push(film);
+                }
+            }
+            films.sort_by_key(|f| (f.production_year.unwrap_or(i32::MAX), f.name.clone()));
+            for film in films {
+                if let Some(poster) =
+                    images::find_by_item_and_type(&state.pool, film.id, "Primary", 0)
+                        .await
+                        .map_err(ApiError::Database)?
+                {
+                    return serve_image(&poster.path, opts, state, req).await;
+                }
+            }
+        }
         // A season without a cover shows its show's.
         if item.item_type == "Season"
             && let Some(series) = item.series_id.or(item.parent_id)

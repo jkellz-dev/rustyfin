@@ -463,6 +463,10 @@ low-priority admin features.
       streamed; resizes capped at the CPU count, deduplicated, written atomically; image rows kept across scans while
       their files are unchanged (`images.file_mtime`), so tags are stable; the session row is written at most once a
       minute; the admin asks for display-size images; admin build files cached a year, text/WASM Brotli or gzip
+- [x] Collections (owner, 2026-11-14): each scan of a movie library groups films into BoxSets by the film series
+      their NFO names (`<set><name>` or `<set>`), as Jellyfin does; listed with `IncludeItemTypes=BoxSet`, a
+      collection lists its films (`ParentId`), counts them, and shows its earliest film's poster. Hand-made
+      collections are untouched; automatic ones that lose all films go
 - [x] Episode thumbnails (owner, 2026-11-14): an episode's image is its own `<episode>-thumb.jpg` (Sonarr/Kodi), else a
       frame grabbed once with ffmpeg at 10% of the runtime into the image cache (landscape placeholder if that
       fails); episodes no longer take the season folder's poster; the admin shows episodes as 16:9 cards
