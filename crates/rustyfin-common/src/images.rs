@@ -180,34 +180,6 @@ pub fn discover_season_images(series_dir: &Path, season: i32) -> Vec<DiscoveredI
     images
 }
 
-#[cfg(test)]
-mod season_image_tests {
-    use super::*;
-
-    #[test]
-    fn season_ten_is_not_season_one() {
-        let dir = std::env::temp_dir().join(format!("rf-season-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        for f in [
-            "season10-poster.jpg",
-            "season1-banner.jpg",
-            "season-specials-poster.png",
-        ] {
-            std::fs::write(dir.join(f), b"").unwrap();
-        }
-        let types = |n| {
-            discover_season_images(&dir, n)
-                .into_iter()
-                .map(|i| i.image_type)
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(types(1), vec!["Banner"]);
-        assert_eq!(types(10), vec!["Primary"]);
-        assert_eq!(types(0), vec!["Primary"]);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-}
-
 /// An episode's own images: files named after the episode, `<episode>-thumb.jpg`
 /// (Sonarr/Kodi) or `<episode>.jpg`, as its primary image. The season's
 /// `poster.jpg` in the same folder belongs to the season, not to each episode.
@@ -247,4 +219,32 @@ pub fn discover_episode_images(dir: &Path, episode_stem: &str) -> Vec<Discovered
             }]
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod season_image_tests {
+    use super::*;
+
+    #[test]
+    fn season_ten_is_not_season_one() {
+        let dir = std::env::temp_dir().join(format!("rf-season-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for f in [
+            "season10-poster.jpg",
+            "season1-banner.jpg",
+            "season-specials-poster.png",
+        ] {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        let types = |n| {
+            discover_season_images(&dir, n)
+                .into_iter()
+                .map(|i| i.image_type)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(types(1), vec!["Banner"]);
+        assert_eq!(types(10), vec!["Primary"]);
+        assert_eq!(types(0), vec!["Primary"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
