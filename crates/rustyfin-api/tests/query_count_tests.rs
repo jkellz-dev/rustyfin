@@ -87,7 +87,11 @@ impl Subscriber for QueryCounter {
             let mut sql = Statement::default();
             event.record(&mut sql);
             let sql: String = sql.0.split_whitespace().collect::<Vec<_>>().join(" ");
-            self.seen.lock().unwrap().push(sql);
+            // The test pool's per-connection setup (`SET search_path`), run when
+            // the pool happens to open a connection, is not the route's query.
+            if !sql.contains("SET search_path") {
+                self.seen.lock().unwrap().push(sql);
+            }
         }
     }
     fn enter(&self, id: &span::Id) {
