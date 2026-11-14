@@ -5,8 +5,29 @@ use crate::nfo::{NfoMetadata, NfoPerson};
 
 const TMDB_BASE_URL: &str = "https://api.themoviedb.org/3";
 
+/// How requests prove who they are. TMDB issues an API Read Access Token (a
+/// JWT, sent as `Authorization: Bearer`) and, for older accounts, a v3 API key
+/// (sent as `?api_key=`). Either can be configured as the API key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Credential {
+    Token(String),
+    ApiKey(String),
+}
+
+impl Credential {
+    fn parse(value: &str) -> Self {
+        let value = value.trim();
+        // A JWT: three base64url parts, the header starting `eyJ` (`{"`).
+        if value.starts_with("eyJ") && value.matches('.').count() == 2 {
+            Credential::Token(value.to_string())
+        } else {
+            Credential::ApiKey(value.to_string())
+        }
+    }
+}
+
 pub struct TmdbClient {
-    api_key: String,
+    credential: Credential,
     client: reqwest::Client,
 }
 
@@ -79,19 +100,18 @@ impl TmdbClient {
     /// A show's (`tv`) or film's artwork by TMDB id.
     pub async fn fetch_artwork(&self, id: i64, tv: bool) -> Option<Artwork> {
         let kind = if tv { "tv" } else { "movie" };
-        let url = format!("{TMDB_BASE_URL}/{kind}/{id}?api_key={}", self.api_key);
-        let body = self.client.get(&url).send().await.ok()?.text().await.ok()?;
+        let url = format!("{TMDB_BASE_URL}/{kind}/{id}");
+        let body = self.request(&url).send().await.ok()?.text().await.ok()?;
         parse_artwork(&body)
     }
 
     /// The TMDB id for a TVDB (`tvdb_id`) or IMDb (`imdb_id`) id.
     pub async fn find_by_external_id(&self, source: &str, id: &str, tv: bool) -> Option<i64> {
         let url = format!(
-            "{TMDB_BASE_URL}/find/{}?api_key={}&external_source={source}",
-            urlencoded(id),
-            self.api_key
+            "{TMDB_BASE_URL}/find/{}?external_source={source}",
+            urlencoded(id)
         );
-        let body = self.client.get(&url).send().await.ok()?.text().await.ok()?;
+        let body = self.request(&url).send().await.ok()?.text().await.ok()?;
         parse_find(&body, tv)
     }
 }
@@ -100,7 +120,11 @@ impl TmdbClient {
     /// A GET carrying the credential: a read access token as a bearer header,
     /// an API key as `?api_key=`.
     pub(crate) fn request(&self, url: &str) -> reqwest::RequestBuilder {
-        todo!("{url}")
+        let req = self.client.get(url);
+        match &self.credential {
+            Credential::Token(token) => req.bearer_auth(token),
+            Credential::ApiKey(key) => req.query(&[("api_key", key)]),
+        }
     }
 }
 
@@ -189,7 +213,7 @@ mod artwork_tests {
 impl TmdbClient {
     pub fn new(api_key: String) -> Self {
         Self {
-            api_key,
+            credential: Credential::parse(&api_key),
             client: reqwest::Client::new(),
         }
     }
@@ -208,16 +232,12 @@ impl TmdbClient {
 
     /// Search TMDB for movies, returning all results for disambiguation.
     pub async fn search_movie_results(&self, title: &str, year: Option<i32>) -> Vec<SearchResult> {
-        let mut url = format!(
-            "{TMDB_BASE_URL}/search/movie?api_key={}&query={}",
-            self.api_key,
-            urlencoded(title)
-        );
+        let mut url = format!("{TMDB_BASE_URL}/search/movie?query={}", urlencoded(title));
         if let Some(y) = year {
             url.push_str(&format!("&year={y}"));
         }
 
-        let Ok(resp) = self.client.get(&url).send().await else {
+        let Ok(resp) = self.request(&url).send().await else {
             return vec![];
         };
         let Ok(data) = resp.json::<TmdbSearchResponse>().await else {
@@ -229,13 +249,9 @@ impl TmdbClient {
 
     /// Search TMDB for TV series, returning all results for disambiguation.
     pub async fn search_series_results(&self, title: &str) -> Vec<SearchResult> {
-        let url = format!(
-            "{TMDB_BASE_URL}/search/tv?api_key={}&query={}",
-            self.api_key,
-            urlencoded(title)
-        );
+        let url = format!("{TMDB_BASE_URL}/search/tv?query={}", urlencoded(title));
 
-        let Ok(resp) = self.client.get(&url).send().await else {
+        let Ok(resp) = self.request(&url).send().await else {
             return vec![];
         };
         let Ok(data) = resp.json::<TmdbSearchResponse>().await else {
@@ -256,52 +272,36 @@ impl TmdbClient {
     }
 
     async fn search_movie_id(&self, title: &str, year: Option<i32>) -> Option<TmdbSearchResult> {
-        let mut url = format!(
-            "{TMDB_BASE_URL}/search/movie?api_key={}&query={}",
-            self.api_key,
-            urlencoded(title)
-        );
+        let mut url = format!("{TMDB_BASE_URL}/search/movie?query={}", urlencoded(title));
         if let Some(y) = year {
             url.push_str(&format!("&year={y}"));
         }
 
-        let resp: TmdbSearchResponse =
-            self.client.get(&url).send().await.ok()?.json().await.ok()?;
+        let resp: TmdbSearchResponse = self.request(&url).send().await.ok()?.json().await.ok()?;
 
         resp.results.into_iter().next()
     }
 
     async fn search_tv_id(&self, title: &str) -> Option<TmdbSearchResult> {
-        let url = format!(
-            "{TMDB_BASE_URL}/search/tv?api_key={}&query={}",
-            self.api_key,
-            urlencoded(title)
-        );
+        let url = format!("{TMDB_BASE_URL}/search/tv?query={}", urlencoded(title));
 
-        let resp: TmdbSearchResponse =
-            self.client.get(&url).send().await.ok()?.json().await.ok()?;
+        let resp: TmdbSearchResponse = self.request(&url).send().await.ok()?.json().await.ok()?;
 
         resp.results.into_iter().next()
     }
 
     async fn fetch_movie_details(&self, id: i64) -> Option<NfoMetadata> {
-        let url = format!(
-            "{TMDB_BASE_URL}/movie/{id}?api_key={}&append_to_response=credits",
-            self.api_key
-        );
+        let url = format!("{TMDB_BASE_URL}/movie/{id}?append_to_response=credits");
 
-        let detail: TmdbMovieDetail = self.client.get(&url).send().await.ok()?.json().await.ok()?;
+        let detail: TmdbMovieDetail = self.request(&url).send().await.ok()?.json().await.ok()?;
 
         Some(movie_detail_to_metadata(detail))
     }
 
     async fn fetch_tv_details(&self, id: i64) -> Option<NfoMetadata> {
-        let url = format!(
-            "{TMDB_BASE_URL}/tv/{id}?api_key={}&append_to_response=credits",
-            self.api_key
-        );
+        let url = format!("{TMDB_BASE_URL}/tv/{id}?append_to_response=credits");
 
-        let detail: TmdbTvDetail = self.client.get(&url).send().await.ok()?.json().await.ok()?;
+        let detail: TmdbTvDetail = self.request(&url).send().await.ok()?.json().await.ok()?;
 
         Some(tv_detail_to_metadata(detail))
     }

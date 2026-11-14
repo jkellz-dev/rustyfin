@@ -145,7 +145,10 @@ pub async fn fill_missing(
     };
     let tmdb_key = opts.config.tmdb.api_key.clone();
     if tmdb_key.is_none() && !opts.dry_run {
-        anyhow::bail!("A TMDB API key is required: set [tmdb] api_key in the config");
+        anyhow::bail!(
+            "A TMDB credential is required: set [tmdb] api_key (or RUSTYFIN__TMDB__API_KEY) \
+             to the API Read Access Token or a v3 API key"
+        );
     }
     let tmdb = tmdb_key.map(TmdbClient::new);
     let limiter = RateLimiter::new(
