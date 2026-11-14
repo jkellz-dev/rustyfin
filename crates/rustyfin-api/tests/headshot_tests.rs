@@ -97,11 +97,12 @@ async fn one_headshot_shows_for_the_person_in_every_item() {
             .find(|p| p["Name"] == "Bryan Cranston")
             .unwrap();
         let tag = bryan["PrimaryImageTag"].as_str().expect("a headshot tag");
-        let nobody = people
-            .iter()
-            .find(|p| p["Name"] == "Nobody Pictured")
-            .unwrap();
-        assert!(nobody["PrimaryImageTag"].is_null(), "{nobody}");
+        // Only the first film casts someone without a headshot.
+        if let Some(nobody) = people.iter().find(|p| p["Name"] == "Nobody Pictured") {
+            assert!(nobody["PrimaryImageTag"].is_null(), "{nobody}");
+        } else {
+            assert_eq!(item, second, "{body}");
+        }
 
         let (status, _, got) = app
             .get_bytes(&format!("/Items/{actor}/Images/Primary?tag={tag}"), &token)
