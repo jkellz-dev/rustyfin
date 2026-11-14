@@ -921,7 +921,9 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       at the user, and never re-checked an open socket. Both now go through `rustyfin_auth::session::resolve_token`, and
       an open socket is re-checked on every keepalive (45 s) and closed when its session expires, is logged out, or its
       user is disabled or removed
-- [ ] Rate limiting on auth endpoints
+- [x] Rate limiting on auth endpoints: a user name with 5 failed logins, or an address with 20, in 15 minutes gets
+      429 + `Retry-After` until the oldest failure ages out; a throttle, never Jellyfin's account lockout; logins a
+      trusted forward-auth proxy vouches for are never counted
 - [x] Review CORS / header configuration: same-origin by default, optional allowlist in `rustyfin.toml` (owner,
       2026-11-14); native clients are unaffected
 
