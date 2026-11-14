@@ -5,19 +5,47 @@
 //! and the queries are counted: sqlx reports every statement it runs as a
 //! `sqlx::query` tracing event, collected here by a thread-local subscriber
 //! (the test runtime is single-threaded, so the request runs on this thread).
+//! Only events inside the request's own `measured` span count: work a handler
+//! spawned earlier (it runs on this thread too) would otherwise land in the
+//! count when it happens to run, as it once did in CI (13 vs 14).
 #[allow(dead_code)]
 mod common;
 
 use axum::http::StatusCode;
 use rustyfin_db::repo::{images, media_items, people, user_data};
 use serde_json::json;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use tracing::Instrument;
 use tracing::subscriber::Interest;
 use tracing::{Event, Metadata, Subscriber, span};
 use uuid::Uuid;
 
-/// Records the SQL of each `sqlx::query` event; ignores everything else.
-struct QueryCounter(Arc<Mutex<Vec<String>>>);
+/// Records the SQL of each `sqlx::query` event made inside a `measured` span;
+/// ignores everything else.
+struct QueryCounter {
+    seen: Arc<Mutex<Vec<String>>>,
+    /// Ids handed out to spans; the `measured` ones are listed.
+    next_id: AtomicU64,
+    measured: Mutex<Vec<u64>>,
+    /// How many `measured` spans are entered right now.
+    depth: AtomicUsize,
+}
+
+impl QueryCounter {
+    fn new(seen: Arc<Mutex<Vec<String>>>) -> Self {
+        QueryCounter {
+            seen,
+            next_id: AtomicU64::new(1),
+            measured: Mutex::new(Vec::new()),
+            depth: AtomicUsize::new(0),
+        }
+    }
+
+    fn is_measured(&self, id: &span::Id) -> bool {
+        self.measured.lock().unwrap().contains(&id.into_u64())
+    }
+}
 
 /// Takes the statement's text from the event (sqlx 0.8: `db.statement`, or
 /// `summary` when the statement is not logged in full).
@@ -40,26 +68,38 @@ impl Subscriber for QueryCounter {
         Interest::sometimes()
     }
     fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        metadata.target() == "sqlx::query"
+        metadata.target() == "sqlx::query" || metadata.name() == "measured"
     }
     fn max_level_hint(&self) -> Option<tracing::level_filters::LevelFilter> {
         Some(tracing::level_filters::LevelFilter::TRACE)
     }
-    fn new_span(&self, _: &span::Attributes<'_>) -> span::Id {
-        span::Id::from_u64(1)
+    fn new_span(&self, attrs: &span::Attributes<'_>) -> span::Id {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        if attrs.metadata().name() == "measured" {
+            self.measured.lock().unwrap().push(id);
+        }
+        span::Id::from_u64(id)
     }
     fn record(&self, _: &span::Id, _: &span::Record<'_>) {}
     fn record_follows_from(&self, _: &span::Id, _: &span::Id) {}
     fn event(&self, event: &Event<'_>) {
-        if event.metadata().target() == "sqlx::query" {
+        if event.metadata().target() == "sqlx::query" && self.depth.load(Ordering::SeqCst) > 0 {
             let mut sql = Statement::default();
             event.record(&mut sql);
             let sql: String = sql.0.split_whitespace().collect::<Vec<_>>().join(" ");
-            self.0.lock().unwrap().push(sql);
+            self.seen.lock().unwrap().push(sql);
         }
     }
-    fn enter(&self, _: &span::Id) {}
-    fn exit(&self, _: &span::Id) {}
+    fn enter(&self, id: &span::Id) {
+        if self.is_measured(id) {
+            self.depth.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    fn exit(&self, id: &span::Id) {
+        if self.is_measured(id) {
+            self.depth.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
 }
 
 /// GET `path` and list the queries it ran (images: any answer but a 5xx).
@@ -68,13 +108,19 @@ async fn queries(app: &common::TestApp, path: &str, token: &str) -> Vec<String> 
     // a minute) and other first-touch work would otherwise land in the count.
     let _ = app.get_bytes(path, token).await;
     let seen = Arc::new(Mutex::new(Vec::new()));
-    let guard = tracing::subscriber::set_default(QueryCounter(seen.clone()));
+    let guard = tracing::subscriber::set_default(QueryCounter::new(seen.clone()));
     if path.contains("/Images/") {
-        let (status, _, _) = app.get_bytes(path, token).await;
+        let (status, _, _) = app
+            .get_bytes(path, token)
+            .instrument(tracing::info_span!("measured"))
+            .await;
         drop(guard);
         assert!(!status.is_server_error(), "{path}: {status}");
     } else {
-        let (status, body) = app.get(path, token).await;
+        let (status, body) = app
+            .get(path, token)
+            .instrument(tracing::info_span!("measured"))
+            .await;
         drop(guard);
         assert_eq!(status, StatusCode::OK, "{path}: {body}");
     }
