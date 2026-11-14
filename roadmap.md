@@ -8,7 +8,9 @@ These are **not** on the roadmap — they are intentional exclusions:
 - Plugin/extension system
 - Runtime server config mutation — config files are read-only
 - Server writing to the media filesystem — the server is a read-only consumer of media; a separate CLI tool
-  (`rustyfin-meta`) handles metadata fetching and writing NFO/artwork to disk
+  (`rustyfin-meta`) handles metadata fetching and writing NFO/artwork to disk. In Kubernetes the CLI runs as a
+  sidecar in the server's pod with its own writable media mount (owner decision 2026-11-14); the server
+  container's mount stays read-only
 - Live TV, DVR, TV tuners
 - Photo / book library scanning
 
