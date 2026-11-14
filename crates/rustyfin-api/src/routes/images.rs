@@ -94,6 +94,29 @@ async fn serve_placeholder(
         .await
         .map_err(ApiError::Database)?
     {
+        // An episode without a thumb: a frame from the video, grabbed once into
+        // the image cache. If that fails (unreadable file, no ffmpeg), the
+        // landscape placeholder below stands in.
+        if item.item_type == "Episode"
+            && let Some(video) = item.path.as_deref()
+        {
+            let at = item
+                .runtime_ticks
+                .map_or(60.0, |t| (t as f64 / 10_000_000.0 * 0.1).clamp(1.0, 600.0));
+            let key = super::items::frame_tag(item.id, item.etag.as_deref());
+            match image_processing::video_frame(
+                &state.transcode_manager.ffmpeg_path,
+                std::path::Path::new(video),
+                &state.image_cache_dir,
+                &key,
+                at,
+            )
+            .await
+            {
+                Ok(frame) => return serve_image(&frame.to_string_lossy(), opts, state, req).await,
+                Err(e) => tracing::debug!("No frame for episode {}: {e}", item.id),
+            }
+        }
         // A season without a cover shows its show's.
         if item.item_type == "Season"
             && let Some(series) = item.series_id.or(item.parent_id)

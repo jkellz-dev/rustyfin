@@ -623,6 +623,12 @@ select:focus {
   aspect-ratio: 1 / 1;
 }
 
+/* Episodes: a frame of the video, 16:9. */
+.media-poster.landscape,
+.media-poster-placeholder.landscape {
+  aspect-ratio: 16 / 9;
+}
+
 .media-card-title {
   margin-top: 8px;
   font-size: 0.88em;
@@ -697,6 +703,16 @@ select:focus {
 }
 .detail-poster-placeholder.square {
   aspect-ratio: 1 / 1;
+}
+
+.detail-poster.landscape {
+  width: 400px;
+}
+.detail-poster.landscape img {
+  aspect-ratio: 16 / 9;
+}
+.detail-poster-placeholder.landscape {
+  aspect-ratio: 16 / 9;
 }
 
 .detail-meta {

@@ -148,6 +148,89 @@ pub async fn process_image_traced(
     result.map(|()| (cached, true))
 }
 
+/// A frame from `video` at `at_secs`, as a JPEG under `{cache_dir}/frames/`,
+/// named by `key` (which should change when the video does). Grabbed once:
+/// later and concurrent calls share the file. Shares the resize limit, since
+/// decoding a frame costs about as much as resizing a poster.
+pub async fn video_frame(
+    ffmpeg: &str,
+    video: &Path,
+    cache_dir: &Path,
+    key: &str,
+    at_secs: f64,
+) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    let safe_key: String = key
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    let dir = cache_dir.join("frames");
+    let out = dir.join(format!("{safe_key}.jpg"));
+    if out.exists() {
+        return Ok(out);
+    }
+    let lock = in_flight(&out);
+    let _guard = lock.lock().await;
+    if out.exists() {
+        done_in_flight(&out);
+        return Ok(out);
+    }
+    let _permit = resize_permits().acquire().await?;
+    std::fs::create_dir_all(&dir)?;
+    let tmp = dir.join(format!(
+        ".{safe_key}.{}.tmp.jpg",
+        uuid::Uuid::new_v4().simple()
+    ));
+    // Past the opening credits; from the start if the video is shorter.
+    let mut result = grab(ffmpeg, video, &tmp, at_secs).await;
+    if result.is_err() && at_secs > 0.0 {
+        result = grab(ffmpeg, video, &tmp, 0.0).await;
+    }
+    let result = result.and_then(|()| std::fs::rename(&tmp, &out).map_err(Into::into));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    done_in_flight(&out);
+    result.map(|()| out)
+}
+
+async fn grab(
+    ffmpeg: &str,
+    video: &Path,
+    out: &Path,
+    at_secs: f64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let run = tokio::process::Command::new(ffmpeg)
+        .args(["-v", "error", "-ss", &format!("{at_secs:.3}"), "-i"])
+        .arg(video)
+        .args([
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale='min(1280,iw)':-2",
+            "-q:v",
+            "3",
+            "-f",
+            "image2",
+            "-y",
+        ])
+        .arg(out)
+        .kill_on_drop(true)
+        .output();
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), run)
+        .await
+        .map_err(|_| "ffmpeg took over a minute")??;
+    let written = std::fs::metadata(out).map(|m| m.len() > 0).unwrap_or(false);
+    if !output.status.success() || !written {
+        let _ = std::fs::remove_file(out);
+        return Err(format!(
+            "ffmpeg could not grab a frame: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )
+        .into());
+    }
+    Ok(())
+}
+
 /// The ETag for `source` served with `opts`: it changes when the file does
 /// (size, mtime) or the requested size or format does.
 pub fn etag_for(source_path: &str, len: u64, mtime_ms: u128, opts: &ImageOptions) -> String {

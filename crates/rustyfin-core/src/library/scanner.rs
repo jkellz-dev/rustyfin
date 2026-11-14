@@ -8,7 +8,9 @@ use rustyfin_db::repo::{chapters, images as images_repo, libraries, media_items,
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
-use rustyfin_common::images::{DiscoveredImage, discover_images, discover_season_images};
+use rustyfin_common::images::{
+    DiscoveredImage, discover_episode_images, discover_images, discover_season_images,
+};
 use rustyfin_common::music_tags;
 use rustyfin_common::naming::{
     is_audio_file, is_video_file, make_sort_name, parse_season_folder, resolve_audio_track,
@@ -878,7 +880,7 @@ impl LibraryScanner {
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_chapters(updated.id, &probe_result).await;
-            self.replace_images(updated.id, file_path).await;
+            self.replace_episode_images(updated.id, file_path).await;
             self.enrichment.enrich_episode(updated.id, file_path).await;
             return Ok(IngestOutcome::Updated);
         }
@@ -939,7 +941,7 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_chapters(inserted.id, &probe_result).await;
-        self.replace_images(inserted.id, file_path).await;
+        self.replace_episode_images(inserted.id, file_path).await;
         self.enrichment.enrich_episode(inserted.id, file_path).await;
         Ok(IngestOutcome::Added)
     }
@@ -1218,6 +1220,15 @@ impl LibraryScanner {
                 tracing::error!("Failed to insert image for {item_id}: {e}");
             }
         }
+    }
+
+    async fn replace_episode_images(&self, item_id: Uuid, video: &Path) {
+        let (Some(dir), Some(stem)) = (video.parent(), video.file_stem().and_then(|s| s.to_str()))
+        else {
+            return;
+        };
+        let found = discover_episode_images(dir, stem);
+        self.store_images(item_id, &found).await;
     }
 
     async fn replace_images(&self, item_id: Uuid, file_or_dir: &Path) {

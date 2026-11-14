@@ -682,17 +682,36 @@ pub(crate) fn ensure_primary_placeholder(dto: &mut BaseItemDto) {
         return;
     }
     let placeholder = Placeholder::for_item_type(&dto.item_type);
-    tags.insert("Primary".to_string(), placeholder.tag().to_string());
+    // Episodes without a thumb get a frame from the video (owner, 2026-11-14);
+    // the tag follows the file, so a replaced episode gets a new frame.
+    let tag = if dto.item_type == "Episode" {
+        frame_tag(dto.id, dto.etag.as_deref())
+    } else {
+        placeholder.tag().to_string()
+    };
+    tags.insert("Primary".to_string(), tag.clone());
     dto.image_blur_hashes
         .get_or_insert_with(HashMap::new)
         .entry("Primary".to_string())
         .or_default()
-        .insert(
-            placeholder.tag().to_string(),
-            Placeholder::BLURHASH.to_string(),
-        );
+        .insert(tag, Placeholder::BLURHASH.to_string());
     dto.primary_image_aspect_ratio
         .get_or_insert(placeholder.aspect_ratio());
+}
+
+/// The image tag (and frame cache key) of an episode's grabbed frame.
+pub(crate) fn frame_tag(id: Uuid, etag: Option<&str>) -> String {
+    // FNV-1a: stable across builds, unlike the std hasher's guarantees.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in id
+        .as_bytes()
+        .iter()
+        .chain(etag.unwrap_or_default().as_bytes())
+    {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("frame-{hash:016x}")
 }
 
 /// Group images by entity_id for batch application.

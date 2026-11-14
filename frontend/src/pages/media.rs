@@ -461,9 +461,7 @@ pub fn Media() -> View {
                                                 let display_name =
                                                     browse::card_label(&item_type, &item_name, item.index_number);
 
-                                                let is_music = matches!(item_type.as_str(), "MusicArtist" | "MusicAlbum" | "Audio");
-                                                let poster_class = if is_music { "media-poster square" } else { "media-poster" };
-                                                let placeholder_class = if is_music { "media-poster-placeholder square" } else { "media-poster-placeholder" };
+                                                let (poster_class, placeholder_class) = browse::grid_classes(&item_type);
 
                                                 let is_album = item_type == "MusicAlbum";
                                                 let on_click = move |_| {
@@ -547,10 +545,9 @@ pub fn Media() -> View {
                         let img_url = primary_image_url(&item.id, primary_tag(&item).as_deref(), browse::DETAIL_IMAGE_WIDTH);
                         let refresh_id = detail_id.clone();
                         let detail_item_type = item.item_type.clone();
-                        let is_music_detail = matches!(detail_item_type.as_str(), "MusicArtist" | "MusicAlbum" | "Audio");
                         let is_album = detail_item_type == "MusicAlbum";
-                        let detail_poster_class = if is_music_detail { "detail-poster square" } else { "detail-poster" };
-                        let detail_placeholder_class = if is_music_detail { "detail-poster-placeholder square" } else { "detail-poster-placeholder" };
+                        let (detail_poster_class, detail_placeholder_class) =
+                            browse::detail_classes(&detail_item_type);
 
                         view! {
                             div(class="detail-page") {

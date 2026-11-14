@@ -207,3 +207,44 @@ mod season_image_tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+/// An episode's own images: files named after the episode, `<episode>-thumb.jpg`
+/// (Sonarr/Kodi) or `<episode>.jpg`, as its primary image. The season's
+/// `poster.jpg` in the same folder belongs to the season, not to each episode.
+pub fn discover_episode_images(dir: &Path, episode_stem: &str) -> Vec<DiscoveredImage> {
+    let stem = episode_stem.to_lowercase();
+    let mut found: Option<(u8, String)> = None;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || !is_image_file(&path) {
+            continue;
+        }
+        let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let file_stem = file_stem.to_lowercase();
+        // `-thumb` wins over a bare same-name image.
+        let rank = if file_stem == format!("{stem}-thumb") {
+            0
+        } else if file_stem == stem {
+            1
+        } else {
+            continue;
+        };
+        if found.as_ref().is_none_or(|(r, _)| rank < *r) {
+            found = Some((rank, path.to_string_lossy().to_string()));
+        }
+    }
+    found
+        .map(|(_, path)| {
+            vec![DiscoveredImage {
+                image_type: "Primary".to_string(),
+                path,
+                image_index: 0,
+            }]
+        })
+        .unwrap_or_default()
+}

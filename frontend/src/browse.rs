@@ -52,6 +52,40 @@ pub fn card_label(item_type: &str, name: &str, index_number: Option<i32>) -> Str
     }
 }
 
+/// The CSS shape class of an item's image: square for music, landscape for
+/// episodes (a frame of the video), else a portrait poster.
+pub fn card_shape(item_type: &str) -> &'static str {
+    match item_type {
+        "MusicArtist" | "MusicAlbum" | "Audio" => "square",
+        "Episode" => "landscape",
+        _ => "poster",
+    }
+}
+
+/// The grid card's image and placeholder classes.
+pub fn grid_classes(item_type: &str) -> (&'static str, &'static str) {
+    match card_shape(item_type) {
+        "square" => ("media-poster square", "media-poster-placeholder square"),
+        "landscape" => (
+            "media-poster landscape",
+            "media-poster-placeholder landscape",
+        ),
+        _ => ("media-poster", "media-poster-placeholder"),
+    }
+}
+
+/// The detail view's image and placeholder classes.
+pub fn detail_classes(item_type: &str) -> (&'static str, &'static str) {
+    match card_shape(item_type) {
+        "square" => ("detail-poster square", "detail-poster-placeholder square"),
+        "landscape" => (
+            "detail-poster landscape",
+            "detail-poster-placeholder landscape",
+        ),
+        _ => ("detail-poster", "detail-poster-placeholder"),
+    }
+}
+
 /// Width of a grid card's poster request (cards are ~150 px; 2x for sharp screens).
 pub const CARD_IMAGE_WIDTH: u32 = 300;
 /// Width of the detail view's poster request.
@@ -95,6 +129,14 @@ fn encode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn episodes_are_landscape_music_square_the_rest_posters() {
+        assert_eq!(card_shape("Episode"), "landscape");
+        assert_eq!(card_shape("MusicAlbum"), "square");
+        assert_eq!(card_shape("Movie"), "poster");
+        assert_eq!(card_shape("Season"), "poster");
+    }
 
     #[test]
     fn image_urls_ask_for_a_display_size_and_carry_the_tag() {
