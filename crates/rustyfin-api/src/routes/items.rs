@@ -14,6 +14,7 @@ use rustyfin_db::repo::images::ImageRow;
 use rustyfin_db::repo::{
     chapters, images, libraries, media_items, media_streams, people, user_data, user_library_access,
 };
+use rustyfin_media::image_processing::Placeholder;
 use rustyfin_media::playback_info::{
     default_audio_stream_index, source_video_type, stream_row_to_dto,
 };
@@ -290,6 +291,7 @@ pub(crate) fn with_jellyfin_defaults(dto: &mut BaseItemDto) {
     if dto.display_preferences_id.is_none() {
         dto.display_preferences_id = Some(dto.id.simple().to_string());
     }
+    ensure_primary_placeholder(dto);
 }
 
 pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
@@ -444,6 +446,28 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow
     dto.backdrop_image_tags = fields.backdrop_image_tags;
     dto.image_blur_hashes = fields.image_blur_hashes;
     dto.primary_image_aspect_ratio = fields.primary_image_aspect_ratio;
+    ensure_primary_placeholder(dto);
+}
+
+/// An item without primary artwork names the placeholder in its shape, which
+/// `/Items/{id}/Images/Primary` serves. Real artwork always wins.
+pub(crate) fn ensure_primary_placeholder(dto: &mut BaseItemDto) {
+    let tags = dto.image_tags.get_or_insert_with(HashMap::new);
+    if tags.contains_key("Primary") {
+        return;
+    }
+    let placeholder = Placeholder::for_item_type(&dto.item_type);
+    tags.insert("Primary".to_string(), placeholder.tag().to_string());
+    dto.image_blur_hashes
+        .get_or_insert_with(HashMap::new)
+        .entry("Primary".to_string())
+        .or_default()
+        .insert(
+            placeholder.tag().to_string(),
+            Placeholder::BLURHASH.to_string(),
+        );
+    dto.primary_image_aspect_ratio
+        .get_or_insert(placeholder.aspect_ratio());
 }
 
 /// Group images by entity_id for batch application.

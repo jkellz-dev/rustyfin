@@ -189,3 +189,80 @@ pub async fn cleanup_cache(cache_dir: &Path, max_age: std::time::Duration) -> st
     }
     Ok(removed)
 }
+
+/// The plain tile served as an item's primary image while it has no artwork
+/// (owner decision 2026-11-14: a placeholder rather than frames grabbed from
+/// the video). One per shape, drawn on first use into the image cache.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Placeholder {
+    /// 2:3, films, series, seasons and anything without a better shape.
+    Poster,
+    /// 16:9, episodes, videos and libraries.
+    Landscape,
+    /// 1:1, music.
+    Square,
+}
+
+impl Placeholder {
+    /// BlurHash of the placeholder's single colour (#303038).
+    pub const BLURHASH: &'static str = "005hZ5";
+    const COLOUR: [u8; 3] = [0x30, 0x30, 0x38];
+
+    /// The shape Jellyfin clients expect for an item type.
+    pub fn for_item_type(item_type: &str) -> Self {
+        match item_type {
+            "Episode" | "Video" | "MusicVideo" | "Trailer" | "CollectionFolder" | "UserView"
+            | "Folder" => Placeholder::Landscape,
+            "Audio" | "MusicAlbum" | "MusicArtist" | "Playlist" | "AudioBook" => {
+                Placeholder::Square
+            }
+            _ => Placeholder::Poster,
+        }
+    }
+
+    /// The image tag clients send back; bump the suffix if the picture changes.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Placeholder::Poster => "placeholder-poster-1",
+            Placeholder::Landscape => "placeholder-landscape-1",
+            Placeholder::Square => "placeholder-square-1",
+        }
+    }
+
+    /// Width and height of the drawn tile.
+    pub fn size(self) -> (u32, u32) {
+        match self {
+            Placeholder::Poster => (600, 900),
+            Placeholder::Landscape => (960, 540),
+            Placeholder::Square => (600, 600),
+        }
+    }
+
+    pub fn aspect_ratio(self) -> f64 {
+        let (w, h) = self.size();
+        f64::from(w) / f64::from(h)
+    }
+
+    /// The placeholder PNG under `cache_dir`, drawn the first time it is asked
+    /// for. Written to a unique temporary name and renamed, so concurrent first
+    /// requests never see a half-written file.
+    pub fn ensure_file(self, cache_dir: &Path) -> std::io::Result<PathBuf> {
+        let dir = cache_dir.join("placeholders");
+        let path = dir.join(format!("{}.png", self.tag()));
+        if path.exists() {
+            return Ok(path);
+        }
+        std::fs::create_dir_all(&dir)?;
+        let (w, h) = self.size();
+        let tile = image::RgbImage::from_pixel(w, h, image::Rgb(Self::COLOUR));
+        let tmp = dir.join(format!(
+            "{}.{}.tmp",
+            self.tag(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        tile.save_with_format(&tmp, image::ImageFormat::Png)
+            .map_err(std::io::Error::other)?;
+        std::fs::rename(&tmp, &path)?;
+        Ok(path)
+    }
+}

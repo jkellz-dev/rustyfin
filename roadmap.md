@@ -443,6 +443,9 @@ low-priority admin features.
 - [x] Scans prune items whose files are gone (owner decision 2026-11-14): only when the library folder is a
       readable non-empty directory, only under the scanned root, never more than half of a library of 10+ files in
       one scan; emptied series/seasons/albums/artists go too, user data cascades
+- [x] Placeholder primary image for items without artwork (owner decision 2026-11-14): `ImageTags.Primary`,
+      BlurHash and aspect ratio in the item's shape (2:3 poster, 16:9 episode/library, 1:1 music), served and
+      resized at `/Items/{id}/Images/Primary`; real artwork always wins. Video frame extraction stays deferred
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

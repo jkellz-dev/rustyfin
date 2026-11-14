@@ -9,8 +9,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::images;
-use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions};
+use rustyfin_db::repo::{images, libraries, media_items};
+use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 
 use crate::error::ApiError;
@@ -36,15 +36,47 @@ pub async fn get_item_image(
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let image = images::find_by_item_and_type(&state.pool, item_id, &image_type, 0)
+    let opts = build_options(&params, &headers);
+    match images::find_by_item_and_type(&state.pool, item_id, &image_type, 0)
         .await
         .map_err(ApiError::Database)?
-        .ok_or(ApiError::NotFound)?;
-
-    let opts = build_options(&params, &headers);
-    serve_image(&image.path, &opts, &state).await
+    {
+        Some(image) => serve_image(&image.path, &opts, &state).await,
+        None => serve_placeholder(&state, item_id, &image_type, &opts).await,
+    }
 }
 
+/// The placeholder for an item or library with no primary artwork. Other image
+/// types have no placeholder: clients only require a primary image.
+async fn serve_placeholder(
+    state: &AppState,
+    item_id: Uuid,
+    image_type: &str,
+    opts: &ImageOptions,
+) -> Result<Response, ApiError> {
+    if !image_type.eq_ignore_ascii_case("Primary") {
+        return Err(ApiError::NotFound);
+    }
+    let shape = if let Some(item) = media_items::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        Placeholder::for_item_type(&item.item_type)
+    } else if libraries::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+        .is_some()
+    {
+        Placeholder::Landscape
+    } else {
+        return Err(ApiError::NotFound);
+    };
+    let path = shape.ensure_file(&state.image_cache_dir).map_err(|e| {
+        tracing::error!("Could not draw the {shape:?} placeholder: {e}");
+        ApiError::Internal(format!("placeholder: {e}"))
+    })?;
+    serve_image(&path.to_string_lossy(), opts, state).await
+}
 /// `GET /Items/{itemId}/Images/{imageType}/{imageIndex}` -- Serve item image by index.
 pub async fn get_item_image_by_index(
     State(state): State<AppState>,
@@ -52,15 +84,16 @@ pub async fn get_item_image_by_index(
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let image = images::find_by_item_and_type(&state.pool, item_id, &image_type, image_index)
+    let opts = build_options(&params, &headers);
+    match images::find_by_item_and_type(&state.pool, item_id, &image_type, image_index)
         .await
         .map_err(ApiError::Database)?
-        .ok_or(ApiError::NotFound)?;
-
-    let opts = build_options(&params, &headers);
-    serve_image(&image.path, &opts, &state).await
+    {
+        Some(image) => serve_image(&image.path, &opts, &state).await,
+        None if image_index == 0 => serve_placeholder(&state, item_id, &image_type, &opts).await,
+        None => Err(ApiError::NotFound),
+    }
 }
-
 /// `GET /Items/{itemId}/Images` -- List all images for an item.
 pub async fn get_item_images_list(
     State(state): State<AppState>,

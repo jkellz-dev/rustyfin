@@ -236,7 +236,11 @@ async fn every_item_carries_jellyfins_default_fields() {
         let folder = &body["Items"][0];
         assert_item_base(folder);
         assert_eq!(has(folder, "MediaType"), "Unknown", "{path}");
-        assert_eq!(has(folder, "ImageTags"), &json!({}), "{path}");
+        assert_eq!(
+            has(folder, "ImageTags"),
+            &json!({ "Primary": "placeholder-landscape-1" }),
+            "{path}"
+        );
         empty_array(folder, "BackdropImageTags");
     }
     app.cleanup().await;

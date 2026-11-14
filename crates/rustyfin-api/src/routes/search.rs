@@ -117,6 +117,14 @@ pub async fn search_hints(
         }
     }
 
+    for hint in &mut hints {
+        if hint.primary_image_tag.is_none() {
+            let placeholder =
+                rustyfin_media::image_processing::Placeholder::for_item_type(&hint.item_type);
+            hint.primary_image_tag = Some(placeholder.tag().to_string());
+            hint.primary_image_aspect_ratio = Some(placeholder.aspect_ratio());
+        }
+    }
     let total = hints.len() as i32;
     Ok(Json(SearchHintResult {
         search_hints: hints,

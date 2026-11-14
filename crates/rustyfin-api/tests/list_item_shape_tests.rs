@@ -1,7 +1,7 @@
 //! Every item in a list carries the keys clients read without checking.
 //!
 //! Jellyfin emits `UserData` for every item (zeros and `false` when the user has
-//! never touched it), `ImageTags` as `{}` and `BackdropImageTags` as `[]` when an
+//! never touched it), `ImageTags` with only the placeholder primary and `BackdropImageTags` as `[]` when an
 //! item has no images, and `VideoType` for videos. Rustyfin left all of them out
 //! whenever there was nothing to say, and the Hurl parity suite flagged every list
 //! route for it. Clients index into these without a null check.
@@ -61,9 +61,18 @@ async fn an_item_with_no_images_has_empty_image_fields_not_missing_ones() {
     let (status, body) = app.get(path, &token).await;
     assert_eq!(status, StatusCode::OK);
     let item = only(&body, path);
-    assert_eq!(item["ImageTags"], serde_json::json!({}), "{item}");
+    // Only the placeholder primary (placeholder_image_tests covers it).
+    assert_eq!(
+        item["ImageTags"],
+        serde_json::json!({ "Primary": "placeholder-poster-1" }),
+        "{item}"
+    );
     assert_eq!(item["BackdropImageTags"], serde_json::json!([]), "{item}");
-    assert_eq!(item["ImageBlurHashes"], serde_json::json!({}), "{item}");
+    assert_eq!(
+        item["ImageBlurHashes"],
+        serde_json::json!({ "Primary": { "placeholder-poster-1": "005hZ5" } }),
+        "{item}"
+    );
     app.cleanup().await;
 }
 
@@ -85,7 +94,11 @@ async fn a_single_item_answer_has_the_same_shape() {
         assert_eq!(status, StatusCode::OK, "{path}");
         assert!(item["UserData"].is_object(), "{path}: {item}");
         assert_eq!(item["UserData"]["Played"], false, "{path}");
-        assert_eq!(item["ImageTags"], serde_json::json!({}), "{path}: {item}");
+        assert_eq!(
+            item["ImageTags"],
+            serde_json::json!({ "Primary": "placeholder-poster-1" }),
+            "{path}: {item}"
+        );
         assert_eq!(item["BackdropImageTags"], serde_json::json!([]), "{path}");
         assert_eq!(item["VideoType"], "VideoFile", "{path}: {item}");
     }
