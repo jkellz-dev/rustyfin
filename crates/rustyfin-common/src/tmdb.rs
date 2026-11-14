@@ -96,6 +96,53 @@ impl TmdbClient {
     }
 }
 
+impl TmdbClient {
+    /// A GET carrying the credential: a read access token as a bearer header,
+    /// an API key as `?api_key=`.
+    pub(crate) fn request(&self, url: &str) -> reqwest::RequestBuilder {
+        todo!("{url}")
+    }
+}
+
+#[cfg(test)]
+mod credential_tests {
+    use super::*;
+
+    const TOKEN: &str = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ4In0.c2ln";
+
+    #[test]
+    fn a_read_access_token_is_sent_as_a_bearer_header() {
+        let c = TmdbClient::new(format!("  {TOKEN}\n"));
+        let req = c
+            .request("https://api.themoviedb.org/3/tv/1?append_to_response=credits")
+            .build()
+            .unwrap();
+        assert_eq!(
+            req.headers()["authorization"],
+            format!("Bearer {TOKEN}").as_str()
+        );
+        assert_eq!(
+            req.url().query(),
+            Some("append_to_response=credits"),
+            "no key in the URL"
+        );
+    }
+
+    #[test]
+    fn an_api_key_goes_in_the_query() {
+        let c = TmdbClient::new("0123456789abcdef0123456789abcdef".into());
+        let req = c
+            .request("https://api.themoviedb.org/3/find/tt1?external_source=imdb_id")
+            .build()
+            .unwrap();
+        assert!(req.headers().get("authorization").is_none());
+        assert_eq!(
+            req.url().query(),
+            Some("external_source=imdb_id&api_key=0123456789abcdef0123456789abcdef")
+        );
+    }
+}
+
 #[cfg(test)]
 mod artwork_tests {
     use super::*;
