@@ -247,7 +247,7 @@ jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].HasLyrics" isBoolean
 jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].PremiereDate" isString
+# known difference, not asserted: jsonpath "$.Items[0].PremiereDate" isString (tracks carry only ProductionYear, not a full release date (owner decision 2026-11-14))
 jsonpath "$.Items[0].RunTimeTicks" isNumber
 jsonpath "$.Items[0].IndexNumber" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean

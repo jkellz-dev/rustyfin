@@ -205,6 +205,31 @@ async fn an_album_names_its_artist_and_totals_its_tracks() {
     w.app.cleanup().await;
 }
 
+/// Owner decision (2026-11-14): a track's release date is its year. No full
+/// `PremiereDate`; `ProductionYear` from the file's tag, else the album's year.
+#[tokio::test]
+async fn a_track_carries_a_year_from_its_tag_or_its_album() {
+    let w = world().await;
+    sqlx::query(
+        "UPDATE media_items SET production_year = 2001 WHERE item_type = 'Audio' AND name = 'B'",
+    )
+    .execute(&w.app.pool)
+    .await
+    .unwrap();
+    let (_, body) = w
+        .app
+        .get("/Items?Recursive=true&IncludeItemTypes=Audio", &w.token)
+        .await;
+    let a = by_name(&body, "A");
+    assert_eq!(a["ProductionYear"], 2019, "untagged: the album's year: {a}");
+    assert!(a.get("PremiereDate").is_none(), "year only: {a}");
+    assert_eq!(by_name(&body, "B")["ProductionYear"], 2001, "the tag wins");
+
+    let (_, single) = w.app.get(&format!("/Items/{}", w.track_a), &w.token).await;
+    assert_eq!(single["ProductionYear"], 2019, "{single}");
+    w.app.cleanup().await;
+}
+
 #[tokio::test]
 async fn artists_total_their_tracks() {
     let w = world().await;

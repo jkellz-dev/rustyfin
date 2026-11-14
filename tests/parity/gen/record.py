@@ -32,6 +32,30 @@ OUT = Path(__file__).resolve().parent.parent / "cases"
 
 AUTH = 'MediaBrowser Token="{{token}}"'
 
+# Deliberate differences from Jellyfin, each an owner decision. An assert matching
+# `assert_re` in a request matching `path` and `query` (a subset of the request's
+# query) is written as a comment naming the reason instead of an assert, so the
+# difference stays visible in the case file without failing the run.
+KNOWN_DIFFERENCES = [
+    (
+        "/Items",
+        {"IncludeItemTypes": "Audio"},
+        r'\.PremiereDate" ',
+        "tracks carry only ProductionYear, not a full release date (owner decision 2026-11-14)",
+    ),
+]
+
+
+def known_difference(path, query, assertion):
+    """The reason `assertion` is a deliberate difference for this request, if it is one."""
+    for kd_path, kd_query, assert_re, reason in KNOWN_DIFFERENCES:
+        if (
+            kd_path == path
+            and all(query.get(k) == v for k, v in kd_query.items())
+            and re.search(assert_re, assertion)
+        ):
+            return reason
+    return None
 # Looked up per server at the top of every case file, so ids never leak into the cases.
 PREAMBLE = f"""GET {{{{base_url}}}}/Items
 Authorization: {AUTH}
@@ -245,6 +269,10 @@ def entry(method, path, query, auth, body, status, ctype, parsed):
         asserts.append(f'header "Content-Type" contains "{ctype.split(";")[0].strip()}"')
     if parsed is not None:
         shape(parsed, "$", asserts)
+    for i, assertion in enumerate(asserts):
+        reason = known_difference(path, query, assertion)
+        if reason:
+            asserts[i] = f"# known difference, not asserted: {assertion} ({reason})"
     if not asserts:
         return text[: -len("[Asserts]\n")]
     return text + "\n".join(asserts) + "\n"

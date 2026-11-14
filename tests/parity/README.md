@@ -36,6 +36,14 @@ python3 -I tests/parity/run.py library    # one area
 `run.py` exits non-zero only if Jellyfin fails its own recording (the case is wrong,
 not the server).
 
+## Known differences
+
+Deliberate departures from Jellyfin live in `KNOWN_DIFFERENCES` in `gen/record.py`,
+each with the owner decision behind it. The recorder writes the matching assert as a
+`# known difference, not asserted: ...` comment, so it stays visible in the case file.
+
+- Tracks carry only `ProductionYear`, not `PremiereDate` (owner decision 2026-11-14).
+
 ## Known limits
 
 - Shape only. A value that is wrong but of the right kind passes.
