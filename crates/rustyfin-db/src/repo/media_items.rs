@@ -44,8 +44,10 @@ pub struct MediaItemRow {
     pub presentation_unique_key: Option<String>,
     pub external_ids: Option<serde_json::Value>,
     pub extra_data: Option<serde_json::Value>,
+    /// A track's own artists from its tags (None: never read).
+    #[sqlx(default)]
+    pub artists: Option<Vec<String>>,
 }
-
 /// Find a media item by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE id = $1")
@@ -853,6 +855,58 @@ pub async fn find_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<MediaItemRow
         .bind(ids)
         .fetch_all(pool)
         .await
+}
+
+/// Store a track's artists as read from its tags (empty: read, none found).
+pub async fn set_artists(pool: &PgPool, id: Uuid, artists: &[String]) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE media_items SET artists = $2 WHERE id = $1")
+        .bind(id)
+        .bind(artists)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// For each of `folder_ids`, the summed running time of the tracks below it.
+pub async fn runtime_totals(
+    pool: &PgPool,
+    folder_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, i64>, sqlx::Error> {
+    if folder_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "WITH RECURSIVE below(root, id, depth) AS ( \
+             SELECT id, id, 0 FROM media_items WHERE id = ANY($1) \
+             UNION ALL \
+             SELECT below.root, m.id, below.depth + 1 FROM media_items m \
+             JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
+         SELECT below.root, SUM(m.runtime_ticks)::BIGINT FROM below \
+         JOIN media_items m ON m.id = below.id \
+         WHERE below.depth > 0 AND m.item_type = 'Audio' AND m.runtime_ticks IS NOT NULL \
+         GROUP BY below.root",
+    )
+    .bind(folder_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Artist folders named in `names`: (id, name, library).
+pub async fn find_artists_by_names(
+    pool: &PgPool,
+    names: &[String],
+) -> Result<Vec<(Uuid, String, Option<Uuid>)>, sqlx::Error> {
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as(
+        "SELECT id, name, library_id FROM media_items \
+         WHERE item_type = 'MusicArtist' AND name = ANY($1)",
+    )
+    .bind(names)
+    .fetch_all(pool)
+    .await
 }
 
 /// Get the last watched (played=true) episode in a series for a user.

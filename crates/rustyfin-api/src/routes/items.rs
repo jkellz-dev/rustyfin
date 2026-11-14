@@ -449,6 +449,172 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow
     ensure_primary_placeholder(dto);
 }
 
+/// Tracks name their album, album artist and own artists; albums name their
+/// artist; albums and artists total their tracks' running time. A few batch
+/// queries for the whole page. Artist names link to artist folders of the same
+/// library only, so a hidden library's artists never show up.
+pub(crate) async fn attach_music_fields(
+    pool: &sqlx::PgPool,
+    items: &[media_items::MediaItemRow],
+    dtos: &mut [BaseItemDto],
+) {
+    let musical = |t: &str| matches!(t, "Audio" | "MusicAlbum" | "MusicArtist");
+    if !dtos.iter().any(|d| musical(&d.item_type)) {
+        return;
+    }
+    let rows: HashMap<Uuid, &media_items::MediaItemRow> = items.iter().map(|i| (i.id, i)).collect();
+
+    let mut related_ids: Vec<Uuid> = Vec::new();
+    for row in items {
+        match row.item_type.as_str() {
+            "Audio" => {
+                related_ids.extend(row.season_id.or(row.parent_id));
+                related_ids.extend(row.series_id);
+            }
+            "MusicAlbum" => related_ids.extend(row.parent_id),
+            _ => {}
+        }
+    }
+    related_ids.sort();
+    related_ids.dedup();
+    let related: HashMap<Uuid, media_items::MediaItemRow> =
+        media_items::find_by_ids(pool, &related_ids)
+            .await
+            .or_log_default("media_items::find_by_ids")
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
+
+    let album_ids: Vec<Uuid> = related
+        .values()
+        .filter(|r| r.item_type == "MusicAlbum")
+        .map(|r| r.id)
+        .collect();
+    let album_art: HashMap<Uuid, String> = images::list_by_items(pool, &album_ids)
+        .await
+        .or_log_default("images::list_by_items")
+        .into_iter()
+        .filter(|img| img.image_type == "Primary")
+        .filter_map(|img| img.entity_id.map(|e| (e, img.id.to_string())))
+        .collect();
+
+    // A track's artists: its tags, else its album artist.
+    let album_artist_of = |row: &media_items::MediaItemRow| -> Option<String> {
+        row.series_id
+            .and_then(|id| related.get(&id))
+            .map(|a| a.name.clone())
+            .or_else(|| row.series_name.clone())
+    };
+    let track_artists = |row: &media_items::MediaItemRow| -> Vec<String> {
+        row.artists
+            .clone()
+            .filter(|a| !a.is_empty())
+            .or_else(|| album_artist_of(row).map(|n| vec![n]))
+            .unwrap_or_default()
+    };
+    let mut names: Vec<String> = items
+        .iter()
+        .filter(|r| r.item_type == "Audio")
+        .flat_map(&track_artists)
+        .collect();
+    names.sort();
+    names.dedup();
+    let artist_rows = media_items::find_artists_by_names(pool, &names)
+        .await
+        .or_log_default("media_items::find_artists_by_names");
+    let link = |name: &str, library: Option<Uuid>| -> Option<NameGuidPair> {
+        artist_rows
+            .iter()
+            .find(|(_, n, l)| n == name && *l == library)
+            .map(|(id, n, _)| NameGuidPair {
+                name: n.clone(),
+                id: *id,
+            })
+    };
+
+    let folder_ids: Vec<Uuid> = dtos
+        .iter()
+        .filter(|d| matches!(d.item_type.as_str(), "MusicAlbum" | "MusicArtist"))
+        .map(|d| d.id)
+        .collect();
+    let totals = media_items::runtime_totals(pool, &folder_ids)
+        .await
+        .or_log_default("media_items::runtime_totals");
+
+    for dto in dtos.iter_mut() {
+        let Some(row) = rows.get(&dto.id) else {
+            continue;
+        };
+        match dto.item_type.as_str() {
+            "Audio" => {
+                if let Some(album) = row
+                    .season_id
+                    .or(row.parent_id)
+                    .and_then(|id| related.get(&id))
+                {
+                    dto.album = Some(album.name.clone());
+                    dto.album_id = Some(album.id);
+                    dto.album_primary_image_tag = Some(
+                        album_art
+                            .get(&album.id)
+                            .cloned()
+                            .unwrap_or_else(|| Placeholder::Square.tag().to_string()),
+                    );
+                }
+                if let Some(name) = album_artist_of(row) {
+                    dto.album_artists = Some(
+                        row.series_id
+                            .and_then(|id| related.get(&id))
+                            .map(|a| {
+                                vec![NameGuidPair {
+                                    name: a.name.clone(),
+                                    id: a.id,
+                                }]
+                            })
+                            .unwrap_or_default(),
+                    );
+                    dto.album_artist = Some(name);
+                }
+                let artists = track_artists(row);
+                dto.artist_items = Some(
+                    artists
+                        .iter()
+                        .filter_map(|n| link(n, row.library_id))
+                        .collect(),
+                );
+                dto.artists = Some(artists);
+                // Rustyfin has no lyrics support.
+                dto.has_lyrics = Some(false);
+            }
+            "MusicAlbum" => {
+                if let Some(artist) = row
+                    .parent_id
+                    .and_then(|id| related.get(&id))
+                    .filter(|a| a.item_type == "MusicArtist")
+                {
+                    let pair = vec![NameGuidPair {
+                        name: artist.name.clone(),
+                        id: artist.id,
+                    }];
+                    dto.album_artist = Some(artist.name.clone());
+                    dto.album_artists = Some(pair.clone());
+                    dto.artist_items = Some(pair);
+                    dto.artists = Some(vec![artist.name.clone()]);
+                }
+                if let Some(total) = totals.get(&dto.id) {
+                    dto.runtime_ticks = Some(*total);
+                }
+            }
+            "MusicArtist" => {
+                if let Some(total) = totals.get(&dto.id) {
+                    dto.runtime_ticks = Some(*total);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 /// An item without primary artwork names the placeholder in its shape, which
 /// `/Items/{id}/Images/Primary` serves. Real artwork always wins.
 pub(crate) fn ensure_primary_placeholder(dto: &mut BaseItemDto) {
@@ -632,6 +798,7 @@ pub async fn get_items(
     }
 
     name_series_for_seasons(&state.pool, &mut dtos).await;
+    attach_music_fields(&state.pool, &items, &mut dtos).await;
     attach_media_sources_if_asked(
         &state.pool,
         &query.fields,
@@ -770,6 +937,12 @@ pub async fn get_item_by_id(
         }
     }
 
+    attach_music_fields(
+        &state.pool,
+        std::slice::from_ref(&item),
+        std::slice::from_mut(&mut dto),
+    )
+    .await;
     // The caller's user data, zeros when they never touched the item.
     let row = user_data::get(&state.pool, auth.user_id, item_id)
         .await

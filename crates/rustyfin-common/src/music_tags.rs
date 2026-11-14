@@ -146,3 +146,34 @@ pub fn extract_cover_art(audio_path: &Path, output_path: &Path) -> Option<()> {
     std::fs::write(&output, data).ok()?;
     Some(())
 }
+
+/// The artists in a tag value: split on `;`, `|` and NUL (ID3v2.4 multi-value),
+/// trimmed, empties and repeats dropped, order kept. `/` is not a separator, so
+/// `AC/DC` stays one artist.
+pub fn split_artists(value: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in value.split([';', '|', '\0']) {
+        let name = part.trim();
+        if !name.is_empty() && !out.iter().any(|seen| seen == name) {
+            out.push(name.to_string());
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod split_artists_tests {
+    use super::split_artists;
+
+    #[test]
+    fn separators_split_and_repeats_go() {
+        assert_eq!(split_artists("A; B|C ;A"), vec!["A", "B", "C"]);
+        assert_eq!(split_artists("One\0Two"), vec!["One", "Two"]);
+    }
+
+    #[test]
+    fn a_slash_is_part_of_the_name() {
+        assert_eq!(split_artists("AC/DC"), vec!["AC/DC"]);
+        assert!(split_artists(" ; ").is_empty());
+    }
+}

@@ -15,7 +15,8 @@ use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 use crate::routes::images::{self as image_routes, ImageParams};
 use crate::routes::items::{
-    apply_images_to_dto, attach_user_data, group_images_by_item, media_item_to_dto,
+    apply_images_to_dto, attach_music_fields, attach_user_data, group_images_by_item,
+    media_item_to_dto,
 };
 
 #[derive(Debug, Deserialize, Default)]
@@ -83,8 +84,8 @@ async fn get_artists_inner(
             .ok();
         dtos.push(dto);
     }
+    attach_music_fields(&state.pool, &rows, &mut dtos).await;
     attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
-
     let mut result = QueryResult::new(dtos, total as i32);
     result.start_index = start as i32;
     Ok(Json(result))

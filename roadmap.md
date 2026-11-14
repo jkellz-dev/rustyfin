@@ -446,6 +446,10 @@ low-priority admin features.
 - [x] Placeholder primary image for items without artwork (owner decision 2026-11-14): `ImageTags.Primary`,
       BlurHash and aspect ratio in the item's shape (2:3 poster, 16:9 episode/library, 1:1 music), served and
       resized at `/Items/{id}/Images/Primary`; real artwork always wins. Video frame extraction stays deferred
+- [x] Music fields (owner decision 2026-11-14): tracks carry `Album`, `AlbumId`, `AlbumPrimaryImageTag`,
+      `AlbumArtist(s)`, `Artists` (tags via `media_items.artists`, else the album artist) and `ArtistItems` (artist
+      folders of the same library), `HasLyrics: false`; albums name their artist; albums and artists total their
+      tracks' `RunTimeTicks`
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
 - [x] WebSocket (1/1 — Jellyfin uses SignalR)

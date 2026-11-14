@@ -195,7 +195,12 @@ pub struct BaseItemDto {
     pub artist_items: Option<Vec<NameGuidPair>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub album_artists: Option<Vec<NameGuidPair>>,
-
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artists: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_lyrics: Option<bool>,
     // Trailer count
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_trailer_count: Option<i32>,

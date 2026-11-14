@@ -630,10 +630,13 @@ impl LibraryScanner {
             let year = tags.as_ref().and_then(|t| t.year);
             (title, track_num, disc_num, year)
         };
-
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
                 self.refresh_stale_streams(existing.id, file_path).await;
+                // Tracks scanned before artists were kept get them once.
+                if existing.artists.is_none() {
+                    self.store_track_artists(existing.id, file_path).await;
+                }
                 return Ok(IngestOutcome::Skipped);
             }
 
@@ -666,7 +669,7 @@ impl LibraryScanner {
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
-
+            self.store_track_artists(updated.id, file_path).await;
             return Ok(IngestOutcome::Updated);
         }
 
@@ -700,7 +703,7 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
-
+        self.store_track_artists(inserted.id, file_path).await;
         Ok(IngestOutcome::Added)
     }
 
@@ -1004,6 +1007,17 @@ impl LibraryScanner {
             );
         }
         result.items_removed += removed;
+    }
+
+    /// A track's own artists, from its tags. An empty list records "read, none".
+    async fn store_track_artists(&self, item_id: Uuid, file_path: &Path) {
+        let artists = music_tags::read_tags(file_path)
+            .and_then(|t| t.artist)
+            .map(|a| music_tags::split_artists(&a))
+            .unwrap_or_default();
+        if let Err(e) = media_items::set_artists(&self.pool, item_id, &artists).await {
+            tracing::warn!("Could not store the artists of {item_id}: {e}");
+        }
     }
 
     /// Streams stored before the details existed (no time base) are probed again
