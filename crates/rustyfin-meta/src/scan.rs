@@ -1132,7 +1132,9 @@ pub(crate) async fn download_people_headshots(
             continue;
         };
         let file_path = dir.join(file);
-        if let Err(e) = download_image_with_options(http, url, &file_path, skip_existing).await {
+        let url =
+            rustyfin_common::artwork::resized_tmdb_image_url(url, crate::artwork::HEADSHOT_SIZE);
+        if let Err(e) = download_image_with_options(http, &url, &file_path, skip_existing).await {
             tracing::warn!("  Failed to download headshot for {}: {e}", person.name);
         } else {
             tracing::debug!("  Headshot: {} → {}", person.name, file_path.display());

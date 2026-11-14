@@ -71,3 +71,18 @@ pub async fn download_image_with_options(
 pub fn tmdb_image_url(path: &str, size: &str) -> String {
     format!("https://image.tmdb.org/t/p/{size}{path}")
 }
+
+/// A TMDB image URL at another size (`original` → `h632`), over https. Other
+/// URLs come back unchanged. NFO actor thumbs point at TMDB's originals, often
+/// close to a megabyte; 632 px tall is plenty for a cast list.
+pub fn resized_tmdb_image_url(url: &str, size: &str) -> String {
+    const HOST: &str = "image.tmdb.org/t/p/";
+    let Some(at) = url.find(HOST) else {
+        return url.to_string();
+    };
+    let rest = &url[at + HOST.len()..];
+    match rest.find('/') {
+        Some(slash) => tmdb_image_url(&rest[slash..], size),
+        None => url.to_string(),
+    }
+}

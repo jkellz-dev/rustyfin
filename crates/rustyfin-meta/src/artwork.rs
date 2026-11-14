@@ -133,6 +133,9 @@ pub struct ArtworkStats {
     pub errors: usize,
 }
 
+/// TMDB's size for headshots: 632 px tall, about 50 KB.
+pub const HEADSHOT_SIZE: &str = "h632";
+
 /// The headshots to download into the shared `people_dir`: one per person with
 /// an image URL and no file yet (a person listed twice is fetched once).
 pub fn headshots_wanted(people: &[nfo::NfoPerson], people_dir: &Path) -> Vec<(String, PathBuf)> {
@@ -150,7 +153,10 @@ pub fn headshots_wanted(people: &[nfo::NfoPerson], people_dir: &Path) -> Vec<(St
         }
         let path = people_dir.join(file);
         if !path.exists() {
-            wanted.push((url.to_string(), path));
+            wanted.push((
+                rustyfin_common::artwork::resized_tmdb_image_url(url, HEADSHOT_SIZE),
+                path,
+            ));
         }
     }
     wanted
