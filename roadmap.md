@@ -889,7 +889,10 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [ ] Benchmark: library scan time for large libraries (1k, 10k files)
 - [ ] Benchmark: search latency (Meilisearch vs Postgres ILIKE fallback)
 - [ ] Profile memory usage under sustained load
-- [ ] Identify and fix N+1 query patterns (user_data per-item in loops) — next, before UI work (owner, 2026-11-14)
+- [x] Identify and fix N+1 query patterns (owner, 2026-11-14). `query_count_tests` counts the queries of 16 list
+      routes over a small and a larger library and fails if any grows. Seven did, now fixed: next up (2 per series),
+      resume and playlist items (1 per item), artists (2 per artist), a show's episodes (1 per season), years (1 per
+      year) and a collection's fallback poster (2 per film)
 - [ ] Later, once core functionality is in place (owner, 2026-11-14: "get core functionality in place before we
       truly start optimizing"): benchmark the requests clients make most (home, library grid, item detail, resume,
       search) in the sandbox: p50/p95 and queries per request. If the numbers call for it, prototype an in-memory
