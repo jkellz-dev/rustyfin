@@ -44,13 +44,22 @@ impl Subscriber for QueryCounter {
     fn exit(&self, _: &span::Id) {}
 }
 
-/// GET `path` and count the queries it ran.
+/// GET `path` and count the queries it ran (images: any answer but a 5xx).
 async fn queries(app: &common::TestApp, path: &str, token: &str) -> usize {
+    // Once unmeasured first: the session's activity stamp (written at most once
+    // a minute) and other first-touch work would otherwise land in the count.
+    let _ = app.get_bytes(path, token).await;
     let count = Arc::new(AtomicUsize::new(0));
     let guard = tracing::subscriber::set_default(QueryCounter(count.clone()));
-    let (status, body) = app.get(path, token).await;
-    drop(guard);
-    assert_eq!(status, StatusCode::OK, "{path}: {body}");
+    if path.contains("/Images/") {
+        let (status, _, _) = app.get_bytes(path, token).await;
+        drop(guard);
+        assert!(!status.is_server_error(), "{path}: {status}");
+    } else {
+        let (status, body) = app.get(path, token).await;
+        drop(guard);
+        assert_eq!(status, StatusCode::OK, "{path}: {body}");
+    }
     count.load(Ordering::SeqCst)
 }
 
@@ -87,6 +96,7 @@ struct Fixture {
     movies: Uuid,
     playlist: String,
     long_series: Uuid,
+    collection: String,
 }
 
 async fn fixture(n: usize) -> Fixture {
@@ -237,12 +247,23 @@ async fn fixture(n: usize) -> Fixture {
     assert_eq!(status, StatusCode::OK, "{made}");
     let playlist = made["Id"].as_str().unwrap().to_string();
 
+    let (status, made) = app
+        .post(
+            &format!("/Collections?Name=Box&Ids={}", ids.join(",")),
+            &json!({}),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{made}");
+    let collection = made["Id"].as_str().unwrap().to_string();
+
     Fixture {
         app,
         token,
         movies,
         playlist,
         long_series,
+        collection,
     }
 }
 
@@ -325,4 +346,24 @@ async fn libraries() {
 #[tokio::test]
 async fn search_hints() {
     flat(|_| "/Search/Hints?SearchTerm=Film".into()).await;
+}
+
+#[tokio::test]
+async fn artists() {
+    flat(|_| "/Artists".into()).await;
+}
+
+#[tokio::test]
+async fn every_episode_of_a_show() {
+    flat(|f| format!("/Shows/{}/Episodes", f.long_series)).await;
+}
+
+#[tokio::test]
+async fn years() {
+    flat(|_| "/Years".into()).await;
+}
+
+#[tokio::test]
+async fn collection_image() {
+    flat(|f| format!("/Items/{}/Images/Primary", f.collection)).await;
 }
