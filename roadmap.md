@@ -856,6 +856,9 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [x] Handle malformed UUIDs in path params gracefully (400, not 500) — axum `Path<Uuid>` rejection already yields 400
 - [x] Map Postgres foreign-key violations to 404 (e.g. mark-played on nonexistent item), matching Jellyfin
 - [ ] Handle missing/corrupt media files during scan (log and skip, don't crash)
+- [x] From the first real library (2026-11-14): hidden files and folders (`._*` AppleDouble, `.Trash-*`) and NAS
+      folders (`@eaDir`, `#recycle`) are not media, and items made from them are pruned; artwork is decoded and
+      typed by contents (`.tbn`, PNGs named `.jpg`); ffprobe failures say why; 4xx answers are not logged as errors
 - [ ] Database connection pool exhaustion behavior (graceful degradation)
 - [ ] Large library stress: 10k+ items, deeply nested seasons/episodes
 

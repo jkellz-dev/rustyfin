@@ -238,6 +238,9 @@ impl LibraryScanner {
 
         for entry in entries.flatten() {
             let path = entry.path();
+            if has_ignored_file_name(&path) {
+                continue;
+            }
             if !path.is_dir() {
                 continue;
             }
@@ -293,6 +296,9 @@ impl LibraryScanner {
 
         for entry in entries.flatten() {
             let path = entry.path();
+            if has_ignored_file_name(&path) {
+                continue;
+            }
             if path.is_dir() {
                 subdirs.push(path);
             } else if is_video_file(&path) {
@@ -398,6 +404,9 @@ impl LibraryScanner {
 
         for entry in entries.flatten() {
             let path = entry.path();
+            if has_ignored_file_name(&path) {
+                continue;
+            }
             if !path.is_dir() {
                 continue;
             }
@@ -451,6 +460,9 @@ impl LibraryScanner {
 
         for entry in entries.flatten() {
             let path = entry.path();
+            if has_ignored_file_name(&path) {
+                continue;
+            }
             if path.is_dir() {
                 subdirs.push(path);
             } else if is_audio_file(&path) {
@@ -963,6 +975,30 @@ impl LibraryScanner {
             .into_iter()
             .filter(|(_, path, _)| Path::new(path).starts_with(root))
             .collect();
+        // Items made from hidden files or folders (by older scans) are not media.
+        // They go regardless of the guard below: that guards against a share that
+        // vanished, and these files are still there.
+        let junk: Vec<Uuid> = under
+            .iter()
+            .filter(|(_, path, _)| rustyfin_common::naming::is_ignored_below(root, Path::new(path)))
+            .map(|(id, _, _)| *id)
+            .collect();
+        if !junk.is_empty() {
+            match media_items::delete_ids(&self.pool, &junk).await {
+                Ok(n) => {
+                    tracing::info!(
+                        "Removed {n} items made from hidden files under {}",
+                        root.display()
+                    );
+                    result.items_removed += n;
+                }
+                Err(e) => tracing::error!("Could not remove hidden-file items: {e}"),
+            }
+        }
+        let under: Vec<_> = under
+            .into_iter()
+            .filter(|(id, _, _)| !junk.contains(id))
+            .collect();
         let files = under.iter().filter(|(_, _, folder)| !folder).count();
         let gone_files: Vec<Uuid> = under
             .iter()
@@ -1174,6 +1210,12 @@ fn compute_etag(path: &Path, sidecars: &[Option<PathBuf>]) -> anyhow::Result<Str
     Ok(etag)
 }
 
+fn has_ignored_file_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(rustyfin_common::naming::is_ignored_name)
+}
+
 async fn collect_video_files(dir: &Path) -> Vec<PathBuf> {
     let dir = dir.to_path_buf();
     tokio::task::spawn_blocking(move || {
@@ -1181,6 +1223,8 @@ async fn collect_video_files(dir: &Path) -> Vec<PathBuf> {
         for entry in walkdir::WalkDir::new(&dir)
             .follow_links(true)
             .into_iter()
+            // Hidden and NAS metadata folders are never entered (the root itself is).
+            .filter_entry(|e| e.depth() == 0 || !has_ignored_file_name(e.path()))
             .filter_map(|e| e.ok())
         {
             let path = entry.path().to_path_buf();

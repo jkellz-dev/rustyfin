@@ -242,7 +242,21 @@ async fn serve_image_file(path: &str) -> Result<Response, ApiError> {
         .await
         .map_err(|_| ApiError::NotFound)?;
 
-    let content_type = match std::path::Path::new(path)
+    let content_type = match image_processing::sniff_content_type(&data) {
+        Some(sniffed) => sniffed,
+        None => extension_content_type(path),
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, "public, max-age=86400")
+        .body(Body::from(data))
+        .unwrap())
+}
+
+fn extension_content_type(path: &str) -> &'static str {
+    match std::path::Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
     {
@@ -252,12 +266,5 @@ async fn serve_image_file(path: &str) -> Result<Response, ApiError> {
         Some("gif") => "image/gif",
         Some("svg") => "image/svg+xml",
         _ => "image/jpeg",
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, content_type)
-        .header(header::CACHE_CONTROL, "public, max-age=86400")
-        .body(Body::from(data))
-        .unwrap())
+    }
 }

@@ -49,22 +49,49 @@ pub struct ResolvedItem {
     pub container: String,
 }
 
+/// A file or folder name that is never media: hidden (`.Trash-1000`, `.DS_Store`,
+/// macOS `._*` AppleDouble files that sit beside every file copied from a Mac)
+/// and NAS metadata folders (Synology `@eaDir`, `#recycle`).
+pub fn is_ignored_name(name: &str) -> bool {
+    name.starts_with('.') || name == "@eaDir" || name == "#recycle"
+}
+
+fn has_ignored_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(is_ignored_name)
+}
+
+/// Whether any part of `path` below `root` is an ignored name.
+pub fn is_ignored_below(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root).is_ok_and(|rel| {
+        rel.components()
+            .any(|c| c.as_os_str().to_str().is_some_and(is_ignored_name))
+    })
+}
+
 pub fn is_video_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+    !has_ignored_name(path)
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
 }
 
 pub fn is_audio_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|ext| AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+    !has_ignored_name(path)
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
 }
 
 pub fn is_image_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|ext| IMAGE_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+    !has_ignored_name(path)
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| IMAGE_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
 }
 
 pub fn resolve_movie(path: &Path) -> ResolvedItem {

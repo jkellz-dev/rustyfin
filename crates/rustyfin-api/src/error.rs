@@ -72,7 +72,13 @@ impl IntoResponse for ApiError {
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        tracing::error!("API error: {self}");
+        // A missing image or an unknown id is the client's answer, not a fault:
+        // clients ask for every image type of every item they show.
+        if status.is_server_error() {
+            tracing::error!("API error: {self}");
+        } else {
+            tracing::debug!("API error: {self}");
+        }
         (status, self.to_string()).into_response()
     }
 }

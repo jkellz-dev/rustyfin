@@ -82,7 +82,11 @@ fn resize_and_save(
     use fast_image_resize as fr;
     use image::{DynamicImage, ImageEncoder};
 
-    let img = image::open(source_path)?;
+    // By contents, not extension: Kodi `.tbn` thumbnails are JPEGs, and artwork
+    // saved under the wrong extension (a PNG as `poster.jpg`) is common.
+    let img = image::ImageReader::open(source_path)?
+        .with_guessed_format()?
+        .decode()?;
     let (src_w, src_h) = (img.width(), img.height());
 
     let (dst_w, dst_h) = calculate_dimensions(src_w, src_h, opts);
@@ -264,5 +268,22 @@ impl Placeholder {
             .map_err(std::io::Error::other)?;
         std::fs::rename(&tmp, &path)?;
         Ok(path)
+    }
+}
+
+/// The MIME type of image bytes from their signature, if recognised.
+pub fn sniff_content_type(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else if bytes.starts_with(b"GIF8") {
+        Some("image/gif")
+    } else if bytes.starts_with(b"BM") {
+        Some("image/bmp")
+    } else {
+        None
     }
 }

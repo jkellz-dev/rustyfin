@@ -129,8 +129,9 @@ pub async fn probe_file(path: &Path) -> anyhow::Result<ProbeResult> {
     let path_str = path.to_string_lossy().to_string();
     let output = tokio::process::Command::new("ffprobe")
         .args([
+            // Errors only, so a failure says why (quiet left the log empty).
             "-v",
-            "quiet",
+            "error",
             "-print_format",
             "json",
             "-show_streams",
@@ -143,7 +144,13 @@ pub async fn probe_file(path: &Path) -> anyhow::Result<ProbeResult> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("ffprobe failed for {path_str}: {stderr}");
+        let reason = stderr.trim();
+        let reason = if reason.is_empty() {
+            format!("exit status {}", output.status)
+        } else {
+            reason.to_string()
+        };
+        anyhow::bail!("ffprobe failed for {path_str}: {reason}");
     }
 
     let parsed: FfprobeOutput = serde_json::from_slice(&output.stdout)?;
