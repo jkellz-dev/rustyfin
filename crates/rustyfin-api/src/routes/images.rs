@@ -92,6 +92,15 @@ async fn serve_placeholder(
         .await
         .map_err(ApiError::Database)?
     {
+        // A season without a cover shows its show's.
+        if item.item_type == "Season"
+            && let Some(series) = item.series_id.or(item.parent_id)
+            && let Some(poster) = images::find_by_item_and_type(&state.pool, series, "Primary", 0)
+                .await
+                .map_err(ApiError::Database)?
+        {
+            return serve_image(&poster.path, opts, state).await;
+        }
         Placeholder::for_item_type(&item.item_type)
     } else if libraries::find_by_id(&state.pool, item_id)
         .await

@@ -449,6 +449,60 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow
     ensure_primary_placeholder(dto);
 }
 
+/// Seasons and episodes name their show's poster (`SeriesPrimaryImageTag`), and a
+/// season without a cover of its own shows the show's (owner, 2026-11-14).
+pub(crate) async fn attach_series_art(pool: &sqlx::PgPool, dtos: &mut [BaseItemDto]) {
+    let series_of = |d: &BaseItemDto| match d.item_type.as_str() {
+        "Season" => d.series_id.or(d.parent_id),
+        "Episode" => d.series_id,
+        _ => None,
+    };
+    let mut series_ids: Vec<Uuid> = dtos.iter().filter_map(series_of).collect();
+    if series_ids.is_empty() {
+        return;
+    }
+    series_ids.sort();
+    series_ids.dedup();
+    let posters: HashMap<Uuid, ImageRow> = images::list_by_items(pool, &series_ids)
+        .await
+        .or_log_default("images::list_by_items")
+        .into_iter()
+        .filter(|img| img.image_type == "Primary" && img.image_index == 0)
+        .filter_map(|img| img.entity_id.map(|e| (e, img)))
+        .collect();
+    for dto in dtos.iter_mut() {
+        let Some(poster) = series_of(dto).and_then(|s| posters.get(&s)) else {
+            continue;
+        };
+        let tag = poster.id.to_string();
+        dto.series_primary_image_tag = Some(tag.clone());
+        let has_own = dto
+            .image_tags
+            .as_ref()
+            .and_then(|t| t.get("Primary"))
+            .is_some_and(|t| !t.starts_with("placeholder-"));
+        if dto.item_type != "Season" || has_own {
+            continue;
+        }
+        dto.image_tags
+            .get_or_insert_with(HashMap::new)
+            .insert("Primary".to_string(), tag.clone());
+        let hashes = dto.image_blur_hashes.get_or_insert_with(HashMap::new);
+        hashes.remove("Primary");
+        if let Some(bh) = &poster.blurhash {
+            hashes
+                .entry("Primary".to_string())
+                .or_default()
+                .insert(tag, bh.clone());
+        }
+        if let (Some(w), Some(h)) = (poster.width, poster.height)
+            && h > 0
+        {
+            dto.primary_image_aspect_ratio = Some(f64::from(w) / f64::from(h));
+        }
+    }
+}
+
 /// Tracks name their album, album artist and own artists; albums name their
 /// artist; albums and artists total their tracks' running time. A few batch
 /// queries for the whole page. Artist names link to artist folders of the same
@@ -804,6 +858,7 @@ pub async fn get_items(
 
     name_series_for_seasons(&state.pool, &mut dtos).await;
     attach_music_fields(&state.pool, &items, &mut dtos).await;
+    attach_series_art(&state.pool, &mut dtos).await;
     attach_media_sources_if_asked(
         &state.pool,
         &query.fields,
@@ -948,6 +1003,7 @@ pub async fn get_item_by_id(
         std::slice::from_mut(&mut dto),
     )
     .await;
+    attach_series_art(&state.pool, std::slice::from_mut(&mut dto)).await;
     // The caller's user data, zeros when they never touched the item.
     let row = user_data::get(&state.pool, auth.user_id, item_id)
         .await

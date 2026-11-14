@@ -8,7 +8,7 @@ use rustyfin_db::repo::{chapters, images as images_repo, libraries, media_items,
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
-use rustyfin_common::images::discover_images;
+use rustyfin_common::images::{DiscoveredImage, discover_images, discover_season_images};
 use rustyfin_common::music_tags;
 use rustyfin_common::naming::{
     is_audio_file, is_video_file, make_sort_name, parse_season_folder, resolve_audio_track,
@@ -328,8 +328,10 @@ impl LibraryScanner {
                     )
                     .await?;
 
-                // Discover season-level images
-                self.replace_images(season_id, subdir).await;
+                // Season art: the season folder's own, then the show folder's
+                // season01-poster.jpg and friends for anything still missing.
+                self.replace_season_images(season_id, Some(subdir), series_dir, season_num)
+                    .await;
 
                 // Process episodes in this season
                 let videos = collect_video_files(subdir).await;
@@ -370,6 +372,10 @@ impl LibraryScanner {
                     Some(1),
                 )
                 .await?;
+            // The show folder is this season's folder too, so only its
+            // season01-* files are the season's (poster.jpg is the show's).
+            self.replace_season_images(season_id, None, series_dir, 1)
+                .await;
 
             for video in &loose_videos {
                 match self
@@ -1136,6 +1142,43 @@ impl LibraryScanner {
             .await
             {
                 tracing::error!("Failed to insert chapter for {item_id}: {e}");
+            }
+        }
+    }
+
+    async fn replace_season_images(
+        &self,
+        season_id: Uuid,
+        season_dir: Option<&Path>,
+        series_dir: &Path,
+        season_num: i32,
+    ) {
+        let mut found = season_dir
+            .map(|dir| discover_images(dir, ""))
+            .unwrap_or_default();
+        for img in discover_season_images(series_dir, season_num) {
+            if !found.iter().any(|f| f.image_type == img.image_type) {
+                found.push(img);
+            }
+        }
+        self.store_images(season_id, &found).await;
+    }
+
+    /// Replace an item's image rows with `found`.
+    async fn store_images(&self, item_id: Uuid, found: &[DiscoveredImage]) {
+        if let Err(e) = images_repo::delete_by_item(&self.pool, item_id).await {
+            tracing::error!("Failed to delete images for {item_id}: {e}");
+            return;
+        }
+        for img in found {
+            let new_image = images_repo::NewImage {
+                entity_id: item_id,
+                image_type: img.image_type.clone(),
+                path: img.path.clone(),
+                image_index: img.image_index,
+            };
+            if let Err(e) = images_repo::insert(&self.pool, &new_image).await {
+                tracing::error!("Failed to insert image for {item_id}: {e}");
             }
         }
     }

@@ -121,3 +121,89 @@ fn classify_image(stem_lower: &str, item_stem: &str, path: &str) -> Option<Disco
 
     None
 }
+
+/// The file-name stems a season's art uses in the show folder (Kodi, Sonarr and
+/// Jellyfin): `season01`, `season1` and `season-specials` for season 0.
+fn season_prefixes(season: i32) -> Vec<String> {
+    if season == 0 {
+        vec![
+            "season-specials".to_string(),
+            "season00".to_string(),
+            "season0".to_string(),
+        ]
+    } else {
+        vec![format!("season{season:02}"), format!("season{season}")]
+    }
+}
+
+/// A season's art kept in the show folder: `season01-poster.jpg` (or plain
+/// `season01.jpg`), `-banner`, `-fanart`, `-landscape`/`-thumb`. This is where
+/// Sonarr's Kodi metadata and `rustyfin fetch` write it.
+pub fn discover_season_images(series_dir: &Path, season: i32) -> Vec<DiscoveredImage> {
+    let prefixes = season_prefixes(season);
+    let mut images = Vec::new();
+    let Ok(entries) = std::fs::read_dir(series_dir) else {
+        return images;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || !is_image_file(&path) {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let stem = stem.to_lowercase();
+        let Some(rest) = prefixes.iter().find_map(|p| stem.strip_prefix(p.as_str())) else {
+            continue;
+        };
+        let image_type = match rest {
+            "" | "-poster" => "Primary",
+            "-banner" => "Banner",
+            "-fanart" | "-backdrop" => "Backdrop",
+            "-landscape" | "-thumb" => "Thumb",
+            _ => continue,
+        };
+        if images
+            .iter()
+            .any(|i: &DiscoveredImage| i.image_type == image_type)
+        {
+            continue;
+        }
+        images.push(DiscoveredImage {
+            image_type: image_type.to_string(),
+            path: path.to_string_lossy().to_string(),
+            image_index: 0,
+        });
+    }
+    images.sort_by(|a, b| a.image_type.cmp(&b.image_type));
+    images
+}
+
+#[cfg(test)]
+mod season_image_tests {
+    use super::*;
+
+    #[test]
+    fn season_ten_is_not_season_one() {
+        let dir = std::env::temp_dir().join(format!("rf-season-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for f in [
+            "season10-poster.jpg",
+            "season1-banner.jpg",
+            "season-specials-poster.png",
+        ] {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        let types = |n| {
+            discover_season_images(&dir, n)
+                .into_iter()
+                .map(|i| i.image_type)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(types(1), vec!["Banner"]);
+        assert_eq!(types(10), vec!["Primary"]);
+        assert_eq!(types(0), vec!["Primary"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

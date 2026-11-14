@@ -450,6 +450,9 @@ low-priority admin features.
       `AlbumArtist(s)`, `Artists` (tags via `media_items.artists`, else the album artist) and `ArtistItems` (artist
       folders of the same library), `HasLyrics: false`; albums name their artist; albums and artists total their
       tracks' `RunTimeTicks`
+- [x] Season covers (owner, 2026-11-14): read from the season folder and from the show folder's Kodi/Sonarr names
+      (`season01-poster.jpg`, `season-specials-poster.jpg`, `-banner`, `-fanart`, `-landscape`); a season without
+      one shows the show's poster; seasons and episodes carry `SeriesPrimaryImageTag`
 - [x] A track's release date is its year (owner decision 2026-11-14): `ProductionYear` from the tag, else the
       album's; no `PremiereDate`. Parity lists it in `KNOWN_DIFFERENCES`
 - [x] CORS same-origin by default (owner decision 2026-11-14); `[server] cors_allowed_origins` allowlists web
