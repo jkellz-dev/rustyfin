@@ -49,7 +49,8 @@ async fn an_item_without_art_names_a_placeholder_in_its_shape() {
         ("Movie", "placeholder-poster-1", 2.0 / 3.0),
         ("Series", "placeholder-poster-1", 2.0 / 3.0),
         ("Season", "placeholder-poster-1", 2.0 / 3.0),
-        ("Episode", "placeholder-landscape-1", 16.0 / 9.0),
+        // Episodes name a frame of the video instead (episode_thumb_tests).
+        ("Episode", "frame-", 16.0 / 9.0),
         ("MusicAlbum", "placeholder-square-1", 1.0),
     ] {
         let (status, body) = app
@@ -60,9 +61,14 @@ async fn an_item_without_art_names_a_placeholder_in_its_shape() {
             .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let item = first(&body);
-        assert_eq!(item["ImageTags"]["Primary"], tag, "{kind}: {item}");
+        let got_tag = item["ImageTags"]["Primary"].as_str().unwrap_or_default();
+        if tag.ends_with('-') {
+            assert!(got_tag.starts_with(tag), "{kind}: {item}");
+        } else {
+            assert_eq!(got_tag, tag, "{kind}: {item}");
+        }
         assert_eq!(
-            item["ImageBlurHashes"]["Primary"][tag], BLURHASH,
+            item["ImageBlurHashes"]["Primary"][got_tag], BLURHASH,
             "{kind}: {item}"
         );
         let got = item["PrimaryImageAspectRatio"].as_f64().unwrap_or(-1.0);
