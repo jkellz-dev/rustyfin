@@ -108,6 +108,17 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      # Every integration test is its own binary, each linked with full debug
+      # info; with ~50 of them the runner's disk ran out mid-link ("ld
+      # terminated with signal 7 [Bus error]", mbx: 4.5 GiB free). Drop the
+      # preinstalled SDKs this job never uses: dotnet, GHC and CodeQL now,
+      # Android (the biggest, slow to delete) in the background while we build.
+      - name: Free runner disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          (sudo rm -rf /usr/local/lib/android > /dev/null 2>&1 &)
+          df -h /
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
