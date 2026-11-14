@@ -70,18 +70,18 @@ async fn get_artists_inner(
         .or_log_default("images_repo::list_by_items");
     let images_map = group_images_by_item(all_images);
 
+    let counts = media_items::count_albums_and_songs_by_artists(&state.pool, &item_ids)
+        .await
+        .or_log_default("media_items::count_albums_and_songs_by_artists");
     let mut dtos = Vec::with_capacity(rows.len());
     for row in &rows {
         let mut dto = media_item_to_dto(row, &state.server_id);
         if let Some(item_images) = images_map.get(&row.id) {
             apply_images_to_dto(&mut dto, item_images);
         }
-        dto.album_count = media_items::count_albums_by_artist(&state.pool, row.id)
-            .await
-            .ok();
-        dto.song_count = media_items::count_songs_by_artist(&state.pool, row.id)
-            .await
-            .ok();
+        let (albums, songs) = counts.get(&row.id).copied().unwrap_or_default();
+        dto.album_count = Some(albums);
+        dto.song_count = Some(songs);
         dtos.push(dto);
     }
     attach_music_fields(&state.pool, &rows, &mut dtos).await;

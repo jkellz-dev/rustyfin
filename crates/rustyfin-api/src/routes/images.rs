@@ -148,24 +148,20 @@ async fn serve_placeholder(
             let members = rustyfin_db::repo::collections::list_item_ids(&state.pool, item.id)
                 .await
                 .map_err(ApiError::Database)?;
-            let mut films = Vec::new();
-            for id in members {
-                if let Some(film) = media_items::find_by_id(&state.pool, id)
-                    .await
-                    .map_err(ApiError::Database)?
-                {
-                    films.push(film);
-                }
-            }
+            let mut films = media_items::find_by_ids(&state.pool, &members)
+                .await
+                .map_err(ApiError::Database)?;
             films.sort_by_key(|f| (f.production_year.unwrap_or(i32::MAX), f.name.clone()));
-            for film in films {
-                if let Some(poster) =
-                    images::find_by_item_and_type(&state.pool, film.id, "Primary", 0)
-                        .await
-                        .map_err(ApiError::Database)?
-                {
-                    return serve_image(&poster.path, opts, state, req).await;
-                }
+            let posters = images::list_by_items(&state.pool, &members)
+                .await
+                .map_err(ApiError::Database)?;
+            let poster = films.iter().find_map(|film| {
+                posters.iter().find(|i| {
+                    i.entity_id == Some(film.id) && i.image_type == "Primary" && i.image_index == 0
+                })
+            });
+            if let Some(poster) = poster {
+                return serve_image(&poster.path, opts, state, req).await;
             }
         }
         // A season without a cover shows its show's.

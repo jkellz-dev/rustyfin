@@ -283,14 +283,12 @@ pub async fn get_episodes(
                 .await
                 .map_err(ApiError::Database)?;
 
-        let mut all_episodes = Vec::new();
-        for season in &seasons {
-            let eps =
-                media_items::list_by_parent(&state.pool, Some(season.id), &episode_types, 0, 500)
-                    .await
-                    .map_err(ApiError::Database)?;
-            all_episodes.extend(eps);
-        }
+        // Every season's episodes in one query, season by season.
+        let season_ids: Vec<Uuid> = seasons.iter().map(|s| s.id).collect();
+        let all_episodes =
+            media_items::list_by_parents(&state.pool, &season_ids, &episode_types, 500)
+                .await
+                .map_err(ApiError::Database)?;
 
         let total = all_episodes.len() as i32;
         let mut dtos: Vec<BaseItemDto> = all_episodes

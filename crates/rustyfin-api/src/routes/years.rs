@@ -35,14 +35,15 @@ pub async fn get_years(
     let limit = query.limit.unwrap_or(100) as usize;
     let page = &years[start.min(years.len())..years.len().min(start + limit)];
 
+    let mut counts_by_year = media_items::count_items_by_years(&state.pool, page, query.parent_id)
+        .await
+        .or_log_default("media_items::count_items_by_years");
     let mut dtos = Vec::with_capacity(page.len());
     for &year in page {
         let year_str = year.to_string();
         let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, year_str.as_bytes());
 
-        let counts = media_items::count_items_by_year(&state.pool, year, query.parent_id)
-            .await
-            .or_log_default("media_items::count_items_by_year");
+        let counts = counts_by_year.remove(&year).unwrap_or_default();
 
         let mut dto = BaseItemDto {
             id,

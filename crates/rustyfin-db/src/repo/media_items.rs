@@ -87,6 +87,41 @@ pub async fn list_ancestors(pool: &PgPool, id: Uuid) -> Result<Vec<MediaItemRow>
 }
 
 /// List items by parent ID with pagination.
+/// The children of every parent in `parent_ids`, parent by parent in that order,
+/// each parent's in `list_by_parent` order (by sort name, then name), at most
+/// `limit_per_parent` each. One query.
+pub async fn list_by_parents(
+    pool: &PgPool,
+    parent_ids: &[Uuid],
+    item_types: &[String],
+    limit_per_parent: usize,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    if parent_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE parent_id = ANY($1) \
+         AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) ORDER BY sort_name, name",
+    )
+    .bind(parent_ids)
+    .bind(item_types)
+    .fetch_all(pool)
+    .await?;
+    let mut by_parent: HashMap<Uuid, Vec<MediaItemRow>> = HashMap::new();
+    for row in rows {
+        if let Some(parent) = row.parent_id {
+            let list = by_parent.entry(parent).or_default();
+            if list.len() < limit_per_parent {
+                list.push(row);
+            }
+        }
+    }
+    Ok(parent_ids
+        .iter()
+        .flat_map(|id| by_parent.remove(id).unwrap_or_default())
+        .collect())
+}
+
 pub async fn list_by_parent(
     pool: &PgPool,
     parent_id: Option<Uuid>,
@@ -718,6 +753,33 @@ pub async fn distinct_years(
 }
 
 /// Count items grouped by type for a given production year, optionally scoped to a library.
+/// Item counts per type for many years in one query (the rules of
+/// `count_items_by_year`).
+pub async fn count_items_by_years(
+    pool: &PgPool,
+    years: &[i32],
+    parent_id: Option<Uuid>,
+) -> Result<HashMap<i32, Vec<(String, i64)>>, sqlx::Error> {
+    let rows: Vec<(i32, String, i64)> = sqlx::query_as(
+        r#"
+        SELECT production_year, item_type, COUNT(*) as cnt
+        FROM media_items
+        WHERE production_year = ANY($1)
+          AND ($2::uuid IS NULL OR library_id = $2)
+        GROUP BY production_year, item_type
+        "#,
+    )
+    .bind(years)
+    .bind(parent_id)
+    .fetch_all(pool)
+    .await?;
+    let mut by_year: HashMap<i32, Vec<(String, i64)>> = HashMap::new();
+    for (year, kind, count) in rows {
+        by_year.entry(year).or_default().push((kind, count));
+    }
+    Ok(by_year)
+}
+
 pub async fn count_items_by_year(
     pool: &PgPool,
     year: i32,
@@ -1305,6 +1367,34 @@ pub async fn count_albums_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i3
     .fetch_one(pool)
     .await?;
     Ok(row.0 as i32)
+}
+
+/// Album and song counts of many artists in one query (the rules of
+/// `count_albums_by_artist` and `count_songs_by_artist`).
+pub async fn count_albums_and_songs_by_artists(
+    pool: &PgPool,
+    artist_ids: &[Uuid],
+) -> Result<HashMap<Uuid, (i32, i32)>, sqlx::Error> {
+    if artist_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+        r#"
+        SELECT a.id,
+               (SELECT COUNT(*) FROM media_items m
+                 WHERE m.parent_id = a.id AND m.item_type = 'MusicAlbum'),
+               (SELECT COUNT(*) FROM media_items m
+                 WHERE m.series_id = a.id AND m.item_type = 'Audio')
+        FROM unnest($1::uuid[]) AS a(id)
+        "#,
+    )
+    .bind(artist_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, albums, songs)| (id, (albums as i32, songs as i32)))
+        .collect())
 }
 
 /// Count songs belonging to an artist (via series_id).
