@@ -1,10 +1,10 @@
-FROM debian:bookworm-slim
+# Runtime packages come from the base image (docker/base.Dockerfile, target
+# `server`); CI passes the exact tag it built or found. The `server-latest`
+# default is for local builds.
+ARG BASE_IMAGE=ghcr.io/jkellz-dev/rustyfin-base:server-latest
+FROM ${BASE_IMAGE}
 
 ARG TARGETARCH
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY linux/${TARGETARCH}/rustyfin-server /usr/local/bin/rustyfin-server
 COPY migrations /app/migrations

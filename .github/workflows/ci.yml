@@ -241,11 +241,91 @@ jobs:
           path: artifacts/
           retention-days: 1
 
+  # The Debian layers both images start from (docker/base.Dockerfile). They are
+  # rebuilt only when that file changes or a new month starts (Debian security
+  # updates); otherwise this job finds them in GHCR and builds nothing. It runs
+  # beside the binary builds, so even a rebuild (apt under arm64 emulation, the
+  # slow part) rarely adds to the run.
+  base-images:
+    name: Base Images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write # push base images to GHCR
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Base image key
+        id: key
+        run: |
+          KEY="$(date -u +%Y%m)-$(sha256sum docker/base.Dockerfile | cut -c1-12)"
+          echo "key=${KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Look for existing base images
+        id: existing
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          BASE=ghcr.io/jkellz-dev/rustyfin-base
+          if docker manifest inspect "${BASE}:server-${KEY}" > /dev/null 2>&1 \
+            && docker manifest inspect "${BASE}:meta-${KEY}" > /dev/null 2>&1; then
+            echo "Base images ${KEY} exist; nothing to build."
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build & push meta base
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: docker
+          file: docker/base.Dockerfile
+          target: meta
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/jkellz-dev/rustyfin-base:meta-${{ steps.key.outputs.key }}
+            ghcr.io/jkellz-dev/rustyfin-base:meta-latest
+
+      - name: Build & push server base
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: docker
+          file: docker/base.Dockerfile
+          target: server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/jkellz-dev/rustyfin-base:server-${{ steps.key.outputs.key }}
+            ghcr.io/jkellz-dev/rustyfin-base:server-latest
+
   container-push:
     name: Push Container (${{ matrix.image }})
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: [build]
+    needs: [build, base-images]
     permissions:
       contents: read
       packages: write # push images to GHCR
@@ -253,11 +333,13 @@ jobs:
       matrix:
         include:
           - image: rustyfin-server
+            base: server
             dockerfile: docker/server.Dockerfile
             binary_amd64: rustyfin-server-x86_64-unknown-linux-gnu
             binary_arm64: rustyfin-server-aarch64-unknown-linux-gnu
             binary_name: rustyfin-server
           - image: rustyfin-meta
+            base: meta
             dockerfile: docker/meta.Dockerfile
             binary_amd64: rustyfin-x86_64-unknown-linux-gnu
             binary_arm64: rustyfin-aarch64-unknown-linux-gnu
@@ -299,9 +381,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-
+      # No QEMU: the image only copies binaries onto the base, so nothing runs
+      # for arm64 and no emulation is needed.
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
@@ -325,6 +406,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            BASE_IMAGE=ghcr.io/jkellz-dev/rustyfin-base:${{ matrix.base }}-${{ needs.base-images.outputs.key }}
 
   release:
     name: GitHub Release
