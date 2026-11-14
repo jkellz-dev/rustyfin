@@ -482,6 +482,20 @@ impl Placeholder {
 }
 
 /// The MIME type of image bytes from their signature, if recognised.
+/// Whether `process_image` failed because the file is not an image it can read
+/// (not a picture at all, a format it does not know, or a truncated one), as
+/// opposed to a fault of the server (cache not writable, a task that died).
+pub fn is_unreadable_image(e: &(dyn std::error::Error + Send + Sync + 'static)) -> bool {
+    e.downcast_ref::<image::ImageError>().is_some_and(|e| {
+        matches!(
+            e,
+            image::ImageError::Decoding(_)
+                | image::ImageError::Unsupported(_)
+                | image::ImageError::Limits(_)
+        )
+    })
+}
+
 pub fn sniff_content_type(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some("image/png")

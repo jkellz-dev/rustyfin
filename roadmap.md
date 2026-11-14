@@ -875,7 +875,9 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       which would need each handler's required role
 - [x] Handle malformed UUIDs in path params gracefully (400, not 500) — axum `Path<Uuid>` rejection already yields 400
 - [x] Map Postgres foreign-key violations to 404 (e.g. mark-played on nonexistent item), matching Jellyfin
-- [ ] Handle missing/corrupt media files during scan (log and skip, don't crash)
+- [x] Handle missing/corrupt media files during scan (log and skip, don't crash): dangling links, truncated NFOs,
+      non-images named as artwork, files that are not media and non-UTF-8 names scan without failing the rest
+      (`broken_files_tests`); artwork that cannot be decoded is served as missing (the placeholder), not a 500
 - [x] From the first real library (2026-11-14): hidden files and folders (`._*` AppleDouble, `.Trash-*`) and NAS
       folders (`@eaDir`, `#recycle`) are not media, and items made from them are pruned; artwork is decoded and
       typed by contents (`.tbn`, PNGs named `.jpg`); ffprobe failures say why; 4xx answers are not logged as errors
