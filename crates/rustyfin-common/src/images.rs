@@ -221,22 +221,39 @@ pub fn discover_episode_images(dir: &Path, episode_stem: &str) -> Vec<Discovered
         .unwrap_or_default()
 }
 
-/// The file a person's headshot is kept in, inside the shared people folder:
-/// their name, lowercased, with every run of other characters made one `-`
-/// ("Robert Downey Jr." is `robert-downey-jr.jpg`). People are one row per name,
-/// as in Jellyfin, so a person in many items has one file. `None` for a name
-/// with no letters or digits. The name can never leave the folder.
-pub fn headshot_file_name(name: &str) -> Option<String> {
-    let mut slug = String::new();
-    for c in name.chars().flat_map(char::to_lowercase) {
-        if c.is_alphanumeric() {
-            slug.push(c);
-        } else if !slug.is_empty() && !slug.ends_with('-') {
-            slug.push('-');
-        }
+/// The file a person's headshot is kept in, inside the shared people folder.
+/// Never the person's name (owner, 2026-11-14: names are not identities):
+/// `tmdb-<id>.jpg` when their TMDB id is known (`tmdb-<digits>`, as stored),
+/// else `img-<sha256>.jpg` of the photo's address, so one photo is one file
+/// however many people or films point at it. A TMDB photo's address is its path
+/// without the size (`/kSjVX….jpg`), so `original` and `h632` links agree. `None`
+/// when there is neither.
+pub fn headshot_file_name(
+    provider_person_id: Option<&str>,
+    image_url: Option<&str>,
+) -> Option<String> {
+    if let Some(id) = provider_person_id.and_then(|p| p.strip_prefix("tmdb-"))
+        && !id.is_empty()
+        && id.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Some(format!("tmdb-{id}.jpg"));
     }
-    let slug = slug.trim_end_matches('-');
-    (!slug.is_empty()).then(|| format!("{slug}.jpg"))
+    let url = image_url.map(str::trim).filter(|u| !u.is_empty())?;
+    const TMDB: &str = "image.tmdb.org/t/p/";
+    let address = match url.find(TMDB) {
+        Some(at) => {
+            let rest = &url[at + TMDB.len()..];
+            match rest.find('/') {
+                Some(slash) => format!("tmdb:{}", &rest[slash..]),
+                None => url.to_string(),
+            }
+        }
+        None => url.to_string(),
+    };
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(address.as_bytes());
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    Some(format!("img-{hex}.jpg"))
 }
 
 #[cfg(test)]

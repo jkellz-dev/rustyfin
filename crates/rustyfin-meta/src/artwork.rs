@@ -136,15 +136,17 @@ pub struct ArtworkStats {
 /// TMDB's size for headshots: 632 px tall, about 50 KB.
 pub const HEADSHOT_SIZE: &str = "h632";
 
-/// The headshots to download into the shared `people_dir`: one per person with
-/// an image URL and no file yet (a person listed twice is fetched once).
+/// The headshots to download into the shared `people_dir`: one per file (TMDB
+/// id, else the photo's address; see `headshot_file_name`) that has an image URL
+/// and does not exist yet, so a person or photo listed twice is fetched once.
 pub fn headshots_wanted(people: &[nfo::NfoPerson], people_dir: &Path) -> Vec<(String, PathBuf)> {
     let mut seen = std::collections::HashSet::new();
     let mut wanted = Vec::new();
     for person in people {
+        let url = person.image_url.as_deref().filter(|u| !u.trim().is_empty());
         let (Some(url), Some(file)) = (
-            person.image_url.as_deref().filter(|u| !u.is_empty()),
-            rustyfin_common::images::headshot_file_name(&person.name),
+            url,
+            rustyfin_common::images::headshot_file_name(person.provider_person_id.as_deref(), url),
         ) else {
             continue;
         };

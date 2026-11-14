@@ -79,10 +79,16 @@ async fn check_image_access(
 }
 
 /// A person's headshot in the shared people folder, if the metadata CLI has
-/// fetched one.
-pub(crate) fn headshot_path(state: &AppState, name: &str) -> Option<std::path::PathBuf> {
+/// fetched one: by TMDB id, else by the photo's address (never by name).
+pub(crate) fn headshot_path(
+    state: &AppState,
+    person: &people::PersonRow,
+) -> Option<std::path::PathBuf> {
     let dir = state.people_cache_dir.as_ref()?;
-    let path = dir.join(rustyfin_core::headshot_file_name(name)?);
+    let path = dir.join(rustyfin_core::headshot_file_name(
+        person.provider_person_id.as_deref(),
+        person.image_url.as_deref(),
+    )?);
     path.is_file().then_some(path)
 }
 
@@ -184,7 +190,7 @@ async fn serve_placeholder(
     {
         // People: the headshot from the shared folder, or nothing (clients
         // draw initials).
-        let path = headshot_path(state, &person.name).ok_or(ApiError::NotFound)?;
+        let path = headshot_path(state, &person).ok_or(ApiError::NotFound)?;
         return serve_image(&path.to_string_lossy(), opts, state, req).await;
     } else {
         return Err(ApiError::NotFound);

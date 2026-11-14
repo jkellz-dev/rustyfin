@@ -1127,7 +1127,10 @@ pub(crate) async fn download_people_headshots(
         // One file per person, shared by every item (see `headshot_file_name`).
         let (Some(url), Some(file)) = (
             &person.image_url,
-            rustyfin_common::images::headshot_file_name(&person.name),
+            rustyfin_common::images::headshot_file_name(
+                person.provider_person_id.as_deref(),
+                person.image_url.as_deref(),
+            ),
         ) else {
             continue;
         };

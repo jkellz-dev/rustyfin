@@ -1005,7 +1005,7 @@ pub async fn get_item_by_id(
                     let tag = if people_with_images.contains(&person.id) {
                         Some(person.id.simple().to_string())
                     } else {
-                        super::images::headshot_path(&state, &person.name)
+                        super::images::headshot_path(&state, &person)
                             .and_then(|p| super::images::headshot_tag(&p))
                     };
                     BaseItemPerson {

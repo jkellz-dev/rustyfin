@@ -198,8 +198,10 @@ impl EnrichmentService {
 
                         // Insert image row if headshot cache file exists
                         if let Some(ref cache_dir) = self.people_cache_dir
-                            && let Some(file) =
-                                rustyfin_common::images::headshot_file_name(&person_row.name)
+                            && let Some(file) = rustyfin_common::images::headshot_file_name(
+                                person_row.provider_person_id.as_deref(),
+                                person_row.image_url.as_deref(),
+                            )
                         {
                             let headshot_path = cache_dir.join(file);
                             if headshot_path.is_file() {
@@ -257,10 +259,13 @@ impl EnrichmentService {
 
         let mut inserted = 0u32;
         for person in &people {
-            let Some(ref pid) = person.provider_person_id else {
+            let Some(file) = rustyfin_common::images::headshot_file_name(
+                person.provider_person_id.as_deref(),
+                person.image_url.as_deref(),
+            ) else {
                 continue;
             };
-            let headshot_path = cache_dir.join(format!("{pid}.jpg"));
+            let headshot_path = cache_dir.join(file);
             if !headshot_path.is_file() {
                 continue;
             }

@@ -175,7 +175,7 @@ pub async fn get_person_image(
             .await
             .map_err(ApiError::Database)?
             .is_none()
-        && let Some(path) = image_routes::headshot_path(&state, &person.name)
+        && let Some(path) = image_routes::headshot_path(&state, &person)
     {
         let opts = image_routes::build_options(&params, &headers);
         let req = image_routes::ImageRequest::new(&params, &headers);

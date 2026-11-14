@@ -211,7 +211,7 @@ pub async fn list_missing_headshots(pool: &PgPool) -> Result<Vec<PersonRow>, sql
     sqlx::query_as::<_, PersonRow>(
         r#"
         SELECT p.* FROM people p
-        WHERE p.provider_person_id IS NOT NULL
+        WHERE (p.provider_person_id IS NOT NULL OR p.image_url IS NOT NULL)
           AND NOT EXISTS (
             SELECT 1 FROM images i
             WHERE i.entity_id = p.id AND i.image_type = 'Primary' AND i.image_index = 0
