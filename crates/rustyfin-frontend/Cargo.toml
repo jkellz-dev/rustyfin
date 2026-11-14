@@ -8,6 +8,7 @@ license.workspace = true
 axum.workspace = true
 rust-embed.workspace = true
 mime_guess.workspace = true
+brotli.workspace = true
 flate2.workspace = true
 
 [dev-dependencies]
