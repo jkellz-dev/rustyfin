@@ -2,6 +2,7 @@ use sycamore::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::browse::{self, ChildQuery};
 use crate::types::*;
 
 // ── View state machine ──────────────────────────────────
@@ -18,7 +19,11 @@ enum MediaView {
 struct Breadcrumb {
     label: String,
     parent_id: Option<String>,
-    collection_type: Option<String>,
+    /// What this level lists when it is opened again.
+    query: ChildQuery,
+    /// The item open in the detail view (always the last crumb). It lets the
+    /// level above it, e.g. the episode's season, be clicked.
+    is_detail: bool,
 }
 
 // ── Helpers ─────────────────────────────────────────────
@@ -81,15 +86,6 @@ fn icon_for_item_type(item_type: &str) -> &'static str {
     }
 }
 
-fn item_types_for_collection(collection_type: Option<&str>) -> Option<&'static str> {
-    match collection_type {
-        Some("movies") => Some("Movie"),
-        Some("tvshows") => Some("Series"),
-        Some("music") => Some("MusicArtist"),
-        _ => None,
-    }
-}
-
 const PAGE_SIZE: i32 = 50;
 
 // ── Component ───────────────────────────────────────────
@@ -106,7 +102,7 @@ pub fn Media() -> View {
     let search_results: Signal<Vec<SearchHint>> = create_signal(Vec::new());
     let breadcrumbs: Signal<Vec<Breadcrumb>> = create_signal(Vec::new());
     let current_parent_id: Signal<Option<String>> = create_signal(None);
-    let current_collection_type: Signal<Option<String>> = create_signal(None);
+    let current_query: Signal<ChildQuery> = create_signal(browse::library_query(None));
     let loading = create_signal(true);
     let detail_loading = create_signal(false);
     let search_loading = create_signal(false);
@@ -134,20 +130,19 @@ pub fn Media() -> View {
 
     // ── Actions ─────────────────────────────────────────
 
-    let load_items = move |parent_id: String, collection_type: Option<String>, start: i32| {
+    let load_items = move |parent_id: String, query: ChildQuery, start: i32| {
         loading.set(true);
-        let item_types = item_types_for_collection(collection_type.as_deref());
         spawn_local({
             let parent_id = parent_id.clone();
-            let item_types = item_types.map(|s| s.to_string());
             async move {
                 match api::get_items(
                     &parent_id,
-                    item_types.as_deref(),
+                    query.item_types,
                     start,
                     PAGE_SIZE,
-                    "SortName",
+                    query.sort_by,
                     "Ascending",
+                    query.recursive,
                 )
                 .await
                 {
@@ -166,35 +161,38 @@ pub fn Media() -> View {
     let select_library = move |lib: BaseItemDto| {
         let lib_id = lib.id.clone();
         let lib_name = lib.name.clone();
-        let ctype = lib.collection_type.clone();
+        let query = browse::library_query(lib.collection_type.as_deref());
         current_parent_id.set(Some(lib_id.clone()));
-        current_collection_type.set(ctype.clone());
+        current_query.set(query);
         breadcrumbs.set(vec![Breadcrumb {
             label: lib_name,
             parent_id: Some(lib_id.clone()),
-            collection_type: ctype.clone(),
+            query,
+            is_detail: false,
         }]);
         start_index.set(0);
-        load_items(lib_id, ctype, 0);
+        load_items(lib_id, query, 0);
         current_view.set(MediaView::Grid);
     };
 
     let browse_into = move |item: BaseItemDto| {
         let item_id = item.id.clone();
         let item_name = item.name.clone();
-        // When drilling into a folder, clear collection type filtering
-        // so we get child items (Seasons under Series, Episodes under Season)
+        // Only the folder's direct children: a show's seasons, a season's episodes.
+        let query = browse::children_query(&item.item_type);
         current_parent_id.set(Some(item_id.clone()));
-        current_collection_type.set(None);
+        current_query.set(query);
         breadcrumbs.update(|bc| {
+            bc.retain(|c| !c.is_detail);
             bc.push(Breadcrumb {
                 label: item_name,
                 parent_id: Some(item_id.clone()),
-                collection_type: None,
+                query,
+                is_detail: false,
             });
         });
         start_index.set(0);
-        load_items(item_id, None, 0);
+        load_items(item_id, query, 0);
     };
 
     let view_detail = move |item_id: String| {
@@ -208,12 +206,31 @@ pub fn Media() -> View {
                     Ok(item) => {
                         // For albums, fetch child tracks
                         if item.item_type == "MusicAlbum"
-                            && let Ok(result) =
-                                api::get_items(&item.id, None, 0, 500, "IndexNumber", "Ascending")
-                                    .await
+                            && let Ok(result) = api::get_items(
+                                &item.id,
+                                None,
+                                0,
+                                500,
+                                "IndexNumber",
+                                "Ascending",
+                                false,
+                            )
+                            .await
                         {
                             detail_tracks.set(result.items);
                         }
+                        let label =
+                            browse::card_label(&item.item_type, &item.name, item.index_number);
+                        let query = current_query.get();
+                        breadcrumbs.update(|bc| {
+                            bc.retain(|c| !c.is_detail);
+                            bc.push(Breadcrumb {
+                                label,
+                                parent_id: None,
+                                query,
+                                is_detail: true,
+                            });
+                        });
                         detail_item.set(Some(item));
                     }
                     Err(e) => error.set(Some(e)),
@@ -229,23 +246,23 @@ pub fn Media() -> View {
             let crumbs = breadcrumbs.get_clone();
             let crumb = &crumbs[0];
             let parent_id = crumb.parent_id.clone().unwrap_or_default();
-            let ctype = crumb.collection_type.clone();
+            let query = crumb.query;
             current_parent_id.set(Some(parent_id.clone()));
-            current_collection_type.set(ctype.clone());
+            current_query.set(query);
             breadcrumbs.update(|bc| bc.truncate(1));
             start_index.set(0);
-            load_items(parent_id, ctype, 0);
+            load_items(parent_id, query, 0);
             current_view.set(MediaView::Grid);
         } else if index < breadcrumbs.get_clone().len() - 1 {
             let crumbs = breadcrumbs.get_clone();
             let crumb = &crumbs[index];
             let parent_id = crumb.parent_id.clone().unwrap_or_default();
-            let ctype = crumb.collection_type.clone();
+            let query = crumb.query;
             current_parent_id.set(Some(parent_id.clone()));
-            current_collection_type.set(ctype.clone());
+            current_query.set(query);
             breadcrumbs.update(|bc| bc.truncate(index + 1));
             start_index.set(0);
-            load_items(parent_id, ctype, 0);
+            load_items(parent_id, query, 0);
             current_view.set(MediaView::Grid);
         }
     };
@@ -253,7 +270,7 @@ pub fn Media() -> View {
     let back_to_libraries = move |_| {
         breadcrumbs.set(Vec::new());
         current_parent_id.set(None);
-        current_collection_type.set(None);
+        current_query.set(browse::library_query(None));
         search_term.set(String::new());
         search_results.set(Vec::new());
         current_view.set(MediaView::Libraries);
@@ -434,15 +451,8 @@ pub fn Media() -> View {
                                                 let item_for_click = item.clone();
                                                 let child_count = item.child_count;
 
-                                                let display_name = if item_type == "Episode" || item_type == "Audio" {
-                                                    if let Some(num) = item.index_number {
-                                                        format!("{}. {item_name}", num)
-                                                    } else {
-                                                        item_name.clone()
-                                                    }
-                                                } else {
-                                                    item_name.clone()
-                                                };
+                                                let display_name =
+                                                    browse::card_label(&item_type, &item_name, item.index_number);
 
                                                 let is_music = matches!(item_type.as_str(), "MusicArtist" | "MusicAlbum" | "Audio");
                                                 let poster_class = if is_music { "media-poster square" } else { "media-poster" };
@@ -486,9 +496,8 @@ pub fn Media() -> View {
                                         let has_next = start + PAGE_SIZE < total;
                                         let showing_end = std::cmp::min(start + PAGE_SIZE, total);
                                         let pid = current_parent_id.get_clone().unwrap_or_default();
-                                        let ctype = current_collection_type.get_clone();
+                                        let query = current_query.get();
                                         let pid2 = pid.clone();
-                                        let ctype2 = ctype.clone();
                                         view! {
                                             div(class="pagination") {
                                                 button(
@@ -497,7 +506,7 @@ pub fn Media() -> View {
                                                     on:click=move |_| {
                                                         let new_start = (start - PAGE_SIZE).max(0);
                                                         start_index.set(new_start);
-                                                        load_items(pid.clone(), ctype.clone(), new_start);
+                                                        load_items(pid.clone(), query, new_start);
                                                     }
                                                 ) { "Previous" }
                                                 span(class="pagination-info") {
@@ -509,7 +518,7 @@ pub fn Media() -> View {
                                                     on:click=move |_| {
                                                         let new_start = start + PAGE_SIZE;
                                                         start_index.set(new_start);
-                                                        load_items(pid2.clone(), ctype2.clone(), new_start);
+                                                        load_items(pid2.clone(), query, new_start);
                                                     }
                                                 ) { "Next" }
                                             }
@@ -618,10 +627,11 @@ pub fn Media() -> View {
                                             button(
                                                 class="btn btn-secondary btn-sm",
                                                 on:click=move |_| {
-                                                    // Go back to grid
+                                                    // Back to the level the item was opened from
+                                                    breadcrumbs.update(|bc| bc.retain(|c| !c.is_detail));
                                                     current_view.set(MediaView::Grid);
                                                 }
-                                            ) { "Back to Grid" }
+                                            ) { "Back" }
                                         }
 
                                         // Genres

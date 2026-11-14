@@ -242,10 +242,11 @@ pub async fn get_items(
     limit: i32,
     sort_by: &str,
     sort_order: &str,
+    recursive: bool,
 ) -> Result<QueryResult<BaseItemDto>, String> {
     let mut path = format!(
         "/Items?ParentId={parent_id}&StartIndex={start_index}&Limit={limit}\
-         &SortBy={sort_by}&SortOrder={sort_order}&Recursive=true\
+         &SortBy={sort_by}&SortOrder={sort_order}&Recursive={recursive}\
          &Fields=Overview,Genres,Studios,People,MediaStreams,Chapters,ProviderIds,Path"
     );
     if let Some(types) = item_types {
