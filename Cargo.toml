@@ -74,6 +74,7 @@ futures-util = "0.3"
 quick-xml = { version = "0.37", features = ["serialize"] }
 rust-embed = { version = "8", features = ["axum"] }
 mime_guess = "2"
+flate2 = "1"
 ldap3 = { version = "0.12", default-features = false, features = ["tls-rustls-ring"] }
 ipnet = "2"
 lofty = "0.22"

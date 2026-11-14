@@ -8,3 +8,8 @@ license.workspace = true
 axum.workspace = true
 rust-embed.workspace = true
 mime_guess.workspace = true
+flate2.workspace = true
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+tokio = { workspace = true, features = ["full"] }
