@@ -2,10 +2,13 @@
 //!
 //! Owner (2026-11-14): "we should be pulling actor headshots too and using those
 //! in the cast and crew lists. Those should be cached collectively, not with each
-//! piece of media and shared across media." The `rustyfin` metadata CLI downloads
-//! `<people_cache_dir>/<name>.jpg` once per person; the server reads that folder
-//! when it answers, so a headshot shows in every film and show the person is in
-//! without a rescan.
+//! piece of media and shared across media", and "we can't use people's names,
+//! we must use either the tmdb id ... or content addressed storage" ("tmdb id and
+//! hash"). A headshot is `<people_cache_dir>/tmdb-<id>.jpg` when the person's
+//! TMDB id is known, else `img-<sha256 of the photo's address>.jpg`. The
+//! `rustyfin` metadata CLI downloads it once; the server reads the folder when
+//! it answers, so a headshot shows in every film the person is in without a
+//! rescan.
 #[allow(dead_code)]
 mod common;
 
@@ -39,8 +42,14 @@ fn png(dir: &Dir) -> Vec<u8> {
     std::fs::read(made).unwrap()
 }
 
-async fn cast(app: &common::TestApp, item: Uuid, name: &str) -> Uuid {
-    let person = people::find_or_create(&app.pool, name, "Actor", None, None)
+async fn cast(
+    app: &common::TestApp,
+    item: Uuid,
+    name: &str,
+    url: Option<&str>,
+    tmdb: Option<&str>,
+) -> Uuid {
+    let person = people::find_or_create(&app.pool, name, "Actor", url, tmdb)
         .await
         .unwrap();
     people::link_to_item(&app.pool, item, person.id, Some("Someone"), Some(0))
@@ -49,25 +58,44 @@ async fn cast(app: &common::TestApp, item: Uuid, name: &str) -> Uuid {
     person.id
 }
 
+const BELL: &str = "https://image.tmdb.org/t/p/original/kSjVXfF1ODB6RmFMVJ8XOxWyYCj.jpg";
+
 #[test]
-fn a_headshot_file_is_named_after_the_person() {
+fn a_headshot_is_named_by_tmdb_id_else_by_a_hash_of_the_photo() {
+    // The TMDB id wins.
     assert_eq!(
-        headshot_file_name("Bryan Cranston").as_deref(),
-        Some("bryan-cranston.jpg")
+        headshot_file_name(Some("tmdb-17052"), Some(BELL)).as_deref(),
+        Some("tmdb-17052.jpg")
     );
+    // Without one: a hash of the photo's address, the same at every TMDB size
+    // and scheme, never the person's name.
+    let hashed = headshot_file_name(None, Some(BELL)).unwrap();
+    assert!(
+        hashed.starts_with("img-") && hashed.ends_with(".jpg"),
+        "{hashed}"
+    );
+    assert_eq!(hashed.len(), "img-".len() + 64 + ".jpg".len(), "{hashed}");
+    assert!(hashed[4..68].chars().all(|c| c.is_ascii_hexdigit()));
+    for same in [
+        "http://image.tmdb.org/t/p/h632/kSjVXfF1ODB6RmFMVJ8XOxWyYCj.jpg",
+        "https://image.tmdb.org/t/p/w185/kSjVXfF1ODB6RmFMVJ8XOxWyYCj.jpg",
+    ] {
+        assert_eq!(
+            headshot_file_name(None, Some(same)).as_deref(),
+            Some(hashed.as_str())
+        );
+    }
+    let other = headshot_file_name(None, Some("https://artworks.thetvdb.com/a/b.jpg")).unwrap();
+    assert_ne!(other, hashed);
+    assert!(other.starts_with("img-"));
+    // An id that is not a TMDB number is ignored, never put in a path.
     assert_eq!(
-        headshot_file_name("  Penélope  Cruz ").as_deref(),
-        Some("penélope-cruz.jpg")
+        headshot_file_name(Some("tmdb-../../x"), Some(BELL)).as_deref(),
+        Some(hashed.as_str())
     );
-    assert_eq!(
-        headshot_file_name("Robert Downey Jr.").as_deref(),
-        Some("robert-downey-jr.jpg")
-    );
-    assert_eq!(
-        headshot_file_name("../../etc/passwd").as_deref(),
-        Some("etc-passwd.jpg")
-    );
-    assert_eq!(headshot_file_name(" ./ "), None);
+    assert_eq!(headshot_file_name(Some("imdb-nm1"), None), None);
+    assert_eq!(headshot_file_name(None, Some("  ")), None);
+    assert_eq!(headshot_file_name(None, None), None);
 }
 
 #[tokio::test]
@@ -78,43 +106,58 @@ async fn one_headshot_shows_for_the_person_in_every_item() {
     let lib = app.create_library("Movies", "movies").await;
     let first = app.create_media_item("First", "Movie", lib, None).await;
     let second = app.create_media_item("Second", "Movie", lib, None).await;
-    let actor = cast(&app, first, "Bryan Cranston").await;
+    let bell = cast(&app, first, "Kristen Bell", Some(BELL), None).await;
     assert_eq!(
-        cast(&app, second, "Bryan Cranston").await,
-        actor,
+        cast(&app, second, "Kristen Bell", Some(BELL), None).await,
+        bell,
         "one person row"
     );
-    cast(&app, first, "Nobody Pictured").await;
+    let menzel = cast(&app, first, "Idina Menzel", None, Some("tmdb-19394")).await;
+    cast(&app, first, "Nobody Pictured", None, None).await;
     let bytes = png(&people_dir);
-    std::fs::write(people_dir.0.join("bryan-cranston.jpg"), &bytes).unwrap();
+    let bell_file = headshot_file_name(None, Some(BELL)).unwrap();
+    std::fs::write(people_dir.0.join(&bell_file), &bytes).unwrap();
+    std::fs::write(people_dir.0.join("tmdb-19394.jpg"), &bytes).unwrap();
+    // A file named after a person is not a headshot any more.
+    std::fs::write(people_dir.0.join("nobody-pictured.jpg"), &bytes).unwrap();
 
     for item in [first, second] {
         let (status, body) = app.get(&format!("/Items/{item}"), &token).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let people = body["People"].as_array().expect("people");
-        let bryan = people
-            .iter()
-            .find(|p| p["Name"] == "Bryan Cranston")
-            .unwrap();
-        let tag = bryan["PrimaryImageTag"].as_str().expect("a headshot tag");
-        // Only the first film casts someone without a headshot.
-        if let Some(nobody) = people.iter().find(|p| p["Name"] == "Nobody Pictured") {
-            assert!(nobody["PrimaryImageTag"].is_null(), "{nobody}");
-        } else {
-            assert_eq!(item, second, "{body}");
+        let tag_of = |name: &str| {
+            people
+                .iter()
+                .find(|p| p["Name"] == name)
+                .map(|p| p["PrimaryImageTag"].clone())
+        };
+        let tag = tag_of("Kristen Bell").unwrap();
+        let tag = tag.as_str().expect("a headshot tag");
+        if item == first {
+            assert!(tag_of("Idina Menzel").unwrap().is_string(), "{body}");
+            assert!(tag_of("Nobody Pictured").unwrap().is_null(), "{body}");
         }
 
         let (status, _, got) = app
-            .get_bytes(&format!("/Items/{actor}/Images/Primary?tag={tag}"), &token)
+            .get_bytes(&format!("/Items/{bell}/Images/Primary?tag={tag}"), &token)
             .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(got, bytes, "the shared file, served as is");
     }
 
     let (status, _, got) = app
-        .get_bytes("/Persons/Bryan%20Cranston/Images/Primary", &token)
+        .get_bytes(&format!("/Items/{menzel}/Images/Primary"), &token)
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(got, bytes);
+    let (status, _, got) = app
+        .get_bytes("/Persons/Kristen%20Bell/Images/Primary", &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(got, bytes);
+    let (status, _, _) = app
+        .get_bytes("/Persons/Nobody%20Pictured/Images/Primary", &token)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
     app.cleanup().await;
 }

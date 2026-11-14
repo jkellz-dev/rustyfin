@@ -400,22 +400,40 @@ mod tests {
         }
     }
 
+    fn file(id: Option<&str>, url: Option<&str>) -> String {
+        rustyfin_common::images::headshot_file_name(id, url).unwrap()
+    }
+
     #[test]
     fn headshots_are_fetched_once_per_person_into_the_shared_folder() {
         let t = Tree::new();
-        t.file("people/bryan-cranston.jpg");
+        // Already fetched for another film.
+        t.file(&format!("people/{}", file(None, Some("https://img/a.jpg"))));
+        let mut paul = person("Aaron Paul", Some("https://img/b.jpg"));
+        paul.provider_person_id = Some("tmdb-84497".to_string());
+        let mut paul_again = person("Aaron Paul", Some("https://img/c.jpg"));
+        paul_again.provider_person_id = Some("tmdb-84497".to_string());
         let people = [
             person("Bryan Cranston", Some("https://img/a.jpg")),
-            person("Aaron Paul", Some("https://img/b.jpg")),
-            person("Aaron Paul", Some("https://img/c.jpg")),
+            paul,
+            paul_again,
+            person("Same Photo", Some("https://img/d.jpg")),
+            person("Same Photo Again", Some("https://img/d.jpg")),
             person("No Photo", None),
         ];
         assert_eq!(
             headshots_wanted(&people, &t.0.join("people")),
-            vec![(
-                "https://img/b.jpg".to_string(),
-                t.0.join("people/aaron-paul.jpg")
-            )]
+            vec![
+                (
+                    "https://img/b.jpg".to_string(),
+                    t.0.join("people/tmdb-84497.jpg")
+                ),
+                (
+                    "https://img/d.jpg".to_string(),
+                    t.0.join("people")
+                        .join(file(None, Some("https://img/d.jpg")))
+                ),
+            ]
         );
     }
 
