@@ -35,6 +35,15 @@ pub struct TestApp {
 impl TestApp {
     /// Create a new test app with a random Postgres schema and all migrations applied.
     pub async fn new() -> Self {
+        Self::build(None).await
+    }
+
+    /// A test app whose people headshots come from `dir`.
+    pub async fn with_people_cache_dir(dir: PathBuf) -> Self {
+        Self::build(Some(dir)).await
+    }
+
+    async fn build(people_cache_dir: Option<PathBuf>) -> Self {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://rustyfin:rustyfin@localhost:5432/rustyfin".to_string());
 
@@ -107,7 +116,7 @@ impl TestApp {
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
             scan_in_flight: Arc::new(RwLock::new(HashSet::new())),
             scan_schedules: serde_json::json!({}),
-            people_cache_dir: None,
+            people_cache_dir,
             user_image_url_template: None,
             task_scheduler: None,
             shutdown: shutdown.clone(),

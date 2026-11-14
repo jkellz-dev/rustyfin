@@ -277,6 +277,36 @@ mod tests {
         }
     }
 
+    fn person(name: &str, url: Option<&str>) -> nfo::NfoPerson {
+        nfo::NfoPerson {
+            name: name.to_string(),
+            person_type: "Actor".to_string(),
+            role: None,
+            sort_order: None,
+            image_url: url.map(str::to_string),
+            provider_person_id: None,
+        }
+    }
+
+    #[test]
+    fn headshots_are_fetched_once_per_person_into_the_shared_folder() {
+        let t = Tree::new();
+        t.file("people/bryan-cranston.jpg");
+        let people = [
+            person("Bryan Cranston", Some("https://img/a.jpg")),
+            person("Aaron Paul", Some("https://img/b.jpg")),
+            person("Aaron Paul", Some("https://img/c.jpg")),
+            person("No Photo", None),
+        ];
+        assert_eq!(
+            headshots_wanted(&people, &t.0.join("people")),
+            vec![(
+                "https://img/b.jpg".to_string(),
+                t.0.join("people/aaron-paul.jpg")
+            )]
+        );
+    }
+
     #[test]
     fn season_posters_are_named_as_the_server_reads_them() {
         assert_eq!(season_poster_name(0), "season-specials-poster.jpg");
