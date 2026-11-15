@@ -126,6 +126,19 @@ fn encode(value: &str) -> String {
         .collect()
 }
 
+/// Breadcrumb entries for a keyed list: (index, crumb, is it the last one).
+/// The flag is part of the entry so that when a crumb stops being the last
+/// (going deeper), the entry changes and the list redraws it as a link.
+pub fn crumb_trail<T: Clone>(crumbs: &[T]) -> Vec<(usize, T, bool)> {
+    let last = crumbs.len().saturating_sub(1);
+    crumbs
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, c)| (i, c, i == last))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

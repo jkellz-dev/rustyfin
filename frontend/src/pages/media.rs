@@ -373,11 +373,10 @@ pub fn Media() -> View {
                     div(class="breadcrumbs") {
                         button(class="breadcrumb-link", on:click=back_to_libraries) { "Libraries" }
                         Indexed(
-                            list=move || breadcrumbs.get_clone().into_iter().enumerate().collect::<Vec<_>>(),
-                            view=move |entry: (usize, Breadcrumb)| {
-                                let (idx, crumb) = entry;
+                            list=move || browse::crumb_trail(&breadcrumbs.get_clone()),
+                            view=move |entry: (usize, Breadcrumb, bool)| {
+                                let (idx, crumb, is_last) = entry;
                                 let label = crumb.label.clone();
-                                let is_last = idx == breadcrumbs.get_clone().len() - 1;
                                 if is_last {
                                     view! {
                                         span(class="breadcrumb-sep") { " / " }
