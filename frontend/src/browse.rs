@@ -162,6 +162,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn search_thumbnails_keep_each_item_shape() {
+        assert_eq!(
+            search_thumb_class("Episode"),
+            "search-result-poster landscape"
+        );
+        assert_eq!(
+            search_thumb_class("MusicAlbum"),
+            "search-result-poster square"
+        );
+        assert_eq!(search_thumb_class("Movie"), "search-result-poster");
+        assert_eq!(search_thumb_class("Series"), "search-result-poster");
+    }
+
+    #[test]
     fn the_collections_library_lists_collections() {
         assert_eq!(
             library_query(Some("boxsets")),
