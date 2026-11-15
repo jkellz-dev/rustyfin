@@ -170,6 +170,23 @@ pub async fn list_by_parent(
     q.fetch_all(pool).await
 }
 
+/// The running time of everything under a folder (an album's tracks, also in
+/// disc folders; a show's or season's episodes). None when nothing has one.
+pub async fn cumulative_runtime_ticks(pool: &PgPool, id: Uuid) -> Result<Option<i64>, sqlx::Error> {
+    let row: (Option<i64>,) = sqlx::query_as(
+        "WITH RECURSIVE tree AS ( \
+             SELECT id, runtime_ticks, 1 AS depth FROM media_items WHERE parent_id = $1 \
+             UNION ALL \
+             SELECT c.id, c.runtime_ticks, t.depth + 1 FROM media_items c \
+             JOIN tree t ON c.parent_id = t.id WHERE t.depth < 4 \
+         ) SELECT SUM(runtime_ticks)::bigint FROM tree",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
 /// Count items matching criteria.
 pub async fn count_by_parent(
     pool: &PgPool,

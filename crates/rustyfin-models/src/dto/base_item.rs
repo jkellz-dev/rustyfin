@@ -52,7 +52,9 @@ pub struct BaseItemDto {
     pub end_date: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "RunTimeTicks")]
     pub runtime_ticks: Option<i64>,
-
+    /// A folder's total running time: an album's tracks, a show's episodes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cumulative_run_time_ticks: Option<i64>,
     // Collections
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genres: Option<Vec<String>>,

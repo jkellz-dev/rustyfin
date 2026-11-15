@@ -82,6 +82,8 @@ async fn get_artists_inner(
         let (albums, songs) = counts.get(&row.id).copied().unwrap_or_default();
         dto.album_count = Some(albums);
         dto.song_count = Some(songs);
+        // Jellyfin's artists count their albums as children.
+        dto.child_count = Some(albums);
         dtos.push(dto);
     }
     attach_music_fields(&state.pool, &rows, &mut dtos).await;
