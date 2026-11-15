@@ -1551,9 +1551,28 @@ impl ItemQuery {
     }
 
     /// Map a Jellyfin sort name to a SQL expression.
+    /// Jellyfin's sort name, which numbers seasons, episodes and tracks: a
+    /// season is its number (`0001`), an episode `001 - 0001 - name` (season,
+    /// episode), a track `0001 - 0001 - name` (disc, track); anything else its
+    /// sort name. Numbers are zero-padded, never cut.
+    const JELLYFIN_SORT_KEY: &'static str = "(CASE mi.item_type \
+        WHEN 'Season' THEN COALESCE(lpad(mi.index_number::text, \
+            greatest(4, length(mi.index_number::text)), '0'), COALESCE(mi.sort_name, mi.name)) \
+        WHEN 'Episode' THEN COALESCE(lpad(mi.parent_index_number::text, \
+            greatest(3, length(mi.parent_index_number::text)), '0') || ' - ', '') \
+            || COALESCE(lpad(mi.index_number::text, \
+            greatest(4, length(mi.index_number::text)), '0') || ' - ', '') \
+            || COALESCE(mi.sort_name, mi.name) \
+        WHEN 'Audio' THEN COALESCE(lpad(mi.parent_index_number::text, \
+            greatest(4, length(mi.parent_index_number::text)), '0') || ' - ', '') \
+            || COALESCE(lpad(mi.index_number::text, \
+            greatest(4, length(mi.index_number::text)), '0') || ' - ', '') \
+            || COALESCE(mi.sort_name, mi.name) \
+        ELSE mi.sort_name END)";
+
     fn sort_column(name: &str) -> Option<&'static str> {
         match name {
-            "SortName" | "Default" => Some("mi.sort_name"),
+            "SortName" | "Default" => Some(Self::JELLYFIN_SORT_KEY),
             "Name" => Some("mi.name"),
             "DateCreated" => Some("mi.date_created"),
             "PremiereDate" => Some("mi.premiere_date"),
@@ -1780,17 +1799,6 @@ impl ItemQuery {
                 .get(i)
                 .or(self.sort_order.first())
                 .is_some_and(|o| o.eq_ignore_ascii_case("Descending"));
-            if col == "mi.sort_name" {
-                for numbered in ["mi.parent_index_number", "mi.index_number"] {
-                    qb.push(numbered);
-                    qb.push(if desc {
-                        " DESC NULLS LAST, "
-                    } else {
-                        " ASC NULLS LAST, "
-                    });
-                }
-            }
-
             qb.push(col);
 
             if desc {
