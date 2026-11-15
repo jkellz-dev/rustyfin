@@ -144,6 +144,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_collections_library_lists_collections() {
+        assert_eq!(
+            library_query(Some("boxsets")),
+            ChildQuery {
+                recursive: true,
+                item_types: Some("BoxSet"),
+                sort_by: "SortName",
+            }
+        );
+    }
+
+    #[test]
+    fn collections_and_albums_open_their_details_with_what_they_hold() {
+        assert!(opens_detail("BoxSet", true));
+        assert!(opens_detail("MusicAlbum", true));
+        assert!(opens_detail("Movie", false));
+        assert!(!opens_detail("Series", true));
+        assert!(!opens_detail("Season", true));
+        // A collection lists its films in release order, an album its tracks.
+        assert_eq!(
+            detail_children_sort("BoxSet"),
+            Some("ProductionYear,SortName")
+        );
+        assert_eq!(detail_children_sort("MusicAlbum"), Some("IndexNumber"));
+        assert_eq!(detail_children_sort("Movie"), None);
+    }
+
+    #[test]
     fn every_crumb_but_the_last_is_a_link_and_the_flag_moves_when_one_is_added() {
         let trail = crumb_trail(&["TV Shows"]);
         assert_eq!(trail, [(0, "TV Shows", true)]);
