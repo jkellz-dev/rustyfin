@@ -37,7 +37,7 @@ async fn show_with_two_seasons(app: &common::TestApp, lib: Uuid) -> Uuid {
     series
 }
 
-fn find<'a>(items: &'a Value, id: Uuid) -> &'a Value {
+fn find(items: &Value, id: Uuid) -> &Value {
     items
         .as_array()
         .unwrap()
