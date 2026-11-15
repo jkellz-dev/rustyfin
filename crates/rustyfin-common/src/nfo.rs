@@ -77,6 +77,10 @@ struct MovieNfo {
     premiered: Option<String>,
     #[serde(default)]
     uniqueid: Vec<NfoUniqueId>,
+    tmdbid: Option<String>,
+    imdbid: Option<String>,
+    imdb_id: Option<String>,
+    tvdbid: Option<String>,
     #[serde(default)]
     actor: Vec<NfoActor>,
     #[serde(default)]
@@ -101,6 +105,10 @@ struct TvShowNfo {
     premiered: Option<String>,
     #[serde(default)]
     uniqueid: Vec<NfoUniqueId>,
+    tmdbid: Option<String>,
+    imdbid: Option<String>,
+    imdb_id: Option<String>,
+    tvdbid: Option<String>,
     #[serde(default)]
     actor: Vec<NfoActor>,
 }
@@ -195,6 +203,8 @@ struct NfoActor {
     name: Option<String>,
     role: Option<String>,
     order: Option<i32>,
+    /// Jellyfin's name for `order`.
+    sortorder: Option<i32>,
     thumb: Option<String>,
     tmdbid: Option<String>,
 }
@@ -355,7 +365,11 @@ pub fn parse_album_nfo(path: &Path) -> Option<NfoMetadata> {
 
 fn read_nfo(path: &Path) -> Option<String> {
     match std::fs::read_to_string(path) {
-        Ok(content) => Some(content),
+        // Jellyfin starts its NFOs with a UTF-8 byte-order mark.
+        Ok(content) => Some(match content.strip_prefix('\u{feff}') {
+            Some(rest) => rest.to_string(),
+            None => content,
+        }),
         Err(e) => {
             tracing::warn!("Failed to read NFO {}: {e}", path.display());
             None
@@ -380,6 +394,10 @@ fn movie_nfo_to_metadata(nfo: MovieNfo) -> NfoMetadata {
 
     apply_ratings(&nfo.ratings, &mut meta);
     apply_unique_ids(&nfo.uniqueid, &mut meta);
+    apply_plain_ids(
+        [&nfo.tmdbid, &nfo.imdbid, &nfo.imdb_id, &nfo.tvdbid],
+        &mut meta,
+    );
     apply_actors(&nfo.actor, &mut meta);
 
     for director in &nfo.director {
@@ -426,6 +444,10 @@ fn tvshow_nfo_to_metadata(nfo: TvShowNfo) -> NfoMetadata {
 
     apply_ratings(&nfo.ratings, &mut meta);
     apply_unique_ids(&nfo.uniqueid, &mut meta);
+    apply_plain_ids(
+        [&nfo.tmdbid, &nfo.imdbid, &nfo.imdb_id, &nfo.tvdbid],
+        &mut meta,
+    );
     apply_actors(&nfo.actor, &mut meta);
 
     meta
@@ -560,6 +582,41 @@ fn apply_unique_ids(ids: &[NfoUniqueId], meta: &mut NfoMetadata) {
     }
 }
 
+/// Ids as plain top-level elements, as Jellyfin's NFO saver writes them
+/// (`<tmdbid>802217</tmdbid>`, `<imdbid>`, `<imdb_id>`, `<tvdbid>`), used
+/// where `<uniqueid>` did not give them.
+fn apply_plain_ids(
+    [tmdbid, imdbid, imdb_id, tvdbid]: [&Option<String>; 4],
+    meta: &mut NfoMetadata,
+) {
+    let clean = |v: &Option<String>| {
+        v.as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+    };
+    if meta.tmdb_id.is_none() {
+        meta.tmdb_id = clean(tmdbid);
+    }
+    if meta.imdb_id.is_none() {
+        meta.imdb_id = clean(imdbid).or_else(|| clean(imdb_id));
+    }
+    if meta.tvdb_id.is_none() {
+        meta.tvdb_id = clean(tvdbid);
+    }
+}
+
+/// An actor photo another program can fetch: a web address. Jellyfin's NFO
+/// saver writes paths inside its own config volume
+/// (`/config/metadata/People/N/Name/folder.jpg`), which nothing else can read.
+fn fetchable_photo(thumb: &Option<String>) -> Option<String> {
+    thumb
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| t.starts_with("https://") || t.starts_with("http://"))
+        .map(str::to_string)
+}
+
 fn apply_actors(actors: &[NfoActor], meta: &mut NfoMetadata) {
     for (i, actor) in actors.iter().enumerate() {
         let Some(ref name) = actor.name else { continue };
@@ -571,8 +628,8 @@ fn apply_actors(actors: &[NfoActor], meta: &mut NfoMetadata) {
             name: name.clone(),
             person_type: "Actor".to_string(),
             role: actor.role.clone(),
-            sort_order: actor.order.or(Some(i as i32)),
-            image_url: actor.thumb.clone(),
+            sort_order: actor.order.or(actor.sortorder).or(Some(i as i32)),
+            image_url: fetchable_photo(&actor.thumb),
             provider_person_id,
         });
     }
