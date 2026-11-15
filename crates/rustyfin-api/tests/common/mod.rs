@@ -35,15 +35,24 @@ pub struct TestApp {
 impl TestApp {
     /// Create a new test app with a random Postgres schema and all migrations applied.
     pub async fn new() -> Self {
-        Self::build(None).await
+        Self::build(None, None).await
     }
 
     /// A test app whose people headshots come from `dir`.
     pub async fn with_people_cache_dir(dir: PathBuf) -> Self {
-        Self::build(Some(dir)).await
+        Self::build(Some(dir), None).await
     }
 
-    async fn build(people_cache_dir: Option<PathBuf>) -> Self {
+    /// A test app whose database pool gives up waiting for a connection after
+    /// `timeout` (sqlx's default is 30 s).
+    pub async fn with_acquire_timeout(timeout: std::time::Duration) -> Self {
+        Self::build(None, Some(timeout)).await
+    }
+
+    async fn build(
+        people_cache_dir: Option<PathBuf>,
+        acquire_timeout: Option<std::time::Duration>,
+    ) -> Self {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://rustyfin:rustyfin@localhost:5432/rustyfin".to_string());
 
@@ -67,6 +76,7 @@ impl TestApp {
         let schema_clone = schema.clone();
         let pool = PgPoolOptions::new()
             .max_connections(5)
+            .acquire_timeout(acquire_timeout.unwrap_or(std::time::Duration::from_secs(30)))
             .after_connect(move |conn, _meta| {
                 let schema = schema_clone.clone();
                 Box::pin(async move {
