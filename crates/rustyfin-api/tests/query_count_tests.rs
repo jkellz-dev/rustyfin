@@ -106,8 +106,28 @@ impl Subscriber for QueryCounter {
     }
 }
 
+/// One measurement at a time across this file's tests. Each test thread sets
+/// its own counting subscriber; while several are being set and dropped at
+/// once, tracing's shared callsite interest can briefly leave a run seeing no
+/// events at all ("0 queries for 2 of each"), which says nothing about the
+/// route. Measuring one request at a time removes that race.
+static MEASURING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// GET `path` and list the queries it ran (images: any answer but a 5xx).
+/// Every route runs at least its sign-in check, so a run that saw nothing was
+/// not measured; it is measured again (up to three times).
 async fn queries(app: &common::TestApp, path: &str, token: &str) -> Vec<String> {
+    let _one_at_a_time = MEASURING.lock().await;
+    for _ in 0..3 {
+        let seen = measure(app, path, token).await;
+        if !seen.is_empty() {
+            return seen;
+        }
+    }
+    panic!("{path}: no queries seen in three runs; the counter is not recording");
+}
+
+async fn measure(app: &common::TestApp, path: &str, token: &str) -> Vec<String> {
     // Once unmeasured first: the session's activity stamp (written at most once
     // a minute) and other first-touch work would otherwise land in the count.
     let _ = app.get_bytes(path, token).await;
