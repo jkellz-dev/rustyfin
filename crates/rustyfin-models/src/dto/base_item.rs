@@ -533,7 +533,8 @@ pub struct DashboardStats {
 pub struct SystemHealth {
     pub database: DatabaseHealth,
     pub search: SearchHealth,
-    pub storage: Vec<StorageHealth>,
+    pub libraries: Vec<LibraryHealth>,
+    pub caches: Vec<CacheHealth>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -557,19 +558,35 @@ pub struct SearchHealth {
 }
 
 /// A library or cache folder.
+/// A library's folders: `Status` is the worst of them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct StorageHealth {
-    pub path: String,
-    /// The libraries using the folder (empty for caches).
-    pub libraries: Vec<String>,
-    /// What the folder is: its libraries, or the cache's name.
-    pub label: String,
-    /// `Ok`, `Low` (under 10% free), `Empty` (a library folder with nothing
-    /// in it: an unmounted share?), `Missing`, `Unreadable`, `Unresponsive`.
+pub struct LibraryHealth {
+    pub name: String,
     pub status: String,
-    pub total_bytes: Option<u64>,
-    pub free_bytes: Option<u64>,
+    pub folders: Vec<FolderHealth>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct FolderHealth {
+    pub path: String,
+    /// `Ok`, `Empty` (nothing in it: an unmounted share?), `Missing`,
+    /// `Unreadable`, `Unresponsive`.
+    pub status: String,
+}
+
+/// How much a cache holds (counted at most every few minutes).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CacheHealth {
+    pub name: String,
+    pub path: String,
+    /// `Ok`, `Counting` (the first count is still running), `Missing`,
+    /// `Unreadable`.
+    pub status: String,
+    pub size_bytes: Option<u64>,
+    pub file_count: Option<u64>,
 }
 
 /// A library's dashboard card.

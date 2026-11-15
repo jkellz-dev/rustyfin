@@ -136,16 +136,20 @@ async fn collect(state: &AppState) {
         .set(f64::from(db.pool_size.saturating_sub(db.pool_idle)));
     metrics::gauge!("rustyfin_search_up", "backend" => health.search.backend.clone())
         .set(if health.search.ok { 1.0 } else { 0.0 });
-    for s in &health.storage {
-        let labels = [("path", s.path.clone()), ("label", s.label.clone())];
-        metrics::gauge!("rustyfin_storage_ok", &labels).set(if s.status == "Ok" {
-            1.0
-        } else {
-            0.0
-        });
-        if let (Some(total), Some(free)) = (s.total_bytes, s.free_bytes) {
-            metrics::gauge!("rustyfin_storage_total_bytes", &labels).set(total as f64);
-            metrics::gauge!("rustyfin_storage_free_bytes", &labels).set(free as f64);
+    for lib in &health.libraries {
+        for f in &lib.folders {
+            let labels = [("library", lib.name.clone()), ("path", f.path.clone())];
+            metrics::gauge!("rustyfin_library_folder_ok", &labels).set(if f.status == "Ok" {
+                1.0
+            } else {
+                0.0
+            });
+        }
+    }
+    for c in &health.caches {
+        if let (Some(bytes), Some(files)) = (c.size_bytes, c.file_count) {
+            metrics::gauge!("rustyfin_cache_bytes", "cache" => c.name.clone()).set(bytes as f64);
+            metrics::gauge!("rustyfin_cache_files", "cache" => c.name.clone()).set(files as f64);
         }
     }
 }

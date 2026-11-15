@@ -82,7 +82,9 @@ pub struct SystemHealth {
     pub database: DatabaseHealth,
     pub search: SearchHealth,
     #[serde(default)]
-    pub storage: Vec<StorageHealth>,
+    pub libraries: Vec<LibraryHealth>,
+    #[serde(default)]
+    pub caches: Vec<CacheHealth>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -110,15 +112,31 @@ pub struct SearchHealth {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct StorageHealth {
-    pub path: String,
-    #[serde(default)]
-    pub label: String,
+pub struct LibraryHealth {
+    pub name: String,
     pub status: String,
     #[serde(default)]
-    pub total_bytes: Option<u64>,
+    pub folders: Vec<FolderHealth>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct FolderHealth {
+    pub path: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CacheHealth {
+    pub name: String,
     #[serde(default)]
-    pub free_bytes: Option<u64>,
+    pub path: String,
+    pub status: String,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub file_count: Option<u64>,
 }
 
 /// A library's dashboard card.

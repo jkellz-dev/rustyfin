@@ -1050,7 +1050,9 @@ validation, and polish needed for daily use.
 - [ ] Active sessions / "now playing" widget (backend at `/Sessions` exists)
 - [ ] Library cards show item counts and last scan time
 - [ ] Recent additions widget (latest items added across libraries)
-- [ ] System health indicators (DB connection, Meilisearch status, disk usage)
+- [x] System health indicators (DB connection, Meilisearch status, library folders, cache sizes; free space dropped: the
+      libraries share two disks)
+- [x] Prometheus metrics on their own listener (`[metrics] listen`)
 
 ### 12b. Real-Time Feedback
 

@@ -99,6 +99,24 @@ The server creates all tables automatically via migrations at startup — no man
 
 If omitted, search falls back to PostgreSQL `ILIKE` queries.
 
+### `[metrics]` (optional)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `listen` | `String` | --- | Address for Prometheus `GET /metrics`, e.g. `0.0.0.0:9090` |
+
+Metrics get their own listener and are never served on the public port. Unset, there are none. Series:
+
+- `rustyfin_http_requests_total{method,route,status}`, `rustyfin_http_request_duration_seconds` (by route template)
+- `rustyfin_scans_total{library,result}`, `rustyfin_scan_duration_seconds`, `rustyfin_scan_items_total{library,outcome}`
+- `rustyfin_login_failures_total`, `rustyfin_login_throttled_total`
+- `rustyfin_library_items{library,type}`, `rustyfin_library_last_scan_timestamp_seconds{library}`
+- `rustyfin_users`, `rustyfin_sessions_active`, `rustyfin_sessions_playing`, `rustyfin_transcodes_active`
+- `rustyfin_db_up`, `rustyfin_db_latency_seconds`, `rustyfin_db_pool_connections{state}`, `rustyfin_search_up{backend}`
+- `rustyfin_library_folder_ok{library,path}` (0 when a folder is missing, empty, unreadable or hung)
+- `rustyfin_cache_bytes{cache}`, `rustyfin_cache_files{cache}` (recounted at most every 5 minutes)
+- `rustyfin_up`, `rustyfin_build_info{version}`
+
 ### `[metadata]`
 
 | Field | Type | Default | Description |

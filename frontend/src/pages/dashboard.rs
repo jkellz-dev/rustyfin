@@ -4,8 +4,8 @@ use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::dashboard_view;
 use crate::types::{
-    ActivityLogEntry, BaseItemDto, DashboardStats, LibraryStats, SessionInfo, StorageHealth,
-    SystemInfo,
+    ActivityLogEntry, BaseItemDto, CacheHealth, DashboardStats, LibraryHealth, LibraryStats,
+    SessionInfo, SystemInfo,
 };
 
 /// Seconds since an ISO date, by the browser's clock (None if unparsable).
@@ -172,7 +172,8 @@ pub fn Dashboard() -> View {
                             Some(d) => format!("{}: {d}", search.backend),
                             None => search.backend.clone(),
                         };
-                        let storage = health.storage.clone();
+                        let libraries = health.libraries.clone();
+                        let caches = health.caches.clone();
                         view! {
                             h3(class="dashboard-heading") { "System health" }
                             div(class="card health-list") {
@@ -187,15 +188,39 @@ pub fn Dashboard() -> View {
                                     span(class="text-muted health-detail") { (search_text) }
                                 }
                                 Indexed(
-                                    list=move || storage.clone(),
-                                    view=move |s: StorageHealth| {
-                                        let dot = dashboard_view::health_class(&s.status);
-                                        let detail = dashboard_view::storage_detail(&s.status, s.total_bytes, s.free_bytes);
-                                        let title = s.path.clone();
+                                    list=move || libraries.clone(),
+                                    view=move |l: LibraryHealth| {
+                                        let dot = dashboard_view::health_class(&l.status);
+                                        let folders: Vec<(String, String)> = l
+                                            .folders
+                                            .iter()
+                                            .map(|f| (f.path.clone(), f.status.clone()))
+                                            .collect();
+                                        let detail = dashboard_view::library_detail(&l.status, &folders);
+                                        let title = folders
+                                            .iter()
+                                            .map(|(p, _)| p.as_str())
+                                            .collect::<Vec<_>>()
+                                            .join("\n");
                                         view! {
                                             div(class="health-row", title=title) {
                                                 span(class=dot) {}
-                                                span(class="health-name") { (s.label) }
+                                                span(class="health-name") { (l.name) }
+                                                span(class="text-muted health-detail") { (detail) }
+                                            }
+                                        }
+                                    }
+                                )
+                                Indexed(
+                                    list=move || caches.clone(),
+                                    view=move |c: CacheHealth| {
+                                        let dot = dashboard_view::health_class(&c.status);
+                                        let detail = dashboard_view::cache_detail(&c.status, c.size_bytes, c.file_count);
+                                        let title = c.path.clone();
+                                        view! {
+                                            div(class="health-row", title=title) {
+                                                span(class=dot) {}
+                                                span(class="health-name") { (c.name) }
                                                 span(class="text-muted health-detail") { (detail) }
                                             }
                                         }

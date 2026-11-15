@@ -1,12 +1,17 @@
 //! System health for the dashboard (roadmap 12a): the database, the search
-//! backend, and the folders the server reads and writes.
+//! backend, each library's folders, and how much each cache holds. Free disk
+//! space is not reported: the libraries share two disks, so it repeated the
+//! same numbers on every row (owner, 2026-11-15).
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use rustyfin_db::repo::libraries::LibraryRow;
-use rustyfin_models::dto::{DatabaseHealth, SearchHealth, StorageHealth, SystemHealth};
+use rustyfin_models::dto::{
+    CacheHealth, DatabaseHealth, FolderHealth, LibraryHealth, SearchHealth, SystemHealth,
+};
 
 use crate::router::AppState;
 
@@ -14,8 +19,13 @@ use crate::router::AppState;
 /// (a hung network share must not hang the dashboard).
 const FOLDER_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Below this share of free space a folder's disk is reported as low.
-const LOW_FREE_FRACTION: f64 = 0.10;
+/// A cache's size is counted again after this long; walking a large cache
+/// on every dashboard load or scrape would cost more than it tells.
+const CACHE_SIZE_TTL: Duration = Duration::from_secs(5 * 60);
+
+/// How long a request waits for a cache count before answering without it
+/// (the count carries on in the background and is used next time).
+const CACHE_COUNT_WAIT: Duration = Duration::from_secs(5);
 
 /// The whole report.
 pub async fn system_health(state: &AppState, libs: &[LibraryRow]) -> SystemHealth {
@@ -26,25 +36,36 @@ pub async fn system_health(state: &AppState, libs: &[LibraryRow]) -> SystemHealt
         ok: search.ok,
         detail: search.detail,
     };
-    let mut storage = Vec::new();
-    for (path, names) in library_folders(libs) {
-        storage.push(folder_health(path, names, true).await);
+    let mut libraries = Vec::new();
+    for lib in libs {
+        let mut folders = Vec::new();
+        for path in &lib.paths {
+            folders.push(FolderHealth {
+                path: path.clone(),
+                status: folder_status(PathBuf::from(path)).await.to_string(),
+            });
+        }
+        let status = folders
+            .iter()
+            .map(|f| f.status.as_str())
+            .max_by_key(|s| severity(s))
+            .unwrap_or("Ok")
+            .to_string();
+        libraries.push(LibraryHealth {
+            name: lib.name.clone(),
+            status,
+            folders,
+        });
     }
-    storage.push(
-        folder_health(
-            state.image_cache_dir.clone(),
-            vec!["Image cache".to_string()],
-            false,
-        )
-        .await,
-    );
+    let mut caches = vec![cache_health("Image cache", state.image_cache_dir.clone()).await];
     if let Some(people) = &state.people_cache_dir {
-        storage.push(folder_health(people.clone(), vec!["People cache".to_string()], false).await);
+        caches.push(cache_health("People cache", people.clone()).await);
     }
     SystemHealth {
         database,
         search,
-        storage,
+        libraries,
+        caches,
     }
 }
 
@@ -60,81 +81,161 @@ async fn database_health(state: &AppState) -> DatabaseHealth {
     }
 }
 
-/// Every library folder with the libraries that use it, by path.
-fn library_folders(libs: &[LibraryRow]) -> BTreeMap<PathBuf, Vec<String>> {
-    let mut folders: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
-    for lib in libs {
-        for path in &lib.paths {
-            folders
-                .entry(PathBuf::from(path))
-                .or_default()
-                .push(lib.name.clone());
-        }
+/// How bad a status is; a library shows its worst folder's.
+fn severity(status: &str) -> u8 {
+    match status {
+        "Ok" => 0,
+        "Empty" => 1,
+        "Missing" => 2,
+        "Unreadable" => 3,
+        _ => 4,
     }
-    folders
 }
 
-/// One folder's state: missing, empty (a library folder only: an unmounted
-/// share looks like that), unresponsive, short of space, or fine.
-async fn folder_health(path: PathBuf, labels: Vec<String>, is_library: bool) -> StorageHealth {
-    let probe = {
-        let path = path.clone();
-        tokio::time::timeout(
-            FOLDER_TIMEOUT,
-            tokio::task::spawn_blocking(move || probe_folder(&path)),
-        )
-        .await
-    };
-    let (status, total, free) = match probe {
-        Err(_) => ("Unresponsive", None, None),
-        Ok(Err(_)) => ("Unreadable", None, None),
-        Ok(Ok(Probe::Missing)) => ("Missing", None, None),
-        Ok(Ok(Probe::Unreadable)) => ("Unreadable", None, None),
-        Ok(Ok(Probe::Present { empty, total, free })) => {
-            let status = if is_library && empty {
-                "Empty"
-            } else if total > 0 && (free as f64) < total as f64 * LOW_FREE_FRACTION {
-                "Low"
-            } else {
-                "Ok"
-            };
-            (status, Some(total), Some(free))
-        }
-    };
-    StorageHealth {
-        path: path.to_string_lossy().to_string(),
-        libraries: if is_library {
-            labels.clone()
+/// A library folder: `Ok`, `Empty` (an unmounted share looks like that),
+/// `Missing`, `Unreadable` or `Unresponsive`.
+async fn folder_status(path: PathBuf) -> &'static str {
+    let probe = tokio::time::timeout(
+        FOLDER_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            if !path.is_dir() {
+                return "Missing";
+            }
+            match std::fs::read_dir(&path) {
+                Ok(mut entries) if entries.next().is_none() => "Empty",
+                Ok(_) => "Ok",
+                Err(_) => "Unreadable",
+            }
+        }),
+    )
+    .await;
+    match probe {
+        Err(_) => "Unresponsive",
+        Ok(Err(_)) => "Unreadable",
+        Ok(Ok(status)) => status,
+    }
+}
+
+/// A cache count: status, bytes, files.
+#[derive(Clone, Copy)]
+struct CacheCount {
+    status: &'static str,
+    bytes: u64,
+    files: u64,
+}
+
+/// Last counts by cache folder, and whether a count is running.
+#[derive(Default)]
+struct CacheEntry {
+    counted: Option<(Instant, CacheCount)>,
+    running: Option<Arc<tokio::sync::Notify>>,
+}
+
+static CACHE_COUNTS: LazyLock<Mutex<HashMap<PathBuf, CacheEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// A cache's size and file count, recounted at most every [`CACHE_SIZE_TTL`].
+/// A count still running after [`CACHE_COUNT_WAIT`] answers with the last
+/// one, or `Counting` the first time.
+async fn cache_health(name: &str, path: PathBuf) -> CacheHealth {
+    let (fresh, last, wait) = {
+        let mut counts = CACHE_COUNTS.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = counts.entry(path.clone()).or_default();
+        let last = entry.counted.map(|(_, c)| c);
+        let fresh = entry
+            .counted
+            .is_some_and(|(at, _)| at.elapsed() < CACHE_SIZE_TTL);
+        let wait = if fresh {
+            None
+        } else if let Some(n) = &entry.running {
+            Some(n.clone())
         } else {
-            Vec::new()
-        },
-        label: labels.join(", "),
-        status: status.to_string(),
-        total_bytes: total,
-        free_bytes: free,
-    }
-}
-
-enum Probe {
-    Missing,
-    Unreadable,
-    Present { empty: bool, total: u64, free: u64 },
-}
-
-fn probe_folder(path: &Path) -> Probe {
-    if !path.is_dir() {
-        return Probe::Missing;
-    }
-    let empty = match std::fs::read_dir(path) {
-        Ok(mut entries) => entries.next().is_none(),
-        Err(_) => return Probe::Unreadable,
+            let done = Arc::new(tokio::sync::Notify::new());
+            entry.running = Some(done.clone());
+            let (dir, notify) = (path.clone(), done.clone());
+            tokio::task::spawn_blocking(move || {
+                let count = count_cache(&dir);
+                let mut counts = CACHE_COUNTS.lock().unwrap_or_else(|e| e.into_inner());
+                let entry = counts.entry(dir).or_default();
+                entry.counted = Some((Instant::now(), count));
+                entry.running = None;
+                notify.notify_waiters();
+            });
+            Some(done)
+        };
+        (fresh, last, wait)
     };
-    match rustix::fs::statvfs(path) {
-        Ok(vfs) => Probe::Present {
-            empty,
-            total: vfs.f_blocks.saturating_mul(vfs.f_frsize),
-            free: vfs.f_bavail.saturating_mul(vfs.f_frsize),
-        },
-        Err(_) => Probe::Unreadable,
+    let count = if fresh {
+        last
+    } else {
+        if let Some(done) = wait {
+            let notified = done.notified();
+            // The count may have finished between taking the lock and here.
+            let finished = CACHE_COUNTS
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&path)
+                .is_some_and(|e| e.running.is_none());
+            if !finished {
+                let _ = tokio::time::timeout(CACHE_COUNT_WAIT, notified).await;
+            }
+        }
+        CACHE_COUNTS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&path)
+            .and_then(|e| e.counted.map(|(_, c)| c))
+            .or(last)
+    };
+    let (status, size_bytes, file_count) = match count {
+        Some(c) if c.status == "Ok" => ("Ok", Some(c.bytes), Some(c.files)),
+        Some(c) => (c.status, None, None),
+        None => ("Counting", None, None),
+    };
+    CacheHealth {
+        name: name.to_string(),
+        path: path.to_string_lossy().to_string(),
+        status: status.to_string(),
+        size_bytes,
+        file_count,
+    }
+}
+
+/// Walk a cache folder: total bytes and files. Symlinks are not followed.
+fn count_cache(root: &Path) -> CacheCount {
+    if !root.is_dir() {
+        return CacheCount {
+            status: "Missing",
+            bytes: 0,
+            files: 0,
+        };
+    }
+    let (mut bytes, mut files) = (0u64, 0u64);
+    let mut dirs = vec![root.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            if dir == root {
+                return CacheCount {
+                    status: "Unreadable",
+                    bytes: 0,
+                    files: 0,
+                };
+            }
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                dirs.push(entry.path());
+            } else if meta.is_file() {
+                bytes = bytes.saturating_add(meta.len());
+                files += 1;
+            }
+        }
+    }
+    CacheCount {
+        status: "Ok",
+        bytes,
+        files,
     }
 }

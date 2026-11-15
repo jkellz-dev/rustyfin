@@ -67,28 +67,63 @@ pub fn bytes_label(bytes: u64) -> String {
     }
 }
 
-/// A health row's dot: green when fine, amber for low space or an empty
-/// library folder, red when something is down or gone.
+/// A health row's dot: green when fine, amber for an empty library folder or
+/// a cache still being counted, red when something is down or gone.
 pub fn health_class(status: &str) -> &'static str {
     match status {
         "Ok" => "health-dot health-ok",
-        "Low" | "Empty" => "health-dot health-warn",
+        "Empty" | "Counting" => "health-dot health-warn",
         _ => "health-dot health-bad",
     }
 }
 
-/// A storage row's detail: free space, or what is wrong.
-pub fn storage_detail(status: &str, total: Option<u64>, free: Option<u64>) -> String {
-    let space = match (total, free) {
-        (Some(t), Some(f)) => format!("{} free of {}", bytes_label(f), bytes_label(t)),
-        _ => String::new(),
-    };
+/// What is wrong with a folder, in words.
+fn folder_problem(status: &str) -> &'static str {
     match status {
-        "Ok" => space,
-        "Low" => format!("Low on space: {space}"),
-        "Empty" => "Empty: is the share mounted?".to_string(),
-        "Missing" => "Folder not found".to_string(),
-        "Unresponsive" => "Not answering (hung network share?)".to_string(),
+        "Empty" => "empty: is the share mounted?",
+        "Missing" => "not found",
+        "Unresponsive" => "not answering (hung network share?)",
+        _ => "cannot be read",
+    }
+}
+
+/// A library row's detail: its folder count when all is well, otherwise the
+/// first folder in the worst state and what is wrong with it.
+pub fn library_detail(status: &str, folders: &[(String, String)]) -> String {
+    if status == "Ok" {
+        return match folders.len() {
+            1 => "1 folder".to_string(),
+            n => format!("{n} folders"),
+        };
+    }
+    match folders.iter().find(|(_, s)| s == status) {
+        Some((path, s)) => format!("{path}: {}", folder_problem(s)),
+        None => folder_problem(status).to_string(),
+    }
+}
+
+/// A whole number with thousands separators: 3456 -> "3,456".
+pub fn count_label(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// A cache row's detail: how much it holds, or what is wrong.
+pub fn cache_detail(status: &str, size: Option<u64>, files: Option<u64>) -> String {
+    match (status, size, files) {
+        ("Ok", Some(bytes), Some(1)) => format!("{} in 1 file", bytes_label(bytes)),
+        ("Ok", Some(bytes), Some(n)) => {
+            format!("{} in {} files", bytes_label(bytes), count_label(n))
+        }
+        ("Counting", _, _) => "Counting…".to_string(),
+        ("Missing", _, _) => "Folder not found".to_string(),
         _ => "Cannot be read".to_string(),
     }
 }
@@ -152,19 +187,38 @@ mod tests {
         assert_eq!(health_class("Ok"), "health-dot health-ok");
         assert_eq!(health_class("Empty"), "health-dot health-warn");
         assert_eq!(health_class("Missing"), "health-dot health-bad");
+        assert_eq!(health_class("Counting"), "health-dot health-warn");
+        let folders = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+            list.iter()
+                .map(|(p, s)| (p.to_string(), s.to_string()))
+                .collect()
+        };
         assert_eq!(
-            storage_detail("Ok", Some(2_000_000_000_000), Some(500_000_000_000)),
-            "500 GB free of 2.0 TB"
+            library_detail("Ok", &folders(&[("/a", "Ok"), ("/b", "Ok")])),
+            "2 folders"
+        );
+        assert_eq!(library_detail("Ok", &folders(&[("/a", "Ok")])), "1 folder");
+        assert_eq!(
+            library_detail(
+                "Empty",
+                &folders(&[("/a", "Ok"), ("/mnt/media/music", "Empty")])
+            ),
+            "/mnt/media/music: empty: is the share mounted?"
         );
         assert_eq!(
-            storage_detail("Low", Some(1_000_000_000), Some(50_000_000)),
-            "Low on space: 50.0 MB free of 1.0 GB"
+            library_detail("Missing", &folders(&[("/gone", "Missing")])),
+            "/gone: not found"
         );
+        assert_eq!(count_label(7), "7");
+        assert_eq!(count_label(3456), "3,456");
+        assert_eq!(count_label(1_234_567), "1,234,567");
         assert_eq!(
-            storage_detail("Empty", Some(1), Some(1)),
-            "Empty: is the share mounted?"
+            cache_detail("Ok", Some(1_200_000_000), Some(3456)),
+            "1.2 GB in 3,456 files"
         );
-        assert_eq!(storage_detail("Missing", None, None), "Folder not found");
+        assert_eq!(cache_detail("Ok", Some(512), Some(1)), "512 B in 1 file");
+        assert_eq!(cache_detail("Counting", None, None), "Counting…");
+        assert_eq!(cache_detail("Missing", None, None), "Folder not found");
     }
 
     #[test]
