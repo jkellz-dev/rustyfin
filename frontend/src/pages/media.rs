@@ -290,10 +290,25 @@ pub fn Media() -> View {
             return;
         }
         search_loading.set(true);
+        // Inside a library, search that library; from Libraries, everything.
+        let crumbs = breadcrumbs.get_clone();
+        let scope = browse::search_scope(crumbs.first().and_then(|c| c.parent_id.as_deref()));
+        if scope.is_some() {
+            let query = current_query.get();
+            breadcrumbs.update(|bc| {
+                bc.retain(|c| !c.is_detail);
+                bc.push(Breadcrumb {
+                    label: browse::search_crumb_label(&term),
+                    parent_id: None,
+                    query,
+                    is_detail: true,
+                });
+            });
+        }
         current_view.set(MediaView::Search);
         spawn_local({
             async move {
-                match api::search_hints(&term).await {
+                match api::search_hints(&term, scope.as_deref()).await {
                     Ok(result) => search_results.set(result.search_hints),
                     Err(e) => error.set(Some(e)),
                 }

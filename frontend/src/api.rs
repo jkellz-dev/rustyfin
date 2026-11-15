@@ -286,7 +286,14 @@ pub async fn stop_scheduled_task(task_id: &str) -> Result<(), String> {
 
 // ── Search API ───────────────────────────────────────────
 
-pub async fn search_hints(term: &str) -> Result<SearchHintResult, String> {
+/// Search everything, or one library (`parent_id`).
+pub async fn search_hints(term: &str, parent_id: Option<&str>) -> Result<SearchHintResult, String> {
     let encoded = url_encode(term);
-    get_json(&format!("/Search/Hints?SearchTerm={encoded}&Limit=20")).await
+    let scope = parent_id
+        .map(|p| format!("&ParentId={p}"))
+        .unwrap_or_default();
+    get_json(&format!(
+        "/Search/Hints?SearchTerm={encoded}&Limit=40{scope}"
+    ))
+    .await
 }

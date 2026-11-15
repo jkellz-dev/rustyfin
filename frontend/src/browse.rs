@@ -92,6 +92,19 @@ pub fn grid_classes(item_type: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// The library a search is scoped to: the one the breadcrumbs start in
+/// (none from the Libraries page, which searches everything).
+pub fn search_scope(first_crumb_parent: Option<&str>) -> Option<String> {
+    first_crumb_parent
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+}
+
+/// The breadcrumb naming a search.
+pub fn search_crumb_label(term: &str) -> String {
+    format!("Search: {}", term.trim())
+}
+
 /// A search result thumbnail's class: episodes landscape, music square, the
 /// rest posters.
 pub fn search_thumb_class(item_type: &str) -> &'static str {
@@ -171,6 +184,13 @@ pub fn crumb_trail<T: Clone>(crumbs: &[T]) -> Vec<(usize, T, bool)> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn search_is_scoped_to_the_library_the_crumbs_start_in() {
+        assert_eq!(search_scope(Some("lib-1")).as_deref(), Some("lib-1"));
+        assert_eq!(search_scope(Some("")), None);
+        assert_eq!(search_scope(None), None);
+        assert_eq!(search_crumb_label(" buddy "), "Search: buddy");
+    }
     #[test]
     fn search_thumbnails_keep_each_item_shape() {
         assert_eq!(

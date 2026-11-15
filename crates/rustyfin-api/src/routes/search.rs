@@ -23,6 +23,8 @@ pub struct SearchQuery {
     pub include_genres: Option<bool>,
     pub include_studios: Option<bool>,
     pub include_artists: Option<bool>,
+    /// Only results in this library (Jellyfin's `ParentId`).
+    pub parent_id: Option<Uuid>,
 }
 
 /// `GET /Search/Hints` — Search across all media.
@@ -44,13 +46,19 @@ pub async fn search_hints(
         .await
         .map_err(ApiError::Database)?;
 
+    // Results are filtered below (access, library), so ask for more.
+    let wanted = if query.parent_id.is_some() {
+        limit * 5
+    } else {
+        limit
+    };
     let hits = state
         .search_service
-        .search(&query.search_term, limit, item_types.as_deref())
+        .search(&query.search_term, wanted, item_types.as_deref())
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Filter by library access
+    // Filter by library access, and to the library asked for.
     let hits: Vec<_> = hits
         .into_iter()
         .filter(|hit| {
@@ -58,6 +66,12 @@ pub async fn search_hints(
                 .as_ref()
                 .is_none_or(|ids| hit.library_id.is_none_or(|lid| ids.contains(&lid)))
         })
+        .filter(|hit| {
+            query
+                .parent_id
+                .is_none_or(|pid| hit.library_id == Some(pid))
+        })
+        .take(limit as usize)
         .collect();
 
     let mut hints: Vec<SearchHint> = hits

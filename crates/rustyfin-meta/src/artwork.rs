@@ -151,6 +151,125 @@ pub fn collections_needing_art(dirs: &[PathBuf], collections: &Path, force: bool
         .collect()
 }
 
+/// How long "TMDB has no art for this" is believed before asking again.
+const NO_ART_MEMORY: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
+
+/// What TMDB had no art for when last asked (`movie:<id>` / `tv:<id>` to unix
+/// seconds), kept as `.tmdb-no-art.json` in the collections folder on the
+/// cache volume, so a run does not ask TMDB again about every film it has no
+/// backdrop for (owner, 2026-11-15).
+pub struct NoArtMemory {
+    path: PathBuf,
+    asked: std::collections::BTreeMap<String, u64>,
+    changed: bool,
+}
+
+impl NoArtMemory {
+    pub fn load(dir: &Path) -> Self {
+        let path = dir.join(".tmdb-no-art.json");
+        let asked = std::fs::read(&path)
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
+        NoArtMemory {
+            path,
+            asked,
+            changed: false,
+        }
+    }
+
+    fn now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or_default()
+    }
+
+    /// Whether TMDB was asked about `key` within the memory and had nothing.
+    pub fn recently_lacking(&self, key: &str) -> bool {
+        self.asked
+            .get(key)
+            .is_some_and(|at| Self::now().saturating_sub(*at) < NO_ART_MEMORY.as_secs())
+    }
+
+    pub fn remember(&mut self, key: String) {
+        self.asked.insert(key, Self::now());
+        self.changed = true;
+    }
+
+    pub fn save(&self) {
+        if !self.changed {
+            return;
+        }
+        let write = || -> std::io::Result<()> {
+            if let Some(dir) = self.path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            let body = serde_json::to_vec(&self.asked).map_err(std::io::Error::other)?;
+            let tmp = self.path.with_extension("json.tmp");
+            std::fs::write(&tmp, body)?;
+            std::fs::rename(&tmp, &self.path)
+        };
+        if let Err(e) = write() {
+            tracing::warn!("cannot save {}: {e}", self.path.display());
+        }
+    }
+}
+
+/// The film or show folders of `root`, sorted.
+fn library_dirs(root: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+        .map_err(|e| anyhow::anyhow!("cannot read library folder {}: {e}", root.display()))?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_dir()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| !is_ignored_name(n))
+        })
+        .collect();
+    dirs.sort();
+    Ok(dirs)
+}
+
+/// Only the collection art of the films in `root` (`--collections-only`).
+pub async fn fill_collection_art(root: &Path, opts: &ScanOpts<'_>) -> anyhow::Result<ArtworkStats> {
+    let tmdb_key = opts.config.tmdb.api_key.clone();
+    if tmdb_key.is_none() && !opts.dry_run {
+        anyhow::bail!(
+            "A TMDB credential is required: set [tmdb] api_key (or RUSTYFIN__TMDB__API_KEY)"
+        );
+    }
+    let tmdb = tmdb_key.map(TmdbClient::new);
+    let limiter = RateLimiter::new(
+        opts.config.tmdb.rate_limit,
+        opts.config.tmdb.rate_window_secs,
+    );
+    let http = reqwest::Client::new();
+    let people_dir = PathBuf::from(crate::scan::expand_tilde(
+        &opts.config.output.people_cache_dir,
+    ));
+    let dirs = library_dirs(root)?;
+    let collections_dir = rustyfin_common::images::collection_art_dir(&people_dir);
+    let ids = collections_needing_art(&dirs, &collections_dir, opts.force);
+    let mut stats = ArtworkStats {
+        checked: dirs.len(),
+        ..Default::default()
+    };
+    fetch_collection_art(
+        &ids,
+        &collections_dir,
+        tmdb.as_ref(),
+        &limiter,
+        &http,
+        opts,
+        &mut stats,
+    )
+    .await;
+    Ok(stats)
+}
+
 /// TMDB's size for headshots: 632 px tall, about 50 KB.
 pub const HEADSHOT_SIZE: &str = "h632";
 
@@ -223,20 +342,10 @@ pub async fn fill_missing(
     let people_dir = PathBuf::from(crate::scan::expand_tilde(
         &opts.config.output.people_cache_dir,
     ));
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
-        .map_err(|e| anyhow::anyhow!("cannot read library folder {}: {e}", root.display()))?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_dir()
-                && p.file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| !is_ignored_name(n))
-        })
-        .collect();
-    dirs.sort();
+    let dirs = library_dirs(root)?;
 
     let collections_dir = rustyfin_common::images::collection_art_dir(&people_dir);
+    let mut no_art = NoArtMemory::load(&collections_dir);
     let collection_ids = if tv {
         Vec::new()
     } else {
@@ -300,6 +409,16 @@ pub async fn fill_missing(
             stats.no_id += 1;
             continue;
         };
+        let no_art_key = format!("{}:{id}", if tv { "tv" } else { "movie" });
+        if !need_credits
+            && !opts.force
+            && missing.seasons.is_empty()
+            && no_art.recently_lacking(&no_art_key)
+        {
+            // TMDB had nothing for what is missing when last asked.
+            stats.complete += 1;
+            continue;
+        }
         limiter.wait().await;
         if need_credits {
             limiter.wait().await;
@@ -325,6 +444,9 @@ pub async fn fill_missing(
             continue;
         };
 
+        if (missing.poster && art.poster.is_none()) || (missing.fanart && art.backdrop.is_none()) {
+            no_art.remember(no_art_key.clone());
+        }
         let mut wanted: Vec<(String, PathBuf)> = Vec::new();
         if missing.poster || opts.force {
             wanted.extend(art.poster.clone().map(|u| (u, dir.join("poster.jpg"))));
@@ -350,6 +472,7 @@ pub async fn fill_missing(
             }
         }
     }
+    no_art.save();
     fetch_collection_art(
         &collection_ids,
         &collections_dir,
@@ -492,6 +615,19 @@ mod tests {
         let collections = t.0.join("collections");
         assert_eq!(collections_needing_art(&dirs, &collections, false), [10]);
         assert_eq!(collections_needing_art(&dirs, &collections, true), [10, 20]);
+    }
+
+    #[test]
+    fn what_tmdb_lacked_is_remembered_across_runs() {
+        let t = Tree::new();
+        let mut memory = NoArtMemory::load(&t.0);
+        assert!(!memory.recently_lacking("movie:1"));
+        memory.remember("movie:1".to_string());
+        memory.save();
+        let again = NoArtMemory::load(&t.0);
+        assert!(again.recently_lacking("movie:1"));
+        assert!(!again.recently_lacking("movie:2"));
+        assert!(t.0.join(".tmdb-no-art.json").exists());
     }
 
     #[test]

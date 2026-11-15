@@ -56,6 +56,9 @@ enum Command {
         /// `movies` or `tvshows`
         #[arg(long, short = 't', default_value = "tvshows")]
         library_type: String,
+        /// Only fetch the art of the collections the films belong to.
+        #[arg(long)]
+        collections_only: bool,
     },
     /// Notify the server about changed paths
     Notify {
@@ -140,8 +143,16 @@ async fn main() -> anyhow::Result<()> {
                 tracing::warn!("Failed to notify server: {e}");
             }
         }
-        Command::Artwork { path, library_type } => {
-            let stats = artwork::fill_missing(&path, &library_type, &opts).await?;
+        Command::Artwork {
+            path,
+            library_type,
+            collections_only,
+        } => {
+            let stats = if collections_only {
+                artwork::fill_collection_art(&path, &opts).await?
+            } else {
+                artwork::fill_missing(&path, &library_type, &opts).await?
+            };
             tracing::info!(
                 "Done: checked={}, complete={}, downloaded={}, headshots={}, collections={}, no_id={}, errors={}",
                 stats.checked,
