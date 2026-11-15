@@ -1033,8 +1033,9 @@ Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh.
 - [ ] Check what Radarr's Kodi NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?)
 - [ ] Sidecar file beside each NFO (e.g. `<film>.rustyfin.json`): extra ids only (TMDB collection id, actor TMDB ids),
       written by `rustyfin artwork`/`fetch`, merged by the scanner; never a second copy of the NFO
-- [ ] Collections keyed by TMDB collection id when known; their poster and backdrop fetched into `rustyfin-cache`
-      (`collections/tmdb-<id>.jpg`), falling back to the earliest film's poster
+- [ ] Collections keyed by TMDB collection id when known; their art fetched into `rustyfin-cache` as one folder per
+      collection, `collections/<tmdb-id>/poster.jpg|backdrop.jpg|thumb.jpg|…` (owner, 2026-11-14), falling back to
+      the earliest film's poster
 - [ ] Cast without an NFO actor id gets its TMDB id from the sidecar, so headshots are `tmdb-<id>.jpg` not `img-<hash>`
 
 ## Phase 12 — UI Polish & Interactivity
