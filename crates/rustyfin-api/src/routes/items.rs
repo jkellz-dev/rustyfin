@@ -62,6 +62,8 @@ pub struct ItemsQuery {
     pub enable_total_record_count: Option<bool>,
     /// `IsPlayed`, `IsUnplayed`, `IsFavorite`, `IsResumable` (comma list).
     pub filters: Option<String>,
+    /// `Video`, `Audio` (comma list): Continue Watching asks for Video.
+    pub media_types: Option<String>,
 }
 
 /// What `Filters` asks for: (played, favourite, resumable).
@@ -278,6 +280,9 @@ pub(crate) async fn attach_user_data(pool: &sqlx::PgPool, user_id: Uuid, dtos: &
         if counts_children(dto) {
             let (total, unplayed) = progress.get(&dto.id).copied().unwrap_or((0, 0));
             folder_user_data(&mut ud, total, unplayed);
+            // Clients badge a show with this (episodes) minus those watched;
+            // without it Plezy falls back to ChildCount, the seasons.
+            dto.recursive_item_count = Some(total as i32);
         }
         dto.user_data = Some(ud);
     }
@@ -1244,6 +1249,7 @@ pub async fn get_resume_items(
         .map_err(ApiError::Database)?;
     let wanted_types = parse_comma_delimited(&query.include_item_types);
     let excluded_types = parse_comma_delimited(&query.exclude_item_types);
+    let wanted_media = parse_comma_delimited(&query.media_types);
 
     // The items in one query, then in resume order.
     let resume_ids: Vec<Uuid> = resume_data.iter().map(|(_, id)| *id).collect();
@@ -1277,6 +1283,11 @@ pub async fn get_resume_items(
                 continue;
             }
             if excluded_types.contains(&item.item_type) {
+                continue;
+            }
+            if !wanted_media.is_empty()
+                && !media_type_for(&item.item_type).is_some_and(|m| wanted_media.contains(&m))
+            {
                 continue;
             }
             if dtos.len() as i64 >= limit {

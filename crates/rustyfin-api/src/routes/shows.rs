@@ -30,6 +30,8 @@ pub struct NextUpQuery {
     pub enable_user_data: Option<bool>,
     pub enable_rewatching: Option<bool>,
     pub disable_first_episode: Option<bool>,
+    /// Only shows watched since then (Jellyfin): Plezy sends a year ago.
+    pub next_up_date_cutoff: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -84,14 +86,23 @@ pub async fn get_next_up(
             .map_err(ApiError::Database)?;
 
     // The next episode of every series, in one query
-    let active_ids: Vec<Uuid> = active_series.iter().map(|(id, _)| *id).collect();
+    let active_ids: Vec<Uuid> = active_series
+        .iter()
+        .filter(|(_, last)| {
+            query
+                .next_up_date_cutoff
+                .is_none_or(|cutoff| *last >= cutoff)
+        })
+        .map(|(id, _)| *id)
+        .collect();
     let mut next_episodes = media_items::get_next_episodes(&state.pool, auth.user_id, &active_ids)
         .await
         .map_err(ApiError::Database)?;
 
     // Shows the user never started come after the ones in progress, newest first,
     // unless the client asked to leave them out.
-    if !query.disable_first_episode.unwrap_or(false) {
+    // A cutoff means "shows watched since": never-started ones have no date.
+    if !query.disable_first_episode.unwrap_or(false) && query.next_up_date_cutoff.is_none() {
         let fresh = media_items::series_never_started(
             &state.pool,
             auth.user_id,
