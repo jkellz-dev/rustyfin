@@ -526,6 +526,14 @@ select:focus {
   flex-shrink: 0;
 }
 
+.search-result-poster.landscape {
+  width: 96px;
+}
+
+.search-result-poster.square {
+  width: 54px;
+}
+
 .search-result-info {
   flex: 1;
   min-width: 0;

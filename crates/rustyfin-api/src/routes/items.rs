@@ -1173,6 +1173,9 @@ pub async fn get_latest_items(
     Ok(Json(dtos))
 }
 
+/// How many in-progress items Continue Watching reads before filtering.
+const RESUME_SCAN: i64 = 500;
+
 /// `GET /UserItems/Resume` — Continue watching.
 pub async fn get_resume_items(
     State(state): State<AppState>,
@@ -1185,9 +1188,12 @@ pub async fn get_resume_items(
         .await
         .map_err(ApiError::Database)?;
 
-    let resume_data = user_data::get_resume_items(&state.pool, auth.user_id, limit)
+    // Filtered below by library, folder and type, so read past `limit`.
+    let resume_data = user_data::get_resume_items(&state.pool, auth.user_id, RESUME_SCAN)
         .await
         .map_err(ApiError::Database)?;
+    let wanted_types = parse_comma_delimited(&query.include_item_types);
+    let excluded_types = parse_comma_delimited(&query.exclude_item_types);
 
     // The items in one query, then in resume order.
     let resume_ids: Vec<Uuid> = resume_data.iter().map(|(_, id)| *id).collect();
@@ -1206,6 +1212,25 @@ pub async fn get_resume_items(
                 && item.library_id.is_some_and(|lid| !allowed.contains(&lid))
             {
                 continue;
+            }
+            // Continue Watching in one library (or show, or season) and of the
+            // kinds asked for: films are not in a TV library's list.
+            if let Some(pid) = query.parent_id
+                && item.library_id != Some(pid)
+                && item.parent_id != Some(pid)
+                && item.series_id != Some(pid)
+                && item.season_id != Some(pid)
+            {
+                continue;
+            }
+            if !wanted_types.is_empty() && !wanted_types.iter().any(|t| *t == item.item_type) {
+                continue;
+            }
+            if excluded_types.iter().any(|t| *t == item.item_type) {
+                continue;
+            }
+            if dtos.len() as i64 >= limit {
+                break;
             }
             let mut dto = media_item_to_dto(item, &state.server_id);
             dto.user_data = Some(UserItemDataDto {

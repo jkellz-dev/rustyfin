@@ -5,7 +5,7 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AdminUser;
+use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_db::repo::collections;
 
 use crate::error::ApiError;
@@ -103,4 +103,37 @@ pub async fn remove_collection_items(
     }
 
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `GET /Items/{itemId}/Collections` (Rustyfin): the collections an item is in,
+/// by name, for the film page's link to its collection.
+pub async fn get_item_collections(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+) -> Result<Json<rustyfin_models::dto::QueryResult<rustyfin_models::dto::BaseItemDto>>, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
+    let ids = collections::list_containing(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?;
+    let mut rows = rustyfin_db::repo::media_items::find_by_ids(&state.pool, &ids)
+        .await
+        .map_err(ApiError::Database)?;
+    rows.sort_by(|a, b| a.sort_name.cmp(&b.sort_name).then(a.name.cmp(&b.name)));
+    let mut dtos: Vec<_> = rows
+        .iter()
+        .map(|row| super::items::media_item_to_dto(row, &state.server_id))
+        .collect();
+    let images = rustyfin_db::repo::images::list_by_items(&state.pool, &ids)
+        .await
+        .map_err(ApiError::Database)?;
+    let by_item = super::items::group_images_by_item(images);
+    for dto in &mut dtos {
+        if let Some(item_images) = by_item.get(&dto.id) {
+            super::items::apply_images_to_dto(dto, item_images);
+        }
+    }
+    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    let total = dtos.len() as i32;
+    Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
 }

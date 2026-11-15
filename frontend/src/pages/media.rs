@@ -106,6 +106,8 @@ pub fn Media() -> View {
     let start_index = create_signal(0i32);
     let detail_item: Signal<Option<BaseItemDto>> = create_signal(None);
     let detail_tracks: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
+    // The collections the item in the detail view is in.
+    let detail_collections: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let search_results: Signal<Vec<SearchHint>> = create_signal(Vec::new());
     let breadcrumbs: Signal<Vec<Breadcrumb>> = create_signal(Vec::new());
     let current_parent_id: Signal<Option<String>> = create_signal(None);
@@ -205,6 +207,7 @@ pub fn Media() -> View {
     let view_detail = move |item_id: String| {
         detail_loading.set(true);
         detail_tracks.set(Vec::new());
+        detail_collections.set(Vec::new());
         current_view.set(MediaView::Detail(item_id.clone()));
         spawn_local({
             let item_id = item_id.clone();
@@ -218,6 +221,11 @@ pub fn Media() -> View {
                                     .await
                         {
                             detail_tracks.set(result.items);
+                        }
+                        if item.item_type == "Movie"
+                            && let Ok(result) = api::get_item_collections(&item.id).await
+                        {
+                            detail_collections.set(result.items);
                         }
                         let label =
                             browse::card_label(&item.item_type, &item.name, item.index_number);
@@ -708,6 +716,35 @@ pub fn Media() -> View {
                                     view! {}
                                 })
 
+                                // The collections a film is in
+                                ({
+                                    let sets = detail_collections.get_clone();
+                                    if sets.is_empty() {
+                                        view! {}
+                                    } else {
+                                        view! {
+                                            div(class="detail-section") {
+                                                h3 { "Collections" }
+                                                div(class="provider-list") {
+                                                    Indexed(
+                                                        list=move || sets.clone(),
+                                                        view=move |set: BaseItemDto| {
+                                                            let set_id = set.id.clone();
+                                                            let name = set.name.clone();
+                                                            view! {
+                                                                button(
+                                                                    class="breadcrumb-link",
+                                                                    on:click=move |_| view_detail(set_id.clone())
+                                                                ) { (name) }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                })
+
                                 // Films (for collections)
                                 (if is_collection {
                                     let films = detail_tracks.get_clone();
@@ -992,10 +1029,11 @@ pub fn Media() -> View {
                                                 ) {
                                                     (if has_image {
                                                         let url = img_url.clone();
-                                                        view! { img(class="search-result-poster", src=url, loading="lazy") }
+                                                        view! { img(class=browse::search_thumb_class(&item_type), src=url, loading="lazy") }
                                                     } else {
                                                         let icon = icon_for_item_type(&item_type);
-                                                        view! { div(class="search-result-poster media-poster-placeholder") { (icon) } }
+                                                        let class = format!("{} media-poster-placeholder", browse::search_thumb_class(&item_type));
+                                                        view! { div(class=class) { (icon) } }
                                                     })
                                                     div(class="search-result-info") {
                                                         div(class="name") { (name) }

@@ -218,6 +218,16 @@ pub async fn count_visible(pool: &PgPool, libraries: Option<&[Uuid]>) -> Result<
     Ok(n)
 }
 
+/// The collections `item_id` is in.
+pub async fn list_containing(pool: &PgPool, item_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows: Vec<(Uuid,)> =
+        sqlx::query_as("SELECT collection_id FROM collection_items WHERE item_id = $1")
+            .bind(item_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
 /// Item counts of collections, by collection id.
 pub async fn count_items_batch(
     pool: &PgPool,

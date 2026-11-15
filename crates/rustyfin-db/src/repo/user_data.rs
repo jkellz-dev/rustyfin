@@ -52,7 +52,9 @@ pub async fn get_many(
 
 /// For each of `folder_ids`: how many playable items are below it and how many of
 /// those the user has not played (Jellyfin's `UnplayedItemCount` and the basis of
-/// `PlayedPercentage`). A folder with nothing playable below it is absent.
+/// `PlayedPercentage`). A collection's films count as below it (they live in
+/// their library, linked by `collection_items`). A folder with nothing playable
+/// below it is absent.
 pub async fn folder_progress(
     pool: &PgPool,
     user_id: Uuid,
@@ -67,14 +69,15 @@ pub async fn folder_progress(
              UNION ALL \
              SELECT below.root, m.id, below.depth + 1 FROM media_items m \
              JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
-         SELECT below.root, COUNT(*), \
+         SELECT b.root, COUNT(*), \
                 COUNT(*) FILTER (WHERE NOT COALESCE(ud.played, false)) \
-         FROM below \
-         JOIN media_items m ON m.id = below.id \
+         FROM (SELECT root, id FROM below WHERE depth > 0 \
+               UNION SELECT collection_id, item_id FROM collection_items \
+                     WHERE collection_id = ANY($2)) b \
+         JOIN media_items m ON m.id = b.id \
          LEFT JOIN user_data ud ON ud.item_id = m.id AND ud.user_id = $1 \
-         WHERE below.depth > 0 \
-           AND m.item_type IN ('Movie', 'Episode', 'Audio', 'Video', 'MusicVideo', 'Trailer') \
-         GROUP BY below.root",
+         WHERE m.item_type IN ('Movie', 'Episode', 'Audio', 'Video', 'MusicVideo', 'Trailer') \
+         GROUP BY b.root",
     )
     .bind(user_id)
     .bind(folder_ids)

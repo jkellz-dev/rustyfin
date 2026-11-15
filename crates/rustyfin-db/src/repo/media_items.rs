@@ -101,7 +101,8 @@ pub async fn list_by_parents(
     }
     let rows = sqlx::query_as::<_, MediaItemRow>(
         "SELECT * FROM media_items WHERE parent_id = ANY($1) \
-         AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) ORDER BY sort_name, name",
+         AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) \
+         ORDER BY parent_index_number NULLS LAST, index_number NULLS LAST, sort_name, name",
     )
     .bind(parent_ids)
     .bind(item_types)
@@ -150,7 +151,8 @@ pub async fn list_by_parent(
     }
 
     query.push_str(&format!(
-        " ORDER BY sort_name, name LIMIT ${} OFFSET ${}",
+        " ORDER BY parent_index_number NULLS LAST, index_number NULLS LAST, sort_name, name \
+         LIMIT ${} OFFSET ${}",
         param_index,
         param_index + 1
     ));
@@ -1740,8 +1742,16 @@ impl ItemQuery {
     }
 
     fn apply_sorting<'a>(&'a self, qb: &mut QueryBuilder<'a, sqlx::Postgres>) {
+        // Numbered items (seasons, episodes, tracks) go by their numbers before
+        // their names: an episode's name is its title, not its place, so
+        // "by name" means by season and episode number first, as in Jellyfin
+        // (whose episode sort names start with the numbers). Unnumbered items
+        // (films, shows) are unaffected.
         if self.sort_by.is_empty() {
-            qb.push(" ORDER BY mi.sort_name, mi.name");
+            qb.push(
+                " ORDER BY mi.parent_index_number NULLS LAST, mi.index_number NULLS LAST, \
+                 mi.sort_name, mi.name",
+            );
             return;
         }
 
@@ -1756,14 +1766,24 @@ impl ItemQuery {
             }
             first = false;
 
-            qb.push(col);
-
             // Direction
             let desc = self
                 .sort_order
                 .get(i)
                 .or(self.sort_order.first())
                 .is_some_and(|o| o.eq_ignore_ascii_case("Descending"));
+            if col == "mi.sort_name" {
+                for numbered in ["mi.parent_index_number", "mi.index_number"] {
+                    qb.push(numbered);
+                    qb.push(if desc {
+                        " DESC NULLS LAST, "
+                    } else {
+                        " ASC NULLS LAST, "
+                    });
+                }
+            }
+
+            qb.push(col);
 
             if desc {
                 qb.push(" DESC NULLS LAST");

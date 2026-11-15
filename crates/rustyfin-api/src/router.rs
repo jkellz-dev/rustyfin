@@ -509,6 +509,10 @@ pub fn build_router(state: AppState) -> Router {
         // ── Collections ────────────────────────────────────────────
         .route("/Collections", post(collections::create_collection))
         .route(
+            "/Items/{itemId}/Collections",
+            get(collections::get_item_collections),
+        )
+        .route(
             "/Collections/{collectionId}/Items",
             post(collections::add_collection_items).delete(collections::remove_collection_items),
         )

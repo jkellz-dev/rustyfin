@@ -92,6 +92,16 @@ pub fn grid_classes(item_type: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// A search result thumbnail's class: episodes landscape, music square, the
+/// rest posters.
+pub fn search_thumb_class(item_type: &str) -> &'static str {
+    match card_shape(item_type) {
+        "landscape" => "search-result-poster landscape",
+        "square" => "search-result-poster square",
+        _ => "search-result-poster",
+    }
+}
+
 /// The detail view's image and placeholder classes.
 pub fn detail_classes(item_type: &str) -> (&'static str, &'static str) {
     match card_shape(item_type) {

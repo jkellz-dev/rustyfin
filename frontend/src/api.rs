@@ -231,6 +231,11 @@ pub async fn get_directory_contents(path: &str) -> Result<Vec<FileSystemEntry>, 
 
 // ── Media Browsing API ──────────────────────────────────
 
+/// The collections an item is in (Rustyfin's `/Items/{id}/Collections`).
+pub async fn get_item_collections(item_id: &str) -> Result<QueryResult<BaseItemDto>, String> {
+    get_json(&format!("/Items/{item_id}/Collections")).await
+}
+
 pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, String> {
     get_json("/UserViews").await
 }
