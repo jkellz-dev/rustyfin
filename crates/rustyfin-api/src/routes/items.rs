@@ -1223,10 +1223,10 @@ pub async fn get_resume_items(
             {
                 continue;
             }
-            if !wanted_types.is_empty() && !wanted_types.iter().any(|t| *t == item.item_type) {
+            if !wanted_types.is_empty() && !wanted_types.contains(&item.item_type) {
                 continue;
             }
-            if excluded_types.iter().any(|t| *t == item.item_type) {
+            if excluded_types.contains(&item.item_type) {
                 continue;
             }
             if dtos.len() as i64 >= limit {
