@@ -102,8 +102,13 @@ async fn folder_status(path: PathBuf) -> &'static str {
                 return "Missing";
             }
             match std::fs::read_dir(&path) {
-                Ok(mut entries) if entries.next().is_none() => "Empty",
-                Ok(_) => "Ok",
+                Ok(mut entries) => {
+                    if entries.next().is_none() {
+                        "Empty"
+                    } else {
+                        "Ok"
+                    }
+                }
                 Err(_) => "Unreadable",
             }
         }),
