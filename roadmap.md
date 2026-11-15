@@ -961,12 +961,12 @@ Stubs re-evaluated for real implementation to support major Jellyfin clients (We
 **Entity images (genres, studios, persons, artists):**
 
 - [x] Design: extend `images` table with entity FKs, or use deterministic UUIDs to map entity names → virtual item IDs
-- [ ] `GET /Genres/{name}/Images/{imageType}` — look up genre by name, serve associated image (deferred — genre images
-      not common)
+- [x] `GET /Genres/{name}/Images/{imageType}` — look up genre by name, serve a title's backdrop, else poster (Plezy
+      genre cards)
 - [x] `GET /Studios/{name}/Images/{imageType}` — same for studios
 - [x] `GET /Persons/{name}/Images/{imageType}` — same for persons (headshots from TMDB/NFO)
 - [x] `GET /Artists/{name}/Images/{imageType}` — same for artists (sidecar artist.jpg)
-- [ ] `GET /MusicGenres/{name}/Images/{imageType}` — alias to genres (deferred — genre images not common)
+- [x] `GET /MusicGenres/{name}/Images/{imageType}` — alias to genres
 
 **Item images list:**
 
@@ -1046,10 +1046,10 @@ validation, and polish needed for daily use.
 
 ### 12a. Dashboard Improvements
 
-- [ ] Activity log viewer (backend at `/System/ActivityLog/Entries` already exists, wire to UI)
-- [ ] Active sessions / "now playing" widget (backend at `/Sessions` exists)
-- [ ] Library cards show item counts and last scan time
-- [ ] Recent additions widget (latest items added across libraries)
+- [x] Activity log viewer (backend at `/System/ActivityLog/Entries` already exists, wire to UI)
+- [x] Active sessions / "now playing" widget (backend at `/Sessions` exists)
+- [x] Library cards show item counts and last scan time
+- [x] Recent additions widget (latest items added across libraries)
 - [x] System health indicators (DB connection, Meilisearch status, library folders, cache sizes; free space dropped: the
       libraries share two disks)
 - [x] Prometheus metrics on their own listener (`[metrics] listen`)
@@ -1076,13 +1076,13 @@ validation, and polish needed for daily use.
 ### 12d. Media Browser Polish
 
 - [x] Cast & crew portrait cards with headshot images (initials fallback)
-- [ ] Sorting controls (by name, date added, year, rating)
+- [x] Sorting controls (by name, date added, year, rating)
 - [ ] Filtering by genre, year, rating, item type
 - [ ] Grid/list view toggle
-- [ ] Watched/unwatched badges on posters
-- [ ] Playback progress bars on in-progress items
+- [x] Watched/unwatched badges on posters
+- [x] Playback progress bars on in-progress items
 - [ ] Bulk operations (select multiple items for refresh, mark played/unplayed)
-- [ ] Cast member links (click person → filtered view of their items)
+- [x] Cast member links (click person → filtered view of their items)
 - [ ] Search filters (scope by type: movies, series, music, episodes)
 
 ### 12e. User Management Polish
