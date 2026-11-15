@@ -89,7 +89,7 @@ pub struct LibraryStats {
 }
 
 /// One entry of `/System/ActivityLog/Entries`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ActivityLogEntry {
     #[serde(default)]
