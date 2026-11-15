@@ -83,7 +83,7 @@ impl LibraryScanner {
                     "library" => library.clone(),
                     "outcome" => what
                 )
-                .increment(n as u64);
+                .increment(n);
             }
         }
         outcome
