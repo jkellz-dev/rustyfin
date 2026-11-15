@@ -30,6 +30,9 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
+# Prometheus metrics
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.17", default-features = false }
 # Internal crates
 rustyfin-api = { path = "crates/rustyfin-api" }
 rustyfin-auth = { path = "crates/rustyfin-auth" }

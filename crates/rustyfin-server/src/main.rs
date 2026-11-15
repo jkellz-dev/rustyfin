@@ -322,6 +322,21 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("CORS: allowing {}", cors_origins.join(", "));
     }
 
+    // Prometheus metrics on their own listener, never the public port.
+    if let Some(listen) = config.metrics.listen.as_deref() {
+        let addr: SocketAddr = listen
+            .parse()
+            .map_err(|e| anyhow::anyhow!("[metrics] listen = {listen:?}: {e}"))?;
+        let listener = TcpListener::bind(addr).await?;
+        tracing::info!("Metrics on http://{addr}/metrics");
+        let metrics_app = rustyfin_api::metrics::router(state.clone());
+        tokio::spawn(async move {
+            if let Err(e) = axum::serve(listener, metrics_app).await {
+                tracing::error!("metrics listener stopped: {e}");
+            }
+        });
+    }
+
     // Build router with all API routes
     let app = build_router(state)
         .layer(TraceLayer::new_for_http())

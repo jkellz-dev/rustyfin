@@ -23,6 +23,8 @@ use rustyfin_search::SearchService;
 /// Integration test harness providing an isolated database schema and a ready-to-use Axum router.
 pub struct TestApp {
     pub router: Router,
+    /// The metrics listener's router (`/metrics`).
+    pub metrics_router: Router,
     pub pool: PgPool,
     pub schema: String,
     pub session_manager: Arc<SessionManager>,
@@ -133,10 +135,12 @@ impl TestApp {
             login_limiter: Default::default(),
         };
 
+        let metrics_router = rustyfin_api::metrics::router(state.clone());
         let router = build_router(state);
 
         Self {
             router,
+            metrics_router,
             pool,
             schema,
             session_manager,

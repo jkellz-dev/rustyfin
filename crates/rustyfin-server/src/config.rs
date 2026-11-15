@@ -19,6 +19,16 @@ pub struct Config {
     pub transcode: Option<TranscodeConfig>,
     #[serde(default)]
     pub tasks: TasksConfig,
+    #[serde(default)]
+    pub metrics: MetricsConfig,
+}
+
+/// Prometheus metrics, on a listener of their own (not the public port).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct MetricsConfig {
+    /// Address for `GET /metrics`, e.g. `0.0.0.0:9090`. Unset: no metrics.
+    #[serde(default)]
+    pub listen: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

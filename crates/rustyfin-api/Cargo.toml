@@ -14,6 +14,8 @@ rustyfin-search.workspace = true
 
 axum.workspace = true
 tokio.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
 # statvfs for the dashboard's disk space (already in the tree).
 rustix = { version = "1", features = ["fs"] }
 tower.workspace = true

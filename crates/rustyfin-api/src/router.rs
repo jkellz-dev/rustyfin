@@ -522,6 +522,8 @@ pub fn build_router(state: AppState) -> Router {
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))
         // ── State ───────────────────────────────────────────────
+        // Every matched API route is counted and timed (metrics::track_requests).
+        .route_layer(axum::middleware::from_fn(crate::metrics::track_requests))
         .fallback(unmatched_route)
         .with_state(state)
         .layer(axum::middleware::from_fn(crate::request_log::log_request))

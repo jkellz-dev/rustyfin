@@ -69,6 +69,7 @@ pub async fn authenticate_by_name(
             .check(addr.ip(), name, std::time::Instant::now())
     {
         tracing::warn!("Login throttled for {} ({name:?})", addr.ip());
+        metrics::counter!("rustyfin_login_throttled_total").increment(1);
         return Err(ApiError::TooManyRequests(wait.as_secs().max(1)));
     }
     let user = match resolve_login(&state, &headers, addr, &body, is_first_user).await {
@@ -81,6 +82,7 @@ pub async fn authenticate_by_name(
                 state
                     .login_limiter
                     .record_failure(addr.ip(), name, std::time::Instant::now());
+                metrics::counter!("rustyfin_login_failures_total").increment(1);
             }
             return Err(ApiError::Unauthorized);
         }
