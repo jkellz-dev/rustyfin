@@ -1,7 +1,8 @@
 //! Roadmap 12a: system health on the dashboard. `/System/Stats` reports the
-//! database (reachable, how fast, pool use), the search backend, and every
-//! library folder and cache folder: whether it is there, empty (an unmounted
-//! share), or short of space.
+//! database (reachable, how fast, pool use), the search backend, each library
+//! (its folders there, not empty as an unmounted share looks, answering), and
+//! how much each cache holds. Free space is not reported: the libraries share
+//! two disks, so it repeated the same numbers (owner, 2026-11-15).
 #[allow(dead_code)]
 mod common;
 
@@ -10,11 +11,23 @@ use rustyfin_db::repo::libraries;
 use serde_json::Value;
 use uuid::Uuid;
 
+fn named<'a>(list: &'a Value, name: &str) -> &'a Value {
+    list.as_array()
+        .unwrap_or_else(|| panic!("not a list: {list}"))
+        .iter()
+        .find(|e| e["Name"] == name)
+        .unwrap_or_else(|| panic!("{name} missing from {list}"))
+}
+
 #[tokio::test]
-async fn stats_report_database_search_and_storage_health() {
-    let app = common::TestApp::new().await;
-    let (_, admin) = app.create_user("admin", true).await;
+async fn stats_report_database_search_libraries_and_cache_sizes() {
     let root = std::env::temp_dir().join(format!("rf-health-{}", Uuid::new_v4().simple()));
+    let people = root.join("people");
+    std::fs::create_dir_all(people.join("sub")).unwrap();
+    std::fs::write(people.join("tmdb-1.jpg"), vec![0u8; 1000]).unwrap();
+    std::fs::write(people.join("sub").join("tmdb-2.jpg"), vec![0u8; 500]).unwrap();
+    let app = common::TestApp::with_people_cache_dir(people.clone()).await;
+    let (_, admin) = app.create_user("admin", true).await;
     let full = root.join("movies");
     std::fs::create_dir_all(full.join("Film (2020)")).unwrap();
     let empty = root.join("music");
@@ -47,26 +60,41 @@ async fn stats_report_database_search_and_storage_health() {
     );
     assert_eq!(search["Ok"], true, "{search}");
 
-    let storage = health["Storage"].as_array().expect("Storage");
-    let entry = |dir: &std::path::Path| -> &Value {
-        storage
-            .iter()
-            .find(|s| s["Path"] == p(dir))
-            .unwrap_or_else(|| panic!("{} missing from {health}", dir.display()))
-    };
-    let movies = entry(&full);
+    assert!(
+        health.get("Storage").is_none(),
+        "no free space any more: {health}"
+    );
+    let libs = &health["Libraries"];
+    let movies = named(libs, "Movies");
     assert_eq!(movies["Status"], "Ok", "{movies}");
-    assert_eq!(movies["Libraries"], serde_json::json!(["Movies"]));
-    let total = movies["TotalBytes"].as_u64().expect("TotalBytes");
-    let free = movies["FreeBytes"].as_u64().expect("FreeBytes");
-    assert!(total > 0 && free <= total, "{movies}");
+    assert_eq!(movies["Folders"][0]["Path"], p(&full));
+    let music = named(libs, "Music");
     assert_eq!(
-        entry(&empty)["Status"],
+        music["Status"], "Missing",
+        "the worst of its folders: {music}"
+    );
+    let folder = |path: &std::path::Path| {
+        music["Folders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["Path"] == p(path))
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(
+        folder(&empty)["Status"],
         "Empty",
         "an unmounted share looks empty"
     );
-    assert_eq!(entry(&missing)["Status"], "Missing");
-    assert!(entry(&missing)["TotalBytes"].is_null());
+    assert_eq!(folder(&missing)["Status"], "Missing");
+
+    let caches = &health["Caches"];
+    let people_cache = named(caches, "People cache");
+    assert_eq!(people_cache["Status"], "Ok", "{people_cache}");
+    assert_eq!(people_cache["SizeBytes"], 1500, "{people_cache}");
+    assert_eq!(people_cache["FileCount"], 2, "{people_cache}");
+    assert!(named(caches, "Image cache")["Status"].is_string());
 
     let (_, viewer) = app.create_user("viewer", false).await;
     let (status, _) = app.get("/System/Stats", &viewer).await;

@@ -137,22 +137,29 @@ async fn metrics_cover_requests_libraries_scans_and_health() {
     assert!(sample(&body, "rustyfin_users", &[]).is_some_and(|n| n >= 1.0));
     assert!(sample(&body, "rustyfin_sessions_active", &[]).is_some());
     assert!(sample(&body, "rustyfin_transcodes_active", &[]).is_some());
-    assert!(
-        sample(
-            &body,
-            "rustyfin_storage_free_bytes",
-            &[&format!("path=\"{}\"", root.display())]
-        )
-        .is_some(),
-        "{body}"
-    );
     assert_eq!(
         sample(
             &body,
-            "rustyfin_storage_ok",
-            &[&format!("path=\"{}\"", root.display())]
+            "rustyfin_library_folder_ok",
+            &[
+                "library=\"Movies\"",
+                &format!("path=\"{}\"", root.display())
+            ]
         ),
-        Some(1.0)
+        Some(1.0),
+        "{body}"
+    );
+    assert!(
+        sample(&body, "rustyfin_cache_bytes", &["cache=\"Image cache\""]).is_some(),
+        "{body}"
+    );
+    assert!(
+        sample(&body, "rustyfin_cache_files", &["cache=\"Image cache\""]).is_some(),
+        "{body}"
+    );
+    assert!(
+        !body.contains("rustyfin_storage_"),
+        "free space is gone: {body}"
     );
 
     let _ = std::fs::remove_dir_all(&root);
