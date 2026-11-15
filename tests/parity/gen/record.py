@@ -75,6 +75,21 @@ HTTP 200
 [Captures]
 series_id: jsonpath "$.Items[0].Id"
 
+GET {{{{base_url}}}}/Items
+Authorization: {AUTH}
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: MusicAlbum
+HTTP 200
+[Captures]
+album_id: jsonpath "$.Items[0].Id"
+
+GET {{{{base_url}}}}/Artists/AlbumArtists
+Authorization: {AUTH}
+HTTP 200
+[Captures]
+artist_id: jsonpath "$.Items[0].Id"
+
 """
 
 # (area, method, path, query, needs_auth, json_body)
@@ -135,6 +150,18 @@ REQUESTS = [
     ("browse", "GET", "/Items", {"Recursive": "true", "Filters": "IsUnplayed", "IncludeItemTypes": "Movie"}, True, None),
     ("browse", "GET", "/Items", {"Recursive": "true", "Fields": "Overview,Genres,People,Studios,MediaSources", "IncludeItemTypes": "Movie"}, True, None),
     ("browse", "GET", "/Items/{movie_id}/Images", {}, True, None),
+    # Third slice: what Plezy asks for (its music pages, home rows and Continue
+    # Watching), each a bug found in the app first (2026-11-15).
+    ("music", "GET", "/Artists/AlbumArtists", {"UserId": "{user_id}", "Fields": "RecursiveItemCount,ChildCount,SortName"}, True, None),
+    ("music", "GET", "/Items", {"AlbumArtistIds": "{artist_id}", "IncludeItemTypes": "MusicAlbum", "Recursive": "true", "SortBy": "PremiereDate,ProductionYear,SortName", "SortOrder": "Descending"}, True, None),
+    ("music", "GET", "/Items", {"AlbumIds": "{album_id}", "IncludeItemTypes": "Audio", "Recursive": "true", "SortBy": "ParentIndexNumber,IndexNumber,SortName", "SortOrder": "Ascending", "Fields": "UserData"}, True, None),
+    ("music", "GET", "/Items", {"ArtistIds": "{artist_id}", "IncludeItemTypes": "Audio", "Recursive": "true"}, True, None),
+    ("music", "GET", "/Items/{album_id}", {"UserId": "{user_id}"}, True, None),
+    ("music", "GET", "/Users/{user_id}/Items/Latest", {"IncludeItemTypes": "Audio", "Limit": "20"}, True, None),
+    ("music", "GET", "/Items", {"Recursive": "true", "IncludeItemTypes": "Audio", "Filters": "IsPlayed", "SortBy": "DatePlayed", "SortOrder": "Descending"}, True, None),
+    ("music", "GET", "/Shows/NextUp", {"UserId": "{user_id}", "NextUpDateCutoff": "2025-11-15T00:00:00Z", "EnableResumable": "false"}, True, None),
+    ("music", "GET", "/UserItems/Resume", {"UserId": "{user_id}", "MediaTypes": "Video"}, True, None),
+    ("music", "GET", "/Items", {"Recursive": "true", "Filters": "IsResumable"}, True, None),
 ]
 
 

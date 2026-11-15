@@ -178,3 +178,50 @@ async fn album_ids_list_only_that_albums_tracks() {
     );
     app.cleanup().await;
 }
+
+/// Parity suite (music.hurl): Jellyfin's album artists carry ChildCount (their
+/// albums; Plezy's badge falls back to it), and an album carries
+/// CumulativeRunTimeTicks, its tracks' total, also from disc folders.
+#[tokio::test]
+async fn artists_count_albums_and_albums_add_up_their_tracks() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("Music", "music").await;
+    let artist = app
+        .create_media_item("Band", "MusicArtist", lib, None)
+        .await;
+    let one = app
+        .create_media_item("One", "MusicAlbum", lib, Some(artist))
+        .await;
+    app.create_media_item("Two", "MusicAlbum", lib, Some(artist))
+        .await;
+    let disc = app
+        .create_media_item("Disc 2", "Folder", lib, Some(one))
+        .await;
+    for (name, parent, ticks) in [("a", one, 1_000i64), ("b", one, 2_000), ("c", disc, 3_000)] {
+        let id = app
+            .create_media_item(name, "Audio", lib, Some(parent))
+            .await;
+        sqlx::query("UPDATE media_items SET runtime_ticks = $2 WHERE id = $1")
+            .bind(id)
+            .bind(ticks)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+
+    let (status, body) = app.get("/Artists/AlbumArtists", &token).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let band = body["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["Name"] == "Band")
+        .unwrap_or_else(|| panic!("Band missing: {body}"));
+    assert_eq!(band["ChildCount"], 2, "{band}");
+
+    let (status, album) = app.get(&format!("/Items/{one}"), &token).await;
+    assert_eq!(status, StatusCode::OK, "{album}");
+    assert_eq!(album["CumulativeRunTimeTicks"], 6_000, "{album}");
+    app.cleanup().await;
+}
