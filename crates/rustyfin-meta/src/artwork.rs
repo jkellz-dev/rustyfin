@@ -131,6 +131,24 @@ pub struct ArtworkStats {
     pub headshots: usize,
     pub no_id: usize,
     pub errors: usize,
+    /// Collection art files saved.
+    pub collections: usize,
+}
+
+/// The TMDB collections the films in `dirs` belong to (Radarr's
+/// `<set tmdbcolid>`) that still need art in `collections`: no `poster.jpg`
+/// yet, or all of them with `force`. Each once, in id order.
+pub fn collections_needing_art(dirs: &[PathBuf], collections: &Path, force: bool) -> Vec<i64> {
+    let ids: std::collections::BTreeSet<i64> = dirs
+        .iter()
+        .filter_map(|dir| first_video(dir))
+        .filter_map(|video| nfo::find_movie_nfo(&video))
+        .filter_map(|path| nfo::parse_movie_set(&path))
+        .filter_map(|set| set.tmdb_id?.parse().ok())
+        .collect();
+    ids.into_iter()
+        .filter(|id| force || !collections.join(id.to_string()).join("poster.jpg").exists())
+        .collect()
 }
 
 /// TMDB's size for headshots: 632 px tall, about 50 KB.
@@ -205,7 +223,8 @@ pub async fn fill_missing(
     let people_dir = PathBuf::from(crate::scan::expand_tilde(
         &opts.config.output.people_cache_dir,
     ));
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)?
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+        .map_err(|e| anyhow::anyhow!("cannot read library folder {}: {e}", root.display()))?
         .flatten()
         .map(|e| e.path())
         .filter(|p| {
@@ -217,6 +236,12 @@ pub async fn fill_missing(
         .collect();
     dirs.sort();
 
+    let collections_dir = rustyfin_common::images::collection_art_dir(&people_dir);
+    let collection_ids = if tv {
+        Vec::new()
+    } else {
+        collections_needing_art(&dirs, &collections_dir, opts.force)
+    };
     let mut stats = ArtworkStats::default();
     for dir in dirs {
         stats.checked += 1;
@@ -325,7 +350,64 @@ pub async fn fill_missing(
             }
         }
     }
+    fetch_collection_art(
+        &collection_ids,
+        &collections_dir,
+        tmdb.as_ref(),
+        &limiter,
+        &http,
+        opts,
+        &mut stats,
+    )
+    .await;
     Ok(stats)
+}
+
+/// Download each collection's poster and backdrop into
+/// `<collections>/<tmdb-id>/poster.jpg` and `backdrop.jpg`.
+async fn fetch_collection_art(
+    ids: &[i64],
+    collections: &Path,
+    tmdb: Option<&TmdbClient>,
+    limiter: &RateLimiter,
+    http: &reqwest::Client,
+    opts: &ScanOpts<'_>,
+    stats: &mut ArtworkStats,
+) {
+    if ids.is_empty() {
+        return;
+    }
+    if opts.dry_run {
+        tracing::info!("{} collections need art: {ids:?}", ids.len());
+        return;
+    }
+    let Some(tmdb) = tmdb else { return };
+    for &id in ids {
+        limiter.wait().await;
+        let Some(art) = tmdb.fetch_collection_artwork(id).await else {
+            tracing::error!("Collection {id}: TMDB did not answer");
+            stats.errors += 1;
+            continue;
+        };
+        let dir = collections.join(id.to_string());
+        let wanted = [
+            (art.poster, dir.join("poster.jpg")),
+            (art.backdrop, dir.join("backdrop.jpg")),
+        ];
+        for (url, path) in wanted {
+            let Some(url) = url else { continue };
+            match download_image_with_options(http, &url, &path, !opts.force).await {
+                Ok(()) => {
+                    tracing::info!("Collection {id}: saved {}", path.display());
+                    stats.collections += 1;
+                }
+                Err(e) => {
+                    tracing::error!("Collection {id}: {}: {e}", path.display());
+                    stats.errors += 1;
+                }
+            }
+        }
+    }
 }
 
 /// Download `wanted` headshots; returns how many were saved.

@@ -23,6 +23,8 @@ use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 pub struct LibraryScanner {
     pool: PgPool,
     enrichment: EnrichmentService,
+    /// Collection art (`<tmdb-id>/poster.jpg`, ...), beside the people folder.
+    collection_art_dir: Option<std::path::PathBuf>,
 }
 
 /// Below this many files under a root, the "more than half are gone" guard does
@@ -42,8 +44,15 @@ pub struct ScanResult {
 
 impl LibraryScanner {
     pub fn new(pool: PgPool, people_cache_dir: Option<std::path::PathBuf>) -> Self {
+        let collection_art_dir = people_cache_dir
+            .as_deref()
+            .map(rustyfin_common::images::collection_art_dir);
         let enrichment = EnrichmentService::new(pool.clone(), people_cache_dir);
-        Self { pool, enrichment }
+        Self {
+            pool,
+            enrichment,
+            collection_art_dir,
+        }
     }
 
     /// Scan a library and ingest media items.
@@ -990,6 +999,19 @@ impl LibraryScanner {
                 sets.len()
             ),
             Err(e) => tracing::error!("Collections: library {library_id}: {e}"),
+        }
+        // Art fetched by `rustyfin artwork` into the cache volume, by TMDB id.
+        let Some(art_dir) = self.collection_art_dir.as_ref() else {
+            return;
+        };
+        match collections::list_auto_tmdb_ids(&self.pool, library_id).await {
+            Ok(ids) => {
+                for (collection, tmdb_id) in ids {
+                    let found = discover_images(&art_dir.join(&tmdb_id), "");
+                    self.store_images(collection, &found).await;
+                }
+            }
+            Err(e) => tracing::error!("Collections: art for library {library_id}: {e}"),
         }
     }
 

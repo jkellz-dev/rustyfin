@@ -105,6 +105,13 @@ impl TmdbClient {
         parse_artwork(&body)
     }
 
+    /// A collection's (film series') artwork by TMDB collection id.
+    pub async fn fetch_collection_artwork(&self, id: i64) -> Option<Artwork> {
+        let url = format!("{TMDB_BASE_URL}/collection/{id}");
+        let body = self.request(&url).send().await.ok()?.text().await.ok()?;
+        parse_artwork(&body)
+    }
+
     /// The TMDB id for a TVDB (`tvdb_id`) or IMDb (`imdb_id`) id.
     pub async fn find_by_external_id(&self, source: &str, id: &str, tv: bool) -> Option<i64> {
         let url = format!(

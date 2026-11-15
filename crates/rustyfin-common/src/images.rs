@@ -9,6 +9,17 @@ pub struct DiscoveredImage {
     pub image_index: i32,
 }
 
+/// Where collection art lives: a `collections` folder beside the shared
+/// people folder (on the cache volume: `<cache>/people` and
+/// `<cache>/collections`), one folder per TMDB collection id holding
+/// `poster.jpg`, `backdrop.jpg` and any other art by its usual name.
+pub fn collection_art_dir(people_cache_dir: &Path) -> std::path::PathBuf {
+    people_cache_dir
+        .parent()
+        .unwrap_or(people_cache_dir)
+        .join("collections")
+}
+
 /// Discover sidecar artwork files in a directory for a given media item.
 ///
 /// `item_stem` is the filename stem of the video file (e.g., "Movie Name (2020)").

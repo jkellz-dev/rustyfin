@@ -189,6 +189,22 @@ pub async fn sync_auto(
     Ok((created, gone.len()))
 }
 
+/// The library's automatic collections that have a TMDB collection id:
+/// (collection, TMDB id).
+pub async fn list_auto_tmdb_ids(
+    pool: &PgPool,
+    library_id: Uuid,
+) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, external_ids->>'Tmdb' FROM media_items WHERE library_id = $1 \
+         AND item_type = 'BoxSet' AND extra_data->>'AutoCollection' = 'true' \
+         AND external_ids->>'Tmdb' ~ '^[0-9]+$'",
+    )
+    .bind(library_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Item counts of collections, by collection id.
 pub async fn count_items_batch(
     pool: &PgPool,

@@ -143,11 +143,12 @@ async fn main() -> anyhow::Result<()> {
         Command::Artwork { path, library_type } => {
             let stats = artwork::fill_missing(&path, &library_type, &opts).await?;
             tracing::info!(
-                "Done: checked={}, complete={}, downloaded={}, headshots={}, no_id={}, errors={}",
+                "Done: checked={}, complete={}, downloaded={}, headshots={}, collections={}, no_id={}, errors={}",
                 stats.checked,
                 stats.complete,
                 stats.downloaded,
                 stats.headshots,
+                stats.collections,
                 stats.no_id,
                 stats.errors
             );
