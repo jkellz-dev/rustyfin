@@ -338,21 +338,17 @@ async fn get_items_latest_returns_array() {
 // Task 14: UserLibrary + Playstate parity
 // ═══════════════════════════════════════════════════════════════════
 
-/// GET /Users/{id}/Items/Root is not a registered route.
-/// Axum matches /Users/{userId}/Items/{itemId} but "Root" fails to parse as UUID → 400.
+/// GET /Users/{id}/Items/Root: Jellyfin's GetRootFolder tests (200 for a real
+/// user; the full behaviour is in root_folder_tests).
 #[tokio::test]
-async fn user_items_root_returns_error() {
+async fn user_items_root_returns_the_root_folder() {
     let app = common::TestApp::new().await;
     let (user_id, token) = app.create_user("viewer", false).await;
-    let (status, _) = app
+    let (status, body) = app
         .get(&format!("/Users/{user_id}/Items/Root"), &token)
         .await;
-    // Axum partially matches the /Users/{userId}/Items/{itemId} route but "Root"
-    // fails UUID parsing, resulting in 400 Bad Request.
-    assert!(
-        status == StatusCode::BAD_REQUEST || status == StatusCode::NOT_FOUND,
-        "Items/Root should fail with 400 or 404, got {status}"
-    );
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["Type"], "UserRootFolder");
     app.cleanup().await;
 }
 
