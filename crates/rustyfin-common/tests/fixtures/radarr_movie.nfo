@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <title>8-Bit Christmas</title>
+  <originaltitle>8-Bit Christmas</originaltitle>
+  <sorttitle>8bit christmas</sorttitle>
+  <ratings>
+    <rating name="imdb" max="10" default="true">
+      <value>6.7</value>
+      <votes>25705</votes>
+    </rating>
+    <rating name="themoviedb" max="10">
+      <value>6.427</value>
+      <votes>530</votes>
+    </rating>
+    <rating name="tomatometerallcritics" max="100">
+      <value>84</value>
+    </rating>
+  </ratings>
+  <rating>6.427</rating>
+  <criticrating>84</criticrating>
+  <userrating />
+  <top250 />
+  <outline />
+  <plot>In suburban Chicago during the late 1980s, ten-year-old Jake Doyle embarks on a herculean quest to get the latest and greatest video game system for Christmas.</plot>
+  <tagline />
+  <runtime>98</runtime>
+  <thumb aspect="poster" preview="https://image.tmdb.org/t/p/original/5YwaISdOwp8Zu6O7kwBeUn8a7Pu.jpg">https://image.tmdb.org/t/p/original/5YwaISdOwp8Zu6O7kwBeUn8a7Pu.jpg</thumb>
+  <fanart>
+    <thumb preview="https://image.tmdb.org/t/p/original/lMudh9ouUHsJ1jhKVSbx2ErGdzf.jpg">https://image.tmdb.org/t/p/original/lMudh9ouUHsJ1jhKVSbx2ErGdzf.jpg</thumb>
+  </fanart>
+  <mpaa>PG</mpaa>
+  <playcount />
+  <lastplayed />
+  <id>802217</id>
+  <uniqueid type="tmdb" default="true">802217</uniqueid>
+  <uniqueid type="imdb">tt11540284</uniqueid>
+  <genre>Family</genre>
+  <genre>Comedy</genre>
+  <country />
+  <status>Released</status>
+  <credits>Kevin Jakubowski</credits>
+  <director>Michael Dowse</director>
+  <premiered>2021-11-24</premiered>
+  <year>2021</year>
+  <studio>Star Thrower Entertainment</studio>
+  <trailer>plugin://plugin.video.youtube/play/?video_id=CI-YWRK0VPo</trailer>
+  <watched>false</watched>
+  <fileinfo>
+    <streamdetails>
+      <video>
+        <aspect>2.3880596</aspect>
+        <codec>h265</codec>
+        <height>804</height>
+        <width>1920</width>
+        <durationinseconds>5862</durationinseconds>
+        <hdrtype>dolbyvision</hdrtype>
+      </video>
+    </streamdetails>
+  </fileinfo>
+  <actor>
+    <name>Braelyn Rankins</name>
+    <role>Teddy Hodges</role>
+    <order>10</order>
+    <thumb>https://image.tmdb.org/t/p/original/iiu6HOfpieGzk2gXd5JfUtKnNrH.jpg</thumb>
+  </actor>
+  <actor>
+    <name>Erica Levene</name>
+    <role>Mrs. Trotter</role>
+    <order>19</order>
+  </actor>
+  <actor>
+    <name>Winslow Fegley</name>
+    <role>Jake Doyle</role>
+    <order>0</order>
+    <thumb>https://image.tmdb.org/t/p/original/fx72xnTrHYLsFA3CUlDbwojH8G7.jpg</thumb>
+  </actor>
+</movie>
+https://www.themoviedb.org/movie/802217
+https://www.imdb.com/title/tt11540284
