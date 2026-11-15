@@ -1118,12 +1118,12 @@ pub async fn get_item_by_id(
             .await
             .unwrap_or(0);
         dto.child_count = Some(count as i32);
-        if matches!(item.item_type.as_str(), "MusicAlbum" | "Series" | "Season") {
-            dto.cumulative_run_time_ticks =
-                media_items::cumulative_runtime_ticks(&state.pool, item_id)
-                    .await
-                    .or_log_default("media_items::cumulative_runtime_ticks");
-        }
+    }
+    // By type, not is_folder: what the scanner marks a folder is not the point.
+    if matches!(item.item_type.as_str(), "MusicAlbum" | "Series" | "Season") {
+        dto.cumulative_run_time_ticks = media_items::cumulative_runtime_ticks(&state.pool, item_id)
+            .await
+            .or_log_default("media_items::cumulative_runtime_ticks");
     }
 
     // Media streams for non-folder items
