@@ -131,6 +131,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_crumb_but_the_last_is_a_link_and_the_flag_moves_when_one_is_added() {
+        let trail = crumb_trail(&["TV Shows"]);
+        assert_eq!(trail, [(0, "TV Shows", true)]);
+        // Going into a show: "TV Shows" is no longer the last crumb. The flag is
+        // part of each entry, so the keyed list re-renders it as a link.
+        let trail = crumb_trail(&["TV Shows", "Agatha All Along", "Season 1"]);
+        assert_eq!(
+            trail,
+            [
+                (0, "TV Shows", false),
+                (1, "Agatha All Along", false),
+                (2, "Season 1", true),
+            ]
+        );
+        assert!(crumb_trail::<&str>(&[]).is_empty());
+    }
+
+    #[test]
     fn episodes_are_landscape_music_square_the_rest_posters() {
         assert_eq!(card_shape("Episode"), "landscape");
         assert_eq!(card_shape("MusicAlbum"), "square");
