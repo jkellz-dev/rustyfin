@@ -88,7 +88,7 @@ fn missing_art_is_remembered_for_thirty_days() {
     let checked = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
     let s = TitleSettings {
         artwork: title_settings::Artwork {
-            missing_checked: Some(checked.into()),
+            missing_checked: Some(checked),
             ..Default::default()
         },
         ..Default::default()
