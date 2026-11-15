@@ -1008,6 +1008,9 @@ pub fn Media() -> View {
                                             let series = hint.series_name.clone();
                                             let has_image = hint.primary_image_tag.is_some();
                                             let img_url = primary_image_url(&hint.id, hint.primary_image_tag.as_deref(), browse::THUMB_IMAGE_WIDTH);
+                                            // Worked out here: the view's closures cannot move item_type.
+                                            let thumb_class = browse::search_thumb_class(&item_type);
+                                            let icon = icon_for_item_type(&item_type);
 
                                             let mut meta_parts = Vec::new();
                                             meta_parts.push(item_type.clone());
@@ -1029,10 +1032,9 @@ pub fn Media() -> View {
                                                 ) {
                                                     (if has_image {
                                                         let url = img_url.clone();
-                                                        view! { img(class=browse::search_thumb_class(&item_type), src=url, loading="lazy") }
+                                                        view! { img(class=thumb_class, src=url, loading="lazy") }
                                                     } else {
-                                                        let icon = icon_for_item_type(&item_type);
-                                                        let class = format!("{} media-poster-placeholder", browse::search_thumb_class(&item_type));
+                                                        let class = format!("{thumb_class} media-poster-placeholder");
                                                         view! { div(class=class) { (icon) } }
                                                     })
                                                     div(class="search-result-info") {
