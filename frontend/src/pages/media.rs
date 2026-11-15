@@ -24,6 +24,8 @@ struct Breadcrumb {
     /// The item open in the detail view (always the last crumb). It lets the
     /// level above it, e.g. the episode's season, be clicked.
     is_detail: bool,
+    /// A person's page: their titles rather than a folder's children.
+    person_id: Option<String>,
 }
 
 // ── Helpers ─────────────────────────────────────────────
@@ -112,6 +114,8 @@ pub fn Media() -> View {
     let breadcrumbs: Signal<Vec<Breadcrumb>> = create_signal(Vec::new());
     let current_parent_id: Signal<Option<String>> = create_signal(None);
     let current_query: Signal<ChildQuery> = create_signal(browse::library_query(None));
+    // The person whose titles the grid lists (None: a folder's children).
+    let current_person: Signal<Option<String>> = create_signal(None);
     let loading = create_signal(true);
     let detail_loading = create_signal(false);
     let search_loading = create_signal(false);
@@ -141,6 +145,7 @@ pub fn Media() -> View {
 
     let load_items = move |parent_id: String, query: ChildQuery, start: i32| {
         loading.set(true);
+        let person = current_person.get_clone();
         spawn_local({
             let parent_id = parent_id.clone();
             async move {
@@ -150,8 +155,9 @@ pub fn Media() -> View {
                     start,
                     PAGE_SIZE,
                     query.sort_by,
-                    "Ascending",
+                    query.sort_order,
                     query.recursive,
+                    person.as_deref(),
                 )
                 .await
                 {
@@ -171,6 +177,7 @@ pub fn Media() -> View {
         let lib_id = lib.id.clone();
         let lib_name = lib.name.clone();
         let query = browse::library_query(lib.collection_type.as_deref());
+        current_person.set(None);
         current_parent_id.set(Some(lib_id.clone()));
         current_query.set(query);
         breadcrumbs.set(vec![Breadcrumb {
@@ -178,6 +185,7 @@ pub fn Media() -> View {
             parent_id: Some(lib_id.clone()),
             query,
             is_detail: false,
+            person_id: None,
         }]);
         start_index.set(0);
         load_items(lib_id, query, 0);
@@ -189,6 +197,7 @@ pub fn Media() -> View {
         let item_name = item.name.clone();
         // Only the folder's direct children: a show's seasons, a season's episodes.
         let query = browse::children_query(&item.item_type);
+        current_person.set(None);
         current_parent_id.set(Some(item_id.clone()));
         current_query.set(query);
         breadcrumbs.update(|bc| {
@@ -198,6 +207,8 @@ pub fn Media() -> View {
                 parent_id: Some(item_id.clone()),
                 query,
                 is_detail: false,
+                person_id: None,
+                person_id: None,
             });
         });
         start_index.set(0);
@@ -216,9 +227,17 @@ pub fn Media() -> View {
                     Ok(item) => {
                         // Albums list their tracks, collections their films.
                         if let Some(sort) = browse::detail_children_sort(&item.item_type)
-                            && let Ok(result) =
-                                api::get_items(&item.id, None, 0, 500, sort, "Ascending", false)
-                                    .await
+                            && let Ok(result) = api::get_items(
+                                &item.id,
+                                None,
+                                0,
+                                500,
+                                sort,
+                                "Ascending",
+                                false,
+                                None,
+                            )
+                            .await
                         {
                             detail_tracks.set(result.items);
                         }
@@ -237,6 +256,8 @@ pub fn Media() -> View {
                                 parent_id: None,
                                 query,
                                 is_detail: true,
+                                person_id: None,
+                                person_id: None,
                             });
                         });
                         detail_item.set(Some(item));
@@ -255,6 +276,7 @@ pub fn Media() -> View {
             let crumb = &crumbs[0];
             let parent_id = crumb.parent_id.clone().unwrap_or_default();
             let query = crumb.query;
+            current_person.set(crumb.person_id.clone());
             current_parent_id.set(Some(parent_id.clone()));
             current_query.set(query);
             breadcrumbs.update(|bc| bc.truncate(1));
@@ -266,6 +288,7 @@ pub fn Media() -> View {
             let crumb = &crumbs[index];
             let parent_id = crumb.parent_id.clone().unwrap_or_default();
             let query = crumb.query;
+            current_person.set(crumb.person_id.clone());
             current_parent_id.set(Some(parent_id.clone()));
             current_query.set(query);
             breadcrumbs.update(|bc| bc.truncate(index + 1));
@@ -275,7 +298,42 @@ pub fn Media() -> View {
         }
     };
 
+    // A person's page: the titles they are in.
+    let view_person = move |person_id: String, name: String| {
+        let query = browse::person_query();
+        current_person.set(Some(person_id.clone()));
+        current_parent_id.set(None);
+        current_query.set(query);
+        breadcrumbs.update(|bc| {
+            bc.retain(|c| !c.is_detail);
+            bc.push(Breadcrumb {
+                label: name,
+                parent_id: None,
+                query,
+                is_detail: false,
+                person_id: Some(person_id),
+            });
+        });
+        start_index.set(0);
+        load_items(String::new(), query, 0);
+        current_view.set(MediaView::Grid);
+    };
+
+    // A library listed in another order.
+    let change_sort = move |label: String| {
+        let query = browse::with_sort(current_query.get(), &label);
+        current_query.set(query);
+        breadcrumbs.update(|bc| {
+            if let Some(first) = bc.first_mut() {
+                first.query = query;
+            }
+        });
+        start_index.set(0);
+        load_items(current_parent_id.get_clone().unwrap_or_default(), query, 0);
+    };
+
     let back_to_libraries = move |_| {
+        current_person.set(None);
         breadcrumbs.set(Vec::new());
         current_parent_id.set(None);
         current_query.set(browse::library_query(None));
@@ -302,6 +360,7 @@ pub fn Media() -> View {
                     parent_id: None,
                     query,
                     is_detail: true,
+                    person_id: None,
                 });
             });
         }
@@ -454,11 +513,43 @@ pub fn Media() -> View {
                         let item_list = items.get_clone();
                         let total = total_count.get();
                         let start = start_index.get();
+                        // A library's top level can be re-ordered.
+                        let sortable = breadcrumbs.with(|bc| bc.len() == 1)
+                            && current_query.get().recursive;
+                        let sort_bar = if sortable {
+                            let selected = browse::sort_label(current_query.get());
+                            view! {
+                                div(class="grid-toolbar") {
+                                    label(class="grid-sort") {
+                                        "Sort by "
+                                        select(on:change=move |e: web_sys::Event| {
+                                            let value = e
+                                                .target()
+                                                .and_then(|t| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlSelectElement>(t).ok())
+                                                .map(|s| s.value())
+                                                .unwrap_or_default();
+                                            change_sort(value);
+                                        }) {
+                                            Indexed(
+                                                list=move || browse::SORT_OPTIONS.to_vec(),
+                                                view=move |o: browse::SortOption| {
+                                                    let is_selected = o.label == selected;
+                                                    view! { option(value=o.label, selected=is_selected) { (o.label) } }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            view! {}
+                        };
                         if item_list.is_empty() {
                             view! { div(class="empty-state") { "No items found." } }
                         } else {
                             view! {
                                 div {
+                                    (sort_bar)
                                     div(class="media-grid") {
                                         Indexed(
                                             list=move || item_list.clone(),
@@ -472,7 +563,14 @@ pub fn Media() -> View {
                                                 let item_type = item.item_type.clone();
                                                 let item_for_click = item.clone();
                                                 let child_count = item.child_count;
-
+                                                let user = item.user_data.clone().unwrap_or_default();
+                                                let badge = browse::card_badge(is_folder, user.played, user.unplayed_item_count);
+                                                let progress = browse::progress_percent(
+                                                    user.played_percentage,
+                                                    user.playback_position_ticks,
+                                                    item.runtime_ticks,
+                                                    user.played,
+                                                );
                                                 let display_name =
                                                     browse::card_label(&item_type, &item_name, item.index_number);
 
@@ -489,6 +587,7 @@ pub fn Media() -> View {
 
                                                 view! {
                                                     div(class="media-card", on:click=on_click) {
+                                                        div(class="media-card-art") {
                                                         (if has_image {
                                                             let url = img_url.clone();
                                                             view! { img(class=poster_class, src=url, loading="lazy") }
@@ -496,6 +595,21 @@ pub fn Media() -> View {
                                                             let icon = icon_for_item_type(&item_type);
                                                             view! { div(class=placeholder_class) { (icon) } }
                                                         })
+                                                        (match badge {
+                                                            Some(b) => {
+                                                                let text = b.text();
+                                                                view! { span(class=b.class()) { (text) } }
+                                                            }
+                                                            None => view! {},
+                                                        })
+                                                        (match progress {
+                                                            Some(pct) => {
+                                                                let style = format!("width: {pct:.1}%;");
+                                                                view! { div(class="card-progress") { div(class="card-progress-fill", style=style) {} } }
+                                                            }
+                                                            None => view! {},
+                                                        })
+                                                        }
                                                         div(class="media-card-title") { (display_name) }
                                                         (if let Some(y) = year {
                                                             view! { div(class="media-card-year") { (y) } }
@@ -888,9 +1002,21 @@ pub fn Media() -> View {
                                                         };
                                                         let alt_text = name.clone();
                                                         let title_text = name.clone();
+                                                        let person_name = name.clone();
                                                         let label_text = name;
+                                                        let person_id = person.id.clone();
+                                                        let card_class = if person_id.is_some() {
+                                                            "person-card person-card-link"
+                                                        } else {
+                                                            "person-card"
+                                                        };
+                                                        let open_person = move |_| {
+                                                            if let Some(id) = person_id.clone() {
+                                                                view_person(id, person_name.clone());
+                                                            }
+                                                        };
                                                         view! {
-                                                            div(class="person-card") {
+                                                            div(class=card_class, on:click=open_person) {
                                                                 (if has_image {
                                                                     let src = img_url.clone();
                                                                     let alt = alt_text.clone();

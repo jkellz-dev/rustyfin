@@ -1088,3 +1088,66 @@ select:focus {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
 }
+
+/* ── Grid toolbar, card badges and progress (12d) ─────────── */
+.grid-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.grid-sort {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.grid-sort select {
+  margin-left: 6px;
+}
+
+.media-card-art {
+  position: relative;
+}
+
+.card-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--accent, #00a4dc);
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.card-badge-played {
+  background: #2e7d32;
+}
+
+.card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.card-progress-fill {
+  height: 100%;
+  background: var(--accent, #00a4dc);
+}
+
+.person-card-link {
+  cursor: pointer;
+}
+
+.person-card-link:hover .person-name {
+  text-decoration: underline;
+}

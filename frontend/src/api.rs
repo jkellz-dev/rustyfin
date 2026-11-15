@@ -240,6 +240,9 @@ pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, String> {
     get_json("/UserViews").await
 }
 
+/// One page of items: under `parent_id` (everything when empty), or with
+/// `person_id` in their cast and crew.
+#[allow(clippy::too_many_arguments)]
 pub async fn get_items(
     parent_id: &str,
     item_types: Option<&str>,
@@ -248,14 +251,21 @@ pub async fn get_items(
     sort_by: &str,
     sort_order: &str,
     recursive: bool,
+    person_id: Option<&str>,
 ) -> Result<QueryResult<BaseItemDto>, String> {
     let mut path = format!(
-        "/Items?ParentId={parent_id}&StartIndex={start_index}&Limit={limit}\
+        "/Items?StartIndex={start_index}&Limit={limit}\
          &SortBy={sort_by}&SortOrder={sort_order}&Recursive={recursive}\
          &Fields=Overview,Genres,Studios,People,MediaStreams,Chapters,ProviderIds,Path"
     );
+    if !parent_id.is_empty() {
+        path.push_str(&format!("&ParentId={parent_id}"));
+    }
     if let Some(types) = item_types {
         path.push_str(&format!("&IncludeItemTypes={types}"));
+    }
+    if let Some(person) = person_id {
+        path.push_str(&format!("&PersonIds={person}"));
     }
     get_json(&path).await
 }

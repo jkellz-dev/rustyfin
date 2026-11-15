@@ -158,6 +158,22 @@ pub struct BaseItemDto {
     pub chapters: Vec<ChapterInfoDto>,
     #[serde(default)]
     pub provider_ids: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub user_data: Option<UserItemDataDto>,
+}
+
+/// The signed-in user's state for an item.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UserItemDataDto {
+    #[serde(default)]
+    pub played: bool,
+    #[serde(default)]
+    pub unplayed_item_count: Option<i32>,
+    #[serde(default)]
+    pub played_percentage: Option<f64>,
+    #[serde(default)]
+    pub playback_position_ticks: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

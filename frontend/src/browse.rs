@@ -12,6 +12,129 @@ pub struct ChildQuery {
     pub recursive: bool,
     pub item_types: Option<&'static str>,
     pub sort_by: &'static str,
+    /// One direction per `sort_by` key (the server reuses the first for any
+    /// key without one).
+    pub sort_order: &'static str,
+}
+
+/// An order the library grid offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortOption {
+    pub label: &'static str,
+    pub sort_by: &'static str,
+    pub sort_order: &'static str,
+}
+
+/// The orders a library can be listed in; newest, highest first except name.
+pub const SORT_OPTIONS: &[SortOption] = &[
+    SortOption {
+        label: "Name",
+        sort_by: "SortName",
+        sort_order: "Ascending",
+    },
+    SortOption {
+        label: "Date added",
+        sort_by: "DateCreated,SortName",
+        sort_order: "Descending,Ascending",
+    },
+    SortOption {
+        label: "Year",
+        sort_by: "ProductionYear,SortName",
+        sort_order: "Descending,Ascending",
+    },
+    SortOption {
+        label: "Rating",
+        sort_by: "CommunityRating,SortName",
+        sort_order: "Descending,Ascending",
+    },
+];
+
+/// `query` listed in the order labelled `label` (unchanged for an unknown one).
+pub fn with_sort(query: ChildQuery, label: &str) -> ChildQuery {
+    SORT_OPTIONS
+        .iter()
+        .find(|o| o.label == label)
+        .map_or(query, |o| ChildQuery {
+            sort_by: o.sort_by,
+            sort_order: o.sort_order,
+            ..query
+        })
+}
+
+/// The label of the order `query` uses ("Name" when it is none of them).
+pub fn sort_label(query: ChildQuery) -> &'static str {
+    SORT_OPTIONS
+        .iter()
+        .find(|o| o.sort_by == query.sort_by)
+        .map_or("Name", |o| o.label)
+}
+
+/// What a person's page lists: the films, shows and episodes they are in,
+/// newest first.
+pub fn person_query() -> ChildQuery {
+    ChildQuery {
+        recursive: true,
+        item_types: Some("Movie,Series,Episode"),
+        sort_by: "ProductionYear,SortName",
+        sort_order: "Descending,Ascending",
+    }
+}
+
+/// The corner badge of a grid card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardBadge {
+    /// Watched (a folder: everything in it watched).
+    Played,
+    /// A folder's unwatched episodes or films.
+    Unplayed(i32),
+}
+
+impl CardBadge {
+    pub fn text(self) -> String {
+        match self {
+            CardBadge::Played => "✓".to_string(),
+            CardBadge::Unplayed(n) if n > 99 => "99+".to_string(),
+            CardBadge::Unplayed(n) => n.to_string(),
+        }
+    }
+
+    pub fn class(self) -> &'static str {
+        match self {
+            CardBadge::Played => "card-badge card-badge-played",
+            CardBadge::Unplayed(_) => "card-badge",
+        }
+    }
+}
+
+/// A card's badge from its user data: a tick when watched, else a folder's
+/// unwatched count; nothing otherwise.
+pub fn card_badge(is_folder: bool, played: bool, unplayed: Option<i32>) -> Option<CardBadge> {
+    if played {
+        return Some(CardBadge::Played);
+    }
+    match unplayed {
+        Some(n) if is_folder && n > 0 => Some(CardBadge::Unplayed(n)),
+        _ => None,
+    }
+}
+
+/// How far through an item the user is, in percent, when part way: from the
+/// server's percentage, else position over runtime. None when not started or
+/// watched (the badge says so).
+pub fn progress_percent(
+    played_percentage: Option<f64>,
+    position_ticks: Option<i64>,
+    runtime_ticks: Option<i64>,
+    played: bool,
+) -> Option<f64> {
+    if played {
+        return None;
+    }
+    let pct = played_percentage.or_else(|| match (position_ticks, runtime_ticks) {
+        (Some(pos), Some(run)) if run > 0 => Some(pos as f64 * 100.0 / run as f64),
+        _ => None,
+    })?;
+    (pct > 0.0).then_some(pct.min(100.0))
 }
 
 /// A library's top level: its kind of top-level item, wherever it sits. A mixed
@@ -28,6 +151,7 @@ pub fn library_query(collection_type: Option<&str>) -> ChildQuery {
         recursive: item_types.is_some(),
         item_types,
         sort_by: "SortName",
+        sort_order: "Ascending",
     }
 }
 
@@ -41,6 +165,7 @@ pub fn children_query(parent_type: &str) -> ChildQuery {
             "Series" | "Season" | "MusicAlbum" => "IndexNumber",
             _ => "SortName",
         },
+        sort_order: "Ascending",
     }
 }
 
@@ -271,6 +396,7 @@ mod tests {
                 recursive: true,
                 item_types: Some("BoxSet"),
                 sort_by: "SortName",
+                sort_order: "Ascending",
             }
         );
     }
