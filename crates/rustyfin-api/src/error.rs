@@ -72,6 +72,9 @@ impl IntoResponse for ApiError {
             // that does not exist (e.g. user data for an unknown item), which
             // Jellyfin reports as 404 rather than a server error.
             ApiError::Database(e) if is_foreign_key_violation(e) => StatusCode::NOT_FOUND,
+            ApiError::Database(e) if rustyfin_db::pool::is_unavailable(e) => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
             ApiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
@@ -89,6 +92,10 @@ impl IntoResponse for ApiError {
             response
                 .headers_mut()
                 .insert(axum::http::header::RETRY_AFTER, secs.into());
+        } else if status == StatusCode::SERVICE_UNAVAILABLE {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, 5u64.into());
         }
         response
     }

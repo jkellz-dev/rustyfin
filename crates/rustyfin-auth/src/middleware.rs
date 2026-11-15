@@ -91,6 +91,11 @@ where
 
         let ResolvedToken { session, user } =
             resolve_token(&pool, &token).await.map_err(|e| match e {
+                // Busy or unreachable database: 503, never a 401 that would
+                // sign the client out.
+                TokenError::Database(e) if rustyfin_db::pool::is_unavailable(&e) => {
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
                 TokenError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
                 TokenError::Unknown
                 | TokenError::Expired

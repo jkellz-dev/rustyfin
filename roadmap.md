@@ -881,7 +881,9 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [x] From the first real library (2026-11-14): hidden files and folders (`._*` AppleDouble, `.Trash-*`) and NAS
       folders (`@eaDir`, `#recycle`) are not media, and items made from them are pruned; artwork is decoded and
       typed by contents (`.tbn`, PNGs named `.jpg`); ffprobe failures say why; 4xx answers are not logged as errors
-- [ ] Database connection pool exhaustion behavior (graceful degradation)
+- [x] Database connection pool exhaustion behavior (graceful degradation): a request waits at most 5 s for a
+      connection, then answers 503 (with `Retry-After` from API errors), never a 401 that signs clients out; an
+      unreachable database is 503 too (`pool_exhaustion_tests`)
 - [ ] Large library stress: 10k+ items, deeply nested seasons/episodes
 
 ### 11d. Load & Performance Testing
