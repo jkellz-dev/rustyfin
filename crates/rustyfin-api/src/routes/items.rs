@@ -765,7 +765,7 @@ fn parse_comma_ints(s: &Option<String>) -> Vec<i32> {
 pub async fn get_items(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
-    Query(query): Query<ItemsQuery>,
+    Query(mut query): Query<ItemsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let start_index = query.start_index.unwrap_or(0);
     let limit = query.limit.unwrap_or(50).min(500);
@@ -774,6 +774,13 @@ pub async fn get_items(
     let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
         .await
         .map_err(ApiError::Database)?;
+
+    // The Collections view lists every collection the user may see.
+    if query.parent_id == Some(super::libraries::collections_view_id(&state.server_id)) {
+        query.parent_id = None;
+        query.include_item_types = Some("BoxSet".to_string());
+        query.recursive = Some(true);
+    }
 
     // The root folder's children are the libraries.
     if query.parent_id == Some(super::libraries::root_folder_id(&state.server_id)) {
@@ -961,6 +968,13 @@ pub async fn get_item_by_id(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
+    if item_id == super::libraries::collections_view_id(&state.server_id) {
+        let count = super::libraries::visible_collection_count(&state, auth.user_id).await?;
+        return Ok(Json(super::libraries::collections_view_dto(
+            &state.server_id,
+            count,
+        )));
+    }
     if item_id == super::libraries::root_folder_id(&state.server_id) {
         return Ok(Json(
             super::libraries::root_folder_dto(&state, auth.user_id).await?,

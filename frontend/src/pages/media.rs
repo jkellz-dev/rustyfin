@@ -211,18 +211,11 @@ pub fn Media() -> View {
             async move {
                 match api::get_item(&item_id).await {
                     Ok(item) => {
-                        // For albums, fetch child tracks
-                        if item.item_type == "MusicAlbum"
-                            && let Ok(result) = api::get_items(
-                                &item.id,
-                                None,
-                                0,
-                                500,
-                                "IndexNumber",
-                                "Ascending",
-                                false,
-                            )
-                            .await
+                        // Albums list their tracks, collections their films.
+                        if let Some(sort) = browse::detail_children_sort(&item.item_type)
+                            && let Ok(result) =
+                                api::get_items(&item.id, None, 0, 500, sort, "Ascending", false)
+                                    .await
                         {
                             detail_tracks.set(result.items);
                         }
@@ -462,9 +455,9 @@ pub fn Media() -> View {
 
                                                 let (poster_class, placeholder_class) = browse::grid_classes(&item_type);
 
-                                                let is_album = item_type == "MusicAlbum";
+                                                let opens_detail = browse::opens_detail(&item_type, is_folder);
                                                 let on_click = move |_| {
-                                                    if is_album || !is_folder {
+                                                    if opens_detail {
                                                         view_detail(item_id.clone());
                                                     } else {
                                                         browse_into(item_for_click.clone());
@@ -545,6 +538,7 @@ pub fn Media() -> View {
                         let refresh_id = detail_id.clone();
                         let detail_item_type = item.item_type.clone();
                         let is_album = detail_item_type == "MusicAlbum";
+                        let is_collection = detail_item_type == "BoxSet";
                         let (detail_poster_class, detail_placeholder_class) =
                             browse::detail_classes(&detail_item_type);
 
@@ -702,6 +696,52 @@ pub fn Media() -> View {
                                                                     span(class="track-num") { (num_str) }
                                                                     span(class="track-name") { (name) }
                                                                     span(class="track-duration") { (duration_str) }
+                                                                }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    view! {}
+                                })
+
+                                // Films (for collections)
+                                (if is_collection {
+                                    let films = detail_tracks.get_clone();
+                                    if films.is_empty() {
+                                        view! {}
+                                    } else {
+                                        view! {
+                                            div(class="detail-section") {
+                                                h3 { "Films" }
+                                                div(class="media-grid") {
+                                                    Indexed(
+                                                        list=move || films.clone(),
+                                                        view=move |film: BaseItemDto| {
+                                                            let film_id = film.id.clone();
+                                                            let name = film.name.clone();
+                                                            let year = film.production_year;
+                                                            let has_image = has_primary_image(&film);
+                                                            let url = primary_image_url(&film.id, primary_tag(&film).as_deref(), browse::CARD_IMAGE_WIDTH);
+                                                            let (poster_class, placeholder_class) = browse::grid_classes(&film.item_type);
+                                                            let icon = icon_for_item_type(&film.item_type);
+                                                            view! {
+                                                                div(class="media-card", on:click=move |_| view_detail(film_id.clone())) {
+                                                                    (if has_image {
+                                                                        let url = url.clone();
+                                                                        view! { img(class=poster_class, src=url, loading="lazy") }
+                                                                    } else {
+                                                                        view! { div(class=placeholder_class) { (icon) } }
+                                                                    })
+                                                                    div(class="media-card-title") { (name) }
+                                                                    (if let Some(y) = year {
+                                                                        view! { div(class="media-card-year") { (y) } }
+                                                                    } else {
+                                                                        view! {}
+                                                                    })
                                                                 }
                                                             }
                                                         }

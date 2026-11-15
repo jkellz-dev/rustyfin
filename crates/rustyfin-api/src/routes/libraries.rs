@@ -64,6 +64,10 @@ pub async fn get_user_views(
                 .or_log_default("media_items::count_top_level_by_library");
         dto.child_count = Some(count as i32);
     }
+    let collections = visible_collection_count(&state, auth.user_id).await?;
+    if collections > 0 {
+        dtos.push(collections_view_dto(&state.server_id, collections));
+    }
     super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
 
     let total = dtos.len() as i32;
@@ -144,6 +148,47 @@ pub(crate) async fn root_folder_dto(
     };
     super::items::with_jellyfin_defaults(&mut dto);
     Ok(dto)
+}
+
+/// The id of the Collections view (Jellyfin's `boxsets` folder).
+pub(crate) fn collections_view_id(server_id: &str) -> uuid::Uuid {
+    uuid::Uuid::new_v5(
+        &uuid::Uuid::NAMESPACE_OID,
+        format!("{server_id}/collections").as_bytes(),
+    )
+}
+
+/// How many collections `user_id` may see.
+pub(crate) async fn visible_collection_count(
+    state: &AppState,
+    user_id: uuid::Uuid,
+) -> Result<i64, ApiError> {
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
+        .await
+        .map_err(ApiError::Database)?;
+    rustyfin_db::repo::collections::count_visible(&state.pool, accessible.as_deref())
+        .await
+        .map_err(ApiError::Database)
+}
+
+/// The Collections view: a virtual library of every collection the user may
+/// see, as Jellyfin shows once a collection exists.
+pub(crate) fn collections_view_dto(server_id: &str, count: i64) -> BaseItemDto {
+    let mut dto = BaseItemDto {
+        name: "Collections".to_string(),
+        server_id: server_id.to_string(),
+        id: collections_view_id(server_id),
+        item_type: "CollectionFolder".to_string(),
+        collection_type: Some("boxsets".to_string()),
+        is_folder: true,
+        sort_name: Some("collections".to_string()),
+        parent_id: Some(root_folder_id(server_id)),
+        child_count: Some(count as i32),
+        location_type: Some("FileSystem".to_string()),
+        ..Default::default()
+    };
+    super::items::with_jellyfin_defaults(&mut dto);
+    dto
 }
 
 /// The libraries `user_id` may see.

@@ -21,6 +21,7 @@ pub fn library_query(collection_type: Option<&str>) -> ChildQuery {
         Some("movies") => Some("Movie"),
         Some("tvshows") => Some("Series"),
         Some("music") => Some("MusicArtist"),
+        Some("boxsets") => Some("BoxSet"),
         _ => None,
     };
     ChildQuery {
@@ -40,6 +41,23 @@ pub fn children_query(parent_type: &str) -> ChildQuery {
             "Series" | "Season" | "MusicAlbum" => "IndexNumber",
             _ => "SortName",
         },
+    }
+}
+
+/// Whether clicking a card opens the item's details page (anything that is
+/// not a folder, and albums and collections, whose page lists what they hold)
+/// rather than browsing into it.
+pub fn opens_detail(item_type: &str, is_folder: bool) -> bool {
+    matches!(item_type, "MusicAlbum" | "BoxSet") || !is_folder
+}
+
+/// How a details page lists what the item holds: an album its tracks by
+/// number, a collection its films by release. None: nothing to list.
+pub fn detail_children_sort(item_type: &str) -> Option<&'static str> {
+    match item_type {
+        "MusicAlbum" => Some("IndexNumber"),
+        "BoxSet" => Some("ProductionYear,SortName"),
+        _ => None,
     }
 }
 

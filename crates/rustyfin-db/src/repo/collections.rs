@@ -205,6 +205,19 @@ pub async fn list_auto_tmdb_ids(
     .await
 }
 
+/// How many collections (BoxSets) there are in `libraries` (all when `None`).
+/// A collection made by hand outside any library counts for everyone.
+pub async fn count_visible(pool: &PgPool, libraries: Option<&[Uuid]>) -> Result<i64, sqlx::Error> {
+    let (n,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM media_items WHERE item_type = 'BoxSet' \
+         AND ($1::uuid[] IS NULL OR library_id IS NULL OR library_id = ANY($1))",
+    )
+    .bind(libraries)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
 /// Item counts of collections, by collection id.
 pub async fn count_items_batch(
     pool: &PgPool,
