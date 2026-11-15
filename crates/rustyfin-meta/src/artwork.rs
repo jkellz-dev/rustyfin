@@ -391,6 +391,52 @@ mod tests {
         }
     }
 
+    #[test]
+    fn collections_without_a_poster_need_art_once_each() {
+        let t = Tree::new();
+        let nfo = |id: &str| {
+            format!(r#"<movie><title>x</title><set tmdbcolid="{id}"><name>S</name></set></movie>"#)
+        };
+        for (film, set) in [("A (2001)", "10"), ("B (2002)", "10"), ("C (2003)", "20")] {
+            t.file(&format!("movies/{film}/{film}.mkv"));
+            std::fs::write(t.0.join(format!("movies/{film}/{film}.nfo")), nfo(set)).unwrap();
+        }
+        t.file("movies/D (2004)/D (2004).mkv");
+        t.file("collections/20/poster.jpg");
+        let dirs: Vec<PathBuf> = ["A (2001)", "B (2002)", "C (2003)", "D (2004)"]
+            .iter()
+            .map(|d| t.0.join("movies").join(d))
+            .collect();
+        let collections = t.0.join("collections");
+        assert_eq!(collections_needing_art(&dirs, &collections, false), [10]);
+        assert_eq!(collections_needing_art(&dirs, &collections, true), [10, 20]);
+    }
+
+    #[test]
+    fn collection_art_sits_beside_the_people_folder() {
+        assert_eq!(
+            rustyfin_common::images::collection_art_dir(Path::new("/data/cache/people")),
+            Path::new("/data/cache/collections")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_library_folder_is_named_in_the_error() {
+        let config = crate::config::MetaConfig::default();
+        let opts = crate::scan::ScanOpts {
+            config: &config,
+            dry_run: true,
+            auto_mode: false,
+            no_cache: true,
+            force: false,
+        };
+        let err = fill_missing(Path::new("/data/media/kids_movies"), "movies", &opts)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("/data/media/kids_movies"), "{err}");
+    }
+
     fn person(name: &str, url: Option<&str>) -> nfo::NfoPerson {
         nfo::NfoPerson {
             name: name.to_string(),

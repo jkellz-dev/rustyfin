@@ -259,3 +259,65 @@ fn the_tmdb_collection_id_is_read_from_the_nfo() {
     assert_eq!(set.tmdb_id, None);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Collection art lives on the cache volume beside the people folder, one
+/// folder per TMDB collection id (owner, 2026-11-14):
+/// `<cache>/collections/<tmdb-id>/poster.jpg`, `backdrop.jpg`, ...
+/// `rustyfin artwork` fetches it; a scan attaches it to the collection.
+#[tokio::test]
+async fn a_collection_shows_its_art_from_the_cache_volume() {
+    let cache = std::env::temp_dir().join(format!("rf-colart-{}", Uuid::new_v4().simple()));
+    let people = cache.join("people");
+    let art = cache.join("collections").join("1267164");
+    std::fs::create_dir_all(&people).unwrap();
+    std::fs::create_dir_all(&art).unwrap();
+    std::fs::write(art.join("poster.jpg"), b"collection poster").unwrap();
+    std::fs::write(art.join("backdrop.jpg"), b"collection backdrop").unwrap();
+
+    let app = common::TestApp::with_people_cache_dir(people.clone()).await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let tree = Tree::new();
+    let set = r#"<set tmdbcolid="1267164"><name>Ready or Not Collection</name></set>"#;
+    tree.movie("Ready or Not (2019)", Some(set));
+    tree.movie("Ready or Not 2 Here I Come (2026)", Some(set));
+    let lib = libraries::create(&app.pool, "Movies", "movies", &[tree.root()])
+        .await
+        .unwrap()
+        .id;
+    let scan_with_cache = || async {
+        LibraryScanner::new(app.pool.clone(), Some(people.clone()))
+            .scan(lib, &[tree.root()])
+            .await
+            .expect("scan")
+    };
+    scan_with_cache().await;
+
+    let url = format!("/Items?ParentId={lib}&IncludeItemTypes=BoxSet&Recursive=true");
+    let (_, body) = app.get(&url, &token).await;
+    let boxset = &body["Items"][0];
+    let id = boxset["Id"].as_str().unwrap().to_string();
+    let primary = boxset["ImageTags"]["Primary"].as_str().unwrap().to_string();
+    assert_eq!(
+        boxset["BackdropImageTags"].as_array().map(Vec::len),
+        Some(1),
+        "{boxset}"
+    );
+
+    let (status, _, bytes) = app
+        .get_bytes(&format!("/Items/{id}/Images/Primary"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, b"collection poster");
+    let (status, _, bytes) = app
+        .get_bytes(&format!("/Items/{id}/Images/Backdrop/0"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, b"collection backdrop");
+
+    // A rescan with nothing changed keeps the tag clients cache by.
+    scan_with_cache().await;
+    let (_, body) = app.get(&url, &token).await;
+    assert_eq!(body["Items"][0]["ImageTags"]["Primary"], primary.as_str());
+    app.cleanup().await;
+    let _ = std::fs::remove_dir_all(&cache);
+}
