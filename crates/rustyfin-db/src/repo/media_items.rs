@@ -1488,6 +1488,8 @@ pub struct ItemQuery {
     /// MusicArtist items: their albums, the tracks on those, and any track
     /// naming the artist.
     pub artist_ids: Vec<Uuid>,
+    /// MusicAlbum items: their tracks, also those in disc folders.
+    pub album_ids: Vec<Uuid>,
     pub min_community_rating: Option<f64>,
     pub min_critic_rating: Option<f64>,
     pub name_starts_with: Option<String>,
@@ -1528,6 +1530,7 @@ impl Default for ItemQuery {
             tags: Vec::new(),
             person_ids: Vec::new(),
             artist_ids: Vec::new(),
+            album_ids: Vec::new(),
             min_community_rating: None,
             min_critic_rating: None,
             name_starts_with: None,
@@ -1745,6 +1748,17 @@ impl ItemQuery {
                    OR mi.parent_id IN (SELECT al.id FROM media_items al WHERE al.parent_id = a.id) \
                    OR a.name = ANY(mi.artists)))",
             );
+        }
+
+        // Album filter: the album's tracks, directly or in a disc folder.
+        if !self.album_ids.is_empty() {
+            qb.push(" AND (mi.parent_id = ANY(");
+            qb.push_bind(&self.album_ids);
+            qb.push(
+                ") OR mi.parent_id IN (SELECT d.id FROM media_items d WHERE d.parent_id = ANY(",
+            );
+            qb.push_bind(&self.album_ids);
+            qb.push(")))");
         }
 
         // Rating filters

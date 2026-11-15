@@ -55,6 +55,8 @@ pub struct ItemsQuery {
     pub person_ids: Option<String>,
     pub artist_ids: Option<String>,
     pub album_artist_ids: Option<String>,
+    /// Tracks of these albums (Plezy lists an album with it).
+    pub album_ids: Option<String>,
     pub ids: Option<String>,
     pub min_community_rating: Option<f64>,
     pub min_critic_rating: Option<f64>,
@@ -907,6 +909,7 @@ pub async fn get_items(
         tags: parse_pipe_delimited(&query.tags),
         person_ids,
         artist_ids,
+        album_ids: parse_comma_uuids(&query.album_ids),
         min_community_rating: query.min_community_rating,
         min_critic_rating: query.min_critic_rating,
         name_starts_with: query.name_starts_with.clone(),
