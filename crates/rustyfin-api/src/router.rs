@@ -211,10 +211,13 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/Items/{itemId}/Images", get(images::get_item_images_list))
         // ── Entity image stubs (genres, studios, persons, artists, music genres) ──
-        .route("/Genres/{name}/Images/{imageType}", get(stubs::not_found))
+        .route(
+            "/Genres/{name}/Images/{imageType}",
+            get(genres::get_genre_image),
+        )
         .route(
             "/Genres/{name}/Images/{imageType}/{imageIndex}",
-            get(stubs::not_found),
+            get(genres::get_genre_image_by_index),
         )
         .route(
             "/Studios/{name}/Images/{imageType}",
@@ -521,6 +524,7 @@ pub fn build_router(state: AppState) -> Router {
         // ── State ───────────────────────────────────────────────
         .fallback(unmatched_route)
         .with_state(state)
+        .layer(axum::middleware::from_fn(crate::request_log::log_request))
         // Jellyfin clients send camelCase query keys; our extractors expect PascalCase.
         .layer(axum::middleware::from_fn(
             crate::query_case::normalize_query_keys,

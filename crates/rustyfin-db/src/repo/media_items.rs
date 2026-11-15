@@ -285,13 +285,21 @@ pub async fn count_top_level_by_library(
 /// Find latest items added to a library.
 pub async fn latest_by_library(
     pool: &PgPool,
-    library_id: Uuid,
+    library_id: Option<Uuid>,
+    item_types: &[String],
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    // What was added: media, not the containers a scan makes or the
+    // collections built from NFOs (Jellyfin's Latest leaves those out too).
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE library_id = $1 ORDER BY date_created DESC LIMIT $2",
+        "SELECT * FROM media_items WHERE ($1::uuid IS NULL OR library_id = $1) \
+         AND item_type NOT IN ('BoxSet', 'Folder', 'CollectionFolder', 'Playlist', 'Season', \
+                               'UserRootFolder') \
+         AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) \
+         ORDER BY date_created DESC LIMIT $3",
     )
     .bind(library_id)
+    .bind(item_types)
     .bind(limit)
     .fetch_all(pool)
     .await
@@ -988,7 +996,7 @@ pub async fn get_last_watched_episode(
           AND m.item_type = 'Episode'
           AND ud.played = true
           AND (m.parent_index_number IS NULL OR m.parent_index_number > 0)
-        ORDER BY m.parent_index_number DESC NULLS LAST, m.index_number DESC NULLS LAST
+        ORDER BY ud.last_played_date DESC NULLS LAST, m.parent_index_number DESC NULLS LAST, m.index_number DESC NULLS LAST
         LIMIT 1
         "#,
     )
@@ -1058,8 +1066,8 @@ pub async fn get_next_episodes(
               AND m.item_type = 'Episode'
               AND ud.played = true
               AND (m.parent_index_number IS NULL OR m.parent_index_number > 0)
-            ORDER BY m.series_id, m.parent_index_number DESC NULLS LAST,
-                     m.index_number DESC NULLS LAST
+            ORDER BY m.series_id, ud.last_played_date DESC NULLS LAST,
+                     m.parent_index_number DESC NULLS LAST, m.index_number DESC NULLS LAST
         )
         SELECT nx.*
         FROM wanted w
@@ -1800,4 +1808,25 @@ impl ItemQuery {
             qb.push(", mi.sort_name, mi.name");
         }
     }
+}
+
+/// A picture for genre `genre` (in `library`, else anywhere): the backdrop of
+/// one of its titles, else a poster; the best-rated title first.
+pub async fn genre_image(
+    pool: &PgPool,
+    genre: &str,
+    library: Option<Uuid>,
+) -> Result<Option<crate::repo::images::ImageRow>, sqlx::Error> {
+    sqlx::query_as::<_, crate::repo::images::ImageRow>(
+        "SELECT i.* FROM images i JOIN media_items m ON m.id = i.entity_id \
+         WHERE $1 = ANY(m.genres) AND ($2::uuid IS NULL OR m.library_id = $2) \
+           AND m.item_type IN ('Movie', 'Series', 'MusicAlbum', 'MusicArtist') \
+           AND i.image_type IN ('Backdrop', 'Primary') AND i.image_index = 0 \
+         ORDER BY (i.image_type = 'Backdrop') DESC, m.community_rating DESC NULLS LAST, \
+                  m.sort_name, i.id LIMIT 1",
+    )
+    .bind(genre)
+    .bind(library)
+    .fetch_optional(pool)
+    .await
 }

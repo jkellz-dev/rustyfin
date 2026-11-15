@@ -60,6 +60,17 @@ pub async fn get_genres(
             ..Default::default()
         };
 
+        // A title's art stands in for the genre's picture.
+        if let Some(image) = media_items::genre_image(&state.pool, genre_name, query.parent_id)
+            .await
+            .or_log_default("media_items::genre_image")
+        {
+            dto.image_tags = Some(std::collections::HashMap::from([(
+                "Primary".to_string(),
+                image.id.to_string(),
+            )]));
+        }
+
         if include_counts {
             let counts =
                 media_items::count_items_with_genre(&state.pool, genre_name, query.parent_id)
@@ -126,4 +137,37 @@ pub async fn get_genre(
     }
 
     Ok(Json(dto))
+}
+
+/// `GET /Genres/{name}/Images/{imageType}`: the genre's picture, a title's
+/// backdrop (else poster); 404 when none of its titles has art.
+pub async fn get_genre_image(
+    State(state): State<AppState>,
+    axum::extract::Path((name, _image_type)): axum::extract::Path<(String, String)>,
+    axum::extract::Query(params): axum::extract::Query<super::images::ImageParams>,
+    headers: axum::http::HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    let image = media_items::genre_image(&state.pool, &name, None)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+    let opts = super::images::build_options(&params, &headers);
+    let req = super::images::ImageRequest::new(&params, &headers);
+    super::images::serve_image(&image.path, &opts, &state, &req).await
+}
+
+/// `GET /Genres/{name}/Images/{imageType}/{imageIndex}`: as above.
+pub async fn get_genre_image_by_index(
+    state: State<AppState>,
+    axum::extract::Path((name, image_type, _index)): axum::extract::Path<(String, String, i32)>,
+    params: axum::extract::Query<super::images::ImageParams>,
+    headers: axum::http::HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    get_genre_image(
+        state,
+        axum::extract::Path((name, image_type)),
+        params,
+        headers,
+    )
+    .await
 }

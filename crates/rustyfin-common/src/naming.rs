@@ -233,7 +233,17 @@ pub fn split_folder_year(raw: &str) -> (String, Option<i32>) {
             }
         }
     }
-    (raw.trim().to_string(), None)
+    (trimmed.to_string(), None)
+}
+
+/// `name` without provider tags (`[tvdbid-1]`, `[tmdbid-2]`) and the spaces
+/// they leave: `"Andor [tvdbid-393189]"` is `"Andor"`.
+pub fn strip_provider_tags(name: &str) -> String {
+    RE_PROVIDER_ID
+        .replace_all(name, "")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Extract a year from an album directory name, e.g. "Album Name (2020)".

@@ -292,6 +292,11 @@ pub(crate) fn with_jellyfin_defaults(dto: &mut BaseItemDto) {
         dto.display_preferences_id = Some(dto.id.simple().to_string());
     }
     ensure_primary_placeholder(dto);
+    // Collections list their films by release date.
+    if dto.item_type == "BoxSet" {
+        dto.display_order
+            .get_or_insert_with(|| "PremiereDate".to_string());
+    }
 }
 
 pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
@@ -314,7 +319,14 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
     };
 
     let mut dto = BaseItemDto {
-        name: item.name.clone(),
+        name: if matches!(
+            item.item_type.as_str(),
+            "Series" | "MusicArtist" | "MusicAlbum"
+        ) {
+            rustyfin_core::strip_provider_tags(&item.name)
+        } else {
+            item.name.clone()
+        },
         original_title: item.original_title.clone(),
         server_id: server_id.to_string(),
         id: item.id,
@@ -322,7 +334,10 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         // A top-level item hangs off its library.
         parent_id: item.parent_id.or(item.library_id),
         series_id: item.series_id,
-        series_name: item.series_name.clone(),
+        series_name: item
+            .series_name
+            .as_deref()
+            .map(rustyfin_core::strip_provider_tags),
         season_id: item.season_id,
         season_name: item.season_name.clone(),
         index_number: item.index_number,
@@ -827,6 +842,21 @@ pub async fn get_items(
         });
     }
 
+    // A collection's films go by release (its DisplayOrder), as in Jellyfin,
+    // when the client asks for no order or for name order; any other explicit
+    // order is honoured.
+    let wanted_sort = parse_comma_delimited(&query.sort_by);
+    let collection_sort = (collection_members.is_some()
+        && (wanted_sort.is_empty()
+            || wanted_sort
+                .iter()
+                .all(|s| matches!(s.as_str(), "SortName" | "Name" | "Default"))))
+    .then(|| {
+        ["PremiereDate", "ProductionYear", "SortName"]
+            .map(str::to_string)
+            .to_vec()
+    });
+
     // Merge artist_ids and album_artist_ids into person_ids
     let mut person_ids = parse_comma_uuids(&query.person_ids);
     person_ids.extend(parse_comma_uuids(&query.artist_ids));
@@ -858,7 +888,7 @@ pub async fn get_items(
         is_favorite: query.is_favorite,
         is_played: query.is_played,
         search_term: query.search_term.clone(),
-        sort_by: parse_comma_delimited(&query.sort_by),
+        sort_by: collection_sort.unwrap_or_else(|| parse_comma_delimited(&query.sort_by)),
         sort_order: parse_comma_delimited(&query.sort_order),
         start_index,
         limit,
@@ -1129,17 +1159,11 @@ pub async fn get_latest_items(
         .await
         .map_err(ApiError::Database)?;
 
-    // If parent_id is provided, get latest from that library
-    let items = if let Some(parent_id) = query.parent_id {
-        media_items::latest_by_library(&state.pool, parent_id, limit)
-            .await
-            .map_err(ApiError::Database)?
-    } else {
-        // Get latest across all libraries
-        media_items::latest_by_library(&state.pool, Uuid::nil(), limit)
-            .await
-            .map_err(ApiError::Database)?
-    };
+    // One library's latest, or across all of them.
+    let item_types = parse_comma_delimited(&query.include_item_types);
+    let items = media_items::latest_by_library(&state.pool, query.parent_id, &item_types, limit)
+        .await
+        .map_err(ApiError::Database)?;
 
     // Filter by library access
     let items: Vec<_> = items

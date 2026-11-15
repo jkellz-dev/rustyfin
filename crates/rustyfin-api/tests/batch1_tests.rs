@@ -247,7 +247,7 @@ async fn provider_tags_never_show_in_titles() {
 
 #[test]
 fn provider_tags_come_off_names_without_a_year() {
-    use rustyfin_common::naming::split_folder_year;
+    use rustyfin_core::split_folder_year;
     assert_eq!(
         split_folder_year("Andor [tvdbid-393189]"),
         ("Andor".to_string(), None)

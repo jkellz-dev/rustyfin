@@ -423,10 +423,18 @@ pub async fn update_virtual_folder(
         ));
     }
 
+    let before = libraries::find_by_id(&state.pool, query.id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
     let lib = libraries::update(&state.pool, query.id, &req.name, &req.paths)
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
+    // New folders mean new media: scan, as Jellyfin does after a path change.
+    if before.paths != lib.paths {
+        start_scans(&state, vec![lib.clone()]).await;
+    }
 
     let _ = activity_log::insert(
         &state.pool,
