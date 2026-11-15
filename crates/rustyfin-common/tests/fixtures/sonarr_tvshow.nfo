@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<tvshow>
+  <title>Andor</title>
+  <rating>8.6</rating>
+  <plot>In an era filled with danger, deception and intrigue, Cassian Andor will discover the difference he can make in the struggle against the tyrannical Galactic Empire.</plot>
+  <mpaa>TV-14</mpaa>
+  <id>393189</id>
+  <uniqueid type="tvdb" default="true">393189</uniqueid>
+  <uniqueid type="imdb">tt9253284</uniqueid>
+  <uniqueid type="tmdb">83867</uniqueid>
+  <uniqueid type="tvmaze">52341</uniqueid>
+  <genre>Action</genre>
+  <genre>Adventure</genre>
+  <genre>Drama</genre>
+  <genre>Science Fiction</genre>
+  <status>Ended</status>
+  <premiered>2022-09-21</premiered>
+  <enddate>2025-05-13</enddate>
+  <studio>Disney+</studio>
+  <actor>
+    <name>Diego Luna</name>
+    <role>Cassian Andor</role>
+    <thumb>https://artworks.thetvdb.com/banners/v4/actor/356223/photo/6502db4a7d0c6.jpg</thumb>
+  </actor>
+  <actor>
+    <name>Stellan Skarsgård</name>
+    <role>Luthen Rael</role>
+    <thumb>https://artworks.thetvdb.com/banners/person/378106/5f09f8ba3ec90.jpg</thumb>
+  </actor>
+  <actor>
+    <name>Alastair Mackenzie</name>
+    <role>Perrin Fertha</role>
+  </actor>
+  <episodeguide>{"tvdb":"393189","tvmaze":"52341","tmdb":"83867","imdb":"tt9253284"}</episodeguide>
+</tvshow>
+https://www.thetvdb.com/?tab=series&id=393189
