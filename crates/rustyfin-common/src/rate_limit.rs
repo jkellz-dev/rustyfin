@@ -32,3 +32,26 @@ impl RateLimiter {
         self.inner.until_ready().await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// "5 requests per 1 s window" allows 10 requests in about a second, not one
+    /// request per window after the first five (which took 5 s, and made
+    /// `rustyfin artwork` crawl at one TMDB call every 10 s).
+    #[tokio::test]
+    async fn requests_per_window_means_that_many_per_window() {
+        let limiter = RateLimiter::new(5, 1);
+        let started = std::time::Instant::now();
+        for _ in 0..10 {
+            limiter.wait().await;
+        }
+        let took = started.elapsed();
+        assert!(took < std::time::Duration::from_millis(2500), "{took:?}");
+        assert!(
+            took >= std::time::Duration::from_millis(800),
+            "still limited: {took:?}"
+        );
+    }
+}
