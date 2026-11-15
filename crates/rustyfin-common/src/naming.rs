@@ -217,7 +217,9 @@ pub fn resolve_audio_track(path: &Path) -> ResolvedItem {
 /// `"1989 (Taylor's Version)"` and `"Bad (2012 Remaster)"` keep their names.
 pub fn split_folder_year(raw: &str) -> (String, Option<i32>) {
     let without_tags = RE_PROVIDER_ID.replace_all(raw, "");
+    // An empty year ("Baby Driver 2 ()") says nothing.
     let trimmed = without_tags.trim();
+    let trimmed = trimmed.strip_suffix("()").map_or(trimmed, str::trim_end);
     if let Some(open) = trimmed.rfind('(')
         && trimmed.ends_with(')')
     {
@@ -325,6 +327,8 @@ pub fn clean_title(raw: &str) -> String {
     let s = s.replace(['.', '_'], " ");
     // Replace hyphens surrounded by spaces
     let s = s.replace(" - ", " ");
+    // An empty year ("Baby Driver 2 ()": Radarr before a release year is known)
+    let s = s.replace("()", " ");
     // Collapse whitespace and trim
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }

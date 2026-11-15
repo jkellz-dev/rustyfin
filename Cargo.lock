@@ -3026,6 +3026,7 @@ dependencies = [
  "serde_urlencoded",
  "sha2",
  "tokio",
+ "toml",
  "tracing",
  "uuid",
 ]

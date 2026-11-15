@@ -33,6 +33,10 @@ impl EnrichmentService {
         _year: Option<i32>,
     ) {
         let meta = find_movie_nfo(video_path).and_then(|p| parse_movie_nfo(&p));
+        let meta = match video_path.parent() {
+            Some(dir) => with_title_settings(meta, dir),
+            None => meta,
+        };
         let Some(meta) = meta else { return };
         self.apply_metadata(item_id, &meta).await;
     }
@@ -40,6 +44,7 @@ impl EnrichmentService {
     /// Enrich a series item with metadata from NFO.
     pub async fn enrich_series(&self, item_id: Uuid, series_dir: &Path, _series_name: &str) {
         let meta = find_series_nfo(series_dir).and_then(|p| parse_series_nfo(&p));
+        let meta = with_title_settings(meta, series_dir);
         let Some(meta) = meta else { return };
         self.apply_metadata(item_id, &meta).await;
     }
@@ -285,6 +290,28 @@ impl EnrichmentService {
             tracing::info!("Backfilled {inserted} people headshot image(s)");
         }
     }
+}
+
+/// `meta` (from the NFO, if any) with the title's `.rustyfin.toml` in `dir`
+/// laid over it: its ids and title win.
+fn with_title_settings(meta: Option<NfoMetadata>, dir: &Path) -> Option<NfoMetadata> {
+    let Some(settings) = rustyfin_common::title_settings::load(dir) else {
+        return meta;
+    };
+    let mut meta = meta.unwrap_or_default();
+    if let Some(id) = settings.ids.tmdb {
+        meta.tmdb_id = Some(id.to_string());
+    }
+    if let Some(id) = settings.ids.tvdb {
+        meta.tvdb_id = Some(id.to_string());
+    }
+    if let Some(id) = settings.ids.imdb {
+        meta.imdb_id = Some(id);
+    }
+    if let Some(title) = settings.metadata.title {
+        meta.title = Some(title);
+    }
+    Some(meta)
 }
 
 fn build_external_ids(meta: &NfoMetadata) -> Option<serde_json::Value> {

@@ -8,5 +8,6 @@ pub mod musicbrainz;
 pub mod naming;
 pub mod nfo;
 pub mod rate_limit;
+pub mod title_settings;
 pub mod tmdb;
 pub mod tvdb;

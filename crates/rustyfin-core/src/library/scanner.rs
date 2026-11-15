@@ -148,7 +148,11 @@ impl LibraryScanner {
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
         let nfo_path = find_movie_nfo(file_path);
-        let etag = compute_etag(file_path, &[nfo_path])?;
+        // The title's settings count as a sidecar: editing them is a change.
+        let settings_path = file_path
+            .parent()
+            .and_then(rustyfin_common::title_settings::existing);
+        let etag = compute_etag(file_path, &[nfo_path, settings_path])?;
 
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {

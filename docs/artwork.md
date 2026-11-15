@@ -36,22 +36,14 @@ fanart and headshots. Useful after Radarr adds films to new collections.
 
 ## Titles TMDB has no art for (30-day memory)
 
-When TMDB has no poster or backdrop for a film or show that is missing one, the run remembers it in
-`.tmdb-no-art.json` in the collections folder (cluster: `rustyfin-cache/collections/.tmdb-no-art.json`) and does not
-ask TMDB about it again for **30 days**. Without this every run would re-ask TMDB about the same titles.
+When TMDB has no poster or backdrop for a film or show that is missing one, the run records `missing_checked` in the
+title's [`.rustyfin.toml`](title-settings.md) and does not ask TMDB about it again for **30 days**. Without this every
+run would re-ask TMDB about the same titles. To try again sooner, delete that line (one title), every such line
+(everything), or pass `--force` (one run); the commands are in
+[Per-title settings](title-settings.md#retrying-artwork-tmdb-did-not-have).
 
-To try again before the 30 days are up:
-
-- **Everything:** delete the file. The next run asks TMDB about every title again and rebuilds the list from
-  whatever is still missing. In the cluster the `rustyfin-meta` sidecar can write to the folder:
-
-  ```bash
-  kubectl -n media-stack exec deploy/rustyfin -c rustyfin-meta -- rm -f /data/collections/.tmdb-no-art.json
-  ```
-
-- **One run:** pass `--force`, which ignores the list (and also replaces images that already exist, so it is slower).
-- **One title:** the file is a JSON object of `movie:<tmdb-id>` / `tv:<id>` to the Unix time TMDB was asked; remove
-  that entry.
+A title whose `.rustyfin.toml` says `[artwork] skip = true` is left alone, and `[ids]` there replaces the ids the
+folder name or NFO gives.
 
 ## In the cluster
 

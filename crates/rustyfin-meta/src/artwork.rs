@@ -17,6 +17,7 @@ use rustyfin_common::images::{discover_images, discover_season_images};
 use rustyfin_common::naming::{self, is_ignored_name, parse_season_folder};
 use rustyfin_common::nfo;
 use rustyfin_common::rate_limit::RateLimiter;
+use rustyfin_common::title_settings;
 use rustyfin_common::tmdb::TmdbClient;
 
 use crate::scan::ScanOpts;
@@ -109,6 +110,12 @@ fn known_ids(dir: &Path, tv: bool) -> (Option<i64>, Option<String>, Option<Strin
         tvdb = tvdb.or(meta.tvdb_id);
         imdb = imdb.or(meta.imdb_id);
     }
+    // The title's .rustyfin.toml wins over the folder name and the NFO.
+    if let Some(settings) = title_settings::load(dir) {
+        tmdb = settings.ids.tmdb.or(tmdb);
+        tvdb = settings.ids.tvdb.map(|id| id.to_string()).or(tvdb);
+        imdb = settings.ids.imdb.or(imdb);
+    }
     (tmdb, tvdb, imdb)
 }
 
@@ -153,68 +160,6 @@ pub fn collections_needing_art(dirs: &[PathBuf], collections: &Path, force: bool
 
 /// How long "TMDB has no art for this" is believed before asking again.
 const NO_ART_MEMORY: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
-
-/// What TMDB had no art for when last asked (`movie:<id>` / `tv:<id>` to unix
-/// seconds), kept as `.tmdb-no-art.json` in the collections folder on the
-/// cache volume, so a run does not ask TMDB again about every film it has no
-/// backdrop for (owner, 2026-11-15).
-pub struct NoArtMemory {
-    path: PathBuf,
-    asked: std::collections::BTreeMap<String, u64>,
-    changed: bool,
-}
-
-impl NoArtMemory {
-    pub fn load(dir: &Path) -> Self {
-        let path = dir.join(".tmdb-no-art.json");
-        let asked = std::fs::read(&path)
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
-        NoArtMemory {
-            path,
-            asked,
-            changed: false,
-        }
-    }
-
-    fn now() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or_default()
-    }
-
-    /// Whether TMDB was asked about `key` within the memory and had nothing.
-    pub fn recently_lacking(&self, key: &str) -> bool {
-        self.asked
-            .get(key)
-            .is_some_and(|at| Self::now().saturating_sub(*at) < NO_ART_MEMORY.as_secs())
-    }
-
-    pub fn remember(&mut self, key: String) {
-        self.asked.insert(key, Self::now());
-        self.changed = true;
-    }
-
-    pub fn save(&self) {
-        if !self.changed {
-            return;
-        }
-        let write = || -> std::io::Result<()> {
-            if let Some(dir) = self.path.parent() {
-                std::fs::create_dir_all(dir)?;
-            }
-            let body = serde_json::to_vec(&self.asked).map_err(std::io::Error::other)?;
-            let tmp = self.path.with_extension("json.tmp");
-            std::fs::write(&tmp, body)?;
-            std::fs::rename(&tmp, &self.path)
-        };
-        if let Err(e) = write() {
-            tracing::warn!("cannot save {}: {e}", self.path.display());
-        }
-    }
-}
 
 /// The film or show folders of `root`, sorted.
 fn library_dirs(root: &Path) -> anyhow::Result<Vec<PathBuf>> {
@@ -345,7 +290,6 @@ pub async fn fill_missing(
     let dirs = library_dirs(root)?;
 
     let collections_dir = rustyfin_common::images::collection_art_dir(&people_dir);
-    let mut no_art = NoArtMemory::load(&collections_dir);
     let collection_ids = if tv {
         Vec::new()
     } else {
@@ -359,6 +303,15 @@ pub async fn fill_missing(
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
+        let settings = title_settings::load(&dir).unwrap_or_default();
+        if settings.artwork.skip {
+            tracing::info!(
+                "{name}: skipped ([artwork] skip in {})",
+                title_settings::FILE_NAME
+            );
+            stats.complete += 1;
+            continue;
+        }
         // Headshots: the NFO's cast first (no lookup needed), else TMDB's
         // credits below. Shared by everyone the person appears with.
         let local_people = nfo_people(&dir, tv);
@@ -409,11 +362,10 @@ pub async fn fill_missing(
             stats.no_id += 1;
             continue;
         };
-        let no_art_key = format!("{}:{id}", if tv { "tv" } else { "movie" });
         if !need_credits
             && !opts.force
             && missing.seasons.is_empty()
-            && no_art.recently_lacking(&no_art_key)
+            && settings.missing_checked_recently(NO_ART_MEMORY)
         {
             // TMDB had nothing for what is missing when last asked.
             stats.complete += 1;
@@ -445,7 +397,10 @@ pub async fn fill_missing(
         };
 
         if (missing.poster && art.poster.is_none()) || (missing.fanart && art.backdrop.is_none()) {
-            no_art.remember(no_art_key.clone());
+            // Remembered in the title's .rustyfin.toml for NO_ART_MEMORY.
+            if let Err(e) = title_settings::record_missing_checked_now(&dir) {
+                tracing::warn!("{name}: cannot record that TMDB has no art: {e}");
+            }
         }
         let mut wanted: Vec<(String, PathBuf)> = Vec::new();
         if missing.poster || opts.force {
@@ -472,7 +427,6 @@ pub async fn fill_missing(
             }
         }
     }
-    no_art.save();
     fetch_collection_art(
         &collection_ids,
         &collections_dir,
@@ -618,18 +572,20 @@ mod tests {
     }
 
     #[test]
-    fn what_tmdb_lacked_is_remembered_across_runs() {
+    fn title_settings_ids_win_over_the_folder_name_and_nfo() {
         let t = Tree::new();
-        let mut memory = NoArtMemory::load(&t.0);
-        assert!(!memory.recently_lacking("movie:1"));
-        memory.remember("movie:1".to_string());
-        memory.save();
-        let again = NoArtMemory::load(&t.0);
-        assert!(again.recently_lacking("movie:1"));
-        assert!(!again.recently_lacking("movie:2"));
-        assert!(t.0.join(".tmdb-no-art.json").exists());
+        t.file("movies/Wrong (2020) [tmdbid-1]/Wrong (2020).mkv");
+        let dir = t.0.join("movies/Wrong (2020) [tmdbid-1]");
+        assert_eq!(known_ids(&dir, false).0, Some(1));
+        std::fs::write(
+            dir.join(".rustyfin.toml"),
+            "[ids]\ntmdb = 2\nimdb = \"tt9\"\n",
+        )
+        .unwrap();
+        let (tmdb, _, imdb) = known_ids(&dir, false);
+        assert_eq!(tmdb, Some(2));
+        assert_eq!(imdb.as_deref(), Some("tt9"));
     }
-
     #[test]
     fn collection_art_sits_beside_the_people_folder() {
         assert_eq!(
