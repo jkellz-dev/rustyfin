@@ -208,7 +208,6 @@ pub fn Media() -> View {
                 query,
                 is_detail: false,
                 person_id: None,
-                person_id: None,
             });
         });
         start_index.set(0);
@@ -256,7 +255,6 @@ pub fn Media() -> View {
                                 parent_id: None,
                                 query,
                                 is_detail: true,
-                                person_id: None,
                                 person_id: None,
                             });
                         });
