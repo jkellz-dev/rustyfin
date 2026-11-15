@@ -57,6 +57,8 @@ pub struct ItemsQuery {
     pub album_artist_ids: Option<String>,
     /// Tracks of these albums (Plezy lists an album with it).
     pub album_ids: Option<String>,
+    /// Latest: false lists tracks and episodes as they are, ungrouped.
+    pub group_items: Option<bool>,
     pub ids: Option<String>,
     pub min_community_rating: Option<f64>,
     pub min_critic_rating: Option<f64>,
@@ -1189,11 +1191,25 @@ pub async fn get_latest_items(
         .await
         .map_err(ApiError::Database)?;
 
-    // One library's latest, or across all of them.
-    let item_types = parse_comma_delimited(&query.include_item_types);
-    let items = media_items::latest_by_library(&state.pool, query.parent_id, &item_types, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    // One library's latest, or across all of them: the media added, then (as
+    // Jellyfin) tracks grouped into their album and a show's new episodes into
+    // the show, unless GroupItems=false.
+    let wanted = parse_comma_delimited(&query.include_item_types);
+    let group = query.group_items.unwrap_or(true);
+    let fetch_types = latest_fetch_types(&wanted);
+    if !wanted.is_empty() && fetch_types.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+    let fetch_limit = if group { (limit * 20).min(1000) } else { limit };
+    let added =
+        media_items::latest_by_library(&state.pool, query.parent_id, &fetch_types, fetch_limit)
+            .await
+            .map_err(ApiError::Database)?;
+    let items = if group {
+        group_latest(&state.pool, added, &wanted, limit).await?
+    } else {
+        added
+    };
 
     // Filter by library access
     let items: Vec<_> = items
@@ -1229,6 +1245,144 @@ pub async fn get_latest_items(
         attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
     }
     Ok(Json(dtos))
+}
+
+/// What Latest reads: media, never containers. Asking for shows or albums
+/// reads their episodes or tracks, which are then grouped.
+fn latest_fetch_types(wanted: &[String]) -> Vec<String> {
+    const MEDIA: [&str; 5] = ["Movie", "Episode", "Audio", "Video", "MusicVideo"];
+    if wanted.is_empty() {
+        return MEDIA.map(str::to_string).to_vec();
+    }
+    let mut types: Vec<String> = Vec::new();
+    for t in wanted {
+        let read = match t.as_str() {
+            "Series" | "Season" => "Episode",
+            "MusicAlbum" | "MusicArtist" => "Audio",
+            other => other,
+        };
+        if MEDIA.contains(&read) && !types.iter().any(|x| x == read) {
+            types.push(read.to_string());
+        }
+    }
+    types
+}
+
+/// One slot of the grouped Latest list.
+enum LatestSlot {
+    Item(media_items::MediaItemRow),
+    Album(Uuid),
+    Series(Uuid, media_items::MediaItemRow, usize),
+}
+
+/// Jellyfin's grouping of Latest: tracks become their album (also from disc
+/// folders), a show with several new episodes becomes the show, one new
+/// episode stays an episode. Newest first, `limit` entries.
+async fn group_latest(
+    pool: &sqlx::PgPool,
+    added: Vec<media_items::MediaItemRow>,
+    wanted: &[String],
+    limit: i64,
+) -> Result<Vec<media_items::MediaItemRow>, ApiError> {
+    // Each track's album: its parent, or its parent's parent for disc folders.
+    let parent_ids: Vec<Uuid> = added
+        .iter()
+        .filter(|r| r.item_type == "Audio")
+        .filter_map(|r| r.parent_id)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    let parents: HashMap<Uuid, media_items::MediaItemRow> =
+        media_items::find_by_ids(pool, &parent_ids)
+            .await
+            .map_err(ApiError::Database)?
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
+    let album_of = |track: &media_items::MediaItemRow| -> Option<Uuid> {
+        let parent = parents.get(&track.parent_id?)?;
+        if parent.item_type == "MusicAlbum" {
+            Some(parent.id)
+        } else {
+            parent.parent_id
+        }
+    };
+
+    let mut slots: Vec<LatestSlot> = Vec::new();
+    let mut seen_album: std::collections::HashSet<Uuid> = Default::default();
+    let mut series_slot: HashMap<Uuid, usize> = HashMap::new();
+    for row in added {
+        if row.item_type == "Audio"
+            && let Some(album) = album_of(&row)
+        {
+            if seen_album.insert(album) {
+                slots.push(LatestSlot::Album(album));
+            }
+            continue;
+        }
+        if row.item_type == "Episode"
+            && let Some(series) = row.series_id
+        {
+            if let Some(&i) = series_slot.get(&series) {
+                if let LatestSlot::Series(_, _, n) = &mut slots[i] {
+                    *n += 1;
+                }
+            } else {
+                series_slot.insert(series, slots.len());
+                slots.push(LatestSlot::Series(series, row, 1));
+            }
+            continue;
+        }
+        slots.push(LatestSlot::Item(row));
+    }
+
+    let folder_ids: Vec<Uuid> = slots
+        .iter()
+        .filter_map(|s| match s {
+            LatestSlot::Album(id) => Some(*id),
+            LatestSlot::Series(id, _, n) if *n > 1 => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let mut folders: HashMap<Uuid, media_items::MediaItemRow> =
+        media_items::find_by_ids(pool, &folder_ids)
+            .await
+            .map_err(ApiError::Database)?
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
+    let wants = |t: &str| {
+        wanted.is_empty()
+            || wanted.iter().any(|w| {
+                w == t
+                    || (t == "Series" && w == "Episode")
+                    || (t == "Episode" && w == "Series")
+                    || (t == "MusicAlbum" && w == "Audio")
+            })
+    };
+    let mut out = Vec::new();
+    for slot in slots {
+        let row = match slot {
+            LatestSlot::Item(row) => Some(row),
+            LatestSlot::Album(id) => folders.remove(&id),
+            LatestSlot::Series(id, episode, n) => {
+                if n > 1 {
+                    folders.remove(&id)
+                } else {
+                    Some(episode)
+                }
+            }
+        };
+        if let Some(row) = row
+            && wants(&row.item_type)
+        {
+            out.push(row);
+            if out.len() as i64 >= limit {
+                break;
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// How many in-progress items Continue Watching reads before filtering.
