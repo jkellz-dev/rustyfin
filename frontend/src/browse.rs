@@ -185,6 +185,64 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_library_can_be_sorted_by_name_date_added_year_or_rating() {
+        let lib = library_query(Some("movies"));
+        assert_eq!(lib.sort_order, "Ascending");
+        let labels: Vec<&str> = SORT_OPTIONS.iter().map(|o| o.label).collect();
+        assert_eq!(labels, ["Name", "Date added", "Year", "Rating"]);
+        let by_year = with_sort(lib, "Year");
+        assert_eq!(by_year.sort_by, "ProductionYear,SortName");
+        assert_eq!(by_year.sort_order, "Descending,Ascending");
+        assert_eq!(by_year.item_types, lib.item_types, "only the order changes");
+        assert_eq!(sort_label(by_year), "Year");
+        assert_eq!(sort_label(lib), "Name");
+        assert_eq!(with_sort(lib, "nonsense"), lib);
+    }
+
+    #[test]
+    fn a_person_lists_their_films_shows_and_episodes_newest_first() {
+        let q = person_query();
+        assert!(q.recursive);
+        assert_eq!(q.item_types, Some("Movie,Series,Episode"));
+        assert_eq!(q.sort_by, "ProductionYear,SortName");
+        assert_eq!(q.sort_order, "Descending,Ascending");
+    }
+
+    #[test]
+    fn cards_badge_watched_items_and_unwatched_counts() {
+        assert_eq!(card_badge(false, true, None), Some(CardBadge::Played));
+        assert_eq!(
+            card_badge(true, false, Some(3)),
+            Some(CardBadge::Unplayed(3))
+        );
+        assert_eq!(card_badge(true, true, Some(0)), Some(CardBadge::Played));
+        assert_eq!(card_badge(true, false, Some(0)), None);
+        assert_eq!(card_badge(false, false, None), None);
+        assert_eq!(CardBadge::Unplayed(120).text(), "99+");
+        assert_eq!(CardBadge::Unplayed(7).text(), "7");
+        assert_eq!(CardBadge::Played.text(), "✓");
+    }
+
+    #[test]
+    fn progress_shows_only_for_items_part_way_through() {
+        assert_eq!(progress_percent(Some(42.4), None, None, false), Some(42.4));
+        assert_eq!(
+            progress_percent(None, Some(25), Some(100), false),
+            Some(25.0)
+        );
+        assert_eq!(progress_percent(None, Some(0), Some(100), false), None);
+        assert_eq!(
+            progress_percent(Some(50.0), None, None, true),
+            None,
+            "watched: badge, not bar"
+        );
+        assert_eq!(progress_percent(None, Some(10), None, false), None);
+        assert_eq!(
+            progress_percent(Some(140.0), None, None, false),
+            Some(100.0)
+        );
+    }
+    #[test]
     fn search_is_scoped_to_the_library_the_crumbs_start_in() {
         assert_eq!(search_scope(Some("lib-1")).as_deref(), Some("lib-1"));
         assert_eq!(search_scope(Some("")), None);
