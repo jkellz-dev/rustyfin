@@ -178,6 +178,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Items", get(items::get_items))
         .route("/Items/Counts", get(items::get_item_counts))
         .route("/Items/Latest", get(items::get_latest_items))
+        .route("/Items/Root", get(libraries::get_root_folder))
         .route("/Items/{itemId}", get(items::get_item_by_id))
         .route("/Items/{itemId}/Refresh", post(items::refresh_item))
         .route("/UserItems/Resume", get(items::get_resume_items))
@@ -190,6 +191,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/Users/{userId}/Items/Latest",
             get(items::get_user_latest_items_legacy),
+        )
+        .route(
+            "/Users/{userId}/Items/Root",
+            get(libraries::get_root_folder_legacy),
         )
         .route(
             "/Users/{userId}/Items/{itemId}",

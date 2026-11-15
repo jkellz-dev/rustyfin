@@ -52,17 +52,9 @@ pub async fn get_user_views(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    let libs = libraries::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
-
+    let libs = visible_libraries(&state, auth.user_id).await?;
     let mut dtos: Vec<BaseItemDto> = libs
         .iter()
-        .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
         .map(|lib| collection_folder_dto(lib, &state.server_id))
         .collect();
     for dto in &mut dtos {
@@ -125,8 +117,72 @@ pub async fn get_grouping_options(
 
 /// Jellyfin hangs every library off one root folder; Rustyfin's is derived from
 /// the server id, so it is stable and the same on every route.
-fn root_folder_id(server_id: &str) -> uuid::Uuid {
+pub(crate) fn root_folder_id(server_id: &str) -> uuid::Uuid {
     uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, server_id.as_bytes())
+}
+
+/// The caller's root folder (Jellyfin's `UserRootFolder`): the parent of
+/// every library, counting the ones the user may see.
+pub(crate) async fn root_folder_dto(
+    state: &AppState,
+    user_id: uuid::Uuid,
+) -> Result<BaseItemDto, ApiError> {
+    let views = visible_libraries(state, user_id).await?;
+    let mut dto = BaseItemDto {
+        name: "Media Folders".to_string(),
+        server_id: state.server_id.clone(),
+        id: root_folder_id(&state.server_id),
+        item_type: "UserRootFolder".to_string(),
+        is_folder: true,
+        sort_name: Some("media folders".to_string()),
+        child_count: Some(views.len() as i32),
+        can_delete: Some(false),
+        can_download: Some(false),
+        location_type: Some("FileSystem".to_string()),
+        media_type: Some("Unknown".to_string()),
+        ..Default::default()
+    };
+    super::items::with_jellyfin_defaults(&mut dto);
+    Ok(dto)
+}
+
+/// The libraries `user_id` may see.
+async fn visible_libraries(
+    state: &AppState,
+    user_id: uuid::Uuid,
+) -> Result<Vec<libraries::LibraryRow>, ApiError> {
+    let libs = libraries::list_all(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(libs
+        .into_iter()
+        .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
+        .collect())
+}
+
+/// `GET /Items/Root`: the caller's root folder.
+pub async fn get_root_folder(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+) -> Result<Json<BaseItemDto>, ApiError> {
+    Ok(Json(root_folder_dto(&state, auth.user_id).await?))
+}
+
+/// `GET /Users/{userId}/Items/Root`: the legacy form; 404 for an unknown user,
+/// as Jellyfin.
+pub async fn get_root_folder_legacy(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    axum::extract::Path(user_id): axum::extract::Path<uuid::Uuid>,
+) -> Result<Json<BaseItemDto>, ApiError> {
+    rustyfin_db::repo::users::find_by_id(&state.pool, user_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+    Ok(Json(root_folder_dto(&state, auth.user_id).await?))
 }
 
 /// A library as Jellyfin's `CollectionFolder` item.

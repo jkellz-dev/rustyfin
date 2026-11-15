@@ -712,7 +712,8 @@ Postgres (not SQLite).
 **User library parity** (from `UserLibraryControllerTests.cs`, 4 tests):
 
 - [x] `GET /Users/{nonExistentId}/Items/Root` — 400 (UUID parse fail on "Root")
-- [ ] `GET /Users/{realId}/Items/Root` — 200, returns root folder DTO
+- [x] `GET /Users/{realId}/Items/Root` — 200, returns root folder DTO (`UserRootFolder`, also `/Items/Root` and
+      `/Items/{rootId}`; `ParentId={rootId}` lists the libraries the user may see; unknown user 404)
 - [x] `GET /Users/{realId}/Items/{nonExistentItemId}` — 404
 - [x] `GET /Items/{itemId}/Intros` — returns empty QueryResult (stub parity)
 

@@ -775,6 +775,11 @@ pub async fn get_items(
         .await
         .map_err(ApiError::Database)?;
 
+    // The root folder's children are the libraries.
+    if query.parent_id == Some(super::libraries::root_folder_id(&state.server_id)) {
+        return super::libraries::get_user_views(State(state), auth).await;
+    }
+
     // Determine if parent_id is a library
     let is_library = if let Some(pid) = query.parent_id {
         libraries::find_by_id(&state.pool, pid)
@@ -956,6 +961,11 @@ pub async fn get_item_by_id(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
+    if item_id == super::libraries::root_folder_id(&state.server_id) {
+        return Ok(Json(
+            super::libraries::root_folder_dto(&state, auth.user_id).await?,
+        ));
+    }
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?
