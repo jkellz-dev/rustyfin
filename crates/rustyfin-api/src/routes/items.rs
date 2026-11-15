@@ -60,6 +60,25 @@ pub struct ItemsQuery {
     pub min_critic_rating: Option<f64>,
     pub name_starts_with: Option<String>,
     pub enable_total_record_count: Option<bool>,
+    /// `IsPlayed`, `IsUnplayed`, `IsFavorite`, `IsResumable` (comma list).
+    pub filters: Option<String>,
+}
+
+/// What `Filters` asks for: (played, favourite, resumable).
+fn parse_filters(filters: &Option<String>) -> (Option<bool>, Option<bool>, bool) {
+    let mut played = None;
+    let mut favorite = None;
+    let mut resumable = false;
+    for f in parse_comma_delimited(filters) {
+        match f.as_str() {
+            "IsPlayed" => played = Some(true),
+            "IsUnplayed" => played = Some(false),
+            "IsFavorite" | "IsFavoriteOrLikes" => favorite = Some(true),
+            "IsResumable" => resumable = true,
+            _ => {}
+        }
+    }
+    (played, favorite, resumable)
 }
 
 /// The caller's `UserData` for an item: their row when they have one, otherwise
@@ -857,10 +876,11 @@ pub async fn get_items(
             .to_vec()
     });
 
-    // Merge artist_ids and album_artist_ids into person_ids
-    let mut person_ids = parse_comma_uuids(&query.person_ids);
-    person_ids.extend(parse_comma_uuids(&query.artist_ids));
-    person_ids.extend(parse_comma_uuids(&query.album_artist_ids));
+    // Artists are MusicArtist items, not people: their own filter.
+    let person_ids = parse_comma_uuids(&query.person_ids);
+    let mut artist_ids = parse_comma_uuids(&query.artist_ids);
+    artist_ids.extend(parse_comma_uuids(&query.album_artist_ids));
+    let (filter_played, filter_favorite, filter_resumable) = parse_filters(&query.filters);
 
     // Build the query
     let item_query = media_items::ItemQuery {
@@ -881,12 +901,14 @@ pub async fn get_items(
         official_ratings: parse_pipe_delimited(&query.official_ratings),
         tags: parse_pipe_delimited(&query.tags),
         person_ids,
+        artist_ids,
         min_community_rating: query.min_community_rating,
         min_critic_rating: query.min_critic_rating,
         name_starts_with: query.name_starts_with.clone(),
         user_id: Some(auth.user_id),
-        is_favorite: query.is_favorite,
-        is_played: query.is_played,
+        is_favorite: query.is_favorite.or(filter_favorite),
+        is_played: query.is_played.or(filter_played),
+        is_resumable: filter_resumable,
         search_term: query.search_term.clone(),
         sort_by: collection_sort.unwrap_or_else(|| parse_comma_delimited(&query.sort_by)),
         sort_order: parse_comma_delimited(&query.sort_order),

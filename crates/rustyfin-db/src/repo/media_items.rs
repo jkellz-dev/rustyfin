@@ -1485,6 +1485,9 @@ pub struct ItemQuery {
     pub official_ratings: Vec<String>,
     pub tags: Vec<String>,
     pub person_ids: Vec<Uuid>,
+    /// MusicArtist items: their albums, the tracks on those, and any track
+    /// naming the artist.
+    pub artist_ids: Vec<Uuid>,
     pub min_community_rating: Option<f64>,
     pub min_critic_rating: Option<f64>,
     pub name_starts_with: Option<String>,
@@ -1493,6 +1496,8 @@ pub struct ItemQuery {
     pub user_id: Option<Uuid>,
     pub is_favorite: Option<bool>,
     pub is_played: Option<bool>,
+    /// Started but not finished (`Filters=IsResumable`).
+    pub is_resumable: bool,
 
     // Search
     pub search_term: Option<String>,
@@ -1522,12 +1527,14 @@ impl Default for ItemQuery {
             official_ratings: Vec::new(),
             tags: Vec::new(),
             person_ids: Vec::new(),
+            artist_ids: Vec::new(),
             min_community_rating: None,
             min_critic_rating: None,
             name_starts_with: None,
             user_id: None,
             is_favorite: None,
             is_played: None,
+            is_resumable: false,
             search_term: None,
             sort_by: Vec::new(),
             sort_order: Vec::new(),
@@ -1542,6 +1549,7 @@ impl ItemQuery {
     fn needs_user_data_join(&self) -> bool {
         self.is_favorite.is_some()
             || self.is_played.is_some()
+            || self.is_resumable
             || self.sort_by.iter().any(|s| {
                 matches!(
                     s.as_str(),
@@ -1727,6 +1735,18 @@ impl ItemQuery {
             qb.push("))");
         }
 
+        // Artist filter: albums below the artist, their tracks, and tracks
+        // whose artists name it.
+        if !self.artist_ids.is_empty() {
+            qb.push(" AND EXISTS (SELECT 1 FROM media_items a WHERE a.id = ANY(");
+            qb.push_bind(&self.artist_ids);
+            qb.push(
+                ") AND (mi.parent_id = a.id \
+                   OR mi.parent_id IN (SELECT al.id FROM media_items al WHERE al.parent_id = a.id) \
+                   OR a.name = ANY(mi.artists)))",
+            );
+        }
+
         // Rating filters
         if let Some(min) = self.min_community_rating {
             qb.push(" AND mi.community_rating >= ");
@@ -1764,6 +1784,12 @@ impl ItemQuery {
                 } else {
                     qb.push(" AND (ud.played = false OR ud.played IS NULL)");
                 }
+            }
+            if self.is_resumable {
+                qb.push(
+                    " AND ud.playback_position_ticks > 0 \
+                     AND (ud.played = false OR ud.played IS NULL)",
+                );
             }
         }
     }
