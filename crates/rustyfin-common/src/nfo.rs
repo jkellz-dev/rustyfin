@@ -286,10 +286,21 @@ struct NfoSet {
     #[serde(rename = "$text")]
     text: Option<String>,
     name: Option<String>,
+    /// Radarr: `<set tmdbcolid="1267164">`.
+    #[serde(rename = "@tmdbcolid")]
+    tmdbcolid: Option<String>,
 }
 
-/// The film series (collection) a movie NFO names, if any.
-pub fn parse_movie_collection(path: &Path) -> Option<String> {
+/// The film series (collection) a movie NFO puts the film in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MovieSet {
+    pub name: String,
+    /// The collection's TMDB id, when the NFO gives it (Radarr does).
+    pub tmdb_id: Option<String>,
+}
+
+/// The film series a movie NFO names, if any, with its TMDB id if given.
+pub fn parse_movie_set(path: &Path) -> Option<MovieSet> {
     let content = read_nfo(path)?;
     if is_url_only(&content) {
         return None;
@@ -297,10 +308,21 @@ pub fn parse_movie_collection(path: &Path) -> Option<String> {
     let set = quick_xml::de::from_str::<MovieSetOnly>(&content)
         .ok()?
         .set?;
-    set.name
+    let name = set
+        .name
         .or(set.text)
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty())?;
+    let tmdb_id = set
+        .tmdbcolid
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()));
+    Some(MovieSet { name, tmdb_id })
+}
+
+/// The film series (collection) a movie NFO names, if any.
+pub fn parse_movie_collection(path: &Path) -> Option<String> {
+    parse_movie_set(path).map(|s| s.name)
 }
 
 /// Parse a tvshow NFO file into `NfoMetadata`.

@@ -973,17 +973,16 @@ impl LibraryScanner {
                 return;
             }
         };
-        let mut sets: std::collections::BTreeMap<String, Vec<Uuid>> = Default::default();
-        for (id, path, is_folder) in items {
-            if is_folder {
-                continue;
-            }
-            if let Some(name) = find_movie_nfo(Path::new(&path))
-                .and_then(|nfo| rustyfin_common::nfo::parse_movie_collection(&nfo))
-            {
-                sets.entry(name).or_default().push(id);
-            }
-        }
+        let found: Vec<(Uuid, String, Option<String>)> = items
+            .into_iter()
+            .filter(|(_, _, is_folder)| !is_folder)
+            .filter_map(|(id, path, _)| {
+                find_movie_nfo(Path::new(&path))
+                    .and_then(|nfo| rustyfin_common::nfo::parse_movie_set(&nfo))
+                    .map(|set| (id, set.name, set.tmdb_id))
+            })
+            .collect();
+        let sets = collections::group_auto_sets(found);
         match collections::sync_auto(&self.pool, library_id, &sets).await {
             Ok((0, 0)) => {}
             Ok((created, removed)) => tracing::info!(
