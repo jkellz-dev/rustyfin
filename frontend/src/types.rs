@@ -72,6 +72,53 @@ pub struct DashboardStats {
     pub item_count: i64,
     #[serde(default)]
     pub libraries: Vec<LibraryStats>,
+    #[serde(default)]
+    pub health: Option<SystemHealth>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SystemHealth {
+    pub database: DatabaseHealth,
+    pub search: SearchHealth,
+    #[serde(default)]
+    pub storage: Vec<StorageHealth>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DatabaseHealth {
+    pub ok: bool,
+    #[serde(default)]
+    pub latency_ms: f64,
+    #[serde(default)]
+    pub pool_size: u32,
+    #[serde(default)]
+    pub pool_idle: u32,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SearchHealth {
+    pub backend: String,
+    pub ok: bool,
+    #[serde(default)]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct StorageHealth {
+    pub path: String,
+    #[serde(default)]
+    pub label: String,
+    pub status: String,
+    #[serde(default)]
+    pub total_bytes: Option<u64>,
+    #[serde(default)]
+    pub free_bytes: Option<u64>,
 }
 
 /// A library's dashboard card.

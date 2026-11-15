@@ -126,6 +126,10 @@ pub async fn get_stats(
     let library_stats = libraries::stats(&state.pool)
         .await
         .map_err(ApiError::Database)?;
+    let library_rows = libraries::list_all(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+    let health = crate::health::system_health(&state, &library_rows).await;
     let library_count = library_stats.len() as i64;
     let user_count = users::count(&state.pool)
         .await
@@ -148,6 +152,7 @@ pub async fn get_stats(
                 last_scanned: l.last_scanned_at,
             })
             .collect(),
+        health: Some(health),
     }))
 }
 

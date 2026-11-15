@@ -1265,3 +1265,38 @@ select:focus {
 .activity-error {
   background: #e53935;
 }
+
+/* ── System health (12a) ─────────────────────────────────── */
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.health-name {
+  min-width: 140px;
+  font-weight: 500;
+}
+
+.health-detail {
+  font-size: 0.85em;
+}
+
+.health-dot {
+  flex: 0 0 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.health-ok {
+  background: #2e7d32;
+}
+
+.health-warn {
+  background: #f9a825;
+}
+
+.health-bad {
+  background: #e53935;
+}

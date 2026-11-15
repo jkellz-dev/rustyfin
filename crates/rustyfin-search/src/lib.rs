@@ -19,6 +19,15 @@ pub struct SearchHit {
     pub library_id: Option<Uuid>,
 }
 
+/// Whether search works, for the dashboard.
+#[derive(Debug, Clone)]
+pub struct BackendHealth {
+    /// `Meilisearch` or `Postgres` (the fallback, always there).
+    pub backend: &'static str,
+    pub ok: bool,
+    pub detail: Option<String>,
+}
+
 /// Search error type.
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
@@ -58,6 +67,40 @@ impl SearchService {
         #[cfg(not(feature = "meilisearch"))]
         {
             false
+        }
+    }
+
+    /// Whether the search backend answers. Without Meilisearch, search is
+    /// Postgres and as healthy as the database.
+    pub async fn health(&self) -> BackendHealth {
+        #[cfg(feature = "meilisearch")]
+        if let Some(ref client) = self.meili_client {
+            let answer =
+                tokio::time::timeout(std::time::Duration::from_secs(2), client.health()).await;
+            return match answer {
+                Ok(Ok(h)) => BackendHealth {
+                    backend: "Meilisearch",
+                    ok: h.status == "available",
+                    detail: Some(h.status),
+                },
+                Ok(Err(e)) => BackendHealth {
+                    backend: "Meilisearch",
+                    ok: false,
+                    detail: Some(format!("{e}; searches fall back to Postgres")),
+                },
+                Err(_) => BackendHealth {
+                    backend: "Meilisearch",
+                    ok: false,
+                    detail: Some(
+                        "no answer within 2 s; searches fall back to Postgres".to_string(),
+                    ),
+                },
+            };
+        }
+        BackendHealth {
+            backend: "Postgres",
+            ok: true,
+            detail: None,
         }
     }
 

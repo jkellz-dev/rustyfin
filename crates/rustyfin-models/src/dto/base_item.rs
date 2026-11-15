@@ -522,6 +522,54 @@ pub struct DashboardStats {
     /// One card per library.
     #[serde(default)]
     pub libraries: Vec<LibraryStats>,
+    /// Database, search and storage health.
+    #[serde(default)]
+    pub health: Option<SystemHealth>,
+}
+
+/// The dashboard's health panel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SystemHealth {
+    pub database: DatabaseHealth,
+    pub search: SearchHealth,
+    pub storage: Vec<StorageHealth>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DatabaseHealth {
+    pub ok: bool,
+    /// How long `SELECT 1` took.
+    pub latency_ms: f64,
+    pub pool_size: u32,
+    pub pool_idle: u32,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SearchHealth {
+    /// `Meilisearch` or `Postgres`.
+    pub backend: String,
+    pub ok: bool,
+    pub detail: Option<String>,
+}
+
+/// A library or cache folder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct StorageHealth {
+    pub path: String,
+    /// The libraries using the folder (empty for caches).
+    pub libraries: Vec<String>,
+    /// What the folder is: its libraries, or the cache's name.
+    pub label: String,
+    /// `Ok`, `Low` (under 10% free), `Empty` (a library folder with nothing
+    /// in it: an unmounted share?), `Missing`, `Unreadable`, `Unresponsive`.
+    pub status: String,
+    pub total_bytes: Option<u64>,
+    pub free_bytes: Option<u64>,
 }
 
 /// A library's dashboard card.

@@ -51,6 +51,48 @@ pub fn session_label(
     }
 }
 
+/// `1.2 TB`, `340 GB`, `12 MB`: decimal units, as disks are sold.
+pub fn bytes_label(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1000.0 && unit < UNITS.len() - 1 {
+        value /= 1000.0;
+        unit += 1;
+    }
+    if unit == 0 || value >= 100.0 {
+        format!("{value:.0} {}", UNITS[unit])
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+/// A health row's dot: green when fine, amber for low space or an empty
+/// library folder, red when something is down or gone.
+pub fn health_class(status: &str) -> &'static str {
+    match status {
+        "Ok" => "health-dot health-ok",
+        "Low" | "Empty" => "health-dot health-warn",
+        _ => "health-dot health-bad",
+    }
+}
+
+/// A storage row's detail: free space, or what is wrong.
+pub fn storage_detail(status: &str, total: Option<u64>, free: Option<u64>) -> String {
+    let space = match (total, free) {
+        (Some(t), Some(f)) => format!("{} free of {}", bytes_label(f), bytes_label(t)),
+        _ => String::new(),
+    };
+    match status {
+        "Ok" => space,
+        "Low" => format!("Low on space: {space}"),
+        "Empty" => "Empty: is the share mounted?".to_string(),
+        "Missing" => "Folder not found".to_string(),
+        "Unresponsive" => "Not answering (hung network share?)".to_string(),
+        _ => "Cannot be read".to_string(),
+    }
+}
+
 /// The CSS class of an activity entry's severity marker.
 pub fn severity_class(severity: &str) -> &'static str {
     match severity {
@@ -99,6 +141,30 @@ mod tests {
             session_label(None, "Web", "Firefox", None, false),
             "Someone (Web on Firefox)"
         );
+    }
+
+    #[test]
+    fn health_rows_read_at_a_glance() {
+        assert_eq!(bytes_label(512), "512 B");
+        assert_eq!(bytes_label(1_500_000), "1.5 MB");
+        assert_eq!(bytes_label(340_000_000_000), "340 GB");
+        assert_eq!(bytes_label(12_000_000_000_000), "12.0 TB");
+        assert_eq!(health_class("Ok"), "health-dot health-ok");
+        assert_eq!(health_class("Empty"), "health-dot health-warn");
+        assert_eq!(health_class("Missing"), "health-dot health-bad");
+        assert_eq!(
+            storage_detail("Ok", Some(2_000_000_000_000), Some(500_000_000_000)),
+            "500 GB free of 2.0 TB"
+        );
+        assert_eq!(
+            storage_detail("Low", Some(1_000_000_000), Some(50_000_000)),
+            "Low on space: 50.0 MB free of 1.0 GB"
+        );
+        assert_eq!(
+            storage_detail("Empty", Some(1), Some(1)),
+            "Empty: is the share mounted?"
+        );
+        assert_eq!(storage_detail("Missing", None, None), "Folder not found");
     }
 
     #[test]

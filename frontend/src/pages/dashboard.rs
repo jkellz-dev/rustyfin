@@ -4,7 +4,8 @@ use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::dashboard_view;
 use crate::types::{
-    ActivityLogEntry, BaseItemDto, DashboardStats, LibraryStats, SessionInfo, SystemInfo,
+    ActivityLogEntry, BaseItemDto, DashboardStats, LibraryStats, SessionInfo, StorageHealth,
+    SystemInfo,
 };
 
 /// Seconds since an ISO date, by the browser's clock (None if unparsable).
@@ -146,6 +147,56 @@ pub fn Dashboard() -> View {
                                                 div(class="library-card-name") { (lib.name) }
                                                 div(class="library-card-count") { (count) }
                                                 div(class="library-card-scan text-muted") { (scanned) }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        view! {}
+                    })
+
+                    // System health
+                    (if let Some(health) = stats.get_clone().and_then(|s| s.health) {
+                        let db = health.database.clone();
+                        let db_dot = dashboard_view::health_class(if db.ok { "Ok" } else { "Down" });
+                        let db_text = if db.ok {
+                            format!("{:.1} ms, {} of {} connections idle", db.latency_ms, db.pool_idle, db.pool_size)
+                        } else {
+                            db.error.clone().unwrap_or_else(|| "Not answering".to_string())
+                        };
+                        let search = health.search.clone();
+                        let search_dot = dashboard_view::health_class(if search.ok { "Ok" } else { "Down" });
+                        let search_text = match &search.detail {
+                            Some(d) => format!("{}: {d}", search.backend),
+                            None => search.backend.clone(),
+                        };
+                        let storage = health.storage.clone();
+                        view! {
+                            h3(class="dashboard-heading") { "System health" }
+                            div(class="card health-list") {
+                                div(class="health-row") {
+                                    span(class=db_dot) {}
+                                    span(class="health-name") { "Database" }
+                                    span(class="text-muted health-detail") { (db_text) }
+                                }
+                                div(class="health-row") {
+                                    span(class=search_dot) {}
+                                    span(class="health-name") { "Search" }
+                                    span(class="text-muted health-detail") { (search_text) }
+                                }
+                                Indexed(
+                                    list=move || storage.clone(),
+                                    view=move |s: StorageHealth| {
+                                        let dot = dashboard_view::health_class(&s.status);
+                                        let detail = dashboard_view::storage_detail(&s.status, s.total_bytes, s.free_bytes);
+                                        let title = s.path.clone();
+                                        view! {
+                                            div(class="health-row", title=title) {
+                                                span(class=dot) {}
+                                                span(class="health-name") { (s.label) }
+                                                span(class="text-muted health-detail") { (detail) }
                                             }
                                         }
                                     }
