@@ -19,7 +19,12 @@ impl RateLimiter {
     pub fn new(requests_per_window: u32, window_secs: u64) -> Self {
         let window = window_secs.max(1);
         let burst = requests_per_window.max(1);
-        let quota = Quota::with_period(std::time::Duration::from_secs(window))
+        // governor's period is the time to earn back ONE request: the window
+        // shared by the requests in it (40 per 10 s = one per 250 ms), with up
+        // to a window's worth allowed at once. Using the whole window here
+        // allowed one request per window after the first burst.
+        let period = std::time::Duration::from_secs(window) / burst;
+        let quota = Quota::with_period(period)
             .expect("non-zero duration")
             .allow_burst(NonZeroU32::new(burst).expect("non-zero burst"));
         Self {
