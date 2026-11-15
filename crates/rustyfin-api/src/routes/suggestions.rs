@@ -64,5 +64,7 @@ pub async fn get_suggestions(
         }
     }
 
+    // Badges: clients fall back to ChildCount (a show's seasons) without it.
+    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
     Ok(Json(QueryResult::new(dtos, total)))
 }

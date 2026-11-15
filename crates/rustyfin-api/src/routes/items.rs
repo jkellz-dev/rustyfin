@@ -1194,6 +1194,10 @@ pub async fn get_latest_items(
         }
     }
 
+    // Badges: clients fall back to ChildCount (a show's seasons) without it.
+    if query.enable_user_data.unwrap_or(true) {
+        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    }
     Ok(Json(dtos))
 }
 
