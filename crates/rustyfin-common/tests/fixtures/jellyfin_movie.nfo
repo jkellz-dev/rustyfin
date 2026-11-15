@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <plot>In suburban Chicago during the late 1980s, ten-year-old Jake Doyle embarks on a herculean quest to get the latest and greatest video game system for Christmas.</plot>
+  <lockdata>false</lockdata>
+  <dateadded>2024-12-19 16:25:29</dateadded>
+  <title>8-Bit Christmas</title>
+  <originaltitle>8-Bit Christmas</originaltitle>
+  <director>Michael Dowse</director>
+  <writer>Kevin Jakubowski</writer>
+  <credits>Kevin Jakubowski</credits>
+  <trailer>plugin://plugin.video.youtube/play/?video_id=CI-YWRK0VPo</trailer>
+  <rating>6.4</rating>
+  <year>2021</year>
+  <sorttitle>8bit christmas</sorttitle>
+  <mpaa>PG</mpaa>
+  <collectionnumber>802217</collectionnumber>
+  <imdbid>tt11540284</imdbid>
+  <tmdbid>802217</tmdbid>
+  <premiered>2021-11-24</premiered>
+  <releasedate>2021-11-24</releasedate>
+  <criticrating>84</criticrating>
+  <runtime>98</runtime>
+  <tagline>How far would you go to score the ultimate gift?</tagline>
+  <country />
+  <country>United States of America</country>
+  <genre>Comedy</genre>
+  <genre>Family</genre>
+  <studio />
+  <studio>New Line Cinema</studio>
+  <studio>Star Thrower Entertainment</studio>
+  <tag>1980s</tag>
+  <tag>christmas</tag>
+  <art>
+    <poster>/data/media/movies/8-Bit Christmas (2021) [tmdbid-802217]/folder.jpg</poster>
+    <fanart>/data/media/movies/8-Bit Christmas (2021) [tmdbid-802217]/backdrop.jpg</fanart>
+  </art>
+  <actor>
+    <name>Neil Patrick Harris</name>
+    <role>Adult Jake Doyle / Narrator</role>
+    <type>Actor</type>
+    <sortorder>0</sortorder>
+    <thumb>/config/metadata/People/N/Neil Patrick Harris/folder.jpg</thumb>
+  </actor>
+  <actor>
+    <name>Winslow Fegley</name>
+    <role>Jake Doyle</role>
+    <type>Actor</type>
+    <sortorder>1</sortorder>
+    <thumb>/config/metadata/People/W/Winslow Fegley/folder.jpg</thumb>
+  </actor>
+  <actor>
+    <name>Tom Rooney</name>
+    <role>Dr. Timothy Keane Sr.</role>
+    <type>Actor</type>
+    <sortorder>15</sortorder>
+  </actor>
+  <id>tt11540284</id>
+  <fileinfo>
+    <streamdetails>
+      <video>
+        <codec>hevc</codec>
+        <width>1920</width>
+        <height>804</height>
+        <durationinseconds>5862</durationinseconds>
+      </video>
+    </streamdetails>
+  </fileinfo>
+</movie>
