@@ -67,3 +67,126 @@ async fn poster_lists_carry_the_unwatched_episode_count() {
     }
     app.cleanup().await;
 }
+
+/// Plezy's badge is `RecursiveItemCount` (episodes) minus those watched; it
+/// falls back to `ChildCount` (seasons) when lists leave RecursiveItemCount out.
+#[tokio::test]
+async fn library_lists_carry_each_shows_episode_count() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("TV Shows", "tvshows").await;
+    let series = show_with_two_seasons(&app, lib).await;
+    let (status, body) = app
+        .get(
+            &format!(
+                "/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Series\
+                 &Fields=RecursiveItemCount,ChildCount"
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let show = find(&body["Items"], series);
+    assert_eq!(show["RecursiveItemCount"], 6, "{show}");
+    assert_eq!(show["UserData"]["UnplayedItemCount"], 6, "{show}");
+    app.cleanup().await;
+}
+
+/// Plezy's Continue Watching is Resume (MediaTypes=Video) plus NextUp with a
+/// NextUpDateCutoff: no tracks, and no shows never started.
+#[tokio::test]
+async fn continue_watching_keeps_to_video_and_shows_in_progress() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("Mixed", "mixed").await;
+    let started = show_with_two_seasons(&app, lib).await;
+    let untouched = app
+        .create_media_item("Untouched Show", "Series", lib, None)
+        .await;
+    let season = app
+        .create_media_item("Season 1", "Season", lib, Some(untouched))
+        .await;
+    let ep = app
+        .create_media_item("U1", "Episode", lib, Some(season))
+        .await;
+    sqlx::query("UPDATE media_items SET series_id = $2, parent_index_number = 1, index_number = 1 WHERE id = $1")
+        .bind(ep)
+        .bind(untouched)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let (s1e1,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM media_items WHERE name = 'S1E1' AND series_id = $1")
+            .bind(started)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+    sqlx::query(
+        "UPDATE media_items SET parent_index_number = substr(name, 2, 1)::int, \
+         index_number = substr(name, 4, 1)::int WHERE series_id = $1 AND item_type = 'Episode'",
+    )
+    .bind(started)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    rustyfin_db::repo::user_data::upsert(&app.pool, user, s1e1, 0, true, false, 1)
+        .await
+        .unwrap();
+    let song = app
+        .create_media_item("Half a Song", "Audio", lib, None)
+        .await;
+    rustyfin_db::repo::user_data::upsert(&app.pool, user, song, 10_000_000, false, false, 0)
+        .await
+        .unwrap();
+
+    let (_, resume) = app
+        .get(
+            "/UserItems/Resume?Limit=20&MediaTypes=Video&Recursive=true",
+            &token,
+        )
+        .await;
+    assert!(
+        resume["Items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|i| i["Type"] != "Audio"),
+        "{resume}"
+    );
+
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(365)).to_rfc3339();
+    let (status, next) = app
+        .get(
+            &format!(
+                "/Shows/NextUp?Limit=20&EnableResumable=false&NextUpDateCutoff={}",
+                cutoff.replace('+', "%2B")
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{next}");
+    let shows: Vec<&str> = next["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["SeriesId"].as_str().unwrap())
+        .collect();
+    assert_eq!(shows, [started.to_string()], "{next}");
+
+    // A show last watched before the cutoff is left out too.
+    sqlx::query("UPDATE user_data SET last_played_date = NOW() - INTERVAL '2 years'")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let (_, next) = app
+        .get(
+            &format!(
+                "/Shows/NextUp?Limit=20&NextUpDateCutoff={}",
+                cutoff.replace('+', "%2B")
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(next["Items"], serde_json::json!([]), "{next}");
+    app.cleanup().await;
+}
