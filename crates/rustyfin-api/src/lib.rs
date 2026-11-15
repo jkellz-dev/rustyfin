@@ -2,6 +2,7 @@ pub mod cors;
 pub mod error;
 pub mod health;
 pub mod login_limit;
+pub mod metrics;
 pub mod query_case;
 pub mod request_log;
 pub mod router;

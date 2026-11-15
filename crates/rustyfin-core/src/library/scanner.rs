@@ -57,6 +57,39 @@ impl LibraryScanner {
 
     /// Scan a library and ingest media items.
     pub async fn scan(&self, library_id: Uuid, paths: &[String]) -> anyhow::Result<ScanResult> {
+        let started = Instant::now();
+        let outcome = self.scan_library(library_id, paths).await;
+        // Prometheus: scans by library and result, how long they took, and
+        // what they changed.
+        let library = libraries::find_by_id(&self.pool, library_id)
+            .await
+            .ok()
+            .flatten()
+            .map_or_else(|| library_id.to_string(), |l| l.name);
+        let result = if outcome.is_ok() { "ok" } else { "error" };
+        metrics::counter!("rustyfin_scans_total", "library" => library.clone(), "result" => result)
+            .increment(1);
+        metrics::histogram!("rustyfin_scan_duration_seconds", "library" => library.clone())
+            .record(started.elapsed().as_secs_f64());
+        if let Ok(r) = &outcome {
+            for (what, n) in [
+                ("added", r.items_added),
+                ("updated", r.items_updated),
+                ("removed", r.items_removed),
+                ("errors", r.errors),
+            ] {
+                metrics::counter!(
+                    "rustyfin_scan_items_total",
+                    "library" => library.clone(),
+                    "outcome" => what
+                )
+                .increment(n as u64);
+            }
+        }
+        outcome
+    }
+
+    async fn scan_library(&self, library_id: Uuid, paths: &[String]) -> anyhow::Result<ScanResult> {
         let start = Instant::now();
         let mut result = ScanResult {
             items_added: 0,
