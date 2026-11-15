@@ -188,3 +188,74 @@ async fn a_hand_made_collection_is_left_alone() {
     );
     app.cleanup().await;
 }
+
+/// Radarr writes the collection's TMDB id: `<set tmdbcolid="1267164">`.
+/// Collections are keyed by it, so a film whose older NFO only names the set
+/// joins the same one, and a rename on TMDB renames rather than splits it.
+#[tokio::test]
+async fn collections_are_keyed_by_their_tmdb_id() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let tree = Tree::new();
+    tree.movie(
+        "Ready or Not (2019)",
+        Some(r#"<set tmdbcolid="1267164"><name>Ready or Not Collection</name><overview /></set>"#),
+    );
+    // A Jellyfin-written NFO: the name only.
+    tree.movie(
+        "Ready or Not 2 Here I Come (2026)",
+        Some("<set><name>Ready or Not Collection</name></set>"),
+    );
+    let lib = libraries::create(&app.pool, "Movies", "movies", &[tree.root()])
+        .await
+        .unwrap()
+        .id;
+    scan(&app, lib, &tree).await;
+    let url =
+        format!("/Items?ParentId={lib}&IncludeItemTypes=BoxSet&Recursive=true&Fields=ProviderIds");
+    let (_, body) = app.get(&url, &token).await;
+    let sets = body["Items"].as_array().unwrap();
+    assert_eq!(sets.len(), 1, "{body}");
+    assert_eq!(sets[0]["Name"], "Ready or Not Collection");
+    assert_eq!(sets[0]["ChildCount"], 2, "{body}");
+    assert_eq!(sets[0]["ProviderIds"]["Tmdb"], "1267164", "{body}");
+    let id = sets[0]["Id"].as_str().unwrap().to_string();
+
+    // TMDB renames the collection; Radarr rewrites both NFOs.
+    let renamed = r#"<set tmdbcolid="1267164"><name>Ready or Not Films</name></set>"#;
+    tree.movie("Ready or Not (2019)", Some(renamed));
+    tree.movie("Ready or Not 2 Here I Come (2026)", Some(renamed));
+    scan(&app, lib, &tree).await;
+    let (_, body) = app.get(&url, &token).await;
+    let sets = body["Items"].as_array().unwrap();
+    assert_eq!(sets.len(), 1, "{body}");
+    assert_eq!(sets[0]["Id"], id.as_str(), "the same collection, renamed");
+    assert_eq!(sets[0]["Name"], "Ready or Not Films");
+    assert_eq!(sets[0]["ChildCount"], 2);
+    app.cleanup().await;
+}
+
+#[test]
+fn the_tmdb_collection_id_is_read_from_the_nfo() {
+    let dir = std::env::temp_dir().join(format!("rf-set-{}", Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let radarr = dir.join("a.nfo");
+    std::fs::write(
+        &radarr,
+        r#"<movie><title>A</title><set tmdbcolid="1267164"><name>Ready or Not Collection</name><overview /></set></movie>"#,
+    )
+    .unwrap();
+    let named = dir.join("b.nfo");
+    std::fs::write(
+        &named,
+        "<movie><title>B</title><set>Alien Collection</set></movie>",
+    )
+    .unwrap();
+    let set = rustyfin_core::parse_movie_set(&radarr).unwrap();
+    assert_eq!(set.name, "Ready or Not Collection");
+    assert_eq!(set.tmdb_id.as_deref(), Some("1267164"));
+    let set = rustyfin_core::parse_movie_set(&named).unwrap();
+    assert_eq!(set.name, "Alien Collection");
+    assert_eq!(set.tmdb_id, None);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
