@@ -8,7 +8,6 @@ mod common;
 use axum::http::StatusCode;
 use rustyfin_db::repo::user_data;
 use serde_json::Value;
-use uuid::Uuid;
 
 fn names(body: &Value) -> Vec<String> {
     let mut n: Vec<String> = body["Items"]
