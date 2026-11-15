@@ -519,6 +519,22 @@ pub struct DashboardStats {
     pub library_count: i64,
     pub user_count: i64,
     pub item_count: i64,
+    /// One card per library.
+    #[serde(default)]
+    pub libraries: Vec<LibraryStats>,
+}
+
+/// A library's dashboard card.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LibraryStats {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub collection_type: String,
+    /// Films, episodes and tracks.
+    pub item_count: i64,
+    /// When the last scan finished; None if never.
+    pub last_scanned: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Chapter info for a media item.

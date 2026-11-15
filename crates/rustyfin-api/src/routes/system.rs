@@ -123,10 +123,10 @@ pub async fn get_stats(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<DashboardStats>, ApiError> {
-    let library_count = libraries::list_all(&state.pool)
+    let library_stats = libraries::stats(&state.pool)
         .await
-        .map(|libs| libs.len() as i64)
         .map_err(ApiError::Database)?;
+    let library_count = library_stats.len() as i64;
     let user_count = users::count(&state.pool)
         .await
         .map_err(ApiError::Database)?;
@@ -138,6 +138,16 @@ pub async fn get_stats(
         library_count,
         user_count,
         item_count,
+        libraries: library_stats
+            .into_iter()
+            .map(|l| rustyfin_models::dto::LibraryStats {
+                id: l.id,
+                name: l.name,
+                collection_type: l.library_type,
+                item_count: l.item_count,
+                last_scanned: l.last_scanned_at,
+            })
+            .collect(),
     }))
 }
 

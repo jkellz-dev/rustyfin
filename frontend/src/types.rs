@@ -70,6 +70,64 @@ pub struct DashboardStats {
     pub library_count: i64,
     pub user_count: i64,
     pub item_count: i64,
+    #[serde(default)]
+    pub libraries: Vec<LibraryStats>,
+}
+
+/// A library's dashboard card.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LibraryStats {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub collection_type: String,
+    #[serde(default)]
+    pub item_count: i64,
+    #[serde(default)]
+    pub last_scanned: Option<String>,
+}
+
+/// One entry of `/System/ActivityLog/Entries`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ActivityLogEntry {
+    #[serde(default)]
+    pub id: i64,
+    pub name: String,
+    #[serde(default)]
+    pub overview: Option<String>,
+    #[serde(default)]
+    pub severity: String,
+    pub date: String,
+}
+
+/// What a session is doing (`/Sessions`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SessionInfo {
+    pub id: String,
+    #[serde(default)]
+    pub user_name: Option<String>,
+    #[serde(default)]
+    pub client: String,
+    #[serde(default)]
+    pub device_name: String,
+    #[serde(default)]
+    pub last_activity_date: Option<String>,
+    #[serde(default)]
+    pub now_playing_item: Option<BaseItemDto>,
+    #[serde(default)]
+    pub play_state: Option<PlayState>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PlayState {
+    #[serde(default)]
+    pub position_ticks: Option<i64>,
+    #[serde(default)]
+    pub is_paused: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

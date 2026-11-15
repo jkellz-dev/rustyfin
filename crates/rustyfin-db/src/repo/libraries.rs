@@ -15,6 +15,39 @@ pub struct LibraryRow {
     pub updated_at: DateTime<Utc>,
 }
 
+/// One library on the dashboard: its media count and last finished scan.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct LibraryStatRow {
+    pub id: Uuid,
+    pub name: String,
+    pub library_type: String,
+    /// Films, episodes, tracks and other videos (not shows, seasons or folders).
+    pub item_count: i64,
+    pub last_scanned_at: Option<DateTime<Utc>>,
+}
+
+/// Every library with its media count and last finished scan, by name.
+pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryStatRow>(
+        "SELECT l.id, l.name, l.library_type, l.last_scanned_at, \
+                (SELECT COUNT(*) FROM media_items m WHERE m.library_id = l.id \
+                   AND m.item_type IN ('Movie', 'Episode', 'Audio', 'MusicVideo', 'Video')) \
+                  AS item_count \
+         FROM libraries l ORDER BY l.name",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// Record that a scan of `id` finished now.
+pub async fn mark_scanned(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE libraries SET last_scanned_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// List all libraries.
 pub async fn list_all(pool: &PgPool) -> Result<Vec<LibraryRow>, sqlx::Error> {
     sqlx::query_as::<_, LibraryRow>("SELECT * FROM libraries ORDER BY name")

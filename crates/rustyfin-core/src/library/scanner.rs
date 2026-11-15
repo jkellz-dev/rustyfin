@@ -105,6 +105,9 @@ impl LibraryScanner {
         libraries::touch_updated_at(&self.pool, library_id)
             .await
             .ok();
+        if let Err(e) = libraries::mark_scanned(&self.pool, library_id).await {
+            tracing::warn!("cannot record the scan time of library {library_id}: {e}");
+        }
         // Backfill headshot image rows for people with cached headshots
         self.enrichment.backfill_people_headshots().await;
 

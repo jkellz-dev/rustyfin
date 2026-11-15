@@ -1,6 +1,7 @@
 mod api;
 mod browse;
 mod components;
+mod dashboard_view;
 mod pages;
 mod types;
 

@@ -1151,3 +1151,117 @@ select:focus {
 .person-card-link:hover .person-name {
   text-decoration: underline;
 }
+
+/* ── Dashboard widgets (12a) ─────────────────────────────── */
+.dashboard-heading {
+  margin: 28px 0 12px;
+}
+
+.library-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.library-card {
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--bg-card, #1c1c1c);
+}
+
+.library-card-name {
+  font-weight: 600;
+}
+
+.library-card-count {
+  margin-top: 4px;
+}
+
+.library-card-scan {
+  margin-top: 2px;
+  font-size: 0.8em;
+}
+
+.session-row {
+  padding: 8px 0;
+}
+
+.session-row + .session-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.session-progress {
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.recent-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.recent-card {
+  flex: 0 0 110px;
+}
+
+.recent-art {
+  width: 110px;
+  height: 165px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.recent-art.landscape {
+  height: 62px;
+}
+
+.recent-title {
+  margin-top: 4px;
+  font-size: 0.78em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.activity-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-overview,
+.activity-when {
+  font-size: 0.8em;
+}
+
+.activity-when {
+  white-space: nowrap;
+}
+
+.activity-dot {
+  flex: 0 0 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent, #00a4dc);
+}
+
+.activity-warning {
+  background: #f9a825;
+}
+
+.activity-error {
+  background: #e53935;
+}

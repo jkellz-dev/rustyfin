@@ -135,6 +135,24 @@ pub async fn get_dashboard_stats() -> Result<DashboardStats, String> {
     get_json("/System/Stats").await
 }
 
+/// The latest activity log entries, newest first.
+pub async fn get_activity_log(limit: i32) -> Result<QueryResult<ActivityLogEntry>, String> {
+    get_json(&format!(
+        "/System/ActivityLog/Entries?StartIndex=0&Limit={limit}"
+    ))
+    .await
+}
+
+/// Sessions active in the last 15 minutes.
+pub async fn get_active_sessions() -> Result<Vec<SessionInfo>, String> {
+    get_json("/Sessions?ActiveWithinSeconds=960").await
+}
+
+/// The latest media added across every library.
+pub async fn get_latest_items(limit: i32) -> Result<Vec<BaseItemDto>, String> {
+    get_json(&format!("/Items/Latest?Limit={limit}&GroupItems=false")).await
+}
+
 pub async fn get_libraries() -> Result<Vec<VirtualFolderInfo>, String> {
     get_json("/Library/VirtualFolders").await
 }
