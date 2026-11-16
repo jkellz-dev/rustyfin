@@ -21,9 +21,25 @@ about one hour:
 | An album's tracks ingested 8 at once (`01805f0`) | 22/s | 22/s | ~57 min |
 
 The server used 2.6 cores and under 180 MiB while scanning; most of that CPU
-is ffprobe itself, which is now the floor (reading audio facts with lofty,
-already used for tags, would remove it for music). Rescans skip unchanged
-files by their etag and do not probe them.
+was ffprobe itself. Rescans skip unchanged files by their etag and do not
+probe them.
+
+### Music read with lofty (`3f6229e`)
+
+Audio facts are now read in-process with lofty (already used for tags) and
+ffprobe runs only for files lofty cannot name exactly. Measured on 5,000 real
+mp3 tracks (1 s, 128 kbit/s, embedded cover; 50 artists × 10 albums), first
+scan, same sandbox:
+
+| | 5,000 tracks | Tracks/s | ffprobe processes |
+| --- | --- | --- | --- |
+| ffprobe (`251b648`) | 258 s | 19 | up to 8 |
+| lofty (`9bf8e6b`) | 92 s | 54 | none |
+
+The stored streams are the same (mp3, 2 channels, 44.1 kHz, the cover as a
+64×64 mjpeg video stream); lofty's bit rate is its own estimate (131 vs 128
+kbit/s). A first scan of 75,000 tracks drops to about 25 minutes; what is left
+is mostly the database writes per track.
 
 ## Browsing (`/Items`), 5 concurrent clients, 30 s each
 
