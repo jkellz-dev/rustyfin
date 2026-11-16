@@ -239,6 +239,7 @@ jsonpath "$.RemoteTrailers" isCollection
 jsonpath "$.ProviderIds" exists
 jsonpath "$.ProviderIds.MusicBrainzAlbum" isString
 jsonpath "$.ProviderIds.MusicBrainzReleaseGroup" isString
+jsonpath "$.ProviderIds.MusicBrainzAlbumArtist" isString
 jsonpath "$.IsFolder" isBoolean
 jsonpath "$.ParentId" isString
 jsonpath "$.Type" isString

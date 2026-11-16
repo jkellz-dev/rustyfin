@@ -20,6 +20,21 @@ HTTP 200
 [Captures]
 series_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: MusicAlbum
+HTTP 200
+[Captures]
+album_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Artists/AlbumArtists
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+artist_id: jsonpath "$.Items[0].Id"
+
 GET {{base_url}}/Library/VirtualFolders
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
@@ -58,10 +73,13 @@ jsonpath "$.Items[0].LocalTrailerCount" isNumber
 jsonpath "$.Items[0].SpecialFeatureCount" isNumber
 jsonpath "$.Items[0].DisplayPreferencesId" isString
 jsonpath "$.Items[0].Tags" isCollection
+jsonpath "$.Items[0].PrimaryImageAspectRatio" isNumber
 jsonpath "$.Items[0].CollectionType" isString
 jsonpath "$.Items[0].ImageTags" exists
+jsonpath "$.Items[0].ImageTags.Primary" isString
 jsonpath "$.Items[0].BackdropImageTags" isCollection
 jsonpath "$.Items[0].ImageBlurHashes" exists
+jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.Items[0].LockedFields" isCollection
@@ -528,10 +546,13 @@ jsonpath "$.Items[0].ChildCount" isNumber
 jsonpath "$.Items[0].SpecialFeatureCount" isNumber
 jsonpath "$.Items[0].DisplayPreferencesId" isString
 jsonpath "$.Items[0].Tags" isCollection
+jsonpath "$.Items[0].PrimaryImageAspectRatio" isNumber
 jsonpath "$.Items[0].CollectionType" isString
 jsonpath "$.Items[0].ImageTags" exists
+jsonpath "$.Items[0].ImageTags.Primary" isString
 jsonpath "$.Items[0].BackdropImageTags" isCollection
 jsonpath "$.Items[0].ImageBlurHashes" exists
+jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
 jsonpath "$.Items[0].LocationType" isString
 jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.Items[0].LockedFields" isCollection

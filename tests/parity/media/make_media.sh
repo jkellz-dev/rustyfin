@@ -9,6 +9,12 @@ mkdir -p "$out/movies/Test Movie (2020)" \
 	"$out/shows/Test Show (2021)/Season 01" \
 	"$out/music/Test Artist/Test Album (2019)"
 
+# Picard-style MusicBrainz tags (TXXX frames), so both servers read the same
+# ids from the files: the ids Jellyfin's own online lookup found for this album.
+MB_ALBUM=43bcfb95-f26c-4f8d-84f8-7b2ac5b8ab72
+MB_GROUP=5b35fbbc-3f45-45a8-95a9-2545dbf44e7c
+MB_ARTIST=7e84f845-ac16-41fe-9ff8-df12eb32af55
+
 # Fixed timestamps so the etag and DateCreated do not differ between runs.
 video() {
 	ffmpeg -y -loglevel error \
@@ -22,7 +28,11 @@ audio() {
 		-f lavfi -i "sine=frequency=$3:duration=4" \
 		-c:a libmp3lame -b:a 64k \
 		-metadata title="$2" -metadata artist="Test Artist" \
-		-metadata album="Test Album" -metadata track="$4" "$1"
+		-metadata album="Test Album" -metadata track="$4" \
+		-metadata "MusicBrainz Album Id=$MB_ALBUM" \
+		-metadata "MusicBrainz Release Group Id=$MB_GROUP" \
+		-metadata "MusicBrainz Artist Id=$MB_ARTIST" \
+		-metadata "MusicBrainz Album Artist Id=$MB_ARTIST" "$1"
 }
 
 video "$out/movies/Test Movie (2020)/Test Movie (2020).mp4" "Test Movie"

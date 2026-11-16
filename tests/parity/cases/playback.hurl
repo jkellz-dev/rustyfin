@@ -20,6 +20,21 @@ HTTP 200
 [Captures]
 series_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: MusicAlbum
+HTTP 200
+[Captures]
+album_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Artists/AlbumArtists
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+artist_id: jsonpath "$.Items[0].Id"
+
 POST {{base_url}}/Items/{{movie_id}}/PlaybackInfo
 Authorization: MediaBrowser Token="{{token}}"
 Content-Type: application/json
