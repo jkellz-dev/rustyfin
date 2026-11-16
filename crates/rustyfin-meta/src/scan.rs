@@ -29,6 +29,9 @@ pub struct ScanOpts<'a> {
     pub auto_mode: bool,
     pub no_cache: bool,
     pub force: bool,
+    /// Ask TMDB which collection each film is in when its NFO gives no id
+    /// (`rustyfin artwork --check-collections`; off by default).
+    pub check_collections: bool,
 }
 
 pub async fn scan_directory(

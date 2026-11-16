@@ -11,12 +11,13 @@ rustyfin artwork /data/media/<tv-folder> -t tvshows
 rustyfin --dry-run artwork /data/media/movies -t movies     # report only, change nothing
 rustyfin --force artwork /data/media/movies -t movies       # replace existing images too
 rustyfin artwork /data/media/movies -t movies --collections-only
+rustyfin artwork /data/media/movies -t movies --collections-only --check-collections
 ```
 
 A run ends with a summary line:
 
 ```text
-Done: checked=183, complete=182, downloaded=0, headshots=0, collections=0, no_id=0, errors=0
+Done: checked=183, complete=182, downloaded=0, headshots=0, collections=0, collection_checks=0, no_id=0, errors=0
 ```
 
 ## Where things go
@@ -33,6 +34,20 @@ The server attaches collection art to automatic collections at scan time, so sca
 
 Fetches only the art of the TMDB collections the films' NFOs name (`<set tmdbcolid="...">`), skipping posters,
 fanart and headshots. Useful after Radarr adds films to new collections.
+
+## `--check-collections` (off by default)
+
+Collections come from the films' NFOs. An NFO written before TMDB renamed a collection, or by a tool that writes only
+the name (`<set>28 Days/Weeks Later Collection</set>`, no `tmdbcolid`), splits a series in two: "28 Days/Weeks Later
+Collection" for the old films and "28 Days/Weeks/Years Later Collection" for the new one. Radarr does not rewrite such
+NFOs on its own.
+
+`--check-collections` asks TMDB (`/movie/{id}`, one call per film) which collection each film is in, for films whose NFO
+gives no collection id and that have a TMDB id (folder name, NFO or `.rustyfin.toml`). The answer goes into the film's
+[`.rustyfin.toml`](title-settings.md) as `[collection] tmdb`, `name` and `checked`; the server groups by it at the next
+scan, so the series becomes one collection with TMDB's current name and art. NFOs are never changed. A film is asked
+again after **30 days** (or now with `--force`); films whose NFO has a `tmdbcolid` are never asked. Combine it with
+`--collections-only` to do only this and the collection art.
 
 ## Titles TMDB has no art for (30-day memory)
 
@@ -54,6 +69,7 @@ folder name or NFO gives.
 media-stack/media/rustyfin/jobs/artwork-job.sh -t movies movies movies_kids
 media-stack/media/rustyfin/jobs/artwork-job.sh -t tvshows --dry-run <tv-folder>
 media-stack/media/rustyfin/jobs/artwork-job.sh -t movies --collections-only movies
+media-stack/media/rustyfin/jobs/artwork-job.sh -t movies --collections-only --check-collections movies /mnt/media/movies
 media-stack/media/rustyfin/jobs/artwork-job.sh -t movies /mnt/media/<folder>
 ```
 

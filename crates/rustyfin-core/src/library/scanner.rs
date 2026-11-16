@@ -1355,9 +1355,22 @@ impl LibraryScanner {
         let found: Vec<(Uuid, String, Option<String>)> = items
             .into_iter()
             .filter_map(|(id, path)| {
-                find_movie_nfo(Path::new(&path))
-                    .and_then(|nfo| rustyfin_common::nfo::parse_movie_set(&nfo))
-                    .map(|set| (id, set.name, set.tmdb_id))
+                let path = Path::new(&path);
+                let nfo_set = find_movie_nfo(path)
+                    .and_then(|nfo| rustyfin_common::nfo::parse_movie_set(&nfo));
+                // TMDB's answer, when `rustyfin artwork --check-collections`
+                // recorded one, wins over an NFO that may be stale.
+                let looked_up = path
+                    .parent()
+                    .and_then(rustyfin_common::title_settings::load)
+                    .and_then(|s| Some((s.collection.tmdb?, s.collection.name)));
+                match looked_up {
+                    Some((tmdb, name)) => {
+                        let name = name.or_else(|| nfo_set.map(|s| s.name))?;
+                        Some((id, name, Some(tmdb.to_string())))
+                    }
+                    None => nfo_set.map(|set| (id, set.name, set.tmdb_id)),
+                }
             })
             .collect();
         let sets = collections::group_auto_sets(found);

@@ -140,6 +140,8 @@ pub struct ArtworkStats {
     pub errors: usize,
     /// Collection art files saved.
     pub collections: usize,
+    /// Films whose collection TMDB was asked for (`--check-collections`).
+    pub collection_checks: usize,
 }
 
 /// The TMDB collections the films in `dirs` belong to (Radarr's
@@ -148,14 +150,83 @@ pub struct ArtworkStats {
 pub fn collections_needing_art(dirs: &[PathBuf], collections: &Path, force: bool) -> Vec<i64> {
     let ids: std::collections::BTreeSet<i64> = dirs
         .iter()
-        .filter_map(|dir| first_video(dir))
-        .filter_map(|video| nfo::find_movie_nfo(&video))
-        .filter_map(|path| nfo::parse_movie_set(&path))
-        .filter_map(|set| set.tmdb_id?.parse().ok())
+        .filter_map(|dir| {
+            // A collection recorded from TMDB wins over the NFO's.
+            title_settings::load(dir)
+                .and_then(|s| s.collection.tmdb)
+                .or_else(|| {
+                    first_video(dir)
+                        .and_then(|video| nfo::find_movie_nfo(&video))
+                        .and_then(|path| nfo::parse_movie_set(&path))
+                        .and_then(|set| set.tmdb_id?.parse().ok())
+                })
+        })
         .collect();
     ids.into_iter()
         .filter(|id| force || !collections.join(id.to_string()).join("poster.jpg").exists())
         .collect()
+}
+
+/// The films in `dirs` whose collection to ask TMDB for, with their TMDB id:
+/// those whose NFO gives no collection id (none, or only a name that may be
+/// stale) and that were not asked within `NO_ART_MEMORY` (all with `force`).
+/// Films with no known TMDB id are skipped.
+pub fn films_needing_collection_check(dirs: &[PathBuf], force: bool) -> Vec<(PathBuf, i64)> {
+    dirs.iter()
+        .filter(|dir| {
+            first_video(dir)
+                .and_then(|v| nfo::find_movie_nfo(&v))
+                .and_then(|p| nfo::parse_movie_set(&p))
+                .and_then(|s| s.tmdb_id)
+                .is_none()
+        })
+        .filter(|dir| {
+            force
+                || !title_settings::load(dir)
+                    .is_some_and(|s| s.collection_checked_recently(NO_ART_MEMORY))
+        })
+        .filter_map(|dir| Some((dir.clone(), known_ids(dir, false).0?)))
+        .collect()
+}
+
+/// Ask TMDB for the collection of each film that needs it and record the
+/// answer in the film's `.rustyfin.toml` (`--check-collections`).
+async fn check_collections(
+    dirs: &[PathBuf],
+    tmdb: Option<&TmdbClient>,
+    limiter: &RateLimiter,
+    opts: &ScanOpts<'_>,
+    stats: &mut ArtworkStats,
+) {
+    let films = films_needing_collection_check(dirs, opts.force);
+    if films.is_empty() {
+        return;
+    }
+    if opts.dry_run {
+        tracing::info!("{} films would be checked for a collection", films.len());
+        return;
+    }
+    let Some(tmdb) = tmdb else { return };
+    for (dir, id) in films {
+        let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        limiter.wait().await;
+        let Some(found) = tmdb.fetch_movie_collection(id).await else {
+            tracing::error!("{name}: TMDB did not answer for its collection");
+            stats.errors += 1;
+            continue;
+        };
+        stats.collection_checks += 1;
+        if let Some((cid, cname)) = &found {
+            tracing::info!("{name}: in {cname} ({cid})");
+        }
+        if let Err(e) = title_settings::record_collection_checked(
+            &dir,
+            found.as_ref().map(|(i, n)| (*i, n.as_str())),
+        ) {
+            tracing::warn!("{name}: cannot record its collection: {e}");
+            stats.errors += 1;
+        }
+    }
 }
 
 /// How long "TMDB has no art for this" is believed before asking again.
@@ -197,11 +268,14 @@ pub async fn fill_collection_art(root: &Path, opts: &ScanOpts<'_>) -> anyhow::Re
     ));
     let dirs = library_dirs(root)?;
     let collections_dir = rustyfin_common::images::collection_art_dir(&people_dir);
-    let ids = collections_needing_art(&dirs, &collections_dir, opts.force);
     let mut stats = ArtworkStats {
         checked: dirs.len(),
         ..Default::default()
     };
+    if opts.check_collections {
+        check_collections(&dirs, tmdb.as_ref(), &limiter, opts, &mut stats).await;
+    }
+    let ids = collections_needing_art(&dirs, &collections_dir, opts.force);
     fetch_collection_art(
         &ids,
         &collections_dir,
@@ -290,12 +364,15 @@ pub async fn fill_missing(
     let dirs = library_dirs(root)?;
 
     let collections_dir = rustyfin_common::images::collection_art_dir(&people_dir);
+    let mut stats = ArtworkStats::default();
+    if opts.check_collections && !tv {
+        check_collections(&dirs, tmdb.as_ref(), &limiter, opts, &mut stats).await;
+    }
     let collection_ids = if tv {
         Vec::new()
     } else {
         collections_needing_art(&dirs, &collections_dir, opts.force)
     };
-    let mut stats = ArtworkStats::default();
     for dir in dirs {
         stats.checked += 1;
         let name = dir
@@ -651,6 +728,7 @@ mod tests {
             auto_mode: false,
             no_cache: true,
             force: false,
+            check_collections: false,
         };
         let err = fill_missing(Path::new("/data/media/kids_movies"), "movies", &opts)
             .await

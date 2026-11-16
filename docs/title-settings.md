@@ -18,6 +18,11 @@ title = "8-Bit Christmas"    # the name shown everywhere (and sorted by)
 [artwork]
 skip = false                              # never fetch artwork for this title
 missing_checked = 2026-11-15T08:00:00Z    # written by `rustyfin artwork`
+
+[collection]                              # written by `rustyfin artwork --check-collections`
+tmdb = 1565
+name = "28 Days/Weeks/Years Later Collection"
+checked = 2026-11-16T08:00:00Z
 ```
 
 ## Keys
@@ -29,6 +34,8 @@ missing_checked = 2026-11-15T08:00:00Z    # written by `rustyfin artwork`
 | `[metadata] title` | Title that replaces the NFO's and the folder name's |
 | `[artwork] skip` | `true`: `rustyfin artwork` leaves the title alone (posters, backdrops, headshots) |
 | `[artwork] missing_checked` | When TMDB last had none of the title's missing poster or backdrop; see below |
+| `[collection] tmdb`, `name` | The film's collection on TMDB; wins over the NFO's `<set>` ([artwork](artwork.md)) |
+| `[collection] checked` | When `--check-collections` last asked TMDB (again after 30 days) |
 
 Every key is optional. The file overrides; it never has to repeat what the NFO already says.
 
@@ -41,8 +48,9 @@ and applies to the whole show.
 ## Who writes it
 
 The server only reads it (the media mount is read-only). You write it by hand. `rustyfin artwork` writes
-`missing_checked` and nothing else: it replaces that one line, or adds it under `[artwork]`, or adds an `[artwork]`
-table at the end, and keeps every comment, blank line and other key as it was.
+`missing_checked`, and with `--check-collections` the `[collection]` keys, and nothing else: it replaces that one line,
+or adds it under `[artwork]`, or adds an `[artwork]` table at the end, and keeps every comment, blank line and other key
+as it was.
 
 ## Mistakes
 

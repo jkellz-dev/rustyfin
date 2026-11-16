@@ -78,6 +78,21 @@ pub fn parse_artwork(json: &str) -> Option<Artwork> {
     })
 }
 
+/// The collection `/movie/{id}` puts the film in: `Some(Some((id, name)))`,
+/// `Some(None)` when it is in none, `None` when the body is not a film (an
+/// error, a bad key).
+pub fn parse_movie_collection(json: &str) -> Option<Option<(i64, String)>> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    v.get("id")?.as_i64()?;
+    let set = v.get("belongs_to_collection").filter(|c| !c.is_null());
+    Some(set.and_then(|c| {
+        Some((
+            c.get("id")?.as_i64()?,
+            c.get("name")?.as_str()?.trim().to_string(),
+        ))
+    }))
+}
+
 /// The TMDB id `/find/{external id}` returned, for a show (`tv`) or a film.
 pub fn parse_find(json: &str, tv: bool) -> Option<i64> {
     #[derive(Deserialize)]
@@ -103,6 +118,13 @@ impl TmdbClient {
         let url = format!("{TMDB_BASE_URL}/{kind}/{id}");
         let body = self.request(&url).send().await.ok()?.text().await.ok()?;
         parse_artwork(&body)
+    }
+
+    /// The collection a film is in (see `parse_movie_collection`).
+    pub async fn fetch_movie_collection(&self, id: i64) -> Option<Option<(i64, String)>> {
+        let url = format!("{TMDB_BASE_URL}/movie/{id}");
+        let body = self.request(&url).send().await.ok()?.text().await.ok()?;
+        parse_movie_collection(&body)
     }
 
     /// A collection's (film series') artwork by TMDB collection id.

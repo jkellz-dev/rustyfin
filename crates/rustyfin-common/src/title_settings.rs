@@ -14,6 +14,11 @@
 //!
 //! [lyrics]                                  # in an album folder
 //! checked = 2026-11-16T08:00:00Z            # written by `rustyfin lyrics`
+//!
+//! [collection]                              # written by `rustyfin artwork
+//! tmdb = 1565                               #   --check-collections`
+//! name = "28 Days/Weeks/Years Later Collection"
+//! checked = 2026-11-16T08:00:00Z
 //! ```
 //!
 //! Precedence: these settings, then the NFO, then the folder name, then
@@ -38,6 +43,7 @@ pub struct TitleSettings {
     pub metadata: Metadata,
     pub artwork: Artwork,
     pub lyrics: Lyrics,
+    pub collection: Collection,
 }
 
 /// Provider ids that replace the folder name's and the NFO's.
@@ -72,6 +78,21 @@ pub struct Artwork {
 #[serde(default, deny_unknown_fields)]
 pub struct Lyrics {
     /// When LRCLIB last lacked lyrics for some of the album's tracks.
+    #[serde(deserialize_with = "toml_time")]
+    pub checked: Option<DateTime<Utc>>,
+}
+
+/// `[collection]`: the film series TMDB puts the film in, recorded by
+/// `rustyfin artwork --check-collections` (owner, 2026-11-16: opt-in) when
+/// the NFO gives no collection id. Wins over the NFO's `<set>`.
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Collection {
+    /// The TMDB collection id; none when TMDB has the film in no collection.
+    pub tmdb: Option<i64>,
+    /// The collection's name on TMDB.
+    pub name: Option<String>,
+    /// When TMDB was last asked.
     #[serde(deserialize_with = "toml_time")]
     pub checked: Option<DateTime<Utc>>,
 }
@@ -113,6 +134,16 @@ impl TitleSettings {
                 Ok(age) => age < within,
                 Err(_) => true,
             })
+    }
+
+    /// Whether TMDB was asked for this film's collection within `within`.
+    pub fn collection_checked_recently(&self, within: std::time::Duration) -> bool {
+        self.collection.checked.is_some_and(|at| {
+            match Utc::now().signed_duration_since(at).to_std() {
+                Ok(age) => age < within,
+                Err(_) => true,
+            }
+        })
     }
 
     /// Whether TMDB was found to have no art within `within` of now.
@@ -204,6 +235,38 @@ pub fn record_lyrics_checked_now(dir: &Path) -> std::io::Result<()> {
     write_line(dir, old, "lyrics", "checked", &line)
 }
 
+/// Record the collection TMDB puts the film in `dir` in (`None`: in none), as
+/// checked now. Same rules as `record_missing_checked`; a collection recorded
+/// before is kept when TMDB now names none (the owner may delete it).
+pub fn record_collection_checked(dir: &Path, found: Option<(i64, &str)>) -> std::io::Result<()> {
+    let p = path(dir);
+    let old = match std::fs::read_to_string(&p) {
+        Ok(t) => Some(t),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e),
+    };
+    if let Some(text) = &old
+        && let Err(e) = toml::from_str::<TitleSettings>(text)
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("{} is not valid, so it is left alone: {e}", p.display()),
+        ));
+    }
+    let mut lines = vec![(
+        "checked",
+        format!("checked = {}", Utc::now().format("%Y-%m-%dT%H:%M:%SZ")),
+    )];
+    if let Some((id, name)) = found {
+        lines.push((
+            "name",
+            format!("name = {}", toml::Value::String(name.to_string())),
+        ));
+        lines.push(("tmdb", format!("tmdb = {id}")));
+    }
+    write_lines(dir, old, "collection", &lines)
+}
+
 /// Write `line` as `table.key` into the settings file (created if needed),
 /// checking the result reads back.
 fn write_line(
@@ -213,8 +276,21 @@ fn write_line(
     key: &str,
     line: &str,
 ) -> std::io::Result<()> {
+    write_lines(dir, old, table, &[(key, line.to_string())])
+}
+
+/// `write_line` for several keys of one table, in one write.
+fn write_lines(
+    dir: &Path,
+    old: Option<String>,
+    table: &str,
+    lines: &[(&str, String)],
+) -> std::io::Result<()> {
     let p = path(dir);
-    let new = set_table_line(old.as_deref().unwrap_or(HEADER), table, key, line);
+    let mut new = old.unwrap_or_else(|| HEADER.to_string());
+    for (key, line) in lines {
+        new = set_table_line(&new, table, key, line);
+    }
     // Never write something that would not read back.
     toml::from_str::<TitleSettings>(&new).map_err(|e| {
         std::io::Error::new(

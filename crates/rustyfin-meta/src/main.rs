@@ -60,6 +60,12 @@ enum Command {
         /// Only fetch the art of the collections the films belong to.
         #[arg(long)]
         collections_only: bool,
+        /// Ask TMDB which collection each film is in, for films whose NFO
+        /// gives no collection id (old or hand-made NFOs), and record the
+        /// answer in the film's `.rustyfin.toml` (asked again after 30 days,
+        /// or now with --force). Off by default: one TMDB call per such film.
+        #[arg(long)]
+        check_collections: bool,
     },
     /// Fetch lyrics from LRCLIB for tracks that have none, written beside the
     /// track as `.lrc` (synced) or `.txt` (plain). Existing lyrics and files are
@@ -126,6 +132,13 @@ async fn main() -> anyhow::Result<()> {
         auto_mode: cli.auto,
         no_cache: cli.no_cache,
         force: cli.force,
+        check_collections: matches!(
+            cli.command,
+            Command::Artwork {
+                check_collections: true,
+                ..
+            }
+        ),
     };
 
     match cli.command {
@@ -156,6 +169,7 @@ async fn main() -> anyhow::Result<()> {
             path,
             library_type,
             collections_only,
+            ..
         } => {
             let stats = if collections_only {
                 artwork::fill_collection_art(&path, &opts).await?
@@ -163,12 +177,13 @@ async fn main() -> anyhow::Result<()> {
                 artwork::fill_missing(&path, &library_type, &opts).await?
             };
             tracing::info!(
-                "Done: checked={}, complete={}, downloaded={}, headshots={}, collections={}, no_id={}, errors={}",
+                "Done: checked={}, complete={}, downloaded={}, headshots={}, collections={}, collection_checks={}, no_id={}, errors={}",
                 stats.checked,
                 stats.complete,
                 stats.downloaded,
                 stats.headshots,
                 stats.collections,
+                stats.collection_checks,
                 stats.no_id,
                 stats.errors
             );
