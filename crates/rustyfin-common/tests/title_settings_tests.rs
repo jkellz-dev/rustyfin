@@ -149,3 +149,26 @@ fn a_file_that_does_not_parse_is_never_overwritten() {
     assert!(title_settings::record_missing_checked(&d.0, when).is_err());
     assert_eq!(d.read(), "[ids\nbroken");
 }
+
+#[test]
+fn the_lyrics_check_is_recorded_beside_other_settings() {
+    let dir = std::env::temp_dir().join(format!("rustyfin-ts-lyrics-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join(".rustyfin.toml"),
+        "# mine\n[artwork]\nskip = true\n",
+    )
+    .unwrap();
+    rustyfin_common::title_settings::record_lyrics_checked_now(&dir).unwrap();
+    rustyfin_common::title_settings::record_lyrics_checked_now(&dir).unwrap();
+    let text = std::fs::read_to_string(dir.join(".rustyfin.toml")).unwrap();
+    assert!(
+        text.starts_with("# mine\n[artwork]\nskip = true\n"),
+        "{text}"
+    );
+    assert_eq!(text.matches("checked =").count(), 1, "{text}");
+    let s = rustyfin_common::title_settings::load(&dir).unwrap();
+    assert!(s.artwork.skip);
+    assert!(s.lyrics_checked_recently(std::time::Duration::from_secs(60)));
+    std::fs::remove_dir_all(&dir).ok();
+}

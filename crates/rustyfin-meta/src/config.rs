@@ -18,6 +18,8 @@ pub struct MetaConfig {
     pub output: OutputConfig,
     #[serde(default)]
     pub server: ServerConfig,
+    #[serde(default)]
+    pub lrclib: LrclibConfig,
     /// Accepts the same `metadata.tmdb_api_key` field as the server config,
     /// so both binaries can share `RUSTYFIN__METADATA__TMDB_API_KEY`.
     #[serde(default)]
@@ -231,6 +233,36 @@ fn default_discogs_rate_window() -> u64 {
 
 fn default_token_file() -> String {
     "~/.config/rustyfin/discogs_tokens.json".to_string()
+}
+
+/// LRCLIB, for `rustyfin lyrics`. `url` may point at a self-hosted copy.
+#[derive(Debug, Deserialize)]
+pub struct LrclibConfig {
+    #[serde(default = "default_lrclib_url")]
+    pub url: String,
+    #[serde(default = "default_lrclib_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_rate_window")]
+    pub rate_window_secs: u64,
+}
+
+impl Default for LrclibConfig {
+    fn default() -> Self {
+        Self {
+            url: default_lrclib_url(),
+            rate_limit: default_lrclib_rate_limit(),
+            rate_window_secs: default_rate_window(),
+        }
+    }
+}
+
+fn default_lrclib_url() -> String {
+    "https://lrclib.net".to_string()
+}
+
+/// Requests per `rate_window_secs`: polite for a public, volunteer-run service.
+fn default_lrclib_rate_limit() -> u32 {
+    20
 }
 
 #[derive(Debug, Deserialize, Default)]

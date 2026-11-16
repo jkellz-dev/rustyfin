@@ -11,6 +11,9 @@
 //! [artwork]
 //! skip = false                              # never fetch artwork for this title
 //! missing_checked = 2026-11-15T08:00:00Z    # written by `rustyfin artwork`
+//!
+//! [lyrics]                                  # in an album folder
+//! checked = 2026-11-16T08:00:00Z            # written by `rustyfin lyrics`
 //! ```
 //!
 //! Precedence: these settings, then the NFO, then the folder name, then
@@ -34,6 +37,7 @@ pub struct TitleSettings {
     pub ids: Ids,
     pub metadata: Metadata,
     pub artwork: Artwork,
+    pub lyrics: Lyrics,
 }
 
 /// Provider ids that replace the folder name's and the NFO's.
@@ -61,6 +65,15 @@ pub struct Artwork {
     /// When TMDB last had none of the missing poster or backdrop.
     #[serde(deserialize_with = "toml_time")]
     pub missing_checked: Option<DateTime<Utc>>,
+}
+
+/// `[lyrics]`, in an album folder.
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Lyrics {
+    /// When LRCLIB last lacked lyrics for some of the album's tracks.
+    #[serde(deserialize_with = "toml_time")]
+    pub checked: Option<DateTime<Utc>>,
 }
 
 /// A TOML offset date-time (`2026-11-15T08:00:00Z`) as UTC.
@@ -92,6 +105,16 @@ impl TitleSettings {
 }
 
 impl TitleSettings {
+    /// Whether LRCLIB was asked for this album's missing lyrics within `within`.
+    pub fn lyrics_checked_recently(&self, within: std::time::Duration) -> bool {
+        self.lyrics
+            .checked
+            .is_some_and(|at| match Utc::now().signed_duration_since(at).to_std() {
+                Ok(age) => age < within,
+                Err(_) => true,
+            })
+    }
+
     /// Whether TMDB was found to have no art within `within` of now.
     pub fn missing_checked_recently(&self, within: std::time::Duration) -> bool {
         self.missing_checked_within(Utc::now(), within)
@@ -157,7 +180,41 @@ pub fn record_missing_checked(dir: &Path, when: DateTime<Utc>) -> std::io::Resul
         ));
     }
     let line = format!("missing_checked = {}", when.format("%Y-%m-%dT%H:%M:%SZ"));
-    let new = set_artwork_line(old.as_deref().unwrap_or(HEADER), &line);
+    write_line(dir, old, "artwork", "missing_checked", &line)
+}
+
+/// Record that LRCLIB was asked for the missing lyrics of the album in `dir`,
+/// now. Same rules as `record_missing_checked`.
+pub fn record_lyrics_checked_now(dir: &Path) -> std::io::Result<()> {
+    let p = path(dir);
+    let old = match std::fs::read_to_string(&p) {
+        Ok(t) => Some(t),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e),
+    };
+    if let Some(text) = &old
+        && let Err(e) = toml::from_str::<TitleSettings>(text)
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("{} is not valid, so it is left alone: {e}", p.display()),
+        ));
+    }
+    let line = format!("checked = {}", Utc::now().format("%Y-%m-%dT%H:%M:%SZ"));
+    write_line(dir, old, "lyrics", "checked", &line)
+}
+
+/// Write `line` as `table.key` into the settings file (created if needed),
+/// checking the result reads back.
+fn write_line(
+    dir: &Path,
+    old: Option<String>,
+    table: &str,
+    key: &str,
+    line: &str,
+) -> std::io::Result<()> {
+    let p = path(dir);
+    let new = set_table_line(old.as_deref().unwrap_or(HEADER), table, key, line);
     // Never write something that would not read back.
     toml::from_str::<TitleSettings>(&new).map_err(|e| {
         std::io::Error::new(
@@ -170,16 +227,16 @@ pub fn record_missing_checked(dir: &Path, when: DateTime<Utc>) -> std::io::Resul
     std::fs::rename(&tmp, &p)
 }
 
-/// `text` with `line` as the `[artwork]` table's `missing_checked`: replacing
-/// it, else added under the table's header, else in a new table at the end.
-fn set_artwork_line(text: &str, line: &str) -> String {
+/// `text` with `line` as `[table]`'s `key`: replacing it, else added under
+/// the table's header, else in a new table at the end.
+fn set_table_line(text: &str, table: &str, key: &str, line: &str) -> String {
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let header = |l: &str| l.trim().starts_with('[');
     let is_artwork = |l: &str| {
         let t = l.trim();
         t.strip_prefix('[')
             .and_then(|r| r.split(']').next())
-            .is_some_and(|name| name.trim() == "artwork")
+            .is_some_and(|name| name.trim() == table)
             && !t.starts_with("[[")
     };
     if let Some(start) = lines.iter().position(|l| is_artwork(l)) {
@@ -189,7 +246,7 @@ fn set_artwork_line(text: &str, line: &str) -> String {
             .map_or(lines.len(), |i| start + 1 + i);
         let existing = (start + 1..end).find(|&i| {
             let t = lines[i].trim_start();
-            t.strip_prefix("missing_checked")
+            t.strip_prefix(key)
                 .is_some_and(|rest| rest.trim_start().starts_with('='))
         });
         match existing {
@@ -200,7 +257,7 @@ fn set_artwork_line(text: &str, line: &str) -> String {
         if lines.last().is_some_and(|l| !l.trim().is_empty()) {
             lines.push(String::new());
         }
-        lines.push("[artwork]".to_string());
+        lines.push(format!("[{table}]"));
         lines.push(line.to_string());
     }
     let mut out = lines.join("\n");

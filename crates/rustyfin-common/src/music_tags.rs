@@ -242,3 +242,38 @@ pub fn musicbrainz_ids(tags: &AudioTags) -> MusicBrainzIds {
         artist: pick(&[("MusicBrainzArtist", &album_artist)]),
     }
 }
+
+/// What LRCLIB needs to find a recording, read from a track's tags.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrackQuery {
+    pub artist: String,
+    pub title: String,
+    pub album: String,
+    pub duration_secs: u64,
+    /// The tags already carry lyrics.
+    pub has_lyrics: bool,
+}
+
+/// The track's artist, title, album and length; None when the file cannot be
+/// read or lacks any of them (LRCLIB needs all four to match a recording).
+pub fn read_track_query(path: &Path) -> Option<TrackQuery> {
+    use lofty::file::{AudioFile, TaggedFileExt};
+    use lofty::tag::{Accessor, ItemKey};
+    let file = lofty::read_from_path(path).ok()?;
+    let tag = file.primary_tag().or_else(|| file.first_tag())?;
+    let duration_secs = file.properties().duration().as_secs();
+    let s = |v: Option<std::borrow::Cow<'_, str>>| {
+        v.map(|x| x.trim().to_string()).filter(|x| !x.is_empty())
+    };
+    let artist =
+        s(tag.artist()).or_else(|| s(tag.get_string(&ItemKey::AlbumArtist).map(Into::into)))?;
+    Some(TrackQuery {
+        artist,
+        title: s(tag.title())?,
+        album: s(tag.album())?,
+        duration_secs: (duration_secs > 0).then_some(duration_secs)?,
+        has_lyrics: tag
+            .get_string(&ItemKey::Lyrics)
+            .is_some_and(|l| !l.trim().is_empty()),
+    })
+}

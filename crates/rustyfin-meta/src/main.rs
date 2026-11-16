@@ -1,6 +1,7 @@
 mod artwork;
 mod config;
 mod fetch;
+mod lyrics;
 mod scan;
 
 use std::path::{Path, PathBuf};
@@ -59,6 +60,14 @@ enum Command {
         /// Only fetch the art of the collections the films belong to.
         #[arg(long)]
         collections_only: bool,
+    },
+    /// Fetch lyrics from LRCLIB for tracks that have none, written beside the
+    /// track as `.lrc` (synced) or `.txt` (plain). Existing lyrics and files are
+    /// never touched; albums LRCLIB lacked are asked again after 30 days
+    /// (--force asks now).
+    Lyrics {
+        /// A music library, artist or album folder.
+        path: PathBuf,
     },
     /// Notify the server about changed paths
     Notify {
@@ -164,6 +173,30 @@ async fn main() -> anyhow::Result<()> {
                 stats.errors
             );
             if stats.downloaded > 0
+                && let (Some(server_url), Some(api_key)) = (
+                    config.server.url.as_deref(),
+                    config.server.api_key.as_deref(),
+                )
+                && let Err(e) = notify_server(server_url, api_key, &[&path]).await
+            {
+                tracing::warn!("Failed to notify server: {e}");
+            }
+        }
+        Command::Lyrics { path } => {
+            let stats = lyrics::fill_missing(&path, &opts).await?;
+            tracing::info!(
+                "Done: tracks={}, had={}, synced={}, plain={}, instrumental={}, missing={}, recently_checked={}, unreadable={}, errors={}",
+                stats.tracks,
+                stats.had,
+                stats.synced,
+                stats.plain,
+                stats.instrumental,
+                stats.missing,
+                stats.recently_checked,
+                stats.unreadable,
+                stats.errors
+            );
+            if stats.synced + stats.plain > 0
                 && let (Some(server_url), Some(api_key)) = (
                     config.server.url.as_deref(),
                     config.server.api_key.as_deref(),
