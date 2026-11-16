@@ -308,7 +308,8 @@ pub fn Dashboard() -> View {
                                             }
                                             None => {
                                                 let placeholder = format!("{shape} recent-art-empty");
-                                                view! { div(class=placeholder) { (label.chars().next().map(String::from).unwrap_or_default()) } }
+                                                let initial = label.chars().next().map(String::from).unwrap_or_default();
+                                                view! { div(class=placeholder) { (initial) } }
                                             }
                                         };
                                         view! {
