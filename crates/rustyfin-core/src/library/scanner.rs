@@ -216,6 +216,7 @@ impl LibraryScanner {
     async fn scan_movies(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
         let video_files = collect_video_files(lib_path).await;
         let (films, mut extras) = split_extras(video_files);
+        let (films, versions) = split_versions(films, lib_path);
         // Theme songs belong to the film when it has a folder of its own.
         let mut per_dir: std::collections::HashMap<&Path, usize> = Default::default();
         for f in &films {
@@ -273,6 +274,32 @@ impl LibraryScanner {
             }
         }
 
+        // Other versions of a film go under the film (Jellyfin's
+        // multi-version rule): one film, one media source per file.
+        let version_paths: Vec<PathBuf> = versions.iter().map(|(v, _)| v.clone()).collect();
+        for chunk in version_paths.chunks(PROBE_BATCH) {
+            self.prefetch_probes(chunk).await;
+        }
+        for (version, film) in &versions {
+            let Ok(Some(row)) =
+                media_items::find_by_path(&self.pool, &film.to_string_lossy()).await
+            else {
+                continue;
+            };
+            match self
+                .ingest_owned(version, library_id, row.id, "Version", "Movie")
+                .await
+            {
+                Ok(IngestOutcome::Added) => result.items_added += 1,
+                Ok(IngestOutcome::Updated) => result.items_updated += 1,
+                Ok(IngestOutcome::Skipped) => result.items_skipped += 1,
+                Err(e) => {
+                    tracing::error!("Error ingesting version {}: {e}", version.display());
+                    result.errors += 1;
+                }
+            }
+        }
+
         let extra_paths: Vec<PathBuf> = extras.iter().map(|e| e.path.clone()).collect();
         for chunk in extra_paths.chunks(PROBE_BATCH) {
             self.prefetch_probes(chunk).await;
@@ -322,13 +349,33 @@ impl LibraryScanner {
         owner: Uuid,
         kind: ExtraKind,
     ) -> anyhow::Result<IngestOutcome> {
+        let item_type = match kind {
+            ExtraKind::Trailer => "Trailer",
+            ExtraKind::ThemeSong => "Audio",
+            _ => "Video",
+        };
+        self.ingest_owned(file_path, library_id, owner, kind.as_str(), item_type)
+            .await
+    }
+
+    /// Store a file that belongs to another item (an extra, another version
+    /// of a film) under it, as `extra_type`. A row an older scan made for the
+    /// same file is reused, so it keeps its id and stops being listed.
+    async fn ingest_owned(
+        &self,
+        file_path: &Path,
+        library_id: Uuid,
+        owner: Uuid,
+        extra_type: &str,
+        item_type: &str,
+    ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
         let etag = compute_etag(file_path, &[])?;
         let existing = media_items::find_by_path(&self.pool, &path_str).await?;
         if let Some(e) = &existing
             && e.etag.as_deref() == Some(etag.as_str())
             && e.owner_id == Some(owner)
-            && e.extra_type.as_deref() == Some(kind.as_str())
+            && e.extra_type.as_deref() == Some(extra_type)
         {
             self.refresh_stale_streams(e.id, file_path).await;
             return Ok(IngestOutcome::Skipped);
@@ -344,12 +391,7 @@ impl LibraryScanner {
             .trim()
             .to_string();
         let item = media_items::NewMediaItem {
-            item_type: match kind {
-                ExtraKind::Trailer => "Trailer",
-                ExtraKind::ThemeSong => "Audio",
-                _ => "Video",
-            }
-            .to_string(),
+            item_type: item_type.to_string(),
             library_id: Some(library_id),
             parent_id: None,
             sort_name: Some(name.to_lowercase()),
@@ -384,7 +426,7 @@ impl LibraryScanner {
                 IngestOutcome::Added,
             ),
         };
-        media_items::set_extra(&self.pool, id, Some(owner), Some(kind.as_str())).await?;
+        media_items::set_extra(&self.pool, id, Some(owner), Some(extra_type)).await?;
         self.replace_streams(id, &probe_result).await;
         Ok(outcome)
     }
@@ -1777,6 +1819,41 @@ fn split_extras(files: Vec<PathBuf>) -> (Vec<PathBuf>, Vec<FoundExtra>) {
     (films, extras)
 }
 
+/// Films and the other versions of films: in a folder of its own (not the
+/// library root), two or more files named after the folder are one film's
+/// versions (`naming::version_label`). The plain name, else the first by
+/// name, is the film; the rest are returned as (version, film).
+fn split_versions(films: Vec<PathBuf>, root: &Path) -> (Vec<PathBuf>, Vec<(PathBuf, PathBuf)>) {
+    use rustyfin_common::naming::version_label;
+    let mut by_dir: std::collections::BTreeMap<PathBuf, Vec<(PathBuf, String)>> =
+        Default::default();
+    let mut kept = Vec::new();
+    for f in films {
+        match (f.parent(), version_label(&f)) {
+            (Some(dir), Some(label)) if dir != root => {
+                by_dir
+                    .entry(dir.to_path_buf())
+                    .or_default()
+                    .push((f, label));
+            }
+            _ => kept.push(f),
+        }
+    }
+    let mut versions = Vec::new();
+    for (_, mut files) in by_dir {
+        if files.len() < 2 {
+            kept.extend(files.into_iter().map(|(f, _)| f));
+            continue;
+        }
+        files.sort_by(|a, b| (!a.1.is_empty(), &a.0).cmp(&(!b.1.is_empty(), &b.0)));
+        let film = files[0].0.clone();
+        versions.extend(files.into_iter().skip(1).map(|(f, _)| (f, film.clone())));
+        kept.push(film);
+    }
+    kept.sort();
+    (kept, versions)
+}
+
 /// The film an extra belongs to among the films of its folder: the one whose
 /// name starts the extra's (longest wins, for multi-version folders), else the
 /// first by name.
@@ -1869,7 +1946,17 @@ async fn collect_audio_files(dir: &Path) -> Vec<PathBuf> {
     .unwrap_or_default()
 }
 
+/// The file's streams and length: read in-process with lofty for audio files
+/// (about a millisecond, owner 2026-11-16), else by ffprobe (~100 ms to start).
 async fn probe_file_graceful(path: &Path) -> Option<probe::ProbeResult> {
+    if is_audio_file(path) {
+        let p = path.to_path_buf();
+        if let Ok(Some(result)) =
+            tokio::task::spawn_blocking(move || rustyfin_media::audio_probe::probe_audio(&p)).await
+        {
+            return Some(result);
+        }
+    }
     match probe::probe_file(path).await {
         Ok(result) => Some(result),
         Err(e) => {

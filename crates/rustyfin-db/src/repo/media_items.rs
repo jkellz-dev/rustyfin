@@ -101,6 +101,21 @@ pub async fn list_extras(
     .await
 }
 
+/// The other versions of each of `owners` (Jellyfin's multi-version films),
+/// by path.
+pub async fn list_versions(
+    pool: &PgPool,
+    owners: &[Uuid],
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE owner_id = ANY($1) AND extra_type = 'Version' \
+         ORDER BY path",
+    )
+    .bind(owners)
+    .fetch_all(pool)
+    .await
+}
+
 /// Per owner: (trailers, special features), for `LocalTrailerCount` and
 /// `SpecialFeatureCount`.
 pub async fn count_extras(
@@ -110,7 +125,7 @@ pub async fn count_extras(
     let rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
         "SELECT owner_id, \
                 COUNT(*) FILTER (WHERE extra_type = 'Trailer'), \
-                COUNT(*) FILTER (WHERE extra_type NOT IN ('Trailer', 'ThemeVideo', 'ThemeSong')) \
+                COUNT(*) FILTER (WHERE extra_type NOT IN ('Trailer', 'ThemeVideo', 'ThemeSong', 'Version')) \
          FROM media_items WHERE owner_id = ANY($1) GROUP BY owner_id",
     )
     .bind(owners)

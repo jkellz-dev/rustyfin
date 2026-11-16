@@ -13,6 +13,7 @@ pub use library::tasks::{
 pub use rustyfin_common::images::headshot_file_name;
 pub use rustyfin_common::lyrics;
 pub use rustyfin_common::music_tags;
+pub use rustyfin_common::naming;
 pub use rustyfin_common::naming::{split_folder_year, strip_provider_tags};
 /// For the API tests and the scanner: the film series a movie NFO names.
 pub use rustyfin_common::nfo::{MovieSet, parse_movie_collection, parse_movie_set};

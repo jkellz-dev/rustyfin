@@ -39,6 +39,7 @@ pub mod theme_media;
 pub mod universal_audio;
 pub mod user_data;
 pub mod users;
+pub mod versions;
 pub mod webhooks;
 pub mod websocket;
 pub mod years;

@@ -27,10 +27,11 @@ pub async fn get_subtitle_stream(
 pub async fn get_subtitle_stream_with_source(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
-    Path((item_id, _media_source_id, stream_index)): Path<(Uuid, String, i32)>,
+    Path((item_id, media_source_id, stream_index)): Path<(Uuid, String, i32)>,
 ) -> Result<Response, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    serve_subtitle(&state, item_id, stream_index, "vtt").await
+    let file = super::versions::source_item(&state, item_id, Some(&media_source_id)).await?;
+    serve_subtitle(&state, file, stream_index, "vtt").await
 }
 
 /// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}`

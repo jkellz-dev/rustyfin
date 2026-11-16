@@ -34,7 +34,7 @@ pub struct ProbeChapter {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProbeStream {
     pub stream_index: i32,
     pub stream_type: String,

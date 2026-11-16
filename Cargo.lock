@@ -3156,6 +3156,7 @@ dependencies = [
  "fast_image_resize",
  "image",
  "libc",
+ "lofty",
  "rustyfin-db",
  "rustyfin-models",
  "serde",
