@@ -33,6 +33,7 @@ pub async fn report_playback_start(
                 ("Unknown".to_string(), "Unknown".to_string())
             };
 
+        state.session_manager.ensure_tracked(auth.session_id).await;
         state
             .session_manager
             .report_playback_start(
@@ -73,6 +74,35 @@ pub async fn report_playback_progress(
             0,
         )
         .await;
+    }
+
+    // A session tracked again after a restart has no playback yet: the start
+    // report came before the restart. The progress report names the item.
+    state.session_manager.ensure_tracked(auth.session_id).await;
+    if let Some(item_id) = body.item_id
+        && !state.session_manager.has_playback(auth.session_id).await
+    {
+        let (item_name, item_type) = match media_items::find_by_id(&state.pool, item_id).await {
+            Ok(Some(item)) => (item.name, item.item_type),
+            _ => ("Unknown".to_string(), "Unknown".to_string()),
+        };
+        state
+            .session_manager
+            .report_playback_start(
+                auth.session_id,
+                item_id,
+                item_name,
+                item_type,
+                body.position_ticks,
+                body.is_paused,
+                body.is_muted,
+                body.volume_level,
+                body.play_method.clone(),
+                body.audio_stream_index,
+                body.subtitle_stream_index,
+                body.play_session_id.clone(),
+            )
+            .await;
     }
 
     state
@@ -126,6 +156,7 @@ pub async fn report_playback_stopped(
 
 /// `POST /Sessions/Playing/Ping` — Keep session alive.
 pub async fn playback_ping(State(state): State<AppState>, auth: AuthenticatedUser) -> StatusCode {
+    state.session_manager.ensure_tracked(auth.session_id).await;
     state.session_manager.touch(auth.session_id).await;
     StatusCode::NO_CONTENT
 }

@@ -96,6 +96,47 @@ impl SessionManager {
         );
     }
 
+    /// Track a session again from its stored row when memory lost it (the
+    /// server restarted after the client logged in; the client kept its token).
+    /// Without this its playback reports were dropped and it never showed as
+    /// playing. A no-op for a session already tracked.
+    pub async fn ensure_tracked(&self, session_id: Uuid) {
+        if self.sessions.read().await.contains_key(&session_id) {
+            return;
+        }
+        let row = match rustyfin_db::repo::sessions::find_active_by_id(&self.pool, session_id).await
+        {
+            Ok(Some(row)) => row,
+            Ok(None) => return,
+            Err(e) => {
+                tracing::warn!("Could not load session {session_id} to track it: {e}");
+                return;
+            }
+        };
+        let user_name = rustyfin_db::repo::users::find_by_id(&self.pool, row.user_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|u| u.username)
+            .unwrap_or_default();
+        let mut sessions = self.sessions.write().await;
+        // Another request may have tracked it meanwhile; keep what it holds.
+        sessions
+            .entry(session_id)
+            .or_insert_with(|| TrackedSession {
+                session_id,
+                user_id: row.user_id,
+                user_name,
+                device_id: row.device_id,
+                device_name: row.device_name,
+                app_name: row.app_name,
+                app_version: row.app_version,
+                last_activity: Utc::now(),
+                playback: None,
+                capabilities: None,
+            });
+    }
+
     /// Report that playback has started on a session.
     #[allow(clippy::too_many_arguments)]
     pub async fn report_playback_start(
@@ -130,6 +171,15 @@ impl SessionManager {
             });
             session.last_activity = Utc::now();
         }
+    }
+
+    /// Whether a session has something playing.
+    pub async fn has_playback(&self, session_id: Uuid) -> bool {
+        self.sessions
+            .read()
+            .await
+            .get(&session_id)
+            .is_some_and(|s| s.playback.is_some())
     }
 
     /// Report playback progress update.

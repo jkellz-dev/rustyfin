@@ -27,6 +27,14 @@ pub async fn find_by_token(pool: &PgPool, token: &str) -> Result<Option<SessionR
     .await
 }
 
+/// An active session by id.
+pub async fn find_active_by_id(pool: &PgPool, id: Uuid) -> Result<Option<SessionRow>, sqlx::Error> {
+    sqlx::query_as::<_, SessionRow>("SELECT * FROM sessions WHERE id = $1 AND is_active = true")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+}
+
 /// Find active sessions for a user.
 pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<SessionRow>, sqlx::Error> {
     sqlx::query_as::<_, SessionRow>(
