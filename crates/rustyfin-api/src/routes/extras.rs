@@ -84,6 +84,19 @@ pub async fn special_features(
     ))
 }
 
+/// A title's theme songs (`theme.mp3`, the `theme-music` folder).
+pub(crate) async fn theme_songs(
+    state: &AppState,
+    auth: &AuthenticatedUser,
+    item_id: Uuid,
+) -> Result<ThemeMediaResult, ApiError> {
+    let items = extras(state, auth, item_id, &["ThemeSong"]).await?;
+    let mut result = ThemeMediaResult::empty(item_id);
+    result.total_record_count = items.len() as i32;
+    result.items = items;
+    Ok(result)
+}
+
 /// The videos in a title's `backdrops` folder, for `ThemeVideos`/`ThemeMedia`.
 pub(crate) async fn theme_videos(
     state: &AppState,

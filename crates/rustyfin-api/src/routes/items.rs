@@ -19,8 +19,8 @@ use rustyfin_media::playback_info::{
     default_audio_stream_index, source_video_type, stream_row_to_dto,
 };
 use rustyfin_models::dto::{
-    BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, NameGuidPair, QueryResult,
-    UserItemDataDto,
+    BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, MediaStream, NameGuidPair,
+    QueryResult, UserItemDataDto,
 };
 
 use crate::error::{ApiError, DegradeExt};
@@ -116,6 +116,30 @@ pub(crate) fn user_data_dto(
 
 /// The one media source a stored file is, with its streams, on the item. Nothing
 /// is attached when the item has no probed streams.
+/// A track's lyrics file as Jellyfin lists it: an external `Lyric` stream
+/// after the probed ones. Only tracks the scan found lyrics for are looked at.
+fn lyric_stream(
+    item: &media_items::MediaItemRow,
+    streams: &[MediaStream],
+    reveal_path: bool,
+) -> Option<MediaStream> {
+    if item.item_type != "Audio" || item.has_lyrics != Some(true) {
+        return None;
+    }
+    let file = rustyfin_core::lyrics::sidecar_path(std::path::Path::new(item.path.as_deref()?))?;
+    let codec = file.extension()?.to_str()?.to_lowercase();
+    Some(MediaStream {
+        index: streams.iter().map(|s| s.index + 1).max().unwrap_or(0),
+        stream_type: "Lyric".to_string(),
+        codec: Some(codec),
+        is_external: true,
+        path: reveal_path.then(|| file.to_string_lossy().into_owned()),
+        display_title: "Lyrics".to_string(),
+        supports_external_stream: true,
+        ..Default::default()
+    })
+}
+
 pub(crate) fn attach_media_source(
     dto: &mut BaseItemDto,
     item: &media_items::MediaItemRow,
@@ -125,7 +149,10 @@ pub(crate) fn attach_media_source(
     if streams.is_empty() {
         return;
     }
-    let media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
+    let mut media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
+    if let Some(lyric) = lyric_stream(item, &media_stream_dtos, reveal_path) {
+        media_stream_dtos.push(lyric);
+    }
     let source = MediaSourceInfo {
         id: item.id.to_string(),
         // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.

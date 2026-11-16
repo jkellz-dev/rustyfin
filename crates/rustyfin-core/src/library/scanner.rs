@@ -160,7 +160,28 @@ impl LibraryScanner {
 
     async fn scan_movies(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
         let video_files = collect_video_files(lib_path).await;
-        let (films, extras) = split_extras(video_files);
+        let (films, mut extras) = split_extras(video_files);
+        // Theme songs belong to the film when it has a folder of its own.
+        let mut per_dir: std::collections::HashMap<&Path, usize> = Default::default();
+        for f in &films {
+            if let Some(dir) = f.parent() {
+                *per_dir.entry(dir).or_default() += 1;
+            }
+        }
+        let theme_dirs: Vec<PathBuf> = per_dir
+            .into_iter()
+            .filter(|(dir, n)| *n == 1 && *dir != lib_path)
+            .map(|(dir, _)| dir.to_path_buf())
+            .collect();
+        for dir in theme_dirs {
+            for path in theme_songs_in(&dir) {
+                extras.push(FoundExtra {
+                    path,
+                    kind: ExtraKind::ThemeSong,
+                    owner_dir: dir.clone(),
+                });
+            }
+        }
         // Folders whose film owns extras: only those films' ids are looked up.
         let owner_dirs: std::collections::HashSet<PathBuf> =
             extras.iter().map(|e| e.owner_dir.clone()).collect();
@@ -259,10 +280,10 @@ impl LibraryScanner {
             .trim()
             .to_string();
         let item = media_items::NewMediaItem {
-            item_type: if kind == ExtraKind::Trailer {
-                "Trailer"
-            } else {
-                "Video"
+            item_type: match kind {
+                ExtraKind::Trailer => "Trailer",
+                ExtraKind::ThemeSong => "Audio",
+                _ => "Video",
             }
             .to_string(),
             library_id: Some(library_id),
@@ -499,6 +520,10 @@ impl LibraryScanner {
             // `trailers`, `extras`, `featurettes`, ...: the show's extras
             // (Jellyfin's docs; an `extras` folder is not a Specials season).
             if let Some(kind) = rustyfin_common::naming::extras_folder_kind(dir_name) {
+                // `theme-music` holds songs, taken with the show's theme below.
+                if kind == ExtraKind::ThemeSong {
+                    continue;
+                }
                 for video in collect_video_files(subdir).await {
                     let kind = rustyfin_common::naming::extra_kind(&video, false).unwrap_or(kind);
                     self.ingest_extra_counted(&video, library_id, series_id, kind, result)
@@ -559,6 +584,12 @@ impl LibraryScanner {
                     }
                 }
             }
+        }
+
+        // The show's theme songs: `theme.mp3` and the `theme-music` folder.
+        for song in theme_songs_in(series_dir) {
+            self.ingest_extra_counted(&song, library_id, series_id, ExtraKind::ThemeSong, result)
+                .await;
         }
 
         // Loose extras in the show folder are the show's.
@@ -1679,6 +1710,43 @@ fn pick_owner(films: &[(String, Uuid)], extra_stem: &str) -> Option<Uuid> {
         .max_by_key(|(stem, _)| stem.len())
         .or_else(|| films.iter().min_by(|a, b| a.0.cmp(&b.0)))
         .map(|(_, id)| *id)
+}
+
+/// A title folder's theme songs, as Jellyfin finds them: audio named `theme`
+/// beside the title, and every song in its `theme-music` folder.
+fn theme_songs_in(dir: &Path) -> Vec<PathBuf> {
+    let audio_in = |d: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(d)
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_file() && is_audio_file(p))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut songs: Vec<PathBuf> = audio_in(dir)
+        .into_iter()
+        .filter(|p| {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("theme"))
+        })
+        .collect();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.eq_ignore_ascii_case("theme-music"))
+            {
+                songs.extend(audio_in(&p));
+            }
+        }
+    }
+    songs.sort();
+    songs
 }
 
 async fn collect_video_files(dir: &Path) -> Vec<PathBuf> {

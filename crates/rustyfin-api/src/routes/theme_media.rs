@@ -18,14 +18,15 @@ use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto}
 use crate::error::ApiError;
 use crate::router::AppState;
 
-/// `GET /Items/{itemId}/ThemeSongs`
+/// `GET /Items/{itemId}/ThemeSongs`: `theme.mp3` and the `theme-music` folder.
 pub async fn get_theme_songs(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<ThemeMediaResult>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    Ok(Json(ThemeMediaResult::empty(item_id)))
+    Ok(Json(
+        super::extras::theme_songs(&state, &auth, item_id).await?,
+    ))
 }
 
 /// `GET /Items/{itemId}/ThemeVideos`: the videos in the title's `backdrops` folder.
@@ -45,8 +46,10 @@ pub async fn get_theme_media(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<AllThemeMediaResult>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    Ok(Json(AllThemeMediaResult::empty(item_id)))
+    let mut all = AllThemeMediaResult::empty(item_id);
+    all.theme_songs_result = super::extras::theme_songs(&state, &auth, item_id).await?;
+    all.theme_videos_result = super::extras::theme_videos(&state, &auth, item_id).await?;
+    Ok(Json(all))
 }
 
 /// `GET /Items/{itemId}/Ancestors` — the item's parents, nearest first.
