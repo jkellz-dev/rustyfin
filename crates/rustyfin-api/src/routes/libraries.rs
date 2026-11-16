@@ -273,16 +273,14 @@ pub async fn get_virtual_folders(
         .await
         .map_err(ApiError::Database)?;
 
+    let scanning = state.scan_in_flight.read().await.clone();
     let folders: Vec<VirtualFolderInfo> = libs
-        .iter()
-        .map(|lib| VirtualFolderInfo {
-            name: lib.name.clone(),
-            locations: lib.paths.clone(),
-            collection_type: Some(lib.library_type.clone()),
-            item_id: lib.id.to_string(),
-            primary_image_item_id: None,
-            library_options: options_of(lib),
-            scan_schedule: lib.scan_schedule.clone(),
+        .into_iter()
+        .map(|lib| {
+            let active = scanning.contains(&lib.id);
+            let mut info = folder_info(lib);
+            info.refresh_status = Some(if active { "Active" } else { "Idle" }.to_string());
+            info
         })
         .collect();
 
@@ -495,6 +493,8 @@ fn folder_info(lib: libraries::LibraryRow) -> VirtualFolderInfo {
         item_id: lib.id.to_string(),
         primary_image_item_id: None,
         scan_schedule: lib.scan_schedule,
+        refresh_status: None,
+        last_scanned: lib.last_scanned_at,
     }
 }
 

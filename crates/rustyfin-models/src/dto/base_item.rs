@@ -472,6 +472,13 @@ pub struct VirtualFolderInfo {
     pub library_options: LibraryOptions,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scan_schedule: Option<String>,
+    /// Jellyfin's `RefreshStatus`: `Active` while a scan of it is queued or
+    /// running, else `Idle`.
+    #[serde(default)]
+    pub refresh_status: Option<String>,
+    /// When its last scan finished.
+    #[serde(default)]
+    pub last_scanned: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Request to create a new library.

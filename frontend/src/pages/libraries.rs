@@ -3,6 +3,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::dashboard_view;
 use crate::types::{
     CreateLibraryRequest, FileSystemEntry, UpdateLibraryRequest, VirtualFolderInfo,
 };
@@ -97,11 +98,24 @@ pub fn Libraries() -> View {
         });
     };
 
+    let polling = create_signal(false);
     let on_scan = move |id: String| {
+        // Show it at once; the server's RefreshStatus takes over on the next poll.
+        libs.update(|list| {
+            for lib in list.iter_mut().filter(|l| l.item_id == id) {
+                lib.refresh_status = Some("Active".to_string());
+            }
+        });
         spawn_local({
             async move {
                 match api::scan_library(Some(&id)).await {
-                    Ok(()) => toast.set(Some("Scan started".to_string())),
+                    Ok(()) => {
+                        toast.set(Some("Scan started".to_string()));
+                        if !polling.get() {
+                            polling.set(true);
+                            poll_scans(libs, toast, polling);
+                        }
+                    }
                     Err(e) => error.set(Some(e)),
                 }
             }
@@ -165,12 +179,14 @@ pub fn Libraries() -> View {
         div {
             // Toast
             (if let Some(msg) = toast.get_clone() {
+                let msg_for_clear = msg.clone();
                 // Clear toast after display
                 spawn_local({
                     async move {
-                        gloo_net::http::Request::get("data:,")
-                            .send().await.ok(); // tiny delay
-                        toast.set(None);
+                        sleep_ms(3000).await;
+                        if toast.get_clone().as_deref() == Some(msg_for_clear.as_str()) {
+                            toast.set(None);
+                        }
                     }
                 });
                 view! {
@@ -480,11 +496,16 @@ pub fn Libraries() -> View {
                                         let ctype = lib.collection_type.clone().unwrap_or_else(|| "unknown".to_string());
                                         let locations = lib.locations.join(", ");
                                         let scan_id = lib.item_id.clone();
+                                        let scanning = dashboard_view::is_scanning(lib.refresh_status.as_deref());
+                                        let last = dashboard_view::last_scanned_label(lib.last_scanned.as_deref());
                                         let del_lib = lib.clone();
                                         let edit_lib = lib.clone();
                                         view! {
                                             tr {
-                                                td { (name) }
+                                                td {
+                                                    div { (name) }
+                                                    div(class="text-muted text-small") { (last) }
+                                                }
                                                 td { span(class="badge badge-type") { (ctype) } }
                                                 td { (locations) }
                                                 td {
@@ -500,11 +521,18 @@ pub fn Libraries() -> View {
                                                             }
                                                         ) { "Edit" }
                                                         button(class="btn btn-secondary btn-sm",
+                                                            disabled=scanning,
                                                             on:click={
                                                                 let scan_id = scan_id.clone();
                                                                 move |_| on_scan(scan_id.clone())
                                                             }
-                                                        ) { "Scan" }
+                                                        ) {
+                                                            (if scanning {
+                                                                view! { span(class="spinner spinner-sm") {} " Scanning…" }
+                                                            } else {
+                                                                view! { "Scan" }
+                                                            })
+                                                        }
                                                         button(class="btn btn-danger btn-sm",
                                                             on:click={
                                                                 let del_lib = del_lib.clone();
@@ -524,4 +552,53 @@ pub fn Libraries() -> View {
             })
         }
     }
+}
+
+/// Re-read the libraries every 2 seconds while any is being scanned, and say
+/// when each scan finishes.
+fn poll_scans(
+    libs: Signal<Vec<VirtualFolderInfo>>,
+    toast: Signal<Option<String>>,
+    polling: Signal<bool>,
+) {
+    spawn_local(async move {
+        loop {
+            sleep_ms(2000).await;
+            let Ok(now) = api::get_libraries().await else {
+                polling.set(false);
+                break;
+            };
+            let flags = |list: &[VirtualFolderInfo]| -> Vec<(String, bool)> {
+                list.iter()
+                    .map(|l| {
+                        (
+                            l.name.clone(),
+                            dashboard_view::is_scanning(l.refresh_status.as_deref()),
+                        )
+                    })
+                    .collect()
+            };
+            let before = flags(&libs.get_clone());
+            let after = flags(&now);
+            let done = dashboard_view::scans_finished(&before, &after);
+            let any_active = after.iter().any(|(_, active)| *active);
+            libs.set(now);
+            if !done.is_empty() {
+                toast.set(Some(format!("Scan finished: {}", done.join(", "))));
+            }
+            if !any_active {
+                polling.set(false);
+                break;
+            }
+        }
+    });
+}
+
+async fn sleep_ms(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        if let Some(window) = web_sys::window() {
+            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+        }
+    });
+    let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
 }

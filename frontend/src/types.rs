@@ -16,6 +16,11 @@ pub struct VirtualFolderInfo {
     pub locations: Vec<String>,
     pub collection_type: Option<String>,
     pub item_id: String,
+    /// `Active` while a scan is queued or running.
+    #[serde(default)]
+    pub refresh_status: Option<String>,
+    #[serde(default)]
+    pub last_scanned: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

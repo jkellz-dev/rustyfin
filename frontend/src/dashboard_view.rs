@@ -128,6 +128,28 @@ pub fn cache_detail(status: &str, size: Option<u64>, files: Option<u64>) -> Stri
     }
 }
 
+/// True while a library is being scanned (queued or running).
+pub fn is_scanning(refresh_status: Option<&str>) -> bool {
+    refresh_status == Some("Active")
+}
+
+/// The libraries whose scan finished between two looks at the list: active
+/// before, idle (or gone quiet) now. Their names, in list order.
+pub fn scans_finished(before: &[(String, bool)], now: &[(String, bool)]) -> Vec<String> {
+    now.iter()
+        .filter(|(name, active)| !*active && before.iter().any(|(b, was)| b == name && *was))
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
+/// "Last scanned 2026-11-16 01:50" from an RFC 3339 time (UTC).
+pub fn last_scanned_label(iso: Option<&str>) -> String {
+    match iso {
+        Some(t) if t.len() >= 16 => format!("Last scanned {} UTC", t[..16].replace('T', " ")),
+        _ => "Never scanned".to_string(),
+    }
+}
+
 /// The CSS class of an activity entry's severity marker.
 pub fn severity_class(severity: &str) -> &'static str {
     match severity {
@@ -219,6 +241,22 @@ mod tests {
         assert_eq!(cache_detail("Ok", Some(512), Some(1)), "512 B in 1 file");
         assert_eq!(cache_detail("Counting", None, None), "Counting…");
         assert_eq!(cache_detail("Missing", None, None), "Folder not found");
+    }
+
+    #[test]
+    fn scan_buttons_follow_the_server() {
+        assert!(is_scanning(Some("Active")));
+        assert!(!is_scanning(Some("Idle")));
+        assert!(!is_scanning(None));
+        let before = vec![("Music".to_string(), true), ("Movies".to_string(), false)];
+        let now = vec![("Music".to_string(), false), ("Movies".to_string(), false)];
+        assert_eq!(scans_finished(&before, &now), ["Music"]);
+        assert!(scans_finished(&now, &now).is_empty());
+        assert_eq!(
+            last_scanned_label(Some("2026-11-16T01:50:12.5Z")),
+            "Last scanned 2026-11-16 01:50 UTC"
+        );
+        assert_eq!(last_scanned_label(None), "Never scanned");
     }
 
     #[test]

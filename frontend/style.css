@@ -1300,3 +1300,15 @@ select:focus {
 .health-bad {
   background: #e53935;
 }
+
+/* Libraries: scan state on the row */
+.spinner-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  vertical-align: -2px;
+}
+
+.text-small {
+  font-size: 0.8rem;
+}
