@@ -859,6 +859,11 @@ pub(crate) fn ensure_primary_placeholder(dto: &mut BaseItemDto) {
     // the tag follows the file, so a replaced episode gets a new frame.
     let tag = if dto.item_type == "Episode" {
         frame_tag(dto.id, dto.etag.as_deref())
+    } else if matches!(dto.item_type.as_str(), "MusicAlbum" | "Audio") {
+        // Music without a cover file shows the cover embedded in its (first)
+        // track, when there is one (owner, 2026-11-16). Its own tag, so
+        // clients never keep the placeholder they cached under the shared one.
+        cover_tag(dto.id, dto.etag.as_deref())
     } else {
         placeholder.tag().to_string()
     };
@@ -870,6 +875,12 @@ pub(crate) fn ensure_primary_placeholder(dto: &mut BaseItemDto) {
         .insert(tag, Placeholder::BLURHASH.to_string());
     dto.primary_image_aspect_ratio
         .get_or_insert(placeholder.aspect_ratio());
+}
+
+/// The image tag (and cache key) of the cover embedded in a track, for an
+/// album or track without a cover file.
+pub(crate) fn cover_tag(id: Uuid, etag: Option<&str>) -> String {
+    frame_tag(id, etag).replacen("frame-", "cover-", 1)
 }
 
 /// The image tag (and frame cache key) of an episode's grabbed frame.

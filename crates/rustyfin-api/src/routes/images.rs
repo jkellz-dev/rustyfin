@@ -149,6 +149,33 @@ async fn serve_placeholder(
                 Err(e) => tracing::debug!("No frame for episode {}: {e}", item.id),
             }
         }
+        // Music without a cover file: the cover embedded in the track, or in
+        // an album's first track that has one (as Jellyfin). The placeholder
+        // stands in when none has a picture.
+        if matches!(item.item_type.as_str(), "MusicAlbum" | "Audio") {
+            let tracks = if item.item_type == "Audio" {
+                vec![item.clone()]
+            } else {
+                media_items::list_by_parents(&state.pool, &[item.id], &["Audio".to_string()], 5)
+                    .await
+                    .map_err(ApiError::Database)?
+            };
+            let key = super::items::cover_tag(item.id, item.etag.as_deref());
+            for track in &tracks {
+                let Some(path) = track.path.as_deref() else {
+                    continue;
+                };
+                if let Some(cover) = image_processing::embedded_cover(
+                    std::path::Path::new(path),
+                    &state.image_cache_dir,
+                    &key,
+                )
+                .await
+                {
+                    return serve_image(&cover.to_string_lossy(), opts, state, req).await;
+                }
+            }
+        }
         // A collection without a cover shows its earliest film's poster.
         if item.item_type == "BoxSet" {
             let members = rustyfin_db::repo::collections::list_item_ids(&state.pool, item.id)

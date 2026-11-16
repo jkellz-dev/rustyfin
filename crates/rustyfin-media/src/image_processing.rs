@@ -193,6 +193,62 @@ pub async fn video_frame(
     result.map(|()| out)
 }
 
+/// The cover art embedded in `track` (the front cover, else the first
+/// picture), written once to `{cache_dir}/covers/{key}.img` and shared by later
+/// calls; `None` when the track has no picture or cannot be read. For albums
+/// without a cover file, as Jellyfin does (owner, 2026-11-16). Like frames,
+/// covers are pruned with the cache and written again when asked for.
+pub async fn embedded_cover(track: &Path, cache_dir: &Path, key: &str) -> Option<PathBuf> {
+    let safe_key: String = key
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    let dir = cache_dir.join("covers");
+    let out = dir.join(format!("{safe_key}.img"));
+    if out.exists() {
+        return Some(out);
+    }
+    let lock = in_flight(&out);
+    let _guard = lock.lock().await;
+    if out.exists() {
+        done_in_flight(&out);
+        return Some(out);
+    }
+    let track = track.to_path_buf();
+    let picture = tokio::task::spawn_blocking(move || read_embedded_picture(&track))
+        .await
+        .ok()
+        .flatten();
+    let result = picture.and_then(|bytes| {
+        std::fs::create_dir_all(&dir).ok()?;
+        let tmp = dir.join(format!(".{safe_key}.{}.tmp", uuid::Uuid::new_v4().simple()));
+        if std::fs::write(&tmp, bytes)
+            .and_then(|()| std::fs::rename(&tmp, &out))
+            .is_err()
+        {
+            let _ = std::fs::remove_file(&tmp);
+            return None;
+        }
+        Some(out.clone())
+    });
+    done_in_flight(&out);
+    result
+}
+
+fn read_embedded_picture(track: &Path) -> Option<Vec<u8>> {
+    use lofty::file::TaggedFileExt;
+    use lofty::picture::PictureType;
+    let tagged = lofty::read_from_path(track).ok()?;
+    let pictures: Vec<&lofty::picture::Picture> =
+        tagged.tags().iter().flat_map(|t| t.pictures()).collect();
+    let picture = pictures
+        .iter()
+        .find(|p| p.pic_type() == PictureType::CoverFront)
+        .or_else(|| pictures.first())?;
+    let data = picture.data();
+    (!data.is_empty()).then(|| data.to_vec())
+}
+
 async fn grab(
     ffmpeg: &str,
     video: &Path,
