@@ -260,7 +260,11 @@ pub fn record_collection_checked(dir: &Path, found: Option<(i64, &str)>) -> std:
     if let Some((id, name)) = found {
         lines.push((
             "name",
-            format!("name = {}", toml::Value::String(name.to_string())),
+            // A JSON string is a valid TOML basic string (same escapes).
+            format!(
+                "name = {}",
+                serde_json::to_string(name).unwrap_or_else(|_| """".to_string())
+            ),
         ));
         lines.push(("tmdb", format!("tmdb = {id}")));
     }
