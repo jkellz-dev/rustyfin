@@ -12,7 +12,8 @@ use rustyfin_db::repo::{images, media_items};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use super::items::{
-    apply_images_to_dto, attach_user_data, group_images_by_item, media_item_to_dto,
+    apply_images_to_dto, attach_media_sources_if_asked, attach_user_data, group_images_by_item,
+    media_item_to_dto,
 };
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
@@ -186,6 +187,15 @@ async fn enrich_next_up_dtos(
             }
         }
     }
+
+    attach_media_sources_if_asked(
+        &state.pool,
+        &query.fields,
+        items,
+        dtos,
+        auth.is_administrator,
+    )
+    .await;
 
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.pool, auth.user_id, dtos).await;
@@ -403,6 +413,15 @@ async fn enrich_episode_dtos(
             }
         }
     }
+
+    attach_media_sources_if_asked(
+        &state.pool,
+        &query.fields,
+        items,
+        dtos,
+        auth.is_administrator,
+    )
+    .await;
 
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.pool, auth.user_id, dtos).await;

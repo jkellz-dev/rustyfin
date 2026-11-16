@@ -158,6 +158,35 @@ pub(crate) fn attach_media_source(
     dto.media_streams = Some(media_stream_dtos);
 }
 
+/// Jellyfin's sort name for a numbered item with none of its own: a season
+/// `0001`, an episode `001 - 0001 - <name>`, a track `0001 - 0001 - <name>`
+/// (disc, then track; a missing number is left out). The same key the list
+/// queries sort by (`JELLYFIN_SORT_KEY`).
+fn numbered_sort_name(item: &media_items::MediaItemRow) -> Option<String> {
+    let part =
+        |n: Option<i32>, width: usize| n.map(|n| format!("{n:0width$} - ")).unwrap_or_default();
+    match item.item_type.as_str() {
+        "Season" => Some(
+            item.index_number
+                .map(|n| format!("{n:04}"))
+                .unwrap_or_else(|| item.name.clone()),
+        ),
+        "Episode" => Some(format!(
+            "{}{}{}",
+            part(item.parent_index_number, 3),
+            part(item.index_number, 4),
+            item.name
+        )),
+        "Audio" => Some(format!(
+            "{}{}{}",
+            part(item.parent_index_number, 4),
+            part(item.index_number, 4),
+            item.name
+        )),
+        _ => None,
+    }
+}
+
 /// `Fields=MediaSources` or `Fields=MediaStreams` on a list: clients decide direct
 /// play from the list without a request per item. One query for all the items.
 pub(crate) async fn attach_media_sources_if_asked(
@@ -430,7 +459,7 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         index_number: item.index_number,
         parent_index_number: item.parent_index_number,
         overview: item.overview.clone(),
-        sort_name: item.sort_name.clone(),
+        sort_name: item.sort_name.clone().or_else(|| numbered_sort_name(item)),
         community_rating: item.community_rating,
         critic_rating: item.critic_rating,
         official_rating: item.official_rating.clone(),
