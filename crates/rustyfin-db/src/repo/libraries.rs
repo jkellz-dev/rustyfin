@@ -13,6 +13,9 @@ pub struct LibraryRow {
     pub library_options: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// When its last scan finished (absent from queries that name columns).
+    #[sqlx(default)]
+    pub last_scanned_at: Option<DateTime<Utc>>,
 }
 
 /// One library on the dashboard: its media count and last finished scan.
