@@ -38,9 +38,78 @@ artist_id: jsonpath "$.Items[0].Id"
 GET {{base_url}}/Library/VirtualFolders
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{base_url}}/Shows/{{series_id}}/Seasons
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
+GET {{base_url}}/Library/VirtualFolders
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].Locations" isCollection
+jsonpath "$[0].CollectionType" isString
+jsonpath "$[0].LibraryOptions" exists
+jsonpath "$[0].LibraryOptions.Enabled" isBoolean
+jsonpath "$[0].LibraryOptions.EnablePhotos" isBoolean
+jsonpath "$[0].LibraryOptions.EnableRealtimeMonitor" isBoolean
+jsonpath "$[0].LibraryOptions.EnableLUFSScan" isBoolean
+jsonpath "$[0].LibraryOptions.EnableChapterImageExtraction" isBoolean
+jsonpath "$[0].LibraryOptions.ExtractChapterImagesDuringLibraryScan" isBoolean
+jsonpath "$[0].LibraryOptions.EnableTrickplayImageExtraction" isBoolean
+jsonpath "$[0].LibraryOptions.ExtractTrickplayImagesDuringLibraryScan" isBoolean
+jsonpath "$[0].LibraryOptions.PathInfos" isCollection
+jsonpath "$[0].LibraryOptions.PathInfos[0].Path" isString
+jsonpath "$[0].LibraryOptions.SaveLocalMetadata" isBoolean
+jsonpath "$[0].LibraryOptions.EnableInternetProviders" isBoolean
+jsonpath "$[0].LibraryOptions.EnableAutomaticSeriesGrouping" isBoolean
+jsonpath "$[0].LibraryOptions.EnableEmbeddedTitles" isBoolean
+jsonpath "$[0].LibraryOptions.EnableEmbeddedExtrasTitles" isBoolean
+jsonpath "$[0].LibraryOptions.EnableEmbeddedEpisodeInfos" isBoolean
+jsonpath "$[0].LibraryOptions.AutomaticRefreshIntervalDays" isNumber
+jsonpath "$[0].LibraryOptions.SeasonZeroDisplayName" isString
+jsonpath "$[0].LibraryOptions.DisabledLocalMetadataReaders" isCollection
+jsonpath "$[0].LibraryOptions.DisabledSubtitleFetchers" isCollection
+jsonpath "$[0].LibraryOptions.SubtitleFetcherOrder" isCollection
+jsonpath "$[0].LibraryOptions.DisabledMediaSegmentProviders" isCollection
+jsonpath "$[0].LibraryOptions.MediaSegmentProvideOrder" isCollection
+jsonpath "$[0].LibraryOptions.SkipSubtitlesIfEmbeddedSubtitlesPresent" isBoolean
+jsonpath "$[0].LibraryOptions.SkipSubtitlesIfAudioTrackMatches" isBoolean
+jsonpath "$[0].LibraryOptions.RequirePerfectSubtitleMatch" isBoolean
+jsonpath "$[0].LibraryOptions.SaveSubtitlesWithMedia" isBoolean
+jsonpath "$[0].LibraryOptions.SaveLyricsWithMedia" isBoolean
+jsonpath "$[0].LibraryOptions.SaveTrickplayWithMedia" isBoolean
+jsonpath "$[0].LibraryOptions.DisabledLyricFetchers" isCollection
+jsonpath "$[0].LibraryOptions.LyricFetcherOrder" isCollection
+jsonpath "$[0].LibraryOptions.PreferNonstandardArtistsTag" isBoolean
+jsonpath "$[0].LibraryOptions.UseCustomTagDelimiters" isBoolean
+jsonpath "$[0].LibraryOptions.CustomTagDelimiters" isCollection
+jsonpath "$[0].LibraryOptions.DelimiterWhitelist" isCollection
+jsonpath "$[0].LibraryOptions.AutomaticallyAddToCollection" isBoolean
+jsonpath "$[0].LibraryOptions.AllowEmbeddedSubtitles" isString
+jsonpath "$[0].LibraryOptions.TypeOptions" isCollection
+jsonpath "$[0].ItemId" isString
+jsonpath "$[0].PrimaryImageItemId" isString
+jsonpath "$[0].RefreshStatus" isString
 
 GET {{base_url}}/Library/MediaFolders
 Authorization: MediaBrowser Token="{{token}}"
@@ -697,3 +766,28 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].ServerId" isString
+jsonpath "$[0].Id" isString
+jsonpath "$[0].Container" isString
+jsonpath "$[0].RunTimeTicks" isNumber
+jsonpath "$[0].ProductionYear" isNumber
+jsonpath "$[0].IsFolder" isBoolean
+jsonpath "$[0].Type" isString
+jsonpath "$[0].UserData" exists
+jsonpath "$[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$[0].UserData.PlayCount" isNumber
+jsonpath "$[0].UserData.IsFavorite" isBoolean
+jsonpath "$[0].UserData.Played" isBoolean
+jsonpath "$[0].UserData.Key" isString
+jsonpath "$[0].UserData.ItemId" isString
+jsonpath "$[0].ChildCount" isNumber
+jsonpath "$[0].VideoType" isString
+jsonpath "$[0].ImageTags" exists
+jsonpath "$[0].ImageTags.Primary" isString
+jsonpath "$[0].BackdropImageTags" isCollection
+jsonpath "$[0].ImageBlurHashes" exists
+jsonpath "$[0].ImageBlurHashes.Primary" exists
+jsonpath "$[0].LocationType" isString
+jsonpath "$[0].MediaType" isString

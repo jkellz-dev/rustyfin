@@ -35,6 +35,29 @@ HTTP 200
 [Captures]
 artist_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Library/VirtualFolders
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{base_url}}/Shows/{{series_id}}/Seasons
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
 POST {{base_url}}/Items/{{movie_id}}/PlaybackInfo
 Authorization: MediaBrowser Token="{{token}}"
 Content-Type: application/json

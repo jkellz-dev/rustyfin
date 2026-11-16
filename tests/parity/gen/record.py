@@ -185,6 +185,11 @@ REQUESTS = [
     ("music", "GET", "/Shows/NextUp", {"UserId": "{user_id}", "NextUpDateCutoff": "2025-11-15T00:00:00Z", "EnableResumable": "false"}, True, None),
     ("music", "GET", "/UserItems/Resume", {"UserId": "{user_id}", "MediaTypes": "Video"}, True, None),
     ("music", "GET", "/Items", {"Recursive": "true", "Filters": "IsResumable"}, True, None),
+    # Extras (roadmap 11j): a trailer and a featurette beside the test film.
+    ("extras", "GET", "/Items/{movie_id}/LocalTrailers", {"UserId": "{user_id}"}, True, None),
+    ("extras", "GET", "/Items/{movie_id}/SpecialFeatures", {"UserId": "{user_id}"}, True, None),
+    ("extras", "GET", "/Users/{user_id}/Items/{movie_id}", {}, True, None),
+    ("extras", "GET", "/Items", {"Recursive": "true", "IncludeItemTypes": "Movie"}, True, None),
     # Fourth slice (roadmap 11a): the owner's Plezy session, 2026-11-16, exact queries.
     ("plezy", "GET", "/UserItems/Resume", {'UserId': '{user_id}', 'Limit': '21', 'Fields': 'Overview,DateCreated', 'MediaTypes': 'Video', 'Recursive': 'true', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
     ("plezy", "GET", "/Shows/NextUp", {'UserId': '{user_id}', 'Limit': '21', 'Fields': 'Overview,DateCreated', 'EnableResumable': 'false', 'NextUpDateCutoff': '2025-11-16T00:00:00Z', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
@@ -302,6 +307,11 @@ def shape(node, path, out, depth=0):
                 out.append(f'jsonpath "{child}" {kind(val)}')
     elif isinstance(node, list):
         out.append(f'jsonpath "{path}" isCollection')
+        # A top-level list (LocalTrailers, Ancestors, /Users): hold its
+        # first element to the same shape too, so an empty answer fails.
+        if node and depth < 3:
+            out.append(f'jsonpath "{path}[0]" exists')
+            shape(node[0], f"{path}[0]", out, depth + 1)
 
 
 def fetch(method, path, query, auth, body, token, variables):

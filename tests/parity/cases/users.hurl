@@ -35,6 +35,29 @@ HTTP 200
 [Captures]
 artist_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Library/VirtualFolders
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{base_url}}/Shows/{{series_id}}/Seasons
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
 GET {{base_url}}/Users/Me
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
@@ -115,6 +138,75 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].ServerId" isString
+jsonpath "$[0].Id" isString
+jsonpath "$[0].HasPassword" isBoolean
+jsonpath "$[0].HasConfiguredPassword" isBoolean
+jsonpath "$[0].HasConfiguredEasyPassword" isBoolean
+jsonpath "$[0].EnableAutoLogin" isBoolean
+jsonpath "$[0].LastLoginDate" isString
+jsonpath "$[0].LastActivityDate" isString
+jsonpath "$[0].Configuration" exists
+jsonpath "$[0].Configuration.PlayDefaultAudioTrack" isBoolean
+jsonpath "$[0].Configuration.SubtitleLanguagePreference" isString
+jsonpath "$[0].Configuration.DisplayMissingEpisodes" isBoolean
+jsonpath "$[0].Configuration.GroupedFolders" isCollection
+jsonpath "$[0].Configuration.SubtitleMode" isString
+jsonpath "$[0].Configuration.DisplayCollectionsView" isBoolean
+jsonpath "$[0].Configuration.EnableLocalPassword" isBoolean
+jsonpath "$[0].Configuration.OrderedViews" isCollection
+jsonpath "$[0].Configuration.LatestItemsExcludes" isCollection
+jsonpath "$[0].Configuration.MyMediaExcludes" isCollection
+jsonpath "$[0].Configuration.HidePlayedInLatest" isBoolean
+jsonpath "$[0].Configuration.RememberAudioSelections" isBoolean
+jsonpath "$[0].Configuration.RememberSubtitleSelections" isBoolean
+jsonpath "$[0].Configuration.EnableNextEpisodeAutoPlay" isBoolean
+jsonpath "$[0].Configuration.CastReceiverId" isString
+jsonpath "$[0].Policy" exists
+jsonpath "$[0].Policy.IsAdministrator" isBoolean
+jsonpath "$[0].Policy.IsHidden" isBoolean
+jsonpath "$[0].Policy.EnableCollectionManagement" isBoolean
+jsonpath "$[0].Policy.EnableSubtitleManagement" isBoolean
+jsonpath "$[0].Policy.EnableLyricManagement" isBoolean
+jsonpath "$[0].Policy.IsDisabled" isBoolean
+jsonpath "$[0].Policy.BlockedTags" isCollection
+jsonpath "$[0].Policy.AllowedTags" isCollection
+jsonpath "$[0].Policy.EnableUserPreferenceAccess" isBoolean
+jsonpath "$[0].Policy.AccessSchedules" isCollection
+jsonpath "$[0].Policy.BlockUnratedItems" isCollection
+jsonpath "$[0].Policy.EnableRemoteControlOfOtherUsers" isBoolean
+jsonpath "$[0].Policy.EnableSharedDeviceControl" isBoolean
+jsonpath "$[0].Policy.EnableRemoteAccess" isBoolean
+jsonpath "$[0].Policy.EnableLiveTvManagement" isBoolean
+jsonpath "$[0].Policy.EnableLiveTvAccess" isBoolean
+jsonpath "$[0].Policy.EnableMediaPlayback" isBoolean
+jsonpath "$[0].Policy.EnableAudioPlaybackTranscoding" isBoolean
+jsonpath "$[0].Policy.EnableVideoPlaybackTranscoding" isBoolean
+jsonpath "$[0].Policy.EnablePlaybackRemuxing" isBoolean
+jsonpath "$[0].Policy.ForceRemoteSourceTranscoding" isBoolean
+jsonpath "$[0].Policy.EnableContentDeletion" isBoolean
+jsonpath "$[0].Policy.EnableContentDeletionFromFolders" isCollection
+jsonpath "$[0].Policy.EnableContentDownloading" isBoolean
+jsonpath "$[0].Policy.EnableSyncTranscoding" isBoolean
+jsonpath "$[0].Policy.EnableMediaConversion" isBoolean
+jsonpath "$[0].Policy.EnabledDevices" isCollection
+jsonpath "$[0].Policy.EnableAllDevices" isBoolean
+jsonpath "$[0].Policy.EnabledChannels" isCollection
+jsonpath "$[0].Policy.EnableAllChannels" isBoolean
+jsonpath "$[0].Policy.EnabledFolders" isCollection
+jsonpath "$[0].Policy.EnableAllFolders" isBoolean
+jsonpath "$[0].Policy.InvalidLoginAttemptCount" isNumber
+jsonpath "$[0].Policy.LoginAttemptsBeforeLockout" isNumber
+jsonpath "$[0].Policy.MaxActiveSessions" isNumber
+jsonpath "$[0].Policy.EnablePublicSharing" isBoolean
+jsonpath "$[0].Policy.BlockedMediaFolders" isCollection
+jsonpath "$[0].Policy.BlockedChannels" isCollection
+jsonpath "$[0].Policy.RemoteClientBitrateLimit" isNumber
+jsonpath "$[0].Policy.AuthenticationProviderId" isString
+jsonpath "$[0].Policy.PasswordResetProviderId" isString
+jsonpath "$[0].Policy.SyncPlayAccess" isString
 
 GET {{base_url}}/Users/{{user_id}}
 Authorization: MediaBrowser Token="{{token}}"
@@ -196,6 +288,9 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].Id" isString
 
 GET {{base_url}}/DisplayPreferences/usersettings
 Authorization: MediaBrowser Token="{{token}}"

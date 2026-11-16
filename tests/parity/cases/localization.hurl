@@ -35,12 +35,40 @@ HTTP 200
 [Captures]
 artist_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Library/VirtualFolders
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{base_url}}/Shows/{{series_id}}/Seasons
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
 GET {{base_url}}/Localization/Countries
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].DisplayName" isString
+jsonpath "$[0].TwoLetterISORegionName" isString
+jsonpath "$[0].ThreeLetterISORegionName" isString
 
 GET {{base_url}}/Localization/Cultures
 Authorization: MediaBrowser Token="{{token}}"
@@ -48,6 +76,12 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].DisplayName" isString
+jsonpath "$[0].TwoLetterISOLanguageName" isString
+jsonpath "$[0].ThreeLetterISOLanguageName" isString
+jsonpath "$[0].ThreeLetterISOLanguageNames" isCollection
 
 GET {{base_url}}/Localization/Options
 Authorization: MediaBrowser Token="{{token}}"
@@ -55,6 +89,9 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].Value" isString
 
 GET {{base_url}}/Localization/ParentalRatings
 Authorization: MediaBrowser Token="{{token}}"
@@ -62,3 +99,5 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString

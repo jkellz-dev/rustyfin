@@ -35,9 +35,64 @@ HTTP 200
 [Captures]
 artist_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Library/VirtualFolders
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{base_url}}/Shows/{{series_id}}/Seasons
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
 GET {{base_url}}/Sessions
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].PlayState" exists
+jsonpath "$[0].PlayState.CanSeek" isBoolean
+jsonpath "$[0].PlayState.IsPaused" isBoolean
+jsonpath "$[0].PlayState.IsMuted" isBoolean
+jsonpath "$[0].PlayState.RepeatMode" isString
+jsonpath "$[0].PlayState.PlaybackOrder" isString
+jsonpath "$[0].AdditionalUsers" isCollection
+jsonpath "$[0].Capabilities" exists
+jsonpath "$[0].Capabilities.PlayableMediaTypes" isCollection
+jsonpath "$[0].Capabilities.SupportedCommands" isCollection
+jsonpath "$[0].Capabilities.SupportsMediaControl" isBoolean
+jsonpath "$[0].Capabilities.SupportsPersistentIdentifier" isBoolean
+jsonpath "$[0].RemoteEndPoint" isString
+jsonpath "$[0].PlayableMediaTypes" isCollection
+jsonpath "$[0].Id" isString
+jsonpath "$[0].UserId" isString
+jsonpath "$[0].UserName" isString
+jsonpath "$[0].Client" isString
+jsonpath "$[0].LastActivityDate" isString
+jsonpath "$[0].LastPlaybackCheckIn" isString
+jsonpath "$[0].DeviceName" isString
+jsonpath "$[0].DeviceId" isString
+jsonpath "$[0].ApplicationVersion" isString
+jsonpath "$[0].IsActive" isBoolean
+jsonpath "$[0].SupportsMediaControl" isBoolean
+jsonpath "$[0].SupportsRemoteControl" isBoolean
+jsonpath "$[0].NowPlayingQueue" isCollection
+jsonpath "$[0].NowPlayingQueueFullItems" isCollection
+jsonpath "$[0].HasCustomDeviceName" isBoolean
+jsonpath "$[0].ServerId" isString
+jsonpath "$[0].SupportedCommands" isCollection

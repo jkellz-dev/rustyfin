@@ -5,7 +5,7 @@
 set -eu
 
 out="${1:?usage: make_media.sh <output-dir>}"
-mkdir -p "$out/movies/Test Movie (2020)" \
+mkdir -p "$out/movies/Test Movie (2020)/featurettes" \
 	"$out/shows/Test Show (2021)/Season 01" \
 	"$out/music/Test Artist/Test Album (2019)"
 
@@ -36,6 +36,9 @@ audio() {
 }
 
 video "$out/movies/Test Movie (2020)/Test Movie (2020).mp4" "Test Movie"
+# Extras (roadmap 11j): a trailer by suffix and a featurette by folder.
+video "$out/movies/Test Movie (2020)/Test Movie (2020)-trailer.mp4" "Trailer"
+video "$out/movies/Test Movie (2020)/featurettes/Making Of.mp4" "Making Of"
 video "$out/shows/Test Show (2021)/Season 01/Test Show S01E01.mp4" "Pilot"
 video "$out/shows/Test Show (2021)/Season 01/Test Show S01E02.mp4" "Second"
 audio "$out/music/Test Artist/Test Album (2019)/01 First.mp3" "First" 330 1

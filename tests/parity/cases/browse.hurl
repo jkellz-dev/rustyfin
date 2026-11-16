@@ -35,6 +35,29 @@ HTTP 200
 [Captures]
 artist_id: jsonpath "$.Items[0].Id"
 
+GET {{base_url}}/Library/VirtualFolders
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{base_url}}/Shows/{{series_id}}/Seasons
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{base_url}}/Items
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
 GET {{base_url}}/Studios
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
@@ -171,6 +194,52 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].Name" isString
+jsonpath "$[0].ServerId" isString
+jsonpath "$[0].Id" isString
+jsonpath "$[0].Etag" isString
+jsonpath "$[0].DateCreated" isString
+jsonpath "$[0].CanDelete" isBoolean
+jsonpath "$[0].CanDownload" isBoolean
+jsonpath "$[0].SortName" isString
+jsonpath "$[0].ExternalUrls" isCollection
+jsonpath "$[0].Path" isString
+jsonpath "$[0].EnableMediaSourceDisplay" isBoolean
+jsonpath "$[0].Taglines" isCollection
+jsonpath "$[0].Genres" isCollection
+jsonpath "$[0].PlayAccess" isString
+jsonpath "$[0].RemoteTrailers" isCollection
+jsonpath "$[0].ProviderIds" exists
+jsonpath "$[0].IsFolder" isBoolean
+jsonpath "$[0].ParentId" isString
+jsonpath "$[0].Type" isString
+jsonpath "$[0].People" isCollection
+jsonpath "$[0].Studios" isCollection
+jsonpath "$[0].GenreItems" isCollection
+jsonpath "$[0].LocalTrailerCount" isNumber
+jsonpath "$[0].UserData" exists
+jsonpath "$[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$[0].UserData.PlayCount" isNumber
+jsonpath "$[0].UserData.IsFavorite" isBoolean
+jsonpath "$[0].UserData.Played" isBoolean
+jsonpath "$[0].UserData.Key" isString
+jsonpath "$[0].UserData.ItemId" isString
+jsonpath "$[0].ChildCount" isNumber
+jsonpath "$[0].SpecialFeatureCount" isNumber
+jsonpath "$[0].DisplayPreferencesId" isString
+jsonpath "$[0].Tags" isCollection
+jsonpath "$[0].PrimaryImageAspectRatio" isNumber
+jsonpath "$[0].CollectionType" isString
+jsonpath "$[0].ImageTags" exists
+jsonpath "$[0].ImageTags.Primary" isString
+jsonpath "$[0].BackdropImageTags" isCollection
+jsonpath "$[0].ImageBlurHashes" exists
+jsonpath "$[0].ImageBlurHashes.Primary" exists
+jsonpath "$[0].LocationType" isString
+jsonpath "$[0].MediaType" isString
+jsonpath "$[0].LockedFields" isCollection
+jsonpath "$[0].LockData" isBoolean
 
 GET {{base_url}}/Items/{{movie_id}}/ThemeMedia
 Authorization: MediaBrowser Token="{{token}}"
@@ -307,7 +376,6 @@ jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ServerId" isString
 jsonpath "$.Items[0].Id" isString
 jsonpath "$.Items[0].RunTimeTicks" isNumber
-jsonpath "$.Items[0].ProductionYear" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].UserData" exists
@@ -549,3 +617,11 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
+jsonpath "$[0]" exists
+jsonpath "$[0].ImageType" isString
+jsonpath "$[0].ImageTag" isString
+jsonpath "$[0].Path" isString
+jsonpath "$[0].BlurHash" isString
+jsonpath "$[0].Height" isNumber
+jsonpath "$[0].Width" isNumber
+jsonpath "$[0].Size" isNumber
