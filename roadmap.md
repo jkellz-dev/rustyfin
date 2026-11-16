@@ -1034,14 +1034,20 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
 Owner decisions (2026-11-14): NFO files (written by Radarr/Sonarr) stay the metadata input; what they lack goes in a
 Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh. Downloaded art is stored as fetched.
 
-- [ ] Check what Radarr's Kodi NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?)
-- [ ] Sidecar file beside each NFO (e.g. `<film>.rustyfin.json`): extra ids only (TMDB collection id, actor TMDB ids),
-      written by `rustyfin artwork`/`fetch`, merged by the scanner; never a second copy of the NFO
+- [x] Check what Radarr's Kodi NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?).
+      Answered from Radarr's writer (`XbmcMetadata.cs`, develop, 2026-11-16): `<set tmdbcolid>` with the collection
+      name, `<uniqueid>` TMDB and IMDb ids; actors carry `name`, `role`, `order` and a `thumb` (the TMDB profile
+      URL) but no TMDB person id
+- [x] Sidecar file beside each NFO: the per-title `.rustyfin.toml` (`docs/title-settings.md`; TOML, owner rule):
+      `[ids]` overrides the NFO's ids, `[artwork]` and `[lyrics]` hold the tools' state. The collection id needs no
+      sidecar (Radarr writes `<set tmdbcolid>`); actor ids do not either (next item)
 - [x] Collections keyed by TMDB collection id when known (Radarr's `<set tmdbcolid>`); their art fetched by
       `rustyfin artwork` into `rustyfin-cache` as one folder per collection,
       `collections/<tmdb-id>/poster.jpg|backdrop.jpg|…` (owner, 2026-11-14), beside the people folder, attached by
       the scan; else the earliest film's poster
-- [ ] Cast without an NFO actor id gets its TMDB id from the sidecar, so headshots are `tmdb-<id>.jpg` not `img-<hash>`
+- [x] Cast without an NFO actor id gets its TMDB id from the sidecar, so headshots are `tmdb-<id>.jpg` not `img-<hash>`.
+      Not needed (decided 2026-11-16, owner may overrule): `img-<hash>` is the hash of the TMDB profile path, which is
+      the same for a person in every film, so each headshot is already fetched and stored once per person
 
 ### 11j. Extras (owner, 2026-11-16)
 
