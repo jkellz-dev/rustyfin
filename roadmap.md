@@ -1063,6 +1063,28 @@ their own. Follow [Jellyfin's extras rules](https://jellyfin.org/docs/general/se
 
 ---
 
+### 11k. Lyrics (owner, 2026-11-16)
+
+The owner's library already has about 34,000 `.lrc` files; the owner wants LRCLIB for the rest.
+
+- [x] `GET /Audio/{id}/Lyrics`, matching Jellyfin 10.10.7: the track's sidecar `.lrc`/`.elrc` (synced) or `.txt`, else
+      lyrics embedded in its tags; 404 when there are none (Plezy asks; found in the 11a request log)
+- [ ] `HasLyrics` on tracks, and a `Lyric` media stream naming the file, as Jellyfin sends them (clients that hide the
+      lyrics button without it). Recorded at scan time, not looked up per request
+- [ ] `rustyfin lyrics` in the metadata CLI: for tracks with no lyrics, ask [LRCLIB](https://lrclib.net)
+      (`/api/get` by artist, track, album and duration, so a match is the same recording) and write
+      `<track>.lrc` (synced), or `<track>.txt` (plain) when only plain lyrics exist, beside the track, through the
+      sidecar's writable mount. Never overwrite an existing file. Identify Rustyfin in the `User-Agent`, rate-limit
+      politely, and cache misses so a track LRCLIB lacks is not asked again for a while
+- [ ] Instrumental tracks: LRCLIB marks them; write nothing and remember the answer
+- [ ] Optional self-hosted LRCLIB (its published database dump), like the self-hosted MusicBrainz option:
+      `lrclib_url` in `rustyfin-meta.toml`
+- [ ] Run it from the artwork Job or a scheduled sidecar task after a music scan; report counts (found synced, found
+      plain, instrumental, missing) in the Job log
+- [ ] The next scan sets `HasLyrics` from the new files
+
+---
+
 ## Phase 12 — UI Polish & Interactivity
 
 Comprehensive UX pass across the admin UI and client-facing interactions. The admin UI works but lacks the feedback,
