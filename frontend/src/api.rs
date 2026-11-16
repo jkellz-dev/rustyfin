@@ -254,6 +254,14 @@ pub async fn get_item_collections(item_id: &str) -> Result<QueryResult<BaseItemD
     get_json(&format!("/Items/{item_id}/Collections")).await
 }
 
+/// A title's extras: its trailers, then its other extras (featurettes, ...).
+pub async fn get_extras(item_id: &str) -> Result<Vec<BaseItemDto>, String> {
+    let mut all: Vec<BaseItemDto> = get_json(&format!("/Items/{item_id}/LocalTrailers")).await?;
+    let more: Vec<BaseItemDto> = get_json(&format!("/Items/{item_id}/SpecialFeatures")).await?;
+    all.extend(more);
+    Ok(all)
+}
+
 pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, String> {
     get_json("/UserViews").await
 }

@@ -244,6 +244,9 @@ pub struct BaseItemDto {
     #[serde(rename = "Type")]
     #[serde(default)]
     pub item_type: String,
+    /// An extra's kind (`Trailer`, `Featurette`, ...).
+    #[serde(default)]
+    pub extra_type: Option<String>,
     #[serde(default)]
     pub parent_id: Option<String>,
     #[serde(default)]

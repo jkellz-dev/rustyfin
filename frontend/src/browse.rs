@@ -305,9 +305,35 @@ pub fn crumb_trail<T: Clone>(crumbs: &[T]) -> Vec<(usize, T, bool)> {
         .collect()
 }
 
+/// What an extra is, in words: "Trailer", "Behind the scenes", ...
+pub fn extra_label(extra_type: Option<&str>) -> &'static str {
+    match extra_type.unwrap_or("Unknown") {
+        "Trailer" => "Trailer",
+        "BehindTheScenes" => "Behind the scenes",
+        "DeletedScene" => "Deleted scene",
+        "Interview" => "Interview",
+        "Scene" => "Scene",
+        "Sample" => "Sample",
+        "Short" => "Short",
+        "Featurette" => "Featurette",
+        "Clip" => "Clip",
+        "ThemeVideo" => "Theme video",
+        _ => "Extra",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extras_are_named_in_words() {
+        assert_eq!(extra_label(Some("Trailer")), "Trailer");
+        assert_eq!(extra_label(Some("BehindTheScenes")), "Behind the scenes");
+        assert_eq!(extra_label(Some("DeletedScene")), "Deleted scene");
+        assert_eq!(extra_label(Some("Unknown")), "Extra");
+        assert_eq!(extra_label(None), "Extra");
+    }
 
     #[test]
     fn a_library_can_be_sorted_by_name_date_added_year_or_rating() {

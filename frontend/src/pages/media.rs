@@ -110,6 +110,7 @@ pub fn Media() -> View {
     let detail_tracks: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     // The collections the item in the detail view is in.
     let detail_collections: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
+    let detail_extras: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let search_results: Signal<Vec<SearchHint>> = create_signal(Vec::new());
     let breadcrumbs: Signal<Vec<Breadcrumb>> = create_signal(Vec::new());
     let current_parent_id: Signal<Option<String>> = create_signal(None);
@@ -218,6 +219,7 @@ pub fn Media() -> View {
         detail_loading.set(true);
         detail_tracks.set(Vec::new());
         detail_collections.set(Vec::new());
+        detail_extras.set(Vec::new());
         current_view.set(MediaView::Detail(item_id.clone()));
         spawn_local({
             let item_id = item_id.clone();
@@ -244,6 +246,11 @@ pub fn Media() -> View {
                             && let Ok(result) = api::get_item_collections(&item.id).await
                         {
                             detail_collections.set(result.items);
+                        }
+                        if matches!(item.item_type.as_str(), "Movie" | "Series" | "Season")
+                            && let Ok(extras) = api::get_extras(&item.id).await
+                        {
+                            detail_extras.set(extras);
                         }
                         let label =
                             browse::card_label(&item.item_type, &item.name, item.index_number);
@@ -863,6 +870,39 @@ pub fn Media() -> View {
                                                                     class="breadcrumb-link",
                                                                     on:click=move |_| view_detail(set_id.clone())
                                                                 ) { (name) }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                })
+
+                                // Extras (trailers, featurettes, ...)
+                                ({
+                                    let extras = detail_extras.get_clone();
+                                    if extras.is_empty() {
+                                        view! {}
+                                    } else {
+                                        view! {
+                                            div(class="detail-section") {
+                                                h3 { "Extras" }
+                                                div(class="provider-list") {
+                                                    Indexed(
+                                                        list=move || extras.clone(),
+                                                        view=move |extra: BaseItemDto| {
+                                                            let extra_id = extra.id.clone();
+                                                            let text = format!(
+                                                                "{} · {}",
+                                                                extra.name,
+                                                                browse::extra_label(extra.extra_type.as_deref())
+                                                            );
+                                                            view! {
+                                                                button(
+                                                                    class="breadcrumb-link",
+                                                                    on:click=move |_| view_detail(extra_id.clone())
+                                                                ) { (text) }
                                                             }
                                                         }
                                                     )
