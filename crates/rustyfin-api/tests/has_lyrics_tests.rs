@@ -86,3 +86,49 @@ async fn tracks_say_whether_they_have_lyrics() {
     std::fs::remove_dir_all(&dir).ok();
     app.cleanup().await;
 }
+
+/// Jellyfin lists a lyrics file beside the track as a `Lyric` media stream.
+#[tokio::test]
+async fn a_lyrics_file_is_a_lyric_stream() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("listener", true).await;
+    let dir = tree();
+    let root = dir.to_string_lossy().to_string();
+    let lib: Uuid = sqlx::query_scalar(
+        "INSERT INTO libraries (name, library_type, paths) VALUES ('Music', 'music', ARRAY[$1]) RETURNING id",
+    )
+    .bind(&root)
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    LibraryScanner::new(app.pool.clone(), None)
+        .scan(lib, std::slice::from_ref(&root))
+        .await
+        .unwrap();
+    let one: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE name = 'One'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    // A stream row, as a real probe leaves one.
+    sqlx::query(
+        "INSERT INTO media_streams (item_id, stream_index, stream_type, codec) VALUES ($1, 0, 'Audio', 'mp3')",
+    )
+    .bind(one)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    let (status, body) = app.get(&format!("/Items/{one}"), &token).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let streams = body["MediaStreams"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{body}"));
+    let lyric = streams
+        .iter()
+        .find(|s| s["Type"] == "Lyric")
+        .unwrap_or_else(|| panic!("{body}"));
+    assert_eq!(lyric["Codec"], "lrc", "{lyric}");
+    assert_eq!(lyric["IsExternal"], true, "{lyric}");
+    assert_eq!(lyric["Index"], 1, "{lyric}");
+    std::fs::remove_dir_all(&dir).ok();
+    app.cleanup().await;
+}
