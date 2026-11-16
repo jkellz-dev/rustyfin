@@ -2,6 +2,7 @@ pub mod activity;
 pub mod auth;
 pub mod base_item;
 pub mod item_counts;
+pub mod lyrics;
 pub mod playback;
 pub mod query_result;
 pub mod remote_control;

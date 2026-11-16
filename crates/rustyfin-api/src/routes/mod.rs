@@ -15,6 +15,7 @@ pub mod images;
 pub mod items;
 pub mod libraries;
 pub mod localization;
+pub mod lyrics;
 pub mod media_info;
 pub mod music_genres;
 pub mod persons;

@@ -3,6 +3,7 @@ pub mod cache;
 pub mod discogs;
 pub mod fanart;
 pub mod images;
+pub mod lyrics;
 pub mod music_tags;
 pub mod musicbrainz;
 pub mod naming;

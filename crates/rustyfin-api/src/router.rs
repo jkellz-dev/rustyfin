@@ -465,6 +465,8 @@ pub fn build_router(state: AppState) -> Router {
             get(theme_media::get_theme_media),
         )
         .route("/Items/{itemId}/Ancestors", get(theme_media::get_ancestors))
+        .route("/Audio/{itemId}/Lyrics", get(lyrics::get_lyrics))
+        .route("/MediaSegments/{itemId}", get(lyrics::get_media_segments))
         .route("/Items/Suggestions", get(suggestions::get_suggestions))
         .route("/Movies/Recommendations", get(similar::get_recommendations))
         .route("/Artists", get(artists::get_artists))
