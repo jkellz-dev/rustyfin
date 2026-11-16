@@ -50,3 +50,11 @@ server's own mount is read-only:
 kubectl -n media-stack exec deploy/rustyfin -c rustyfin-meta -- \
   rustyfin lyrics /mnt/media/music
 ```
+
+A one-off Job does the same with the meta image
+(`local_cluster_config/media-stack/media/rustyfin/jobs/lyrics-job.sh`):
+
+```sh
+media-stack/media/rustyfin/jobs/lyrics-job.sh /mnt/media/music
+kubectl -n media-stack logs -f job/<name>     # ends with the Done: line
+```
