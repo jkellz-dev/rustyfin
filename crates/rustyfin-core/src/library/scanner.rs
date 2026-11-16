@@ -1343,7 +1343,9 @@ impl LibraryScanner {
     /// so films scanned before this existed, and NFOs Radarr rewrote, are
     /// picked up without a file change.
     async fn sync_movie_collections(&self, library_id: Uuid) {
-        let items = match media_items::list_paths_in_library(&self.pool, library_id).await {
+        // Films only: a film's extras and other versions share its folder and
+        // NFO, and must not join its collection beside it.
+        let items = match media_items::list_film_paths(&self.pool, library_id).await {
             Ok(items) => items,
             Err(e) => {
                 tracing::error!("Collections: cannot list library {library_id}: {e}");
@@ -1352,8 +1354,7 @@ impl LibraryScanner {
         };
         let found: Vec<(Uuid, String, Option<String>)> = items
             .into_iter()
-            .filter(|(_, _, is_folder)| !is_folder)
-            .filter_map(|(id, path, _)| {
+            .filter_map(|(id, path)| {
                 find_movie_nfo(Path::new(&path))
                     .and_then(|nfo| rustyfin_common::nfo::parse_movie_set(&nfo))
                     .map(|set| (id, set.name, set.tmdb_id))

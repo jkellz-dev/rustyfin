@@ -669,6 +669,20 @@ pub async fn list_paths_in_library(
     .await
 }
 
+/// The library's films (not their extras or other versions), with paths.
+pub async fn list_film_paths(
+    pool: &PgPool,
+    library_id: Uuid,
+) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, path FROM media_items WHERE library_id = $1 AND path IS NOT NULL \
+         AND item_type = 'Movie' AND owner_id IS NULL AND NOT is_folder",
+    )
+    .bind(library_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Delete the items in `ids`; their children, streams, images and user data
 /// cascade. Returns how many rows the statement removed directly.
 pub async fn delete_ids(pool: &PgPool, ids: &[Uuid]) -> Result<u64, sqlx::Error> {
