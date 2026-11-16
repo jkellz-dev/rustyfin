@@ -95,6 +95,9 @@ a:hover {
   padding: 32px 40px;
   flex: 1;
   max-width: 1200px;
+  /* Without this the library grid's minimum width pushed the page 160 px
+     past the right edge of a 1280 px screen. */
+  min-width: 0;
 }
 
 /* ── Setup layout (no sidebar) ──────────────────────── */
@@ -1362,6 +1365,7 @@ select:focus {
   }
   .nav-toggle-bar {
     display: block;
+    width: 24px; /* the button centres its children, so they need a width */
     height: 2px;
     background: var(--text);
     border-radius: 1px;
