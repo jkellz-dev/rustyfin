@@ -1068,7 +1068,7 @@ their own. Follow [Jellyfin's extras rules](https://jellyfin.org/docs/general/se
 The owner's library already has about 34,000 `.lrc` files; the owner wants LRCLIB for the rest.
 
 - [x] `GET /Audio/{id}/Lyrics`, matching Jellyfin 10.10.7: the track's sidecar `.lrc`/`.elrc` (synced) or `.txt`, else
-      lyrics embedded in its tags; 404 when there are none (Plezy asks; found in the 11a request log)
+      lyrics embedded in its tags; 404 when there are none (Plezy asks; found in the 11a request log; was 15e)
 - [ ] `HasLyrics` on tracks, and a `Lyric` media stream naming the file, as Jellyfin sends them (clients that hide the
       lyrics button without it). Recorded at scan time, not looked up per request
 - [ ] `rustyfin lyrics` in the metadata CLI: for tracks with no lyrics, ask [LRCLIB](https://lrclib.net)
@@ -1283,12 +1283,9 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 ### 15e. Lyrics
 
-- [ ] `GET /Audio/{itemId}/Lyrics` — serve synced (LRC) or plain lyrics
-- [ ] Lyrics file discovery (`.lrc` sidecar files alongside audio)
-- [ ] Embedded lyrics extraction from audio tags (ID3v2 USLT/SYLT, Vorbis LYRICS)
-- [ ] `GET /Providers/Lyrics/{itemId}` — search external lyrics providers
-- [ ] `POST /Audio/{itemId}/Lyrics` — upload/save lyrics
-- [ ] `DELETE /Audio/{itemId}/Lyrics` — remove lyrics
+Moved to 11k (2026-11-16). Serving `.lrc`, `.txt` and tagged lyrics is done there; LRCLIB through the metadata
+CLI stands in for `GET /Providers/Lyrics/{itemId}`. Jellyfin's `POST`/`DELETE /Audio/{itemId}/Lyrics` stay out: the
+server never writes to the media filesystem (Design Boundaries).
 
 ### 15f. Custom Theming
 
