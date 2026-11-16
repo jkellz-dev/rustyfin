@@ -9,6 +9,9 @@ BEGIN
     -- test, and an extension created in one of those would vanish with it.
     CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 EXCEPTION
+    -- unique_violation: another connection created it at the same moment.
+    WHEN unique_violation THEN
+        NULL;
     WHEN insufficient_privilege OR undefined_file THEN
         RAISE NOTICE 'pg_trgm not available (%), name search stays unindexed', SQLERRM;
 END
