@@ -1,3 +1,4 @@
+pub mod audio_probe;
 pub mod image_processing;
 pub mod playback_info;
 pub mod probe;

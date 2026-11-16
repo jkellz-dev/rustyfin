@@ -1869,7 +1869,17 @@ async fn collect_audio_files(dir: &Path) -> Vec<PathBuf> {
     .unwrap_or_default()
 }
 
+/// The file's streams and length: read in-process with lofty for audio files
+/// (about a millisecond, owner 2026-11-16), else by ffprobe (~100 ms to start).
 async fn probe_file_graceful(path: &Path) -> Option<probe::ProbeResult> {
+    if is_audio_file(path) {
+        let p = path.to_path_buf();
+        if let Ok(Some(result)) =
+            tokio::task::spawn_blocking(move || rustyfin_media::audio_probe::probe_audio(&p)).await
+        {
+            return Some(result);
+        }
+    }
     match probe::probe_file(path).await {
         Ok(result) => Some(result),
         Err(e) => {
