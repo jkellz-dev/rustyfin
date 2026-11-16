@@ -263,7 +263,7 @@ pub fn record_collection_checked(dir: &Path, found: Option<(i64, &str)>) -> std:
             // A JSON string is a valid TOML basic string (same escapes).
             format!(
                 "name = {}",
-                serde_json::to_string(name).unwrap_or_else(|_| """".to_string())
+                serde_json::to_string(name).unwrap_or_else(|_| r#""""#.to_string())
             ),
         ));
         lines.push(("tmdb", format!("tmdb = {id}")));
