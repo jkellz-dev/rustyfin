@@ -1753,6 +1753,8 @@ impl ItemQuery {
     /// season is its number (`0001`), an episode `001 - 0001 - name` (season,
     /// episode), a track `0001 - 0001 - name` (disc, track); anything else its
     /// sort name. Numbers are zero-padded, never cut.
+    /// The sort key indexes of migration 20261116020000 repeat this expression:
+    /// change both together.
     const JELLYFIN_SORT_KEY: &'static str = "(CASE mi.item_type \
         WHEN 'Season' THEN COALESCE(lpad(mi.index_number::text, \
             greatest(4, length(mi.index_number::text)), '0'), COALESCE(mi.sort_name, mi.name)) \
@@ -1884,7 +1886,13 @@ impl ItemQuery {
         }
 
         // Type filters
-        if !self.include_item_types.is_empty() {
+        // One type is compared with `=`: Postgres then uses the per-type sort
+        // index (migration 20261116020000); `= ANY` of one makes it scan the
+        // all-types index and filter (20 ms vs 0.5 ms for 7,500 albums).
+        if let [one] = self.include_item_types.as_slice() {
+            qb.push(" AND mi.item_type = ");
+            qb.push_bind(one);
+        } else if !self.include_item_types.is_empty() {
             qb.push(" AND mi.item_type = ANY(");
             qb.push_bind(&self.include_item_types);
             qb.push(")");
@@ -2071,4 +2079,22 @@ pub async fn genre_image(
     .bind(library)
     .fetch_optional(pool)
     .await
+}
+
+#[cfg(test)]
+mod sort_key_index_tests {
+    /// Postgres uses the sort key indexes only for the very same expression.
+    #[test]
+    fn the_sort_key_indexes_repeat_the_query_sort_key() {
+        let squash = |s: &str| {
+            s.replace("mi.", "")
+                .replace('\\', "")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let migration = include_str!("../../../../migrations/20261116020000_sort_key_index.sql");
+        let key = squash(super::ItemQuery::JELLYFIN_SORT_KEY);
+        assert_eq!(squash(migration).matches(&key).count(), 2, "{key}");
+    }
 }
