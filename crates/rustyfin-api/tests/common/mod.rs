@@ -32,6 +32,8 @@ pub struct TestApp {
     pub shutdown: Arc<tokio::sync::Notify>,
     /// For planting transcode jobs without ffmpeg.
     pub transcodes: Arc<TranscodeManager>,
+    /// Libraries being scanned (shared with the scheduler and webhooks).
+    pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
 }
 
 impl TestApp {
@@ -113,6 +115,7 @@ impl TestApp {
         let shutdown = Arc::new(tokio::sync::Notify::new());
         let transcodes = transcode_manager.clone();
 
+        let scan_in_flight = Arc::new(RwLock::new(HashSet::new()));
         let state = AppState {
             pool: pool.clone(),
             server_id: "test-server-id".to_string(),
@@ -126,7 +129,7 @@ impl TestApp {
             ldap_config: None,
             transcode_manager,
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
-            scan_in_flight: Arc::new(RwLock::new(HashSet::new())),
+            scan_in_flight: scan_in_flight.clone(),
             scan_schedules: serde_json::json!({}),
             people_cache_dir,
             user_image_url_template: None,
@@ -146,6 +149,7 @@ impl TestApp {
             session_manager,
             shutdown,
             transcodes,
+            scan_in_flight,
         }
     }
 
