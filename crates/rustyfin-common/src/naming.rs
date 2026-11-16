@@ -263,7 +263,7 @@ pub fn resolve_episode(path: &Path, _series_name: &str) -> Option<ResolvedItem> 
         let after = &stem[caps.end()..];
         let cleaned = clean_title(after);
         if cleaned.is_empty() {
-            format!("Episode {episode}")
+            stem.trim().to_string()
         } else {
             cleaned
         }
@@ -271,12 +271,12 @@ pub fn resolve_episode(path: &Path, _series_name: &str) -> Option<ResolvedItem> 
         let after = &stem[caps.end()..];
         let cleaned = clean_title(after);
         if cleaned.is_empty() {
-            format!("Episode {episode}")
+            stem.trim().to_string()
         } else {
             cleaned
         }
     } else {
-        format!("Episode {episode}")
+        stem.trim().to_string()
     };
 
     let sort_name = make_sort_name(&title);

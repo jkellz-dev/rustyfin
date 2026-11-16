@@ -60,6 +60,27 @@ fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
         .is_some_and(|c| c == PG_FOREIGN_KEY_VIOLATION)
 }
 
+/// Jellyfin's 404 body: ASP.NET problem details (`type`, `title`, `status`,
+/// `traceId`), sent as `application/json`. Clients read `status`/`title`.
+fn not_found_body() -> Response {
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let body = serde_json::json!({
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+        "title": "Not Found",
+        "status": 404,
+        "traceId": format!("00-{}-{}-00", id, &id[..16]),
+    });
+    (
+        StatusCode::NOT_FOUND,
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )],
+        body.to_string(),
+    )
+        .into_response()
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = match &self {
@@ -87,7 +108,11 @@ impl IntoResponse for ApiError {
         } else {
             tracing::debug!("API error: {self}");
         }
-        let mut response = (status, self.to_string()).into_response();
+        let mut response = if status == StatusCode::NOT_FOUND {
+            not_found_body()
+        } else {
+            (status, self.to_string()).into_response()
+        };
         if let ApiError::TooManyRequests(secs) = self {
             response
                 .headers_mut()

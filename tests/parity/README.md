@@ -39,12 +39,10 @@ not the server).
 
 ### Nightly, against Rustyfin alone
 
-The cases are Jellyfin's recorded answers, so they also run with no Jellyfin at
-all. `.github/workflows/parity.yml` does that every night (and on pushes that
-touch the suite): the published `rustyfin-server:latest` image against a fresh
-Postgres, the synthetic media from `media/make_media.sh`, `bootstrap/rustyfin.hurl`
-(with `media_root=/data/media/parity-media`), `ci/wait_scanned.hurl` until the
-scan is in, then:
+The cases are Jellyfin's recorded answers, so they also run with no Jellyfin at all. `.github/workflows/parity.yml` does
+that every night (06:30 UTC) and on demand: the published `rustyfin-server:latest` image against a fresh Postgres, the
+synthetic media from `media/make_media.sh`, `bootstrap/rustyfin.hurl` (with `media_root=/data/media/parity-media`),
+`ci/wait_scanned.hurl` until the scan is in, then:
 
 ```sh
 python3 -I tests/parity/run.py --local --server rustyfin --strict --all --write parity-report.md

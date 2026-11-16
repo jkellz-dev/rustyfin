@@ -4,14 +4,12 @@ name: Parity
 # nightly. The cases hold Jellyfin's recorded answers (tests/parity/gen), so no
 # Jellyfin runs here. A gap fails the run; the report is in the job summary.
 on:
+  # Nightly and on demand only: it tests the published image, so a run on
+  # push raced CI and tested the previous image (2026-11-16). workflow_run
+  # would fix that but is an unsafe trigger (zizmor dangerous-triggers).
   schedule:
     - cron: '30 6 * * *'
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'tests/parity/**'
-      - '.github/workflows/parity.yml'
 
 concurrency:
   group: parity
@@ -26,6 +24,7 @@ env:
 
 jobs:
   parity:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
