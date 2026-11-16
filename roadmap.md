@@ -1039,6 +1039,30 @@ Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh.
       the scan; else the earliest film's poster
 - [ ] Cast without an NFO actor id gets its TMDB id from the sidecar, so headshots are `tmdb-<id>.jpg` not `img-<hash>`
 
+### 11j. Extras (owner, 2026-11-16)
+
+Movies with extras show up more than once: trailers, featurettes and the like beside a film are scanned as films of
+their own. Follow [Jellyfin's extras rules](https://jellyfin.org/docs/general/server/media/movies/#extras).
+
+- [ ] Recognise extras in the naming code, and turn the TODO cases in `naming.rs`'s ported Jellyfin tests into passing
+  tests:
+      - folders inside a movie, series or season folder: `behind the scenes`, `deleted scenes`, `interviews`, `scenes`,
+      `samples`, `shorts`, `featurettes`, `clips`, `other`, `extras`, `trailers`; - a file named just `trailer` or
+      `sample`; - a name ending in `-trailer`, `.trailer`, `_trailer` or `trailer` (likewise for `sample`), or in
+      `-scene`, `-clip`, `-interview`, `-behindthescenes`, `-deleted`, `-deletedscene`, `-featurette`, `-short`,
+      `-other` or `-extra`.
+- [ ] The scan stores an extra under its film, show or season, with its type (Trailer, BehindTheScenes,
+      DeletedScene, Interview, Scene, Sample, Short, Featurette, Clip, Unknown), never as a film or episode of its own.
+      The next scan removes the duplicate entries made so far; watched state stays on the real title.
+- [ ] `GET /Items/{id}/LocalTrailers` and `/SpecialFeatures` return them (today they always return `[]`), and the title
+      carries `LocalTrailerCount` and `SpecialFeatureCount`. Extras play through the normal stream routes.
+- [ ] `theme-music` and `backdrops` folders feed theme media and backdrops rather than being scanned as videos.
+- [ ] Parity: the synthetic media gains a `trailers/` folder and a `-featurette` file beside the test film, recorded
+      from Jellyfin.
+- [ ] Admin media page lists a title's extras.
+
+---
+
 ## Phase 12 — UI Polish & Interactivity
 
 Comprehensive UX pass across the admin UI and client-facing interactions. The admin UI works but lacks the feedback,
