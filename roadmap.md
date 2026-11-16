@@ -1188,11 +1188,13 @@ validation, and polish needed for daily use.
 
 The admin must be usable from a phone.
 
-- [ ] Responsive layout: the sidebar collapses to a menu button below tablet width; no horizontal scrolling at 360 px
-- [ ] Tables (users, libraries, tasks, sessions) become stacked cards on narrow screens
-- [ ] Touch targets at least 44 px; no hover-only controls
+- [x] Responsive layout: the sidebar collapses to a menu button below tablet width; no horizontal scrolling at 360 px
+      (below 768 px: top bar with a menu button; checked at 390, 768 and 1280 px, nothing wider than the screen)
+- [ ] Tables (users, libraries, tasks, sessions) become stacked cards on narrow screens (for now they scroll sideways
+      inside themselves)
+- [x] Touch targets at least 44 px; no hover-only controls
 - [ ] Forms and dialogs fit the screen (full-screen dialogs on phones, the right input types and keyboards)
-- [ ] Media grids and title pages reflow to two columns; posters lazy-load
+- [ ] Media grids and title pages reflow to two columns; posters lazy-load (two columns done; lazy-loading not yet)
 - [ ] Dashboard charts and stats readable at phone width
 - [ ] Tested at 360, 390 and 768 px widths (browser device emulation) and on a real phone
 
