@@ -1008,7 +1008,7 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
 - [x] Choose how the two servers are run: a pinned Jellyfin 10.10.7 pod and the published Rustyfin image in
       `hermes-sandbox`, a `hurl-runner` pod beside them (the namespace fence blocks anything outside), both scanning
       synthetic media from `tests/parity/media/make_media.sh`. Still to decide: running it in CI
-- [ ] `tests/parity/` of [Hurl](https://hurl.dev) files (first slice: system, users, library, playback, sessions;
+- [x] `tests/parity/` of [Hurl](https://hurl.dev) files (first slice: system, users, library, playback, sessions;
       generated from a real Jellyfin by `gen/record.py`), one per area (system, users, auth, libraries, items, images,
       playback info, sessions, playstate, search, collections, playlists, ...), each driven by `{{base_url}}` and
       `{{token}}` variables so the same file runs against either server
