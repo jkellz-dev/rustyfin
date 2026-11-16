@@ -216,3 +216,35 @@ async fn a_version_an_older_scan_listed_as_a_film_stops_being_listed() {
     let _ = DIR;
     app.cleanup().await;
 }
+
+#[tokio::test]
+async fn a_collection_lists_a_film_with_versions_once() {
+    // Owner, 2026-11-16: the 28 Days Later collection still showed the film
+    // twice after versions were grouped; trailers in the folder joined too.
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let t = tree();
+    t.file(
+        &format!("{DIR}/movie.nfo"),
+        br#"<movie><title>Film</title><set tmdbcolid="1565"><name>Film Collection</name></set></movie>"#,
+    );
+    t.file(&format!("{DIR}/Film (2002) [tmdbid-170]-trailer.mkv"), b"t");
+    let lib = library(&app, &t.root()).await;
+    scan(&app, lib, &t.root()).await;
+    // Twice, as the live library was: once to make rows, once more.
+    scan(&app, lib, &t.root()).await;
+
+    let (_, sets) = app
+        .get("/Items?Recursive=true&IncludeItemTypes=BoxSet", &token)
+        .await;
+    assert_eq!(sets["TotalRecordCount"], 1, "{sets}");
+    let set = sets["Items"][0]["Id"].as_str().unwrap().to_string();
+    let (_, films) = app.get(&format!("/Items?ParentId={set}"), &token).await;
+    let film = id_of(&app, &t.path(BLURAY)).await;
+    let items = films["Items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{films}"));
+    assert_eq!(items.len(), 1, "{films}");
+    assert!(same(&items[0]["Id"], film), "{films}");
+    app.cleanup().await;
+}
