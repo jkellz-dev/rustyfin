@@ -225,3 +225,79 @@ async fn artists_count_albums_and_albums_add_up_their_tracks() {
     assert_eq!(album["CumulativeRunTimeTicks"], 6_000, "{album}");
     app.cleanup().await;
 }
+
+/// Plezy's alphabet bar filters the artist list with NameStartsWith (and
+/// NameLessThan=A for "#"), on the sort name, within the library it shows.
+/// Ignoring them answered every artist, so the jump only redrew the list.
+#[tokio::test]
+async fn the_alphabet_bar_filters_artists_by_sort_name() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("Music", "music").await;
+    let other = app.create_library("Other Music", "music").await;
+    for (name, sort, library) in [
+        ("ABBA", "abba", lib),
+        ("The Beatles", "beatles", lib),
+        ("Blur", "blur", lib),
+        ("Coldplay", "coldplay", lib),
+        ("!!!", "!!!", lib),
+        ("Bjork", "bjork", other),
+    ] {
+        let artist = app
+            .create_media_item(name, "MusicArtist", library, None)
+            .await;
+        app.create_media_item(
+            &format!("{name} album"),
+            "MusicAlbum",
+            library,
+            Some(artist),
+        )
+        .await;
+        sqlx::query("UPDATE media_items SET sort_name = $2 WHERE id = $1")
+            .bind(artist)
+            .bind(sort)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+    let names = |body: &Value| -> Vec<String> {
+        let mut n: Vec<String> = body["Items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{body}"))
+            .iter()
+            .map(|i| i["Name"].as_str().unwrap().to_string())
+            .collect();
+        n.sort();
+        n
+    };
+    for path in ["/Artists/AlbumArtists", "/Artists"] {
+        let (status, b) = app
+            .get(&format!("{path}?ParentId={lib}&NameStartsWith=b"), &token)
+            .await;
+        assert_eq!(status, StatusCode::OK, "{b}");
+        assert_eq!(names(&b), ["Blur", "The Beatles"], "{path}: {b}");
+        assert_eq!(b["TotalRecordCount"], 2, "{path}: {b}");
+        let (_, b) = app
+            .get(&format!("{path}?ParentId={lib}&NameLessThan=A"), &token)
+            .await;
+        assert_eq!(names(&b), ["!!!"], "{path}: {b}");
+        let (_, b) = app
+            .get(
+                &format!("{path}?ParentId={lib}&NameStartsWithOrGreater=C"),
+                &token,
+            )
+            .await;
+        assert_eq!(names(&b), ["Coldplay"], "{path}: {b}");
+    }
+    // The same filters on /Items (Plezy's other libraries).
+    let (_, b) = app
+        .get(
+            &format!(
+                "/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=MusicArtist&NameLessThan=A"
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&b), ["!!!"], "{b}");
+    app.cleanup().await;
+}
