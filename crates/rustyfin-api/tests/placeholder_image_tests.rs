@@ -51,7 +51,9 @@ async fn an_item_without_art_names_a_placeholder_in_its_shape() {
         ("Season", "placeholder-poster-1", 2.0 / 3.0),
         // Episodes name a frame of the video instead (episode_thumb_tests).
         ("Episode", "frame-", 16.0 / 9.0),
-        ("MusicAlbum", "placeholder-square-1", 1.0),
+        // Music names its tracks' embedded cover instead, which falls back
+        // to the square placeholder (embedded_album_art_tests).
+        ("MusicAlbum", "cover-", 1.0),
     ] {
         let (status, body) = app
             .get(
