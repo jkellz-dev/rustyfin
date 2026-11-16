@@ -168,11 +168,42 @@ struct AlbumNfo {
     track: Vec<AlbumNfoTrack>,
 }
 
+/// A track duration in seconds: `259.0` (Kodi), or `mm:ss` / `h:mm:ss`
+/// (Lidarr). Anything else is no duration, not a broken album NFO.
+fn de_track_duration<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw: Option<String> = Option::deserialize(deserializer)?;
+    Ok(raw.as_deref().and_then(parse_track_duration))
+}
+
+fn parse_track_duration(raw: &str) -> Option<f64> {
+    let raw = raw.trim();
+    if let Ok(secs) = raw.parse::<f64>() {
+        return (secs.is_finite() && secs >= 0.0).then_some(secs);
+    }
+    let parts: Vec<&str> = raw.split(':').collect();
+    if !(2..=3).contains(&parts.len()) {
+        return None;
+    }
+    let mut total = 0.0;
+    for part in parts {
+        let n: f64 = part.trim().parse().ok()?;
+        if !n.is_finite() || n < 0.0 {
+            return None;
+        }
+        total = total * 60.0 + n;
+    }
+    Some(total)
+}
+
 #[derive(Debug, Deserialize)]
 struct AlbumNfoTrack {
     title: Option<String>,
     position: Option<i32>,
     disc: Option<i32>,
+    #[serde(default, deserialize_with = "de_track_duration")]
     duration: Option<f64>,
     file: Option<String>,
 }
