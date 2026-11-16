@@ -1,0 +1,104 @@
+name: Parity
+
+# Roadmap 11h: the Hurl parity suite against the published Rustyfin image,
+# nightly. The cases hold Jellyfin's recorded answers (tests/parity/gen), so no
+# Jellyfin runs here. A gap fails the run; the report is in the job summary.
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/parity/**'
+      - '.github/workflows/parity.yml'
+
+concurrency:
+  group: parity
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  HURL_VERSION: 8.1.0
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: rustyfin
+          POSTGRES_USER: rustyfin
+          POSTGRES_PASSWORD: rustyfin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U rustyfin"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install hurl and ffmpeg
+        run: |
+          curl -fsSL -o /tmp/hurl.deb \
+            "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl_${HURL_VERSION}_amd64.deb"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg /tmp/hurl.deb
+          hurl --version | head -1
+
+      - name: Synthetic media
+        run: sh tests/parity/media/make_media.sh "$RUNNER_TEMP/media/parity-media"
+
+      - name: Start Rustyfin (published image)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker run -d --name rustyfin --network host \
+            -e RUSTYFIN_CONFIG=/etc/rustyfin/rustyfin.toml \
+            -v "$PWD/tests/parity/ci/rustyfin.toml:/etc/rustyfin/rustyfin.toml:ro" \
+            -v "$RUNNER_TEMP/media:/data/media:ro" \
+            ghcr.io/jkellz-dev/rustyfin-server:latest
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8096/System/Info/Public > /dev/null && break
+            sleep 2
+          done
+          curl -fsS http://localhost:8096/System/Info/Public
+          echo
+          docker inspect --format '{{.Config.Image}} {{.Image}}' rustyfin
+
+      - name: Bootstrap and wait for the scan
+        run: |
+          hurl --variable base_url=http://localhost:8096 --variable user=parity \
+            --variable media_root=/data/media/parity-media tests/parity/bootstrap/rustyfin.hurl
+          hurl --variable base_url=http://localhost:8096 --variable user=parity \
+            tests/parity/ci/wait_scanned.hurl
+
+      - name: Run the suite
+        run: |
+          set +e
+          python3 -I tests/parity/run.py --local --server rustyfin --strict --all --write parity-report.md
+          status=$?
+          cat parity-report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Rustyfin log
+        if: failure()
+        run: docker logs rustyfin 2>&1 | tail -200
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: parity-report
+          path: parity-report.md
+          if-no-files-found: ignore

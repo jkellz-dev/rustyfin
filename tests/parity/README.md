@@ -25,7 +25,8 @@ JSON shape (each key present and of the same kind). Values that legitimately dif
 Both servers run in the `hermes-sandbox` namespace with a `hurl-runner` pod beside
 them (the namespace fence stops anything outside from reaching them). Copy the media
 into each server (`/media/parity-media` on Jellyfin, `/data/media/parity-media` on
-Rustyfin), run the two bootstrap files from the runner, then:
+Rustyfin), run the two bootstrap files from the runner (Rustyfin's with
+`--variable media_root=/data/media/parity-media`), then:
 
 ```sh
 python3 -I tests/parity/gen/record.py     # regenerate the cases from Jellyfin
@@ -35,6 +36,24 @@ python3 -I tests/parity/run.py library    # one area
 
 `run.py` exits non-zero only if Jellyfin fails its own recording (the case is wrong,
 not the server).
+
+### Nightly, against Rustyfin alone
+
+The cases are Jellyfin's recorded answers, so they also run with no Jellyfin at
+all. `.github/workflows/parity.yml` does that every night (and on pushes that
+touch the suite): the published `rustyfin-server:latest` image against a fresh
+Postgres, the synthetic media from `media/make_media.sh`, `bootstrap/rustyfin.hurl`
+(with `media_root=/data/media/parity-media`), `ci/wait_scanned.hurl` until the
+scan is in, then:
+
+```sh
+python3 -I tests/parity/run.py --local --server rustyfin --strict --all --write parity-report.md
+```
+
+`--local` runs `hurl` on this machine instead of the sandbox's runner pod
+(`PARITY_RUSTYFIN_URL`, default `http://localhost:8096`); `--strict` fails on any
+Rustyfin gap. The report is the job summary and an artifact. The sandbox run with
+both servers is still how cases are recorded and Jellyfin's own pass is checked.
 
 ## Known differences
 

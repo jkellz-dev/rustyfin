@@ -11,6 +11,13 @@ recording is wrong, not the server). Rustyfin's failures are the parity gaps.
 
 Needs kubectl and the `hurl-runner`, `jellyfin` and `rustyfin-server` services in
 `hermes-sandbox`, both servers bootstrapped (tests/parity/bootstrap/*.hurl).
+
+Offline, against Rustyfin alone (the nightly CI run): the cases already hold
+Jellyfin's recorded answers, so no Jellyfin is needed.
+
+    python3 -I tests/parity/run.py --local --server rustyfin --strict
+    # hurl on PATH; PARITY_RUSTYFIN_URL (default http://localhost:8096);
+    # --strict exits 1 when Rustyfin has any gap.
 """
 import json
 import os
@@ -42,16 +49,32 @@ SERVERS = {
 }
 
 
+# --local: run hurl here instead of in the sandbox's runner pod.
+LOCAL = False
+WORK = "/tmp/parity"
+
+
 def kubectl(*args, stdin=None):
     return subprocess.run([KUBECTL, "-n", NS, *args], input=stdin, capture_output=True, text=True)
 
 
+def put_file(path, text):
+    """Write a file where hurl will read it (here, or in the runner pod)."""
+    if LOCAL:
+        Path(path).write_text(text)
+    else:
+        kubectl("exec", "-i", RUNNER, "--", "sh", "-c", f"cat > {path}", stdin=text)
+
+
 def hurl(file_in_runner, variables, *flags):
-    args = ["exec", RUNNER, "--", "hurl", "--json", "--no-color", *flags]
+    args = ["hurl", "--json", "--no-color", *flags]
     for k, v in variables.items():
         args += ["--variable", f"{k}={v}"]
     args.append(file_in_runner)
-    run = kubectl(*args)
+    if LOCAL:
+        run = subprocess.run(args, capture_output=True, text=True)
+    else:
+        run = kubectl("exec", RUNNER, "--", *args)
     try:
         return json.loads(run.stdout)
     except json.JSONDecodeError:
@@ -65,8 +88,8 @@ def login(server):
         f"{cfg['body']}\nHTTP 200\n[Captures]\ntoken: jsonpath \"$.AccessToken\"\n"
         'user_id: jsonpath "$.User.Id"\n'
     )
-    kubectl("exec", "-i", RUNNER, "--", "sh", "-c", "cat > /tmp/login.hurl", stdin=text)
-    res = hurl("/tmp/login.hurl", {"base_url": cfg["base_url"]})
+    put_file(f"{WORK}/login.hurl", text)
+    res = hurl(f"{WORK}/login.hurl", {"base_url": cfg["base_url"]})
     caps = {c["name"]: c["value"] for c in res["entries"][0]["captures"]}
     return caps["token"], caps["user_id"]
 
@@ -86,7 +109,7 @@ def run_server(server, cases):
     results = {}
     for case in cases:
         res = hurl(
-            f"/tmp/parity/cases/{case.name}",
+            f"{WORK}/cases/{case.name}",
             {"base_url": base, "token": token, "user_id": user_id},
             "--continue-on-error",
         )
@@ -117,6 +140,25 @@ def main():
     show_all = "--all" in args
     if show_all:
         args.remove("--all")
+    global LOCAL, WORK
+    LOCAL = "--local" in args
+    if LOCAL:
+        args.remove("--local")
+        WORK = str(ROOT)
+        SERVERS["rustyfin"]["base_url"] = os.environ.get(
+            "PARITY_RUSTYFIN_URL", "http://localhost:8096"
+        ).rstrip("/")
+        SERVERS["jellyfin"]["base_url"] = os.environ.get(
+            "PARITY_JELLYFIN_URL", "http://localhost:8097"
+        ).rstrip("/")
+    servers = list(SERVERS)
+    if "--server" in args:
+        i = args.index("--server")
+        servers = [args[i + 1]]
+        del args[i : i + 2]
+    strict = "--strict" in args
+    if strict:
+        args.remove("--strict")
     only = args[0] if args else None
 
     cases = sorted((ROOT / "cases").glob("*.hurl"))
@@ -124,12 +166,13 @@ def main():
     if not cases:
         sys.exit("no cases")
 
-    kubectl("exec", RUNNER, "--", "rm", "-rf", "/tmp/parity")
-    cp = kubectl("cp", str(ROOT), f"{RUNNER}:/tmp/parity")
-    if cp.returncode:
-        sys.exit(f"cannot copy cases: {cp.stderr}")
+    if not LOCAL:
+        kubectl("exec", RUNNER, "--", "rm", "-rf", WORK)
+        cp = kubectl("cp", str(ROOT), f"{RUNNER}:{WORK}")
+        if cp.returncode:
+            sys.exit(f"cannot copy cases: {cp.stderr}")
 
-    report = {s: run_server(s, cases) for s in SERVERS}
+    report = {s: run_server(s, cases) for s in servers}
 
     lines = ["# Parity report", ""]
     for server, per_case in report.items():
@@ -152,8 +195,19 @@ def main():
         Path(out_file).write_text(text)
 
     # Jellyfin failing its own recording means the case is wrong.
-    jelly_bad = sum(1 for rows in report["jellyfin"].values() for r in rows if r["failed"])
-    sys.exit(2 if jelly_bad else 0)
+    if "jellyfin" in report:
+        jelly_bad = sum(1 for rows in report["jellyfin"].values() for r in rows if r["failed"])
+        if jelly_bad:
+            sys.exit(2)
+    if strict and "rustyfin" in report:
+        gaps = sum(
+            1
+            for rows in report["rustyfin"].values()
+            for r in rows
+            if r["failed"] or r["no_response"]
+        )
+        sys.exit(1 if gaps else 0)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
