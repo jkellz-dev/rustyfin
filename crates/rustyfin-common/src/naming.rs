@@ -2145,6 +2145,16 @@ mod tests {
     // ---------------------------------------------------------------
 
     #[test]
+    fn an_episode_without_a_title_is_named_after_its_file() {
+        // Jellyfin 10.10.7 names it "Test Show S01E01" (parity plezy.hurl:381).
+        let ep = resolve_episode(Path::new("Show/Season 01/Test Show S01E01.mp4"), "Show").unwrap();
+        assert_eq!(ep.title, "Test Show S01E01");
+        let ep =
+            resolve_episode(Path::new("Show/Season 01/Show S01E02 Pilot.mkv"), "Show").unwrap();
+        assert_eq!(ep.title, "Pilot");
+    }
+
+    #[test]
     fn extras_trailer_suffix_detection() {
         assert!(is_video_file(Path::new("300-trailer.mp4")));
         assert_eq!(
