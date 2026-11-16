@@ -90,6 +90,29 @@ HTTP 200
 [Captures]
 artist_id: jsonpath "$.Items[0].Id"
 
+GET {{{{base_url}}}}/Library/VirtualFolders
+Authorization: {AUTH}
+HTTP 200
+[Captures]
+movies_lib_id: jsonpath "$[?(@.CollectionType=='movies')].ItemId"
+tv_lib_id: jsonpath "$[?(@.CollectionType=='tvshows')].ItemId"
+music_lib_id: jsonpath "$[?(@.CollectionType=='music')].ItemId"
+
+GET {{{{base_url}}}}/Shows/{{{{series_id}}}}/Seasons
+Authorization: {AUTH}
+HTTP 200
+[Captures]
+season_id: jsonpath "$.Items[0].Id"
+
+GET {{{{base_url}}}}/Items
+Authorization: {AUTH}
+[QueryStringParams]
+Recursive: true
+IncludeItemTypes: Audio
+SortBy: SortName
+HTTP 200
+[Captures]
+track_id: jsonpath "$.Items[0].Id"
 """
 
 # (area, method, path, query, needs_auth, json_body)
@@ -162,6 +185,38 @@ REQUESTS = [
     ("music", "GET", "/Shows/NextUp", {"UserId": "{user_id}", "NextUpDateCutoff": "2025-11-15T00:00:00Z", "EnableResumable": "false"}, True, None),
     ("music", "GET", "/UserItems/Resume", {"UserId": "{user_id}", "MediaTypes": "Video"}, True, None),
     ("music", "GET", "/Items", {"Recursive": "true", "Filters": "IsResumable"}, True, None),
+    # Fourth slice (roadmap 11a): the owner's Plezy session, 2026-11-16, exact queries.
+    ("plezy", "GET", "/UserItems/Resume", {'UserId': '{user_id}', 'Limit': '21', 'Fields': 'Overview,DateCreated', 'MediaTypes': 'Video', 'Recursive': 'true', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Shows/NextUp", {'UserId': '{user_id}', 'Limit': '21', 'Fields': 'Overview,DateCreated', 'EnableResumable': 'false', 'NextUpDateCutoff': '2025-11-16T00:00:00Z', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Users/{user_id}/Items/Latest", {'Limit': '20', 'ParentId': '{movies_lib_id}', 'Fields': 'Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Users/{user_id}/Items/Latest", {'Limit': '20', 'ParentId': '{music_lib_id}', 'Fields': 'PremiereDate,OriginalTitle,SortName,DateCreated', 'EnableUserData': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'IncludeItemTypes': 'Playlist', 'Recursive': 'true', 'MediaTypes': 'Video', 'StartIndex': '0', 'Limit': '200', 'Fields': 'Overview,DateCreated,DateLastSaved,DateModified,ChildCount,Tags', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'ParentId': '{movies_lib_id}', 'Recursive': 'true', 'StartIndex': '0', 'Limit': '72', 'EnableTotalRecordCount': 'true', 'IncludeItemTypes': 'Movie', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'ParentId': '{movies_lib_id}', 'Recursive': 'true', 'StartIndex': '0', 'Limit': '72', 'EnableTotalRecordCount': 'true', 'IncludeItemTypes': 'Movie', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'NameStartsWith': 'T', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'ParentId': '{tv_lib_id}', 'Recursive': 'true', 'StartIndex': '0', 'Limit': '72', 'EnableTotalRecordCount': 'true', 'IncludeItemTypes': 'Series', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items/Filters", {'UserId': '{user_id}', 'ParentId': '{movies_lib_id}'}, True, None),
+    ("plezy", "GET", "/Artists/AlbumArtists", {'UserId': '{user_id}', 'ParentId': '{music_lib_id}', 'StartIndex': '0', 'Limit': '72', 'EnableTotalRecordCount': 'true', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'IncludeItemTypes': 'BoxSet', 'Recursive': 'true', 'StartIndex': '0', 'Limit': '36', 'SortBy': 'SortName', 'SortOrder': 'Ascending', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'SearchTerm': 'test', 'Recursive': 'true', 'Limit': '100', 'IncludeItemTypes': 'Series,Episode', 'ParentId': '{tv_lib_id}', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Artists", {'UserId': '{user_id}', 'SearchTerm': 'test', 'Limit': '100', 'ParentId': '{music_lib_id}', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Persons", {'UserId': '{user_id}', 'SearchTerm': 'test', 'PersonTypes': 'Actor,Director', 'Limit': '100', 'EnableImageTypes': 'Primary', 'ImageTypeLimit': '1', 'EnableUserData': 'false', 'EnableTotalRecordCount': 'false'}, True, None),
+    ("plezy", "GET", "/Users/{user_id}/Items/{series_id}", {'Fields': 'Overview,Genres,People,Studios,ProductionLocations,Tags,Taglines,DateCreated,DateLastSaved,PremiereDate,RecursiveItemCount,ChildCount,UserData,MediaSources,OriginalTitle,SortName,Chapters,Trickplay,ProviderIds'}, True, None),
+    ("plezy", "GET", "/Users/{user_id}/Items/{movie_id}", {'Fields': 'Overview,Genres,People,Studios,ProductionLocations,Tags,Taglines,DateCreated,DateLastSaved,PremiereDate,RecursiveItemCount,ChildCount,UserData,MediaSources,OriginalTitle,SortName,Chapters,Trickplay,ProviderIds'}, True, None),
+    ("plezy", "GET", "/Shows/NextUp", {'SeriesId': '{series_id}', 'UserId': '{user_id}', 'Limit': '1', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated,MediaSources', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items/{movie_id}/LocalTrailers", {'UserId': '{user_id}', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items/{movie_id}/SpecialFeatures", {'UserId': '{user_id}', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Shows/{series_id}/Seasons", {'UserId': '{user_id}', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items/{series_id}/Similar", {'UserId': '{user_id}', 'Limit': '10', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Shows/{series_id}/Episodes", {'UserId': '{user_id}', 'SeasonId': '{season_id}', 'StartIndex': '0', 'Limit': '200', 'EnableTotalRecordCount': 'true', 'IsMissing': 'false', 'IsVirtualUnaired': 'false', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated,MediaSources', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Shows/{series_id}/Episodes", {'UserId': '{user_id}', 'Fields': 'UserData,PremiereDate', 'StartIndex': '0', 'Limit': '200', 'IsMissing': 'false', 'IsVirtualUnaired': 'false', 'SortBy': 'ParentIndexNumber,IndexNumber,SortName', 'SortOrder': 'Ascending,Ascending,Ascending', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'ParentId': '{season_id}', 'Fields': 'RecursiveItemCount,ChildCount,OriginalTitle,SortName,Overview,DateCreated,MediaSources', 'StartIndex': '0', 'Limit': '500', 'SortBy': 'ParentIndexNumber,IndexNumber,SortName', 'SortOrder': 'Ascending,Ascending,Ascending', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
+    ("plezy", "GET", "/Items", {'UserId': '{user_id}', 'ParentId': '{series_id}', 'IncludeItemTypes': 'Episode', 'Recursive': 'true', 'SortBy': 'DatePlayed', 'SortOrder': 'Descending', 'Fields': 'UserData', 'Limit': '1', 'EnableImages': 'false', 'EnableTotalRecordCount': 'false'}, True, None),
+    ("plezy", "GET", "/Items", {'Ids': '{movie_id}', 'UserId': '{user_id}', 'Fields': 'CanDelete', 'EnableImages': 'false', 'EnableUserData': 'false', 'EnableTotalRecordCount': 'false'}, True, None),
+    ("plezy", "POST", "/Items/{movie_id}/PlaybackInfo", {'UserId': '{user_id}', 'MediaSourceId': '{movie_id}'}, True, {}),
+    ("plezy", "GET", "/MediaSegments/{movie_id}", {}, True, None),
+    ("plezy", "GET", "/MediaSegments/{track_id}", {}, True, None),
+    ("plezy", "GET", "/Audio/{track_id}/Lyrics", {}, True, None),
+    ("plezy", "GET", "/Audio/{movie_id}/Lyrics", {}, True, None),
 ]
 
 

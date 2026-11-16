@@ -49,3 +49,4 @@ Caddyfile.dev
 
 .vectorcode/
 .worktrees/
+__pycache__/

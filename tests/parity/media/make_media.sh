@@ -41,5 +41,10 @@ video "$out/shows/Test Show (2021)/Season 01/Test Show S01E02.mp4" "Second"
 audio "$out/music/Test Artist/Test Album (2019)/01 First.mp3" "First" 330 1
 audio "$out/music/Test Artist/Test Album (2019)/02 Second.mp3" "Second" 550 2
 
+# Lyrics (11a): Jellyfin reads <track>.lrc (synced) and <track>.txt (plain).
+printf '[ar:Test Artist]\n[ti:First]\n[00:00.50]Line one\n[00:01.75]Line two\n\n[00:03.00][00:04.00]Twice\n' \
+	>"$out/music/Test Artist/Test Album (2019)/01 First.lrc"
+printf 'Plain one\n\nPlain two\n' >"$out/music/Test Artist/Test Album (2019)/02 Second.txt"
+
 find "$out" -type f -exec touch -d "2021-01-01 00:00:00" {} +
 echo "media written to $out"
