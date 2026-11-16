@@ -778,8 +778,8 @@ pub(crate) async fn attach_music_fields(
                         .collect(),
                 );
                 dto.artists = Some(artists);
-                // Rustyfin has no lyrics support.
-                dto.has_lyrics = Some(false);
+                // Found by the scan (sidecar .lrc/.txt or tags).
+                dto.has_lyrics = Some(row.has_lyrics.unwrap_or(false));
             }
             "MusicAlbum" => {
                 if let Some(artist) = row

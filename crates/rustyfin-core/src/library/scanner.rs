@@ -838,6 +838,31 @@ impl LibraryScanner {
         let path_str = file_path.to_string_lossy().to_string();
         let album_nfo = file_path.parent().and_then(find_album_nfo);
         let etag = compute_etag(file_path, &[album_nfo])?;
+        let existing = media_items::find_by_path(&self.pool, &path_str).await?;
+        if let Some(existing) = &existing
+            && existing.etag.as_deref() == Some(etag.as_str())
+        {
+            self.refresh_stale_streams(existing.id, file_path).await;
+            // Tracks scanned before artists, MusicBrainz ids or lyrics were
+            // kept get them once.
+            if existing.artists.is_none()
+                || existing.external_ids.is_none()
+                || existing.has_lyrics.is_none()
+            {
+                self.store_track_tags(existing.id, album_id, artist_id, file_path)
+                    .await;
+            } else if existing.has_lyrics == Some(false)
+                && rustyfin_common::lyrics::sidecar_path(file_path).is_some()
+            {
+                // A lyrics file added since (a stat, not a change of the
+                // track: putting it in the etag would re-probe every track
+                // that has one).
+                if let Err(e) = media_items::set_has_lyrics(&self.pool, existing.id, true).await {
+                    tracing::warn!("Could not store that {} has lyrics: {e}", existing.id);
+                }
+            }
+            return Ok(IngestOutcome::Skipped);
+        }
 
         // Prefer NFO track data, fall back to audio tags, then filename parsing
         let resolved = resolve_audio_track(file_path);
@@ -864,18 +889,7 @@ impl LibraryScanner {
             let year = tags.as_ref().and_then(|t| t.year);
             (title, track_num, disc_num, year)
         };
-        if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
-            if existing.etag.as_deref() == Some(&etag) {
-                self.refresh_stale_streams(existing.id, file_path).await;
-                // Tracks scanned before artists or MusicBrainz ids were kept
-                // get them once.
-                if existing.artists.is_none() || existing.external_ids.is_none() {
-                    self.store_track_tags(existing.id, album_id, artist_id, file_path)
-                        .await;
-                }
-                return Ok(IngestOutcome::Skipped);
-            }
-
+        if let Some(existing) = existing {
             let probe_result = probe_file_graceful(file_path).await;
 
             let item = media_items::NewMediaItem {
@@ -1327,6 +1341,11 @@ impl LibraryScanner {
         file_path: &Path,
     ) {
         let tags = music_tags::read_tags(file_path).unwrap_or_default();
+        let has_lyrics =
+            tags.has_lyrics || rustyfin_common::lyrics::sidecar_path(file_path).is_some();
+        if let Err(e) = media_items::set_has_lyrics(&self.pool, item_id, has_lyrics).await {
+            tracing::warn!("Could not store whether {item_id} has lyrics: {e}");
+        }
         let artists = tags
             .artist
             .as_deref()

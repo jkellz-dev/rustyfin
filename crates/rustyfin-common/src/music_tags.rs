@@ -28,6 +28,8 @@ pub struct AudioTags {
     pub catalog_number: Option<String>,
     pub release_status: Option<String>,
     pub release_country: Option<String>,
+    /// Lyrics in the tags (USLT/SYLT, Vorbis LYRICS, ...).
+    pub has_lyrics: bool,
 }
 
 pub fn read_tags(path: &Path) -> Option<AudioTags> {
@@ -51,6 +53,9 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
         |keys: &[ItemKey]| -> Option<u32> { get(keys).and_then(|s| s.parse::<u32>().ok()) };
 
     Some(AudioTags {
+        has_lyrics: tag
+            .get_string(&ItemKey::Lyrics)
+            .is_some_and(|l| !l.trim().is_empty()),
         title: tag.title().map(|s| s.to_string()),
         artist: tag.artist().map(|s| s.to_string()),
         album_artist: tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string()),

@@ -53,6 +53,19 @@ pub struct MediaItemRow {
     /// The film, show or season an extra belongs to.
     #[sqlx(default)]
     pub owner_id: Option<Uuid>,
+    /// A track's lyrics were found by the scan (None: not looked at yet).
+    #[sqlx(default)]
+    pub has_lyrics: Option<bool>,
+}
+
+/// Record whether a track has lyrics.
+pub async fn set_has_lyrics(pool: &PgPool, id: Uuid, has: bool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE media_items SET has_lyrics = $2 WHERE id = $1")
+        .bind(id)
+        .bind(has)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// Mark an item as an extra of `owner` (or, with `None`, as a title again).
