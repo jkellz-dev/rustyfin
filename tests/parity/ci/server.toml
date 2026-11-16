@@ -1,0 +1,28 @@
+# Rustyfin for the nightly parity run (.github/workflows/parity.yml): the
+# published image against a throwaway Postgres, the synthetic media mounted at
+# /data/media, forward auth trusting the runner itself (hurl runs on the host).
+[server]
+port = 8096
+server_name = "Rustyfin parity"
+base_url = "http://localhost:8096"
+image_cache_dir = "/tmp/rustyfin/images"
+
+[database]
+host = "localhost"
+port = 5432
+name = "rustyfin"
+user = "rustyfin"
+password = "rustyfin"
+
+[auth.forward_auth]
+trusted_proxies = ["127.0.0.0/8", "172.16.0.0/12", "10.0.0.0/8"]
+admin_group = "admin"
+
+[auth.forward_auth.headers]
+user = "Tailscale-User-Login"
+name = "Tailscale-User-Name"
+email = "Tailscale-User-Login"
+groups = "Tailscale-User-Groups"
+
+[tasks]
+enabled = false
