@@ -144,15 +144,15 @@ jsonpath "$[0].Name" isString
 jsonpath "$[0].State" isString
 jsonpath "$[0].Id" isString
 jsonpath "$[0].LastExecutionResult" exists
-jsonpath "$[0].LastExecutionResult.StartTimeUtc" isString
-jsonpath "$[0].LastExecutionResult.EndTimeUtc" isString
-jsonpath "$[0].LastExecutionResult.Status" isString
-jsonpath "$[0].LastExecutionResult.Name" isString
-jsonpath "$[0].LastExecutionResult.Key" isString
-jsonpath "$[0].LastExecutionResult.Id" isString
+# known difference, not asserted: jsonpath "$[0].LastExecutionResult.StartTimeUtc" isString (task history and schedules differ per server; the fields are there when a task has run)
+# known difference, not asserted: jsonpath "$[0].LastExecutionResult.EndTimeUtc" isString (task history and schedules differ per server; the fields are there when a task has run)
+# known difference, not asserted: jsonpath "$[0].LastExecutionResult.Status" isString (task history and schedules differ per server; the fields are there when a task has run)
+# known difference, not asserted: jsonpath "$[0].LastExecutionResult.Name" isString (task history and schedules differ per server; the fields are there when a task has run)
+# known difference, not asserted: jsonpath "$[0].LastExecutionResult.Key" isString (task history and schedules differ per server; the fields are there when a task has run)
+# known difference, not asserted: jsonpath "$[0].LastExecutionResult.Id" isString (task history and schedules differ per server; the fields are there when a task has run)
 jsonpath "$[0].Triggers" isCollection
 jsonpath "$[0].Triggers[0].Type" isString
-jsonpath "$[0].Triggers[0].IntervalTicks" isNumber
+# known difference, not asserted: jsonpath "$[0].Triggers[0].IntervalTicks" isNumber (task history and schedules differ per server; the fields are there when a task has run)
 jsonpath "$[0].Description" isString
 jsonpath "$[0].Category" isString
 jsonpath "$[0].IsHidden" isBoolean
@@ -164,15 +164,15 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
-jsonpath "$[0]" exists
-jsonpath "$[0].Name" isString
-jsonpath "$[0].Version" isString
-jsonpath "$[0].ConfigurationFileName" isString
-jsonpath "$[0].Description" isString
-jsonpath "$[0].Id" isString
-jsonpath "$[0].CanUninstall" isBoolean
-jsonpath "$[0].HasImage" isBoolean
-jsonpath "$[0].Status" isString
+# known difference, not asserted: jsonpath "$[0]" exists (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].Name" isString (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].Version" isString (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].ConfigurationFileName" isString (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].Description" isString (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].Id" isString (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].CanUninstall" isBoolean (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].HasImage" isBoolean (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
+# known difference, not asserted: jsonpath "$[0].Status" isString (no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones)
 
 GET {{base_url}}/Library/PhysicalPaths
 Authorization: MediaBrowser Token="{{token}}"

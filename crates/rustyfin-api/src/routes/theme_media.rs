@@ -60,6 +60,14 @@ pub async fn get_ancestors(
     let ancestors = media_items::list_ancestors(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?;
+    // Jellyfin ends the chain at the library and the user's root folder.
+    let library_id = match ancestors.last() {
+        Some(top) => top.library_id,
+        None => media_items::find_by_id(&state.pool, item_id)
+            .await
+            .map_err(ApiError::Database)?
+            .and_then(|i| i.library_id),
+    };
     let mut dtos: Vec<BaseItemDto> = ancestors
         .iter()
         .map(|item| media_item_to_dto(item, &state.server_id))
@@ -77,6 +85,19 @@ pub async fn get_ancestors(
             }
         }
     }
+
+    if let Some(lib) = match library_id {
+        Some(id) => rustyfin_db::repo::libraries::find_by_id(&state.pool, id)
+            .await
+            .map_err(ApiError::Database)?,
+        None => None,
+    } {
+        dtos.push(super::libraries::collection_folder_dto(
+            &lib,
+            &state.server_id,
+        ));
+    }
+    dtos.push(super::libraries::root_folder_dto(&state, auth.user_id).await?);
 
     Ok(Json(dtos))
 }

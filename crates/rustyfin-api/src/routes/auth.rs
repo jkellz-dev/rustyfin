@@ -156,7 +156,7 @@ pub async fn authenticate_by_name(
         last_activity_date: chrono::Utc::now(),
         is_active: true,
         now_playing_item: None,
-        play_state: None,
+        play_state: Some(rustyfin_models::dto::PlayerStateInfo::idle()),
         transcoding_info: None,
         supports_remote_control: false,
         server_id: state.server_id.clone(),
@@ -164,10 +164,14 @@ pub async fn authenticate_by_name(
         supported_commands: Some(vec![]),
         supports_media_control: true,
         now_viewing_item: None,
-        capabilities: None,
+        capabilities: Some(rustyfin_models::dto::ClientCapabilitiesDto::basic()),
         remote_end_point: None,
-        now_playing_queue: None,
+        now_playing_queue: Some(Vec::new()),
         user_primary_image_tag: None,
+        additional_users: Vec::new(),
+        now_playing_queue_full_items: Vec::new(),
+        has_custom_device_name: false,
+        last_playback_check_in: chrono::Utc::now(),
     };
 
     // Log authentication

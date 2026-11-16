@@ -97,8 +97,10 @@ pub async fn get_sessions(
             subtitle_stream_index: pb.subtitle_stream_index,
             media_source_id: None,
             play_method: pb.play_method.clone(),
-            repeat_mode: None,
+            repeat_mode: Some("RepeatNone".to_string()),
+            playback_order: Some("Default".to_string()),
         });
+        let play_state = Some(play_state.unwrap_or_else(PlayerStateInfo::idle));
 
         // Build transcoding info if there's an active transcode for this session
         let transcoding_info = if let Some(ref pb) = s.playback
@@ -151,10 +153,14 @@ pub async fn get_sessions(
             supported_commands: Some(vec![]),
             supports_media_control: true,
             now_viewing_item: None,
-            capabilities: None,
+            capabilities: Some(rustyfin_models::dto::ClientCapabilitiesDto::basic()),
             remote_end_point: None,
-            now_playing_queue: None,
+            now_playing_queue: Some(Vec::new()),
             user_primary_image_tag: None,
+            additional_users: Vec::new(),
+            now_playing_queue_full_items: Vec::new(),
+            has_custom_device_name: false,
+            last_playback_check_in: s.last_activity,
         });
     }
 

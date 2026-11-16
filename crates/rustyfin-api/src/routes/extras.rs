@@ -52,6 +52,14 @@ async fn extras(
             }
         }
         attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        super::items::attach_media_sources_if_asked(
+            &state.pool,
+            &Some("MediaSources".to_string()),
+            &rows,
+            &mut dtos,
+            auth.is_administrator,
+        )
+        .await;
     }
     Ok(dtos)
 }

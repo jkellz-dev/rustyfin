@@ -77,7 +77,7 @@ jsonpath "$[0].Capabilities.PlayableMediaTypes" isCollection
 jsonpath "$[0].Capabilities.SupportedCommands" isCollection
 jsonpath "$[0].Capabilities.SupportsMediaControl" isBoolean
 jsonpath "$[0].Capabilities.SupportsPersistentIdentifier" isBoolean
-jsonpath "$[0].RemoteEndPoint" isString
+# known difference, not asserted: jsonpath "$[0].RemoteEndPoint" isString (behind forward auth the client's address is the proxy's, so Rustyfin leaves it out)
 jsonpath "$[0].PlayableMediaTypes" isCollection
 jsonpath "$[0].Id" isString
 jsonpath "$[0].UserId" isString

@@ -231,7 +231,7 @@ pub async fn get_root_folder_legacy(
 }
 
 /// A library as Jellyfin's `CollectionFolder` item.
-fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseItemDto {
+pub(crate) fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseItemDto {
     let mut dto = BaseItemDto {
         name: lib.name.clone(),
         server_id: server_id.to_string(),
@@ -484,14 +484,71 @@ fn options_of(lib: &libraries::LibraryRow) -> LibraryOptions {
     serde_json::from_value(lib.library_options.clone()).unwrap_or_default()
 }
 
+/// Jellyfin 10.10's default for every library option Rustyfin keeps no
+/// setting of, so clients that read them find the key.
+fn jellyfin_option_defaults() -> serde_json::Value {
+    serde_json::json!({
+        "EnableLUFSScan": true,
+        "EnableTrickplayImageExtraction": false,
+        "ExtractTrickplayImagesDuringLibraryScan": false,
+        "EnableAutomaticSeriesGrouping": false,
+        "EnableEmbeddedTitles": false,
+        "EnableEmbeddedExtrasTitles": false,
+        "EnableEmbeddedEpisodeInfos": false,
+        "AutomaticRefreshIntervalDays": 0,
+        "SeasonZeroDisplayName": "Specials",
+        "DisabledLocalMetadataReaders": [],
+        "DisabledSubtitleFetchers": [],
+        "SubtitleFetcherOrder": [],
+        "DisabledMediaSegmentProviders": [],
+        "MediaSegmentProvideOrder": [],
+        "SkipSubtitlesIfEmbeddedSubtitlesPresent": false,
+        "SkipSubtitlesIfAudioTrackMatches": false,
+        "RequirePerfectSubtitleMatch": true,
+        "SaveSubtitlesWithMedia": true,
+        "SaveLyricsWithMedia": false,
+        "SaveTrickplayWithMedia": false,
+        "DisabledLyricFetchers": [],
+        "LyricFetcherOrder": [],
+        "PreferNonstandardArtistsTag": false,
+        "UseCustomTagDelimiters": false,
+        "CustomTagDelimiters": ["/", "|", ";", "\\"],
+        "DelimiterWhitelist": [],
+        "AllowEmbeddedSubtitles": "AllowAll",
+        "TypeOptions": [],
+    })
+}
+
+/// A library's options as Jellyfin lists them: stored values, its folders as
+/// `PathInfos`, and Jellyfin's defaults for everything else.
+fn listed_options(lib: &libraries::LibraryRow) -> LibraryOptions {
+    let mut options = options_of(lib);
+    if options.path_infos.is_empty() {
+        options.path_infos = lib
+            .paths
+            .iter()
+            .map(|p| MediaPathInfo {
+                path: p.clone(),
+                network_path: None,
+            })
+            .collect();
+    }
+    if let serde_json::Value::Object(defaults) = jellyfin_option_defaults() {
+        for (k, v) in defaults {
+            options.extra.entry(k).or_insert(v);
+        }
+    }
+    options
+}
+
 fn folder_info(lib: libraries::LibraryRow) -> VirtualFolderInfo {
     VirtualFolderInfo {
-        library_options: options_of(&lib),
+        library_options: listed_options(&lib),
         name: lib.name,
         locations: lib.paths,
         collection_type: Some(lib.library_type),
         item_id: lib.id.to_string(),
-        primary_image_item_id: None,
+        primary_image_item_id: Some(lib.id.to_string()),
         scan_schedule: lib.scan_schedule,
         refresh_status: None,
         last_scanned: lib.last_scanned_at,

@@ -28,6 +28,9 @@ pub async fn get_tasks(
             .ok()
             .flatten()
             .map(|r| TaskResultDto {
+                name: info.name.clone(),
+                key: info.key.clone(),
+                id: info.key.clone(),
                 start_time_utc: r.started_at.to_rfc3339(),
                 end_time_utc: r.ended_at.map(|t| t.to_rfc3339()),
                 status: r.status,
@@ -46,6 +49,8 @@ pub async fn get_tasks(
 
         dtos.push(TaskInfoDto {
             id: info.key.clone(),
+            key: info.key.clone(),
+            is_hidden: false,
             name: info.name.clone(),
             description: info.description.clone(),
             category: info.category.clone(),
@@ -84,6 +89,9 @@ pub async fn get_task(
         .ok()
         .flatten()
         .map(|r| TaskResultDto {
+            name: info.name.clone(),
+            key: info.key.clone(),
+            id: info.key.clone(),
             start_time_utc: r.started_at.to_rfc3339(),
             end_time_utc: r.ended_at.map(|t| t.to_rfc3339()),
             status: r.status,
@@ -102,6 +110,8 @@ pub async fn get_task(
 
     Ok(Json(TaskInfoDto {
         id: info.key.clone(),
+        key: info.key.clone(),
+        is_hidden: false,
         name: info.name.clone(),
         description: info.description.clone(),
         category: info.category.clone(),

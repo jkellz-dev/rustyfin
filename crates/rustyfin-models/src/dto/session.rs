@@ -38,6 +38,52 @@ pub struct SessionInfoDto {
     pub now_playing_queue: Option<Vec<QueueItem>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_primary_image_tag: Option<String>,
+    /// Users sharing the session; Rustyfin has none.
+    #[serde(default)]
+    pub additional_users: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub now_playing_queue_full_items: Vec<super::BaseItemDto>,
+    #[serde(default)]
+    pub has_custom_device_name: bool,
+    /// The last playback report (start, progress or ping).
+    pub last_playback_check_in: DateTime<Utc>,
+}
+
+impl PlayerStateInfo {
+    /// Jellyfin's state for a session playing nothing.
+    pub fn idle() -> Self {
+        Self {
+            position_ticks: None,
+            can_seek: false,
+            is_paused: false,
+            is_muted: false,
+            volume_level: None,
+            audio_stream_index: None,
+            subtitle_stream_index: None,
+            media_source_id: None,
+            play_method: None,
+            repeat_mode: Some("RepeatNone".to_string()),
+            playback_order: Some("Default".to_string()),
+        }
+    }
+}
+
+impl ClientCapabilitiesDto {
+    /// What Rustyfin knows of a client's capabilities without it reporting
+    /// them: it plays audio and video.
+    pub fn basic() -> Self {
+        Self {
+            playable_media_types: Some(vec!["Video".to_string(), "Audio".to_string()]),
+            supported_commands: Some(Vec::new()),
+            supports_media_control: false,
+            supported_live_media_types: None,
+            message_callback_url: None,
+            supports_persistent_identifier: true,
+            supports_sync: false,
+            app_store_url: None,
+            icon_url: None,
+        }
+    }
 }
 
 /// Current playback state of a session.
@@ -59,6 +105,8 @@ pub struct PlayerStateInfo {
     pub play_method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playback_order: Option<String>,
 }
 
 /// Transcoding status information for a session.

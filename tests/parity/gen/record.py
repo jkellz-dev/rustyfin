@@ -34,7 +34,7 @@ AUTH = 'MediaBrowser Token="{{token}}"'
 
 # Deliberate differences from Jellyfin, each an owner decision. An assert matching
 # `assert_re` in a request matching `path` and `query` (a subset of the request's
-# query) is written as a comment naming the reason instead of an assert, so the
+# query; None: no query at all) is written as a comment naming the reason instead of an assert, so the
 # difference stays visible in the case file without failing the run.
 KNOWN_DIFFERENCES = [
     (
@@ -43,15 +43,47 @@ KNOWN_DIFFERENCES = [
         r'\.PremiereDate" ',
         "tracks carry only ProductionYear, not a full release date (owner decision 2026-11-14)",
     ),
+    (
+        "/Plugins",
+        {},
+        r'\$\[0\]',
+        "no plugins: a design boundary (roadmap.md); Jellyfin lists its bundled ones",
+    ),
+    (
+        "/Items/{movie_id}/Images",
+        {},
+        r'\$\[0\]',
+        "Jellyfin grabs a video frame as the poster of a film without art; Rustyfin does not extract images",
+    ),
+    (
+        "/ScheduledTasks",
+        {},
+        r'LastExecutionResult\.|Triggers\[0\]\.IntervalTicks',
+        "task history and schedules differ per server; the fields are there when a task has run",
+    ),
+    (
+        "/Users/{user_id}/Items/Latest",
+        None,
+        r'\$\[0\]\.(Container|RunTimeTicks|VideoType|Artists|ArtistItems|AlbumArtist)',
+        "the synthetic titles share one date added, and the two servers break the tie differently (film first or show first)",
+    ),
+    (
+        "/Sessions",
+        {},
+        r'RemoteEndPoint',
+        "behind forward auth the client's address is the proxy's, so Rustyfin leaves it out",
+    ),
 ]
 
 
 def known_difference(path, query, assertion):
     """The reason `assertion` is a deliberate difference for this request, if it is one."""
     for kd_path, kd_query, assert_re, reason in KNOWN_DIFFERENCES:
+        # `{movie_id}` in a known path stands for whatever id was looked up.
+        kd_re = re.sub(r"\\\{\w+\\\}", "[^/]+", re.escape(kd_path))
         if (
-            kd_path == path
-            and all(query.get(k) == v for k, v in kd_query.items())
+            re.fullmatch(kd_re, path)
+            and (not query if kd_query is None else all(query.get(k) == v for k, v in kd_query.items()))
             and re.search(assert_re, assertion)
         ):
             return reason

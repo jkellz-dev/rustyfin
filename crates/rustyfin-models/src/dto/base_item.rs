@@ -793,8 +793,13 @@ pub struct QueryFilters {
 pub struct CultureDto {
     pub name: String,
     pub display_name: String,
+    #[serde(rename = "TwoLetterISOLanguageName")]
     pub two_letter_iso_language_name: String,
+    #[serde(rename = "ThreeLetterISOLanguageName")]
     pub three_letter_iso_language_name: String,
+    /// Every three-letter code of the language (`deu` and `ger`).
+    #[serde(rename = "ThreeLetterISOLanguageNames", default)]
+    pub three_letter_iso_language_names: Vec<String>,
 }
 
 /// Country info for localization endpoints.
@@ -803,7 +808,9 @@ pub struct CultureDto {
 pub struct CountryInfo {
     pub name: String,
     pub display_name: String,
+    #[serde(rename = "TwoLetterISORegionName")]
     pub two_letter_iso_region_name: String,
+    #[serde(rename = "ThreeLetterISORegionName")]
     pub three_letter_iso_region_name: String,
 }
 

@@ -1349,6 +1349,21 @@ pub async fn get_latest_items(
         }
     }
 
+    // Jellyfin's Latest counts every entry's children (0 for a film) and
+    // gives albums their artists and running time.
+    let folder_ids: Vec<Uuid> = items.iter().filter(|i| i.is_folder).map(|i| i.id).collect();
+    let counts = if folder_ids.is_empty() {
+        HashMap::new()
+    } else {
+        media_items::count_children_batch(&state.pool, &folder_ids)
+            .await
+            .or_log_default("media_items::count_children_batch")
+    };
+    for dto in &mut dtos {
+        dto.child_count = Some(counts.get(&dto.id).copied().unwrap_or(0) as i32);
+    }
+    attach_music_fields(&state.pool, &items, &mut dtos).await;
+
     // Badges: clients fall back to ChildCount (a show's seasons) without it.
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.pool, auth.user_id, &mut dtos).await;

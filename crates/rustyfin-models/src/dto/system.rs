@@ -63,6 +63,8 @@ pub struct BrandingOptions {
 #[serde(rename_all = "PascalCase")]
 pub struct TaskInfoDto {
     pub id: String,
+    pub key: String,
+    pub is_hidden: bool,
     pub name: String,
     pub description: String,
     pub category: String,
@@ -76,6 +78,9 @@ pub struct TaskInfoDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TaskResultDto {
+    pub name: String,
+    pub key: String,
+    pub id: String,
     pub start_time_utc: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_time_utc: Option<String>,
