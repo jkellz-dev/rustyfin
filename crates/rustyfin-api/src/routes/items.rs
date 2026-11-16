@@ -149,11 +149,22 @@ pub(crate) fn attach_media_source(
     if streams.is_empty() {
         return;
     }
+    let source = media_source(item, streams, reveal_path);
+    dto.media_streams = source.media_streams.clone();
+    dto.media_sources = Some(vec![source]);
+}
+
+/// The item's file as a media source: its streams, size, container.
+pub(crate) fn media_source(
+    item: &media_items::MediaItemRow,
+    streams: &[media_streams::MediaStreamRow],
+    reveal_path: bool,
+) -> MediaSourceInfo {
     let mut media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
     if let Some(lyric) = lyric_stream(item, &media_stream_dtos, reveal_path) {
         media_stream_dtos.push(lyric);
     }
-    let source = MediaSourceInfo {
+    MediaSourceInfo {
         id: item.id.to_string(),
         // Jellyfin tells everyone where a file lives; Rustyfin tells administrators.
         path: if reveal_path { item.path.clone() } else { None },
@@ -180,9 +191,7 @@ pub(crate) fn attach_media_source(
         direct_stream_url: None,
         transcode_reasons: None,
         ..Default::default()
-    };
-    dto.media_sources = Some(vec![source]);
-    dto.media_streams = Some(media_stream_dtos);
+    }
 }
 
 /// Jellyfin's sort name for a numbered item with none of its own: a season
@@ -247,6 +256,7 @@ pub(crate) async fn attach_media_sources_if_asked(
             attach_media_source(dto, item, streams, reveal_path);
         }
     }
+    super::versions::attach_versions(pool, items, dtos, reveal_path).await;
 }
 
 /// Jellyfin's `MediaType` for an item type: what kind of stream it plays, or
@@ -1254,6 +1264,13 @@ pub async fn get_item_by_id(
             .await
             .or_log_default("media_streams::list_by_item");
         attach_media_source(&mut dto, &item, &streams, auth.is_administrator);
+        super::versions::attach_versions(
+            &state.pool,
+            std::slice::from_ref(&item),
+            std::slice::from_mut(&mut dto),
+            auth.is_administrator,
+        )
+        .await;
     }
 
     // Load chapters for non-folder items

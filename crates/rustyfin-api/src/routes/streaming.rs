@@ -28,11 +28,13 @@ pub async fn stream_video(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
-    Query(_params): Query<StreamQueryParams>,
+    Query(params): Query<StreamQueryParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    serve_item_file(&state, item_id, &headers).await
+    let file =
+        super::versions::source_item(&state, item_id, params.media_source_id.as_deref()).await?;
+    serve_item_file(&state, file, &headers).await
 }
 
 /// `GET /Videos/{itemId}/stream.{container}` — Direct play video stream with container suffix.
@@ -40,11 +42,13 @@ pub async fn stream_video_container(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
-    Query(_params): Query<StreamQueryParams>,
+    Query(params): Query<StreamQueryParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    serve_item_file(&state, item_id, &headers).await
+    let file =
+        super::versions::source_item(&state, item_id, params.media_source_id.as_deref()).await?;
+    serve_item_file(&state, file, &headers).await
 }
 
 /// `GET /Audio/{itemId}/stream` — Direct play audio stream.

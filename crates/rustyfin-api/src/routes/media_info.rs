@@ -41,6 +41,15 @@ pub async fn get_playback_info(
             source.path = item.path.clone();
         }
     }
+    super::versions::add_playback_versions(
+        &state,
+        &item,
+        &mut info,
+        None,
+        stored_profile.as_ref(),
+        auth.is_administrator,
+    )
+    .await?;
     Ok(Json(info))
 }
 
@@ -78,5 +87,14 @@ pub async fn post_playback_info(
             source.path = item.path.clone();
         }
     }
+    super::versions::add_playback_versions(
+        &state,
+        &item,
+        &mut info,
+        Some(&body),
+        stored_profile.as_ref(),
+        auth.is_administrator,
+    )
+    .await?;
     Ok(Json(info))
 }

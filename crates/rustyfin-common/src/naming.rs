@@ -91,6 +91,35 @@ impl ExtraKind {
     }
 }
 
+/// A film file's version label when it follows Jellyfin's multi-version rule:
+/// its name is its folder's name, then nothing or a separator (`-`, `_`, `.`)
+/// or a bracket, as Radarr names versions
+/// (`Film (2002) [tmdbid-170] - [Bluray-1080p][x265].mkv` gives
+/// `[Bluray-1080p][x265]`). `Some("")` for the plain `Film (2002).mkv`; `None`
+/// when the name does not start with the folder's.
+pub fn version_label(file: &Path) -> Option<String> {
+    let folder = file.parent()?.file_name()?.to_str()?.trim();
+    let stem = file.file_stem()?.to_str()?;
+    if folder.is_empty() {
+        return None;
+    }
+    let head = stem.get(..folder.len())?;
+    if !head.eq_ignore_ascii_case(folder) {
+        return None;
+    }
+    let rest = stem[folder.len()..].trim();
+    match rest.chars().next() {
+        None => Some(String::new()),
+        Some('-' | '_' | '.') => Some(
+            rest.trim_start_matches(['-', '_', '.', ' '])
+                .trim()
+                .to_string(),
+        ),
+        Some('[' | '(') => Some(rest.to_string()),
+        Some(_) => None,
+    }
+}
+
 /// The kind of extra a folder of that name holds (`trailers`, `featurettes`,
 /// ...), as Jellyfin's docs list them.
 pub fn extras_folder_kind(name: &str) -> Option<ExtraKind> {
@@ -466,6 +495,26 @@ fn extract_year(text: &str) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_are_named_after_their_folder() {
+        let label = |p: &str| version_label(Path::new(p));
+        assert_eq!(
+            label("/m/28 Days Later (2002) [tmdbid-170]/28 Days Later (2002) [tmdbid-170] - [Bluray-1080p][EAC3 5.1][x265]-iVy.mkv").as_deref(),
+            Some("[Bluray-1080p][EAC3 5.1][x265]-iVy")
+        );
+        assert_eq!(
+            label("/m/Film (2002)/Film (2002) - 4K.mkv").as_deref(),
+            Some("4K")
+        );
+        assert_eq!(
+            label("/m/Film (2002)/film (2002) [1080p].mkv").as_deref(),
+            Some("[1080p]")
+        );
+        assert_eq!(label("/m/Film (2002)/Film (2002).mkv").as_deref(), Some(""));
+        assert_eq!(label("/m/Shared/Alpha (2000).mkv"), None);
+        assert_eq!(label("/m/Film (2002)/Film (2002)2.mkv"), None);
+    }
 
     #[test]
     fn test_is_video_file() {

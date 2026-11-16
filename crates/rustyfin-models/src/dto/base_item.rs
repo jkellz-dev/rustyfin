@@ -209,6 +209,9 @@ pub struct BaseItemDto {
     // Trailer count
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_trailer_count: Option<i32>,
+    /// How many versions a film has, when more than one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_source_count: Option<i32>,
 
     // Recursive item count (for collection/folder stats)
     #[serde(skip_serializing_if = "Option::is_none")]

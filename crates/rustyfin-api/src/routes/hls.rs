@@ -66,13 +66,15 @@ pub async fn get_master_playlist(
 ) -> Result<Response, ApiError> {
     let play_session_id = session_id_param(params.play_session_id.as_deref())?;
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
+    let file =
+        super::versions::source_item(&state, item_id, params.media_source_id.as_deref()).await?;
 
-    let item = media_items::find_by_id(&state.pool, item_id)
+    let item = media_items::find_by_id(&state.pool, file)
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
 
-    let streams = media_streams::list_by_item(&state.pool, item_id)
+    let streams = media_streams::list_by_item(&state.pool, file)
         .await
         .map_err(ApiError::Database)?;
 
@@ -153,7 +155,9 @@ pub async fn get_variant_playlist(
 
     // Start transcode if not already running
     if !tm.has_active_job(&play_session_id).await {
-        let item = media_items::find_by_id(&state.pool, item_id)
+        let file = super::versions::source_item(&state, item_id, params.media_source_id.as_deref())
+            .await?;
+        let item = media_items::find_by_id(&state.pool, file)
             .await
             .map_err(ApiError::Database)?
             .ok_or(ApiError::NotFound)?;
