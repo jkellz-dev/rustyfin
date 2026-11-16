@@ -73,7 +73,7 @@ jobs:
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           docker run -d --name rustyfin --network host \
             -e RUSTYFIN_CONFIG=/etc/rustyfin/rustyfin.toml \
-            -v "$PWD/tests/parity/ci/rustyfin.toml:/etc/rustyfin/rustyfin.toml:ro" \
+            -v "$PWD/tests/parity/ci/server.toml:/etc/rustyfin/rustyfin.toml:ro" \
             -v "$RUNNER_TEMP/media:/data/media:ro" \
             ghcr.io/jkellz-dev/rustyfin-server:latest
           for i in $(seq 1 60); do
