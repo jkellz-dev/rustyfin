@@ -15,6 +15,7 @@ Jellyfin Media Player) connect to it seamlessly.
 | [Library Scanning](library-scanning.md) | Scanner workflow, file naming, NFO parsing, TMDB |
 | [Artwork](artwork.md) | `rustyfin artwork`: posters, headshots, collection art, the 30-day no-art memory |
 | [Lyrics](lyrics.md) | Where lyrics come from; `rustyfin lyrics` fetches missing ones from LRCLIB |
+| [What clients ask for](client-requests.md) | Ranking real client requests from the request log; the 404s found and fixed |
 | [Per-title settings](title-settings.md) | Optional `.rustyfin.toml` in a title's folder: id, title and artwork overrides |
 | [Streaming & Media](streaming.md) | Media probing, direct play, HTTP Range, HLS transcoding |
 | [Admin Frontend](frontend.md) | Sycamore WASM UI, building, asset embedding |
