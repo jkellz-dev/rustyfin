@@ -707,9 +707,11 @@ impl LibraryScanner {
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
                 self.refresh_stale_streams(existing.id, file_path).await;
-                // Tracks scanned before artists were kept get them once.
-                if existing.artists.is_none() {
-                    self.store_track_artists(existing.id, file_path).await;
+                // Tracks scanned before artists or MusicBrainz ids were kept
+                // get them once.
+                if existing.artists.is_none() || existing.external_ids.is_none() {
+                    self.store_track_tags(existing.id, album_id, artist_id, file_path)
+                        .await;
                 }
                 return Ok(IngestOutcome::Skipped);
             }
@@ -743,7 +745,8 @@ impl LibraryScanner {
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
             self.replace_streams(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
-            self.store_track_artists(updated.id, file_path).await;
+            self.store_track_tags(updated.id, album_id, artist_id, file_path)
+                .await;
             return Ok(IngestOutcome::Updated);
         }
 
@@ -777,7 +780,8 @@ impl LibraryScanner {
         let inserted = media_items::insert(&self.pool, &item).await?;
         self.replace_streams(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
-        self.store_track_artists(inserted.id, file_path).await;
+        self.store_track_tags(inserted.id, album_id, artist_id, file_path)
+            .await;
         Ok(IngestOutcome::Added)
     }
 
@@ -1153,13 +1157,48 @@ impl LibraryScanner {
     }
 
     /// A track's own artists, from its tags. An empty list records "read, none".
-    async fn store_track_artists(&self, item_id: Uuid, file_path: &Path) {
-        let artists = music_tags::read_tags(file_path)
-            .and_then(|t| t.artist)
-            .map(|a| music_tags::split_artists(&a))
+    /// What a track's tags say beyond its title and numbers: its artists, and
+    /// the MusicBrainz ids of the track, its album and its album artist.
+    async fn store_track_tags(
+        &self,
+        item_id: Uuid,
+        folder_id: Uuid,
+        artist_id: Uuid,
+        file_path: &Path,
+    ) {
+        let tags = music_tags::read_tags(file_path).unwrap_or_default();
+        let artists = tags
+            .artist
+            .as_deref()
+            .map(music_tags::split_artists)
             .unwrap_or_default();
         if let Err(e) = media_items::set_artists(&self.pool, item_id, &artists).await {
             tracing::warn!("Could not store the artists of {item_id}: {e}");
+        }
+        let ids = music_tags::musicbrainz_ids(&tags);
+        let as_json = |pairs: &[(&'static str, String)]| {
+            serde_json::Value::Object(
+                pairs
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), serde_json::Value::String(v.clone())))
+                    .collect(),
+            )
+        };
+        let album = media_items::album_of(&self.pool, folder_id)
+            .await
+            .ok()
+            .flatten();
+        let mut writes = vec![(item_id, as_json(&ids.track))];
+        if let Some(album) = album.filter(|_| !ids.album.is_empty()) {
+            writes.push((album, as_json(&ids.album)));
+        }
+        if !ids.artist.is_empty() {
+            writes.push((artist_id, as_json(&ids.artist)));
+        }
+        for (id, json) in writes {
+            if let Err(e) = media_items::add_external_ids(&self.pool, id, &json).await {
+                tracing::warn!("Could not store the MusicBrainz ids of {id}: {e}");
+            }
         }
     }
 

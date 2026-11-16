@@ -327,6 +327,63 @@ pub(crate) fn with_jellyfin_defaults(dto: &mut BaseItemDto) {
     }
 }
 
+/// Jellyfin's `ExternalUrls`: a link for each provider id it knows a page for.
+pub(crate) fn external_urls(
+    item_type: &str,
+    ids: &HashMap<String, String>,
+) -> Vec<rustyfin_models::dto::ExternalUrl> {
+    let tmdb_kind = if matches!(item_type, "Series" | "Season" | "Episode") {
+        "tv"
+    } else if item_type == "BoxSet" {
+        "collection"
+    } else {
+        "movie"
+    };
+    let artist_key = if item_type == "MusicArtist" {
+        "MusicBrainzArtist"
+    } else {
+        "MusicBrainzAlbumArtist"
+    };
+    let links: [(&str, &str, String); 6] = [
+        ("Imdb", "IMDb", "https://www.imdb.com/title/{}".to_string()),
+        (
+            "Tmdb",
+            "TheMovieDb",
+            format!("https://www.themoviedb.org/{tmdb_kind}/{{}}"),
+        ),
+        (
+            "MusicBrainzAlbum",
+            "MusicBrainz",
+            "https://musicbrainz.org/release/{}".to_string(),
+        ),
+        (
+            "MusicBrainzReleaseGroup",
+            "MusicBrainz",
+            "https://musicbrainz.org/release-group/{}".to_string(),
+        ),
+        (
+            artist_key,
+            "MusicBrainz",
+            "https://musicbrainz.org/artist/{}".to_string(),
+        ),
+        (
+            "MusicBrainzTrack",
+            "MusicBrainz",
+            "https://musicbrainz.org/track/{}".to_string(),
+        ),
+    ];
+    links
+        .iter()
+        .filter_map(|(key, name, url)| {
+            let id = ids.get(*key)?;
+            Some(rustyfin_models::dto::ExternalUrl {
+                name: name.to_string(),
+                url: url.replace("{}", id),
+            })
+        })
+        .collect()
+}
+
 pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
     // Convert external_ids JSONB to provider_ids HashMap
     let provider_ids = item.external_ids.as_ref().and_then(|v| {
@@ -402,6 +459,10 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
             let changed = item.date_modified.unwrap_or(item.date_created);
             Some(format!("{:x}", changed.timestamp_millis()))
         }),
+        external_urls: provider_ids
+            .as_ref()
+            .map(|ids| external_urls(&item.item_type, ids))
+            .filter(|links| !links.is_empty()),
         provider_ids,
         media_type,
         can_delete: Some(false),

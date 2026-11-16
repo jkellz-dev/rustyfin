@@ -16,6 +16,9 @@ pub struct AudioTags {
     pub musicbrainz_artist_id: Option<String>,
     pub musicbrainz_album_id: Option<String>,
     pub musicbrainz_release_group_id: Option<String>,
+    pub musicbrainz_album_artist_id: Option<String>,
+    /// The release track (Jellyfin's `MusicBrainzTrack`), not the recording.
+    pub musicbrainz_track_id: Option<String>,
     pub label: Option<String>,
     pub album_type: Option<String>,
     pub original_date: Option<String>,
@@ -69,6 +72,14 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
         musicbrainz_release_group_id: get(&[
             ItemKey::MusicBrainzReleaseGroupId,
             ItemKey::Unknown("MUSICBRAINZ_RELEASEGROUPID".to_string()),
+        ]),
+        musicbrainz_album_artist_id: get(&[
+            ItemKey::MusicBrainzReleaseArtistId,
+            ItemKey::Unknown("MUSICBRAINZ_ALBUMARTISTID".to_string()),
+        ]),
+        musicbrainz_track_id: get(&[
+            ItemKey::MusicBrainzTrackId,
+            ItemKey::Unknown("MUSICBRAINZ_RELEASETRACKID".to_string()),
         ]),
         label: get(&[
             ItemKey::Label,
@@ -175,5 +186,54 @@ mod split_artists_tests {
     fn a_slash_is_part_of_the_name() {
         assert_eq!(split_artists("AC/DC"), vec!["AC/DC"]);
         assert!(split_artists(" ; ").is_empty());
+    }
+}
+
+/// Jellyfin's MusicBrainz provider ids from a file's tags: for the track, its
+/// album and its album artist. Empty maps when the file carries none.
+#[derive(Debug, Default, PartialEq)]
+pub struct MusicBrainzIds {
+    pub track: Vec<(&'static str, String)>,
+    pub album: Vec<(&'static str, String)>,
+    pub artist: Vec<(&'static str, String)>,
+}
+
+pub fn musicbrainz_ids(tags: &AudioTags) -> MusicBrainzIds {
+    let pick = |pairs: &[(&'static str, &Option<String>)]| -> Vec<(&'static str, String)> {
+        pairs
+            .iter()
+            .filter_map(|(k, v)| {
+                v.as_deref()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(|v| (*k, v.to_string()))
+            })
+            .collect()
+    };
+    let album_artist = tags
+        .musicbrainz_album_artist_id
+        .as_ref()
+        .or(tags.musicbrainz_artist_id.as_ref())
+        .cloned();
+    MusicBrainzIds {
+        track: pick(&[
+            ("MusicBrainzAlbum", &tags.musicbrainz_album_id),
+            (
+                "MusicBrainzReleaseGroup",
+                &tags.musicbrainz_release_group_id,
+            ),
+            ("MusicBrainzArtist", &tags.musicbrainz_artist_id),
+            ("MusicBrainzAlbumArtist", &tags.musicbrainz_album_artist_id),
+            ("MusicBrainzTrack", &tags.musicbrainz_track_id),
+        ]),
+        album: pick(&[
+            ("MusicBrainzAlbum", &tags.musicbrainz_album_id),
+            (
+                "MusicBrainzReleaseGroup",
+                &tags.musicbrainz_release_group_id,
+            ),
+            ("MusicBrainzAlbumArtist", &album_artist),
+        ]),
+        artist: pick(&[("MusicBrainzArtist", &album_artist)]),
     }
 }

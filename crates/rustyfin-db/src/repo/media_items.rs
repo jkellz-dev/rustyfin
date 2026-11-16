@@ -947,6 +947,37 @@ pub async fn find_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<MediaItemRow
 }
 
 /// Store a track's artists as read from its tags (empty: read, none found).
+/// Add provider ids to an item, keeping any it already has. An empty object
+/// still marks the item as looked at (`external_ids` no longer NULL).
+pub async fn add_external_ids(
+    pool: &PgPool,
+    id: Uuid,
+    ids: &serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE media_items SET external_ids = $2::jsonb || COALESCE(external_ids, '{}'::jsonb) \
+         WHERE id = $1",
+    )
+    .bind(id)
+    .bind(ids)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// The album a track sits in: its parent, or the parent's parent when the
+/// track is in a disc folder.
+pub async fn album_of(pool: &PgPool, folder_id: Uuid) -> Result<Option<Uuid>, sqlx::Error> {
+    let row: Option<(Option<Uuid>,)> = sqlx::query_as(
+        "SELECT CASE WHEN item_type = 'MusicAlbum' THEN id ELSE parent_id END \
+         FROM media_items WHERE id = $1",
+    )
+    .bind(folder_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| r.0))
+}
+
 pub async fn set_artists(pool: &PgPool, id: Uuid, artists: &[String]) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE media_items SET artists = $2 WHERE id = $1")
         .bind(id)

@@ -100,9 +100,9 @@ pub async fn get_next_up(
         .map_err(ApiError::Database)?;
 
     // Shows the user never started come after the ones in progress, newest first,
-    // unless the client asked to leave them out.
-    // A cutoff means "shows watched since": never-started ones have no date.
-    if !query.disable_first_episode.unwrap_or(false) && query.next_up_date_cutoff.is_none() {
+    // unless the client asked to leave them out (DisableFirstEpisode). As in
+    // Jellyfin 10.10 the date cutoff does not drop them (owner, 2026-11-15).
+    if !query.disable_first_episode.unwrap_or(false) {
         let fresh = media_items::series_never_started(
             &state.pool,
             auth.user_id,
