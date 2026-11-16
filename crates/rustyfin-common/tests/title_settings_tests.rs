@@ -172,3 +172,36 @@ fn the_lyrics_check_is_recorded_beside_other_settings() {
     assert!(s.lyrics_checked_recently(std::time::Duration::from_secs(60)));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_collection_found_on_tmdb_is_recorded_beside_other_settings() {
+    // Owner, 2026-11-16: `rustyfin artwork --check-collections` asks TMDB which
+    // collection a film is in when its NFO does not say, and keeps the answer
+    // in the title's settings (NFOs belong to Radarr).
+    let d = Dir::new();
+    d.write("# mine\n[artwork]\nskip = true\n");
+    let name = r#"28 Days/Weeks/Years Later "Collection""#;
+    title_settings::record_collection_checked(&d.0, Some((1565, name))).unwrap();
+    title_settings::record_collection_checked(&d.0, Some((1565, name))).unwrap();
+    let text = d.read();
+    assert!(
+        text.starts_with("# mine\n[artwork]\nskip = true\n"),
+        "{text}"
+    );
+    assert_eq!(text.matches("tmdb =").count(), 1, "{text}");
+    let s = title_settings::load(&d.0).unwrap();
+    assert!(s.artwork.skip);
+    assert_eq!(s.collection.tmdb, Some(1565));
+    assert_eq!(s.collection.name.as_deref(), Some(name));
+    assert!(s.collection_checked_recently(Duration::from_secs(60)));
+}
+
+#[test]
+fn a_film_in_no_collection_is_remembered_as_checked() {
+    let d = Dir::new();
+    title_settings::record_collection_checked(&d.0, None).unwrap();
+    let s = title_settings::load(&d.0).unwrap();
+    assert_eq!(s.collection.tmdb, None);
+    assert!(s.collection_checked_recently(Duration::from_secs(60)));
+    assert!(!TitleSettings::default().collection_checked_recently(Duration::from_secs(60)));
+}

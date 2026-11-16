@@ -572,6 +572,54 @@ mod tests {
     }
 
     #[test]
+    fn films_whose_nfo_lacks_a_collection_id_are_checked_once_a_month() {
+        let t = Tree::new();
+        let film = |dir: &str, nfo: Option<&str>| {
+            t.file(&format!("movies/{dir}/{dir}.mkv"));
+            if let Some(body) = nfo {
+                std::fs::write(t.0.join(format!("movies/{dir}/{dir}.nfo")), body).unwrap();
+            }
+            t.0.join("movies").join(dir)
+        };
+        let stale = film(
+            "Old (2002) [tmdbid-170]",
+            Some("<movie><title>x</title><set>Old Name</set></movie>"),
+        );
+        let no_set = film(
+            "Plain (2003) [tmdbid-171]",
+            Some("<movie><title>x</title></movie>"),
+        );
+        let radarr = film(
+            "New (2025) [tmdbid-172]",
+            Some(r#"<movie><title>x</title><set tmdbcolid="1565"><name>N</name></set></movie>"#),
+        );
+        let no_id = film("Unknown (2004)", None);
+        let recent = film("Asked (2005) [tmdbid-173]", None);
+        rustyfin_common::title_settings::record_collection_checked(&recent, None).unwrap();
+        let dirs = [stale.clone(), no_set.clone(), radarr, no_id, recent.clone()];
+        assert_eq!(
+            films_needing_collection_check(&dirs, false),
+            [(stale.clone(), 170), (no_set.clone(), 171)]
+        );
+        assert_eq!(
+            films_needing_collection_check(&dirs, true),
+            [(stale, 170), (no_set, 171), (recent, 173)]
+        );
+    }
+
+    #[test]
+    fn collections_recorded_in_title_settings_need_art_too() {
+        let t = Tree::new();
+        t.file("movies/A (2001)/A (2001).mkv");
+        let dir = t.0.join("movies/A (2001)");
+        rustyfin_common::title_settings::record_collection_checked(&dir, Some((30, "S"))).unwrap();
+        assert_eq!(
+            collections_needing_art(&[dir], &t.0.join("collections"), false),
+            [30]
+        );
+    }
+
+    #[test]
     fn title_settings_ids_win_over_the_folder_name_and_nfo() {
         let t = Tree::new();
         t.file("movies/Wrong (2020) [tmdbid-1]/Wrong (2020).mkv");
