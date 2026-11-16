@@ -8,6 +8,7 @@ pub mod collections;
 pub mod configuration;
 pub mod display_preferences;
 pub mod environment;
+pub mod extras;
 pub mod filters;
 pub mod genres;
 pub mod hls;

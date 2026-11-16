@@ -49,6 +49,119 @@ pub struct ResolvedItem {
     pub container: String,
 }
 
+/// Jellyfin's kinds of extra (`ExtraType`), named as its API sends them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExtraKind {
+    Trailer,
+    BehindTheScenes,
+    DeletedScene,
+    Interview,
+    Scene,
+    Sample,
+    Short,
+    Featurette,
+    Clip,
+    Unknown,
+    ThemeVideo,
+    ThemeSong,
+}
+
+impl ExtraKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Trailer => "Trailer",
+            Self::BehindTheScenes => "BehindTheScenes",
+            Self::DeletedScene => "DeletedScene",
+            Self::Interview => "Interview",
+            Self::Scene => "Scene",
+            Self::Sample => "Sample",
+            Self::Short => "Short",
+            Self::Featurette => "Featurette",
+            Self::Clip => "Clip",
+            Self::Unknown => "Unknown",
+            Self::ThemeVideo => "ThemeVideo",
+            Self::ThemeSong => "ThemeSong",
+        }
+    }
+
+    /// Listed by `SpecialFeatures` (Jellyfin's `DisplayExtraTypes`): not
+    /// trailers, not theme media.
+    pub fn is_special_feature(self) -> bool {
+        !matches!(self, Self::Trailer | Self::ThemeVideo | Self::ThemeSong)
+    }
+}
+
+/// The kind of extra a folder of that name holds (`trailers`, `featurettes`,
+/// ...), as Jellyfin's docs list them.
+pub fn extras_folder_kind(name: &str) -> Option<ExtraKind> {
+    Some(match name.trim().to_lowercase().as_str() {
+        "behind the scenes" => ExtraKind::BehindTheScenes,
+        "deleted scenes" => ExtraKind::DeletedScene,
+        "interviews" => ExtraKind::Interview,
+        "scenes" => ExtraKind::Scene,
+        "samples" => ExtraKind::Sample,
+        "shorts" => ExtraKind::Short,
+        "featurettes" => ExtraKind::Featurette,
+        "clips" => ExtraKind::Clip,
+        "other" | "extras" => ExtraKind::Unknown,
+        "trailers" => ExtraKind::Trailer,
+        "backdrops" => ExtraKind::ThemeVideo,
+        "theme-music" => ExtraKind::ThemeSong,
+        _ => return None,
+    })
+}
+
+/// Name suffixes that make a file an extra. The ` trailer`/` sample` forms (a
+/// space) are "loose": a title can end in that word ("I Live In A Trailer").
+const EXTRA_SUFFIXES: &[(&str, ExtraKind, bool)] = &[
+    ("-trailer", ExtraKind::Trailer, false),
+    (".trailer", ExtraKind::Trailer, false),
+    ("_trailer", ExtraKind::Trailer, false),
+    (" trailer", ExtraKind::Trailer, true),
+    ("-sample", ExtraKind::Sample, false),
+    (".sample", ExtraKind::Sample, false),
+    ("_sample", ExtraKind::Sample, false),
+    (" sample", ExtraKind::Sample, true),
+    ("-scene", ExtraKind::Scene, false),
+    ("-clip", ExtraKind::Clip, false),
+    ("-interview", ExtraKind::Interview, false),
+    ("-behindthescenes", ExtraKind::BehindTheScenes, false),
+    ("-deletedscene", ExtraKind::DeletedScene, false),
+    ("-deleted", ExtraKind::DeletedScene, false),
+    ("-featurette", ExtraKind::Featurette, false),
+    ("-short", ExtraKind::Short, false),
+    ("-other", ExtraKind::Unknown, false),
+    ("-extra", ExtraKind::Unknown, false),
+];
+
+/// Whether `path` is an extra, and of what kind (Jellyfin's rules: the folder it
+/// is in, a bare `trailer`/`sample` name, a name suffix). `loose` also accepts the
+/// space-separated suffixes; the scanner allows them only beside another video.
+/// A file named like its folder is the feature itself, never an extra.
+pub fn extra_kind(path: &Path, loose: bool) -> Option<ExtraKind> {
+    let folder = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    if let Some(kind) = extras_folder_kind(folder) {
+        return Some(kind);
+    }
+    let stem = path.file_stem()?.to_str()?.trim().to_lowercase();
+    if stem.eq_ignore_ascii_case(folder.trim()) {
+        return None;
+    }
+    match stem.as_str() {
+        "trailer" => return Some(ExtraKind::Trailer),
+        "sample" => return Some(ExtraKind::Sample),
+        _ => {}
+    }
+    EXTRA_SUFFIXES
+        .iter()
+        .find(|(suffix, _, needs_loose)| (loose || !needs_loose) && stem.ends_with(suffix))
+        .map(|(_, kind, _)| *kind)
+}
+
 /// A file or folder name that is never media: hidden (`.Trash-1000`, `.DS_Store`,
 /// macOS `._*` AppleDouble files that sit beside every file copied from a Mac)
 /// and NAS metadata folders (Synology `@eaDir`, `#recycle`).
@@ -2028,68 +2141,127 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Task 5: Extras and Stubs — gap-documenting tests
-    //
-    // Rustyfin has no ExtraRuleResolver or StubResolver. These tests
-    // verify the files are at least recognized as valid video (or not),
-    // and document what Jellyfin would detect via comments.
+    // Task 5: Extras (Jellyfin's ExtraRuleResolver rules) and stubs
     // ---------------------------------------------------------------
 
     #[test]
     fn extras_trailer_suffix_detection() {
-        // "300-trailer.mp4" is a valid video file
         assert!(is_video_file(Path::new("300-trailer.mp4")));
-        // TODO: should detect ExtraType::Trailer from -trailer suffix.
-        // Jellyfin's ExtraRuleResolver matches the "-trailer" suffix and
-        // marks this as an extra with ExtraType::Trailer, excluding it
-        // from the main movie library.
+        assert_eq!(
+            extra_kind(Path::new("300-trailer.mp4"), false),
+            Some(ExtraKind::Trailer)
+        );
+        assert_eq!(
+            extra_kind(Path::new("300.trailer.mp4"), false),
+            Some(ExtraKind::Trailer)
+        );
+        assert_eq!(
+            extra_kind(Path::new("300_trailer.mp4"), false),
+            Some(ExtraKind::Trailer)
+        );
+        assert_eq!(
+            extra_kind(Path::new("Movie/trailer.mp4"), false),
+            Some(ExtraKind::Trailer)
+        );
     }
 
     #[test]
     fn extras_sample_suffix_detection() {
-        // "300-sample.mp4" is a valid video file
         assert!(is_video_file(Path::new("300-sample.mp4")));
-        // TODO: should detect ExtraType::Sample from -sample suffix.
-        // Jellyfin's ExtraRuleResolver matches "-sample" and marks this
-        // as a sample clip extra, not a main feature.
+        assert_eq!(
+            extra_kind(Path::new("300-sample.mp4"), false),
+            Some(ExtraKind::Sample)
+        );
+        assert_eq!(
+            extra_kind(Path::new("Movie/sample.mkv"), false),
+            Some(ExtraKind::Sample)
+        );
     }
 
     #[test]
     fn extras_deleted_scene_suffix() {
-        // "300-deleted.mp4" is a valid video file
         assert!(is_video_file(Path::new("300-deleted.mp4")));
-        // TODO: should detect ExtraType::DeletedScene from -deleted suffix.
-        // Jellyfin's ExtraRuleResolver matches "-deleted" suffix and
-        // classifies this as a deleted scene extra.
+        assert_eq!(
+            extra_kind(Path::new("300-deleted.mp4"), false),
+            Some(ExtraKind::DeletedScene)
+        );
+        assert_eq!(
+            extra_kind(Path::new("300-deletedscene.mp4"), false),
+            Some(ExtraKind::DeletedScene)
+        );
+        assert_eq!(
+            extra_kind(Path::new("Making of-behindthescenes.mp4"), false),
+            Some(ExtraKind::BehindTheScenes)
+        );
+        assert_eq!(
+            extra_kind(Path::new("a-featurette.mkv"), false),
+            Some(ExtraKind::Featurette)
+        );
+        assert_eq!(
+            extra_kind(Path::new("a-interview.mkv"), false),
+            Some(ExtraKind::Interview)
+        );
+        assert_eq!(
+            extra_kind(Path::new("a-short.mkv"), false),
+            Some(ExtraKind::Short)
+        );
+        assert_eq!(
+            extra_kind(Path::new("a-extra.mkv"), false),
+            Some(ExtraKind::Unknown)
+        );
     }
 
     #[test]
     fn extras_directory_trailers() {
-        // "trailers/300.mp4" — the video file itself is valid
         assert!(is_video_file(Path::new("trailers/300.mp4")));
-        // TODO: should detect ExtraType::Trailer from parent directory name "trailers".
-        // Jellyfin's ExtraRuleResolver checks parent directory names like
-        // "trailers", "behind the scenes", "deleted scenes", "interviews",
-        // "scenes", "samples", "shorts", "featurettes" and classifies
-        // any video inside as the corresponding extra type.
+        assert_eq!(
+            extra_kind(Path::new("300/trailers/300.mp4"), false),
+            Some(ExtraKind::Trailer)
+        );
+        for (folder, kind) in [
+            ("behind the scenes", ExtraKind::BehindTheScenes),
+            ("Deleted Scenes", ExtraKind::DeletedScene),
+            ("interviews", ExtraKind::Interview),
+            ("scenes", ExtraKind::Scene),
+            ("samples", ExtraKind::Sample),
+            ("shorts", ExtraKind::Short),
+            ("featurettes", ExtraKind::Featurette),
+            ("clips", ExtraKind::Clip),
+            ("other", ExtraKind::Unknown),
+            ("extras", ExtraKind::Unknown),
+            ("backdrops", ExtraKind::ThemeVideo),
+        ] {
+            let p = format!("Film/{folder}/x.mkv");
+            assert_eq!(extra_kind(Path::new(&p), false), Some(kind), "{p}");
+        }
     }
 
     #[test]
     fn extras_suffix_part_of_title() {
-        // "I Live In A Trailer.mp4" should NOT be detected as a trailer extra.
-        // The word "trailer" is part of the movie title, not an extras suffix.
+        // "I Live In A Trailer" is a film: the space form only counts beside
+        // another video (`loose`), and a file named like its folder is the film.
         assert!(is_video_file(Path::new("I Live In A Trailer.mp4")));
         let item = resolve_movie(Path::new("I Live In A Trailer.mp4"));
-        // The title should contain "Trailer" as part of the name
-        assert!(
-            item.title.contains("Trailer"),
-            "title should preserve 'Trailer' as part of the movie name, got: {}",
-            item.title
+        assert!(item.title.contains("Trailer"), "got: {}", item.title);
+        assert_eq!(
+            extra_kind(Path::new("I Live In A Trailer.mp4"), false),
+            None
         );
-        // TODO: when ExtraRuleResolver is implemented, ensure it only matches
-        // the "-trailer" suffix pattern (with leading dash/dot), not "trailer"
-        // as a substring of the title. Jellyfin checks for a separator character
-        // before the suffix keyword.
+        assert_eq!(
+            extra_kind(
+                Path::new("I Live In A Trailer/I Live In A Trailer.mp4"),
+                true
+            ),
+            None
+        );
+        assert_eq!(
+            extra_kind(Path::new("Film/Film Official Trailer.mp4"), true),
+            Some(ExtraKind::Trailer)
+        );
+        assert_eq!(
+            extra_kind(Path::new("Film (2020)/Film (2020).mkv"), false),
+            None
+        );
     }
 
     #[test]

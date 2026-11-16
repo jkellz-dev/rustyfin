@@ -203,6 +203,9 @@ pub struct BaseItemDto {
     pub artists: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_lyrics: Option<bool>,
+    /// Jellyfin's `ExtraType` on an extra (trailer, featurette, ...).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_type: Option<String>,
     // Trailer count
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_trailer_count: Option<i32>,

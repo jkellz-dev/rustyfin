@@ -439,13 +439,10 @@ pub fn build_router(state: AppState) -> Router {
             "/Items/{itemId}/Intros",
             get(stubs::empty_query_result_auth),
         )
-        .route(
-            "/Items/{itemId}/LocalTrailers",
-            get(stubs::empty_array_auth),
-        )
+        .route("/Items/{itemId}/LocalTrailers", get(extras::local_trailers))
         .route(
             "/Items/{itemId}/SpecialFeatures",
-            get(stubs::empty_array_auth),
+            get(extras::special_features),
         )
         .route(
             "/Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}",

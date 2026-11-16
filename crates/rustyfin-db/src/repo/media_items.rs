@@ -47,6 +47,63 @@ pub struct MediaItemRow {
     /// A track's own artists from its tags (None: never read).
     #[sqlx(default)]
     pub artists: Option<Vec<String>>,
+    /// Jellyfin's `ExtraType` when this is an extra (trailer, featurette, ...).
+    #[sqlx(default)]
+    pub extra_type: Option<String>,
+    /// The film, show or season an extra belongs to.
+    #[sqlx(default)]
+    pub owner_id: Option<Uuid>,
+}
+
+/// Mark an item as an extra of `owner` (or, with `None`, as a title again).
+pub async fn set_extra(
+    pool: &PgPool,
+    id: Uuid,
+    owner: Option<Uuid>,
+    extra_type: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE media_items SET owner_id = $2, extra_type = $3 WHERE id = $1")
+        .bind(id)
+        .bind(owner)
+        .bind(extra_type)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// An item's extras of the given types, by name.
+pub async fn list_extras(
+    pool: &PgPool,
+    owner: Uuid,
+    extra_types: &[&str],
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    let types: Vec<String> = extra_types.iter().map(|t| t.to_string()).collect();
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE owner_id = $1 AND extra_type = ANY($2) \
+         ORDER BY sort_name, name",
+    )
+    .bind(owner)
+    .bind(types)
+    .fetch_all(pool)
+    .await
+}
+
+/// Per owner: (trailers, special features), for `LocalTrailerCount` and
+/// `SpecialFeatureCount`.
+pub async fn count_extras(
+    pool: &PgPool,
+    owners: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, (i64, i64)>, sqlx::Error> {
+    let rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+        "SELECT owner_id, \
+                COUNT(*) FILTER (WHERE extra_type = 'Trailer'), \
+                COUNT(*) FILTER (WHERE extra_type NOT IN ('Trailer', 'ThemeVideo', 'ThemeSong')) \
+         FROM media_items WHERE owner_id = ANY($1) GROUP BY owner_id",
+    )
+    .bind(owners)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(o, t, s)| (o, (t, s))).collect())
 }
 /// Find a media item by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<MediaItemRow>, sqlx::Error> {
@@ -313,6 +370,7 @@ pub async fn latest_by_library(
          AND item_type NOT IN ('BoxSet', 'Folder', 'CollectionFolder', 'Playlist', 'Season', \
                                'UserRootFolder') \
          AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) \
+         AND owner_id IS NULL \
          ORDER BY date_created DESC LIMIT $3",
     )
     .bind(library_id)
@@ -1184,7 +1242,7 @@ pub async fn search_by_name(
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     let pattern = format!("%{query}%");
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE name ILIKE $1 ORDER BY name LIMIT $2",
+        "SELECT * FROM media_items WHERE name ILIKE $1 AND owner_id IS NULL ORDER BY name LIMIT $2",
     )
     .bind(&pattern)
     .bind(limit)
@@ -1759,7 +1817,11 @@ impl ItemQuery {
     }
 
     fn apply_filters<'a>(&'a self, qb: &mut QueryBuilder<'a, sqlx::Postgres>) {
-        // Scoping
+        // Scoping. Extras belong to their title and are never listed on
+        // their own, unless asked for by id.
+        if self.ids.is_empty() {
+            qb.push(" AND mi.owner_id IS NULL");
+        }
         if !self.ids.is_empty() {
             qb.push(" AND mi.id = ANY(");
             qb.push_bind(&self.ids);

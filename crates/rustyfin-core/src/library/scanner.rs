@@ -15,8 +15,8 @@ use rustyfin_common::images::{
 };
 use rustyfin_common::music_tags;
 use rustyfin_common::naming::{
-    is_audio_file, is_video_file, make_sort_name, parse_season_folder, resolve_audio_track,
-    resolve_episode, resolve_movie, split_folder_year,
+    ExtraKind, is_audio_file, is_video_file, make_sort_name, parse_season_folder,
+    resolve_audio_track, resolve_episode, resolve_movie, split_folder_year,
 };
 use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
@@ -160,8 +160,14 @@ impl LibraryScanner {
 
     async fn scan_movies(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
         let video_files = collect_video_files(lib_path).await;
+        let (films, extras) = split_extras(video_files);
+        // Folders whose film owns extras: only those films' ids are looked up.
+        let owner_dirs: std::collections::HashSet<PathBuf> =
+            extras.iter().map(|e| e.owner_dir.clone()).collect();
+        let mut owners: std::collections::HashMap<PathBuf, Vec<(String, Uuid)>> =
+            std::collections::HashMap::new();
 
-        for file_path in video_files {
+        for file_path in films {
             match self.ingest_movie(&file_path, library_id).await {
                 Ok(IngestOutcome::Added) => result.items_added += 1,
                 Ok(IngestOutcome::Updated) => result.items_updated += 1,
@@ -169,9 +175,133 @@ impl LibraryScanner {
                 Err(e) => {
                     tracing::error!("Error ingesting movie {}: {e}", file_path.display());
                     result.errors += 1;
+                    continue;
                 }
             }
+            let Some(dir) = file_path.parent() else {
+                continue;
+            };
+            if owner_dirs.contains(dir)
+                && let Ok(Some(row)) =
+                    media_items::find_by_path(&self.pool, &file_path.to_string_lossy()).await
+            {
+                owners
+                    .entry(dir.to_path_buf())
+                    .or_default()
+                    .push((lower_stem(&file_path), row.id));
+            }
         }
+
+        for extra in extras {
+            let Some(owner) = owners
+                .get(&extra.owner_dir)
+                .and_then(|films| pick_owner(films, &lower_stem(&extra.path)))
+            else {
+                tracing::debug!(
+                    "Extra with no film beside it, skipped: {}",
+                    extra.path.display()
+                );
+                continue;
+            };
+            self.ingest_extra_counted(&extra.path, library_id, owner, extra.kind, result)
+                .await;
+        }
+    }
+
+    async fn ingest_extra_counted(
+        &self,
+        path: &Path,
+        library_id: Uuid,
+        owner: Uuid,
+        kind: ExtraKind,
+        result: &mut ScanResult,
+    ) {
+        match self.ingest_extra(path, library_id, owner, kind).await {
+            Ok(IngestOutcome::Added) => result.items_added += 1,
+            Ok(IngestOutcome::Updated) => result.items_updated += 1,
+            Ok(IngestOutcome::Skipped) => result.items_skipped += 1,
+            Err(e) => {
+                tracing::error!("Error ingesting extra {}: {e}", path.display());
+                result.errors += 1;
+            }
+        }
+    }
+
+    /// Store an extra under its film, show or season. A row an older scan made
+    /// for the same file (as a film or episode) is reused, so it stops being
+    /// listed as a title.
+    async fn ingest_extra(
+        &self,
+        file_path: &Path,
+        library_id: Uuid,
+        owner: Uuid,
+        kind: ExtraKind,
+    ) -> anyhow::Result<IngestOutcome> {
+        let path_str = file_path.to_string_lossy().to_string();
+        let etag = compute_etag(file_path, &[])?;
+        let existing = media_items::find_by_path(&self.pool, &path_str).await?;
+        if let Some(e) = &existing
+            && e.etag.as_deref() == Some(etag.as_str())
+            && e.owner_id == Some(owner)
+            && e.extra_type.as_deref() == Some(kind.as_str())
+        {
+            self.refresh_stale_streams(e.id, file_path).await;
+            return Ok(IngestOutcome::Skipped);
+        }
+        let probe_result = probe_file_graceful(file_path).await;
+        let video_stream = probe_result
+            .as_ref()
+            .and_then(|p| p.streams.iter().find(|s| s.stream_type == "Video"));
+        let name = file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Extra")
+            .trim()
+            .to_string();
+        let item = media_items::NewMediaItem {
+            item_type: if kind == ExtraKind::Trailer {
+                "Trailer"
+            } else {
+                "Video"
+            }
+            .to_string(),
+            library_id: Some(library_id),
+            parent_id: None,
+            sort_name: Some(name.to_lowercase()),
+            name,
+            path: Some(path_str),
+            production_year: None,
+            runtime_ticks: probe_result.as_ref().map(|p| p.duration_ticks),
+            index_number: None,
+            parent_index_number: None,
+            is_folder: false,
+            series_id: None,
+            season_id: None,
+            series_name: None,
+            season_name: None,
+            container: file_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase()),
+            total_bitrate: probe_result.as_ref().and_then(|p| p.total_bitrate),
+            width: video_stream.and_then(|s| s.width),
+            height: video_stream.and_then(|s| s.height),
+            size: probe_result.as_ref().and_then(|p| p.size),
+            etag: Some(etag),
+        };
+        let (id, outcome) = match existing {
+            Some(e) => (
+                media_items::update(&self.pool, e.id, &item).await?.id,
+                IngestOutcome::Updated,
+            ),
+            None => (
+                media_items::insert(&self.pool, &item).await?.id,
+                IngestOutcome::Added,
+            ),
+        };
+        media_items::set_extra(&self.pool, id, Some(owner), Some(kind.as_str())).await?;
+        self.replace_streams(id, &probe_result).await;
+        Ok(outcome)
     }
 
     async fn ingest_movie(
@@ -366,6 +496,17 @@ impl LibraryScanner {
         for subdir in &subdirs {
             let dir_name = subdir.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
+            // `trailers`, `extras`, `featurettes`, ...: the show's extras
+            // (Jellyfin's docs; an `extras` folder is not a Specials season).
+            if let Some(kind) = rustyfin_common::naming::extras_folder_kind(dir_name) {
+                for video in collect_video_files(subdir).await {
+                    let kind = rustyfin_common::naming::extra_kind(&video, false).unwrap_or(kind);
+                    self.ingest_extra_counted(&video, library_id, series_id, kind, result)
+                        .await;
+                }
+                continue;
+            }
+
             if let Some(season_num) = parse_season_folder(dir_name) {
                 let season_name_str = if season_num == 0 {
                     "Specials".to_string()
@@ -389,9 +530,14 @@ impl LibraryScanner {
                 self.replace_season_images(season_id, Some(subdir), series_dir, season_num)
                     .await;
 
-                // Process episodes in this season
+                // Process episodes in this season; its extras belong to it.
                 let videos = collect_video_files(subdir).await;
                 for video in videos {
+                    if let Some(kind) = rustyfin_common::naming::extra_kind(&video, false) {
+                        self.ingest_extra_counted(&video, library_id, season_id, kind, result)
+                            .await;
+                        continue;
+                    }
                     match self
                         .ingest_episode(
                             &video,
@@ -413,6 +559,20 @@ impl LibraryScanner {
                     }
                 }
             }
+        }
+
+        // Loose extras in the show folder are the show's.
+        let mut show_extras = Vec::new();
+        loose_videos.retain(|v| match rustyfin_common::naming::extra_kind(v, false) {
+            Some(kind) => {
+                show_extras.push((v.clone(), kind));
+                false
+            }
+            None => true,
+        });
+        for (video, kind) in show_extras {
+            self.ingest_extra_counted(&video, library_id, series_id, kind, result)
+                .await;
         }
 
         // Process loose videos in the series root as Season 1 episodes
@@ -1423,6 +1583,83 @@ fn has_ignored_file_name(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
         .is_some_and(rustyfin_common::naming::is_ignored_name)
+}
+
+/// An extra found beside a film, and the folder whose film owns it.
+struct FoundExtra {
+    path: PathBuf,
+    kind: ExtraKind,
+    owner_dir: PathBuf,
+}
+
+fn lower_stem(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .trim()
+        .to_lowercase()
+}
+
+/// Films and extras among a movie library's videos (Jellyfin's rules, see
+/// `naming::extra_kind`). The loose ` trailer`/` sample` suffixes count only in a
+/// folder holding more than one video, so a film named "... Trailer" stays a film.
+fn split_extras(files: Vec<PathBuf>) -> (Vec<PathBuf>, Vec<FoundExtra>) {
+    use rustyfin_common::naming::{extra_kind, extras_folder_kind};
+    let mut plain_per_dir: std::collections::HashMap<PathBuf, usize> = Default::default();
+    let strict: Vec<(PathBuf, Option<ExtraKind>)> = files
+        .into_iter()
+        .map(|f| {
+            let kind = extra_kind(&f, false);
+            if kind.is_none()
+                && let Some(dir) = f.parent()
+            {
+                *plain_per_dir.entry(dir.to_path_buf()).or_default() += 1;
+            }
+            (f, kind)
+        })
+        .collect();
+    let mut films = Vec::new();
+    let mut extras = Vec::new();
+    for (path, kind) in strict {
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let kind = kind.or_else(|| {
+            (plain_per_dir.get(&dir).copied().unwrap_or(0) > 1)
+                .then(|| extra_kind(&path, true))
+                .flatten()
+        });
+        match kind {
+            None => films.push(path),
+            Some(kind) => {
+                let in_extras_folder = dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| extras_folder_kind(n).is_some());
+                let owner_dir = if in_extras_folder {
+                    dir.parent().map(Path::to_path_buf).unwrap_or_default()
+                } else {
+                    dir
+                };
+                extras.push(FoundExtra {
+                    path,
+                    kind,
+                    owner_dir,
+                });
+            }
+        }
+    }
+    (films, extras)
+}
+
+/// The film an extra belongs to among the films of its folder: the one whose
+/// name starts the extra's (longest wins, for multi-version folders), else the
+/// first by name.
+fn pick_owner(films: &[(String, Uuid)], extra_stem: &str) -> Option<Uuid> {
+    films
+        .iter()
+        .filter(|(stem, _)| extra_stem.starts_with(stem.as_str()))
+        .max_by_key(|(stem, _)| stem.len())
+        .or_else(|| films.iter().min_by(|a, b| a.0.cmp(&b.0)))
+        .map(|(_, id)| *id)
 }
 
 async fn collect_video_files(dir: &Path) -> Vec<PathBuf> {

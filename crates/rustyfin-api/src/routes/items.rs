@@ -504,6 +504,7 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         image_tags: Some(HashMap::new()),
         backdrop_image_tags: Some(Vec::new()),
         image_blur_hashes: Some(HashMap::new()),
+        extra_type: item.extra_type.clone(),
         ..Default::default()
     };
     with_jellyfin_defaults(&mut dto);
@@ -1267,6 +1268,14 @@ pub async fn get_item_by_id(
         let (total, unplayed) = progress.get(&item_id).copied().unwrap_or((0, 0));
         folder_user_data(&mut ud, total, unplayed);
         dto.recursive_item_count = Some(total as i32);
+    }
+    if let Some((trailers, features)) = media_items::count_extras(&state.pool, &[item_id])
+        .await
+        .or_log_default("media_items::count_extras")
+        .get(&item_id)
+    {
+        dto.local_trailer_count = Some(*trailers as i32);
+        dto.special_feature_count = Some(*features as i32);
     }
     dto.user_data = Some(ud);
     // Jellyfin sends these on a single item even when there is nothing in them.

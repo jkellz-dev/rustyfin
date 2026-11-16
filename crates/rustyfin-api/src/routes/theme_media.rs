@@ -28,14 +28,15 @@ pub async fn get_theme_songs(
     Ok(Json(ThemeMediaResult::empty(item_id)))
 }
 
-/// `GET /Items/{itemId}/ThemeVideos`
+/// `GET /Items/{itemId}/ThemeVideos`: the videos in the title's `backdrops` folder.
 pub async fn get_theme_videos(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<ThemeMediaResult>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    Ok(Json(ThemeMediaResult::empty(item_id)))
+    Ok(Json(
+        super::extras::theme_videos(&state, &auth, item_id).await?,
+    ))
 }
 
 /// `GET /Items/{itemId}/ThemeMedia`
