@@ -1084,6 +1084,9 @@ validation, and polish needed for daily use.
 - [ ] Bulk operations (select multiple items for refresh, mark played/unplayed)
 - [x] Cast member links (click person → filtered view of their items)
 - [ ] Search filters (scope by type: movies, series, music, episodes)
+- [ ] TV and music collections (deferred, owner 2026-11-16): only Radarr's movie `<set>` creates collections today.
+      Add `collections = ["..."]` to a title's `.rustyfin.toml` (scan creates and fills them), then a media-browser
+      action to create a collection and add shows or albums. Plezy lists collections server-wide, as Jellyfin does.
 
 ### 12e. User Management Polish
 
