@@ -63,6 +63,8 @@ pub struct ItemsQuery {
     pub min_community_rating: Option<f64>,
     pub min_critic_rating: Option<f64>,
     pub name_starts_with: Option<String>,
+    pub name_less_than: Option<String>,
+    pub name_starts_with_or_greater: Option<String>,
     pub enable_total_record_count: Option<bool>,
     /// `IsPlayed`, `IsUnplayed`, `IsFavorite`, `IsResumable` (comma list).
     pub filters: Option<String>,
@@ -976,6 +978,8 @@ pub async fn get_items(
         min_community_rating: query.min_community_rating,
         min_critic_rating: query.min_critic_rating,
         name_starts_with: query.name_starts_with.clone(),
+        name_less_than: query.name_less_than.clone(),
+        name_starts_with_or_greater: query.name_starts_with_or_greater.clone(),
         user_id: Some(auth.user_id),
         is_favorite: query.is_favorite.or(filter_favorite),
         is_played: query.is_played.or(filter_played),

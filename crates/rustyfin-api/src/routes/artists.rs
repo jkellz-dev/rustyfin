@@ -25,6 +25,12 @@ pub struct ArtistQuery {
     pub search_term: Option<String>,
     pub start_index: Option<i64>,
     pub limit: Option<i64>,
+    /// The library to list (Plezy sends its music library's id).
+    pub parent_id: Option<Uuid>,
+    /// The alphabet bar: a prefix, "#" as `NameLessThan=A`, or "from here on".
+    pub name_starts_with: Option<String>,
+    pub name_less_than: Option<String>,
+    pub name_starts_with_or_greater: Option<String>,
 }
 
 /// `GET /Artists` — Browsable artist list.
@@ -54,15 +60,17 @@ async fn get_artists_inner(
     let start = params.start_index.unwrap_or(0);
     let limit = params.limit.unwrap_or(50).min(500);
 
-    let (rows, total) = media_items::list_artists(
-        &state.pool,
-        params.search_term.as_deref(),
-        start,
-        limit,
+    let filter = media_items::ArtistFilter {
+        search: params.search_term.as_deref(),
+        library_id: params.parent_id,
+        name_starts_with: params.name_starts_with.as_deref(),
+        name_less_than: params.name_less_than.as_deref(),
+        name_starts_with_or_greater: params.name_starts_with_or_greater.as_deref(),
         album_artists_only,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    };
+    let (rows, total) = media_items::list_artists(&state.pool, &filter, start, limit)
+        .await
+        .map_err(ApiError::Database)?;
 
     let item_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let all_images = images_repo::list_by_items(&state.pool, &item_ids)

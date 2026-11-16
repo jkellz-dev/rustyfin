@@ -1384,33 +1384,88 @@ pub async fn get_active_series_or_movies(
 }
 
 /// List artist items with optional search and album-artist-only filtering.
-pub async fn list_artists(
-    pool: &PgPool,
-    search: Option<&str>,
-    start_index: i64,
-    limit: i64,
-    album_artists_only: bool,
-) -> Result<(Vec<MediaItemRow>, i64), sqlx::Error> {
-    let mut base_where = "item_type = 'MusicArtist'".to_string();
-    if album_artists_only {
-        base_where.push_str(
-            " AND id IN (SELECT DISTINCT parent_id FROM media_items WHERE item_type = 'MusicAlbum' AND parent_id IS NOT NULL)",
+/// Which artists `/Artists` and `/Artists/AlbumArtists` list.
+#[derive(Debug, Default)]
+pub struct ArtistFilter<'a> {
+    pub search: Option<&'a str>,
+    pub library_id: Option<Uuid>,
+    pub name_starts_with: Option<&'a str>,
+    pub name_less_than: Option<&'a str>,
+    pub name_starts_with_or_greater: Option<&'a str>,
+    pub album_artists_only: bool,
+}
+
+/// The alphabet-bar filters on an item's sort name (case-insensitive, by
+/// code point so "#" (`NameLessThan=A`) catches digits and punctuation).
+fn push_name_filters(
+    qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
+    alias: &str,
+    starts_with: Option<&str>,
+    less_than: Option<&str>,
+    or_greater: Option<&str>,
+) {
+    let key = format!("LOWER(COALESCE({alias}sort_name, {alias}name)) COLLATE \"C\"");
+    if let Some(prefix) = starts_with.filter(|p| !p.is_empty()) {
+        let escaped = prefix
+            .to_lowercase()
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        qb.push(format!(" AND {key} LIKE "));
+        qb.push_bind(format!("{escaped}%"));
+    }
+    if let Some(bound) = less_than.filter(|b| !b.is_empty()) {
+        qb.push(format!(" AND {key} < "));
+        qb.push_bind(bound.to_lowercase());
+    }
+    if let Some(bound) = or_greater.filter(|b| !b.is_empty()) {
+        qb.push(format!(" AND {key} >= "));
+        qb.push_bind(bound.to_lowercase());
+    }
+}
+
+fn push_artist_where(qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, f: &ArtistFilter<'_>) {
+    qb.push(" WHERE mi.item_type = 'MusicArtist'");
+    if f.album_artists_only {
+        qb.push(
+            " AND mi.id IN (SELECT DISTINCT parent_id FROM media_items \
+             WHERE item_type = 'MusicAlbum' AND parent_id IS NOT NULL)",
         );
     }
-    if let Some(term) = search {
-        base_where.push_str(&format!(
-            " AND LOWER(name) LIKE '%{}%'",
-            term.to_lowercase().replace('\'', "''")
-        ));
+    if let Some(lib) = f.library_id {
+        qb.push(" AND mi.library_id = ");
+        qb.push_bind(lib);
     }
-    let count_sql = format!("SELECT COUNT(*) FROM media_items WHERE {base_where}");
-    let total: (i64,) = sqlx::query_as(&count_sql).fetch_one(pool).await?;
-    let list_sql = format!(
-        "SELECT * FROM media_items WHERE {base_where} ORDER BY sort_name, name LIMIT $1 OFFSET $2"
+    if let Some(term) = f.search.filter(|t| !t.is_empty()) {
+        qb.push(" AND mi.name ILIKE ");
+        qb.push_bind(format!("%{term}%"));
+    }
+    push_name_filters(
+        qb,
+        "mi.",
+        f.name_starts_with,
+        f.name_less_than,
+        f.name_starts_with_or_greater,
     );
-    let rows = sqlx::query_as::<_, MediaItemRow>(&list_sql)
-        .bind(limit)
-        .bind(start_index)
+}
+
+pub async fn list_artists(
+    pool: &PgPool,
+    filter: &ArtistFilter<'_>,
+    start_index: i64,
+    limit: i64,
+) -> Result<(Vec<MediaItemRow>, i64), sqlx::Error> {
+    let mut count = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM media_items mi");
+    push_artist_where(&mut count, filter);
+    let total: (i64,) = count.build_query_as().fetch_one(pool).await?;
+    let mut list = sqlx::QueryBuilder::new("SELECT mi.* FROM media_items mi");
+    push_artist_where(&mut list, filter);
+    list.push(" ORDER BY mi.sort_name, mi.name LIMIT ");
+    list.push_bind(limit);
+    list.push(" OFFSET ");
+    list.push_bind(start_index);
+    let rows = list
+        .build_query_as::<MediaItemRow>()
         .fetch_all(pool)
         .await?;
     Ok((rows, total.0))
@@ -1541,6 +1596,9 @@ pub struct ItemQuery {
     pub min_community_rating: Option<f64>,
     pub min_critic_rating: Option<f64>,
     pub name_starts_with: Option<String>,
+    /// Sort name before this (Plezy's "#": `NameLessThan=A`).
+    pub name_less_than: Option<String>,
+    pub name_starts_with_or_greater: Option<String>,
 
     // User data filters
     pub user_id: Option<Uuid>,
@@ -1582,6 +1640,8 @@ impl Default for ItemQuery {
             min_community_rating: None,
             min_critic_rating: None,
             name_starts_with: None,
+            name_less_than: None,
+            name_starts_with_or_greater: None,
             user_id: None,
             is_favorite: None,
             is_played: None,
@@ -1819,11 +1879,14 @@ impl ItemQuery {
             qb.push_bind(min);
         }
 
-        // Name starts with
-        if let Some(ref prefix) = self.name_starts_with {
-            qb.push(" AND UPPER(COALESCE(mi.sort_name, mi.name)) LIKE ");
-            qb.push_bind(format!("{}%", prefix.to_uppercase()));
-        }
+        // Name starts with / before / from (the alphabet bar), on the sort name
+        push_name_filters(
+            qb,
+            "mi.",
+            self.name_starts_with.as_deref(),
+            self.name_less_than.as_deref(),
+            self.name_starts_with_or_greater.as_deref(),
+        );
 
         // Search term
         if let Some(ref term) = self.search_term {
