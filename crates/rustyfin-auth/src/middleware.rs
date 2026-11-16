@@ -10,13 +10,34 @@ use rustyfin_models::dto::MediaBrowserAuth;
 
 use crate::session::{ResolvedToken, TokenError, resolve_token};
 
-/// The access token a WebSocket upgrade carries.
-pub fn socket_token(_headers: &axum::http::HeaderMap, query: Option<&str>) -> Option<String> {
-    query.and_then(|q| {
-        url::form_urlencoded::parse(q.as_bytes())
-            .find(|(k, _)| k == "api_key")
-            .map(|(_, v)| v.to_string())
-    })
+/// The access token a request carries, where Jellyfin clients put it: the
+/// `Authorization: MediaBrowser Token="..."` header, `X-Emby-Token` /
+/// `X-MediaBrowser-Token`, or the `api_key` / `ApiKey` query parameter.
+/// HTTP requests and WebSocket upgrades both use this.
+pub fn request_token(headers: &axum::http::HeaderMap, query: Option<&str>) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| parse_mediabrowser_header(v).token)
+        .or_else(|| {
+            headers
+                .get("X-Emby-Token")
+                .or_else(|| headers.get("X-MediaBrowser-Token"))
+                .and_then(|v| v.to_str().ok())
+                .map(String::from)
+        })
+        .or_else(|| {
+            query.and_then(|q| {
+                url::form_urlencoded::parse(q.as_bytes())
+                    .find(|(k, _)| k == "api_key" || k == "ApiKey")
+                    .map(|(_, v)| v.to_string())
+            })
+        })
+}
+
+/// The access token a WebSocket upgrade carries (Plezy: `?ApiKey=`).
+pub fn socket_token(headers: &axum::http::HeaderMap, query: Option<&str>) -> Option<String> {
+    request_token(headers, query)
 }
 
 /// Authenticated user extracted from the MediaBrowser auth header.
@@ -69,32 +90,7 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let pool = PgPool::from_ref(state);
 
-        // Try Authorization header first
-        let token = parts
-            .headers
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| {
-                let auth = parse_mediabrowser_header(v);
-                auth.token
-            })
-            // Also try X-Emby-Token / X-MediaBrowser-Token headers
-            .or_else(|| {
-                parts
-                    .headers
-                    .get("X-Emby-Token")
-                    .or_else(|| parts.headers.get("X-MediaBrowser-Token"))
-                    .and_then(|v| v.to_str().ok())
-                    .map(String::from)
-            })
-            // Also try api_key query parameter
-            .or_else(|| {
-                parts.uri.query().and_then(|q| {
-                    url::form_urlencoded::parse(q.as_bytes())
-                        .find(|(k, _)| k == "api_key" || k == "ApiKey")
-                        .map(|(_, v)| v.to_string())
-                })
-            });
+        let token = request_token(&parts.headers, parts.uri.query());
 
         let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
 
