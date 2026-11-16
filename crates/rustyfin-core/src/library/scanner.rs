@@ -890,26 +890,38 @@ impl LibraryScanner {
                 .collect();
 
         let audio_files = collect_audio_files(album_dir).await;
-        self.prefetch_probes(&audio_files).await;
 
-        for audio_file in &audio_files {
-            let filename = audio_file
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-            let nfo_track = track_map.get(filename).copied();
-
-            match self
-                .ingest_audio_track(
-                    audio_file,
-                    library_id,
-                    artist_id,
-                    album_id,
-                    artist_name,
-                    nfo_track,
-                )
-                .await
-            {
+        // An album's tracks are ingested several at once: each writes its own
+        // row, and the album- and artist-level ids it adds are merged in one
+        // statement, so the order does not matter (11d stress run).
+        use futures_util::StreamExt;
+        let outcomes: Vec<(&PathBuf, anyhow::Result<IngestOutcome>)> =
+            futures_util::stream::iter(&audio_files)
+                .map(|audio_file| {
+                    let filename = audio_file
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("");
+                    let nfo_track = track_map.get(filename).copied();
+                    async move {
+                        let outcome = self
+                            .ingest_audio_track(
+                                audio_file,
+                                library_id,
+                                artist_id,
+                                album_id,
+                                artist_name,
+                                nfo_track,
+                            )
+                            .await;
+                        (audio_file, outcome)
+                    }
+                })
+                .buffer_unordered(PROBE_CONCURRENCY)
+                .collect()
+                .await;
+        for (audio_file, outcome) in outcomes {
+            match outcome {
                 Ok(IngestOutcome::Added) => result.items_added += 1,
                 Ok(IngestOutcome::Updated) => result.items_updated += 1,
                 Ok(IngestOutcome::Skipped) => result.items_skipped += 1,
