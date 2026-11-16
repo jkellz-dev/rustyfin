@@ -1227,6 +1227,19 @@ select:focus {
   height: 62px;
 }
 
+.recent-art.square {
+  height: 110px;
+}
+
+.recent-art-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
 .recent-title {
   margin-top: 4px;
   font-size: 0.78em;

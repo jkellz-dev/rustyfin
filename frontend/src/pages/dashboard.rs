@@ -290,18 +290,30 @@ pub fn Dashboard() -> View {
                                         let tag = item
                                             .image_tags
                                             .as_ref()
-                                            .and_then(|t| t.get("Primary").cloned())
-                                            .unwrap_or_default();
-                                        let src = format!("/Items/{}/Images/Primary?tag={tag}&maxWidth=160&quality=90", item.id);
-                                        let label = match &item.series_name {
-                                            Some(series) => format!("{series}: {}", item.name),
-                                            None => item.name.clone(),
+                                            .and_then(|t| t.get("Primary").cloned());
+                                        let card = dashboard_view::recent_card(
+                                            &item.id,
+                                            &item.item_type,
+                                            &item.name,
+                                            tag.as_deref(),
+                                            item.series_name.as_deref(),
+                                            item.album_artist.as_deref(),
+                                        );
+                                        let label = card.label.clone();
+                                        let shape = card.shape;
+                                        let art = match card.image {
+                                            Some(src) => {
+                                                let alt = label.clone();
+                                                view! { img(class=shape, src=src, alt=alt, loading="lazy") }
+                                            }
+                                            None => {
+                                                let placeholder = format!("{shape} recent-art-empty");
+                                                view! { div(class=placeholder) { (label.chars().next().map(String::from).unwrap_or_default()) } }
+                                            }
                                         };
-                                        let shape = if item.item_type == "Episode" { "recent-art landscape" } else { "recent-art" };
-                                        let alt = label.clone();
                                         view! {
                                             div(class="recent-card") {
-                                                img(class=shape, src=src, alt=alt, loading="lazy")
+                                                (art)
                                                 div(class="recent-title") { (label) }
                                             }
                                         }

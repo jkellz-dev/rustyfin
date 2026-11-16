@@ -148,9 +148,10 @@ pub async fn get_active_sessions() -> Result<Vec<SessionInfo>, String> {
     get_json("/Sessions?ActiveWithinSeconds=960").await
 }
 
-/// The latest media added across every library.
+/// The latest media added across every library, as Jellyfin's home screen
+/// shows it: new tracks as their album, new episodes as their show.
 pub async fn get_latest_items(limit: i32) -> Result<Vec<BaseItemDto>, String> {
-    get_json(&format!("/Items/Latest?Limit={limit}&GroupItems=false")).await
+    get_json(&format!("/Items/Latest?Limit={limit}")).await
 }
 
 pub async fn get_libraries() -> Result<Vec<VirtualFolderInfo>, String> {

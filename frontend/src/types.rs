@@ -251,6 +251,9 @@ pub struct BaseItemDto {
     pub parent_id: Option<String>,
     #[serde(default)]
     pub series_name: Option<String>,
+    /// An album's or track's album artist.
+    #[serde(default)]
+    pub album_artist: Option<String>,
     #[serde(default)]
     pub index_number: Option<i32>,
     #[serde(default)]

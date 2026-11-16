@@ -159,9 +159,89 @@ pub fn severity_class(severity: &str) -> &'static str {
     }
 }
 
+/// How a "Recently added" entry is drawn: its picture (when it has one),
+/// the picture's shape, and its caption.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecentCard {
+    pub image: Option<String>,
+    pub shape: &'static str,
+    pub label: String,
+}
+
+/// The card for an entry of `/Items/Latest`: albums are square and captioned
+/// with their artist, episodes wide and captioned with their show; an entry
+/// with no picture gets none (a placeholder, not a broken image).
+pub fn recent_card(
+    id: &str,
+    item_type: &str,
+    name: &str,
+    primary_tag: Option<&str>,
+    series: Option<&str>,
+    album_artist: Option<&str>,
+) -> RecentCard {
+    let shape = match item_type {
+        "MusicAlbum" | "Audio" | "MusicArtist" => "recent-art square",
+        "Episode" => "recent-art landscape",
+        _ => "recent-art",
+    };
+    let label = match (series, album_artist) {
+        (Some(s), _) if !s.is_empty() => format!("{s}: {name}"),
+        (_, Some(a)) if !a.is_empty() => format!("{a}: {name}"),
+        _ => name.to_string(),
+    };
+    let image = primary_tag
+        .filter(|t| !t.is_empty())
+        .map(|tag| format!("/Items/{id}/Images/Primary?tag={tag}&maxWidth=220&quality=90"));
+    RecentCard {
+        image,
+        shape,
+        label,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn albums_are_square_and_named_with_their_artist() {
+        let c = recent_card(
+            "a1",
+            "MusicAlbum",
+            "Hideaway",
+            Some("t9"),
+            None,
+            Some("Wavves"),
+        );
+        assert_eq!(c.shape, "recent-art square");
+        assert_eq!(c.label, "Wavves: Hideaway");
+        assert_eq!(
+            c.image.as_deref(),
+            Some("/Items/a1/Images/Primary?tag=t9&maxWidth=220&quality=90")
+        );
+    }
+
+    #[test]
+    fn an_entry_without_a_picture_gets_no_image_address() {
+        let c = recent_card("f1", "Movie", "Film", None, None, None);
+        assert_eq!(
+            (c.image, c.shape, c.label.as_str()),
+            (None, "recent-art", "Film")
+        );
+        assert_eq!(
+            recent_card("f1", "Movie", "Film", Some(""), None, None).image,
+            None
+        );
+    }
+
+    #[test]
+    fn episodes_are_wide_and_named_with_their_show() {
+        let c = recent_card("e1", "Episode", "Pilot", Some("t"), Some("Show"), None);
+        assert_eq!(
+            (c.shape, c.label.as_str()),
+            ("recent-art landscape", "Show: Pilot")
+        );
+    }
 
     #[test]
     fn ages_read_naturally() {
