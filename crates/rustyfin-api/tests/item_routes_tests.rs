@@ -119,8 +119,11 @@ async fn theme_and_ancestor_routes_require_auth() {
 
 // ── Ancestors ──────────────────────────────────────────────────────────
 
+// Jellyfin 10.10.7 ends every chain with the item's library (CollectionFolder)
+// and the user's root folder (parity suite, 2026-11-16).
+
 #[tokio::test]
-async fn ancestors_of_top_level_item_is_empty() {
+async fn ancestors_of_top_level_item_are_its_library_and_the_root() {
     let app = common::TestApp::new().await;
     let (_, token) = app.create_user("viewer", true).await;
     let lib_id = app.create_library("Movies", "movies").await;
@@ -130,7 +133,13 @@ async fn ancestors_of_top_level_item_is_empty() {
         .get(&format!("/Items/{item_id}/Ancestors"), &token)
         .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, serde_json::json!([]));
+    let types: Vec<&str> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["Type"].as_str().unwrap())
+        .collect();
+    assert_eq!(types, ["CollectionFolder", "UserRootFolder"], "{body}");
     app.cleanup().await;
 }
 
@@ -156,9 +165,12 @@ async fn ancestors_walk_the_parent_chain_nearest_first() {
         .iter()
         .map(|a| a["Id"].as_str().expect("ancestor has an Id"))
         .collect();
-    assert_eq!(ids, [season.to_string(), series.to_string()]);
+    assert_eq!(ids[..2], [season.to_string(), series.to_string()]);
+    assert_eq!(ids[2], lib_id.to_string());
+    assert_eq!(ids.len(), 4, "{body}");
     assert_eq!(ancestors[0]["Type"], "Season");
     assert_eq!(ancestors[1]["Type"], "Series");
+    assert_eq!(ancestors[3]["Type"], "UserRootFolder");
     app.cleanup().await;
 }
 
@@ -179,7 +191,8 @@ async fn ancestors_do_not_include_the_item_itself() {
         .iter()
         .map(|a| a["Id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids, [series.to_string()]);
+    assert_eq!(ids[0], series.to_string());
+    assert!(!ids.contains(&season.to_string().as_str()), "{body}");
     app.cleanup().await;
 }
 
@@ -206,7 +219,8 @@ async fn ancestors_terminate_on_a_parent_cycle() {
     .expect("Ancestors must not hang on a cycle");
     assert_eq!(status, StatusCode::OK);
     assert!(
-        body.as_array().unwrap().len() <= 64,
+        // 64 parents at most, then the library and the root folder.
+        body.as_array().unwrap().len() <= 66,
         "chain is bounded, got {} entries",
         body.as_array().unwrap().len()
     );
