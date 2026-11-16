@@ -1177,6 +1177,18 @@ validation, and polish needed for daily use.
 - [ ] Structured error types in API client (not just strings)
 - [ ] Optimistic updates where safe (e.g. toggle favorite immediately, reconcile on response)
 
+### 12h. Mobile Layout (owner, 2026-11-16)
+
+The admin must be usable from a phone.
+
+- [ ] Responsive layout: the sidebar collapses to a menu button below tablet width; no horizontal scrolling at 360 px
+- [ ] Tables (users, libraries, tasks, sessions) become stacked cards on narrow screens
+- [ ] Touch targets at least 44 px; no hover-only controls
+- [ ] Forms and dialogs fit the screen (full-screen dialogs on phones, the right input types and keyboards)
+- [ ] Media grids and title pages reflow to two columns; posters lazy-load
+- [ ] Dashboard charts and stats readable at phone width
+- [ ] Tested at 360, 390 and 768 px widths (browser device emulation) and on a real phone
+
 ---
 
 ## Phase 13 — Admin UI Streaming
