@@ -1745,6 +1745,26 @@ mod tests {
         assert!(result.is_none(), "Nonexistent file should return None");
     }
 
+    /// Lidarr writes a track's duration as `mm:ss` (or `h:mm:ss`). One odd
+    /// value must not cost the whole album its NFO (owner's scan, 2026-11-16).
+    #[test]
+    fn nfo_album_track_durations_in_clock_form() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<album>
+    <title>Live</title>
+    <track><title>Short</title><position>1</position><duration>03:44</duration></track>
+    <track><title>Long</title><position>2</position><duration>1:02:03</duration></track>
+    <track><title>Seconds</title><position>3</position><duration>259.5</duration></track>
+    <track><title>Odd</title><position>4</position><duration>n/a</duration></track>
+</album>"#;
+        let path = write_temp_nfo("clock-durations", xml);
+        let meta = parse_album_nfo(&path).expect("the album still parses");
+        cleanup_temp_nfo(&path);
+        let d: Vec<Option<f64>> = meta.tracks.iter().map(|t| t.duration).collect();
+        assert_eq!(d, [Some(224.0), Some(3723.0), Some(259.5), None]);
+        assert_eq!(meta.tracks[3].title, "Odd");
+    }
+
     #[test]
     fn nfo_album_with_tracks() {
         let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
