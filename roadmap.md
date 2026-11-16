@@ -685,7 +685,8 @@ Jellyfin parity.
 - [x] DTO serialization tests: PascalCase output, optional field omission, QueryResult shape (12 tests)
 - [x] Media encoding unit tests: probe (seconds_to_ticks, parse_frame_rate, map_stream), subtitles (content_type,
       format_from_extension) — 25 tests
-- [ ] Snapshot tests for key API responses (compare against known-good Jellyfin responses) — deferred
+- [x] Snapshot tests for key API responses (compare against known-good Jellyfin responses): covered by the Hurl
+      parity suite (11h), whose cases are Jellyfin 10.10.7's recorded response shapes, run nightly in CI
 
 #### Jellyfin Parity Tests (translated from Jellyfin.Server.Integration.Tests)
 
@@ -885,15 +886,21 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [x] Database connection pool exhaustion behavior (graceful degradation): a request waits at most 5 s for a
       connection, then answers 503 (with `Retry-After` from API errors), never a 401 that signs clients out; an
       unreachable database is 503 too (`pool_exhaustion_tests`)
-- [ ] Large library stress: 10k+ items, deeply nested seasons/episodes
+- [x] Large library stress: 10k+ items, deeply nested seasons/episodes (81,390 files shaped like the owner's
+      library, `tests/stress/make_library.sh`; results in `docs/performance.md`)
 
 ### 11d. Load & Performance Testing
 
-- [ ] Benchmark: `/Items` query with 1k, 10k, 50k items in DB
-- [ ] Benchmark: concurrent streaming sessions (direct play, no transcode)
-- [ ] Benchmark: library scan time for large libraries (1k, 10k files)
-- [ ] Benchmark: search latency (Meilisearch vs Postgres ILIKE fallback)
-- [ ] Profile memory usage under sustained load
+- [x] Benchmark: `/Items` query with 1k, 10k, 50k items in DB (300 to 91,000: p50 15–83 ms after the sort-key
+      indexes, from up to 4.7 s)
+- [x] Benchmark: concurrent streaming sessions (direct play, no transcode): line rate of the 1 Gbit/s link (112 MB/s)
+      from 10 to 50 clients, 1.5 cores
+- [x] Benchmark: library scan time for large libraries (1k, 10k files): 81,390 new files in ~1 h (was ~3.6 h;
+      ffprobe now runs 8 at once)
+- [x] Benchmark: search latency (Meilisearch vs Postgres ILIKE fallback): hints 12 ms p50 (Meilisearch);
+      `SearchTerm` 5 ms with the trigram index (was 1.95 s)
+- [x] Profile memory usage under sustained load: 84 MiB browsing at 350 requests/s, ~300 MiB streaming at line rate,
+      ~165 MiB scanning
 - [x] Identify and fix N+1 query patterns (owner, 2026-11-14). `query_count_tests` counts the queries of 16 list
       routes over a small and a larger library and fails if any grows. Seven did, now fixed: next up (2 per series),
       resume and playlist items (1 per item), artists (2 per artist), a show's episodes (1 per season), years (1 per

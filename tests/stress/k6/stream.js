@@ -24,6 +24,8 @@ export function setup() {
       'Tailscale-User-Name': 'stress',
       'Tailscale-User-Groups': 'admin',
     },
+    // Bodies are discarded by default here (streams); the login's is needed.
+    responseType: 'text',
   });
   const token = res.json('AccessToken');
   const head = http.get(`${BASE}/Videos/${__ENV.ITEM}/stream?static=true&api_key=${token}`, {
