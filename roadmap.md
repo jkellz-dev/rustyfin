@@ -532,7 +532,7 @@ low-priority admin features.
 - [ ] Test with each major client end-to-end: Jellyfin Web, Infuse, Swiftfin, Jellyfin Media Player
 - [x] Meilisearch live test (`crates/rustyfin-search/tests/meili_live.rs`, `#[ignore]`, needs MEILI_URL/MEILI_KEY);
       cluster deploys it as a pod sidecar with capped indexing memory/threads
-- [ ] Document every remaining 404 that clients hit — prioritize by frequency
+- [x] Document every remaining 404 that clients hit — prioritize by frequency (`docs/client-requests.md`)
 - [x] Query-string keys are case-insensitive like ASP.NET: `query_case` middleware upper-cases the first letter, so
       camelCase `searchTerm`/`includeItemTypes` from real clients work (previously ignored or 400)
 - [x] `POST /Library/VirtualFolders` accepts Jellyfin's query-string form (`name`, `collectionType`, `paths`,
@@ -1019,9 +1019,13 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
 - [x] A known-differences list (`KNOWN_DIFFERENCES` in `gen/record.py`, listed in the suite README): every
       deliberate divergence (forward-auth only, no plugins, no LiveTV, track dates as years) is named
       and the suite expects it, so an unplanned one fails
-- [ ] Cover the routes real clients call first (the 11a client-compatibility list), then the rest of the router
-- [ ] Capture Jellyfin's responses as recorded fixtures so the suite can also run offline against Rustyfin alone
-- [ ] Run in CI on a schedule (nightly) rather than every push; report the parity gaps it finds back into 11a
+- [ ] Cover the routes real clients call first (the 11a client-compatibility list), then the rest of the router.
+      Plezy's are covered (`cases/plezy.hurl`, from its request log, 2026-11-16); the other clients need a request
+      log each (`docs/client-requests.md`)
+- [x] Capture Jellyfin's responses as recorded fixtures so the suite can also run offline against Rustyfin alone:
+      the cases are the fixtures (Jellyfin's shapes as asserts), and CI runs them with no Jellyfin
+- [x] Run in CI on a schedule (nightly) rather than every push; report the parity gaps it finds back into 11a
+      (`.github/workflows/parity.yml`, 06:30 UTC and on demand; gaps in the job summary)
 
 ---
 
@@ -1044,22 +1048,25 @@ Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh.
 Movies with extras show up more than once: trailers, featurettes and the like beside a film are scanned as films of
 their own. Follow [Jellyfin's extras rules](https://jellyfin.org/docs/general/server/media/movies/#extras).
 
-- [ ] Recognise extras in the naming code, and turn the TODO cases in `naming.rs`'s ported Jellyfin tests into passing
+- [x] Recognise extras in the naming code, and turn the TODO cases in `naming.rs`'s ported Jellyfin tests into passing
   tests:
       - folders inside a movie, series or season folder: `behind the scenes`, `deleted scenes`, `interviews`, `scenes`,
       `samples`, `shorts`, `featurettes`, `clips`, `other`, `extras`, `trailers`; - a file named just `trailer` or
       `sample`; - a name ending in `-trailer`, `.trailer`, `_trailer` or `trailer` (likewise for `sample`), or in
       `-scene`, `-clip`, `-interview`, `-behindthescenes`, `-deleted`, `-deletedscene`, `-featurette`, `-short`,
       `-other` or `-extra`.
-- [ ] The scan stores an extra under its film, show or season, with its type (Trailer, BehindTheScenes,
+- [x] The scan stores an extra under its film, show or season, with its type (Trailer, BehindTheScenes,
       DeletedScene, Interview, Scene, Sample, Short, Featurette, Clip, Unknown), never as a film or episode of its own.
       The next scan removes the duplicate entries made so far; watched state stays on the real title.
-- [ ] `GET /Items/{id}/LocalTrailers` and `/SpecialFeatures` return them (today they always return `[]`), and the title
+- [x] `GET /Items/{id}/LocalTrailers` and `/SpecialFeatures` return them (today they always return `[]`), and the title
       carries `LocalTrailerCount` and `SpecialFeatureCount`. Extras play through the normal stream routes.
-- [ ] `theme-music` and `backdrops` folders feed theme media and backdrops rather than being scanned as videos.
-- [ ] Parity: the synthetic media gains a `trailers/` folder and a `-featurette` file beside the test film, recorded
+- [x] `theme-music` and `backdrops` folders feed theme media and backdrops rather than being scanned as videos.
+- [x] Parity: the synthetic media gains a `trailers/` folder and a `-featurette` file beside the test film, recorded
       from Jellyfin.
-- [ ] Admin media page lists a title's extras.
+- [x] Admin media page lists a title's extras.
+
+Done 2026-11-16: `naming::ExtraKind`, extras stored with `owner_id`, `routes/extras.rs`, theme songs
+(`theme.mp3`, `theme-music/`) and theme videos (`backdrops/`), parity area `extras`, admin "Extras" section.
 
 ---
 
@@ -1069,19 +1076,22 @@ The owner's library already has about 34,000 `.lrc` files; the owner wants LRCLI
 
 - [x] `GET /Audio/{id}/Lyrics`, matching Jellyfin 10.10.7: the track's sidecar `.lrc`/`.elrc` (synced) or `.txt`, else
       lyrics embedded in its tags; 404 when there are none (Plezy asks; found in the 11a request log; was 15e)
-- [ ] `HasLyrics` on tracks, and a `Lyric` media stream naming the file, as Jellyfin sends them (clients that hide the
+- [x] `HasLyrics` on tracks, and a `Lyric` media stream naming the file, as Jellyfin sends them (clients that hide the
       lyrics button without it). Recorded at scan time, not looked up per request
-- [ ] `rustyfin lyrics` in the metadata CLI: for tracks with no lyrics, ask [LRCLIB](https://lrclib.net)
+- [x] `rustyfin lyrics` in the metadata CLI: for tracks with no lyrics, ask [LRCLIB](https://lrclib.net)
       (`/api/get` by artist, track, album and duration, so a match is the same recording) and write
       `<track>.lrc` (synced), or `<track>.txt` (plain) when only plain lyrics exist, beside the track, through the
       sidecar's writable mount. Never overwrite an existing file. Identify Rustyfin in the `User-Agent`, rate-limit
       politely, and cache misses so a track LRCLIB lacks is not asked again for a while
-- [ ] Instrumental tracks: LRCLIB marks them; write nothing and remember the answer
-- [ ] Optional self-hosted LRCLIB (its published database dump), like the self-hosted MusicBrainz option:
-      `lrclib_url` in `rustyfin-meta.toml`
-- [ ] Run it from the artwork Job or a scheduled sidecar task after a music scan; report counts (found synced, found
+- [x] Instrumental tracks: LRCLIB marks them; write nothing and remember the answer
+- [x] Optional self-hosted LRCLIB (its published database dump), like the self-hosted MusicBrainz option:
+      `[lrclib] url` in `rustyfin-meta.toml`
+- [x] Run it from the artwork Job or a scheduled sidecar task after a music scan; report counts (found synced, found
       plain, instrumental, missing) in the Job log
-- [ ] The next scan sets `HasLyrics` from the new files
+- [x] The next scan sets `HasLyrics` from the new files
+
+Done 2026-11-16: `rustyfin lyrics` (`docs/lyrics.md`), `jobs/lyrics-job.sh` in the cluster repo, albums LRCLIB
+lacked recorded as `[lyrics] checked` in the album's `.rustyfin.toml` (30 days).
 
 ---
 
