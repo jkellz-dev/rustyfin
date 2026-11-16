@@ -47,13 +47,20 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install hurl and ffmpeg
+      # Hurl's .deb wants a libxml2 the runner's Ubuntu no longer ships under
+      # that name; its own image works anywhere. A wrapper puts it on PATH,
+      # on the host network, with the workspace at the same path.
+      - name: Install hurl (image) and ffmpeg
         run: |
-          curl -fsSL -o /tmp/hurl.deb \
-            "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl_${HURL_VERSION}_amd64.deb"
+          docker pull -q "ghcr.io/orange-opensource/hurl:${HURL_VERSION}"
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec docker run --rm -i --network host -v "%s:%s" -w "$PWD" "ghcr.io/orange-opensource/hurl:%s" "$@"\n' \
+            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$HURL_VERSION" > "$RUNNER_TEMP/bin/hurl"
+          chmod +x "$RUNNER_TEMP/bin/hurl"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/hurl" --version | head -1
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends ffmpeg /tmp/hurl.deb
-          hurl --version | head -1
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
 
       - name: Synthetic media
         run: sh tests/parity/media/make_media.sh "$RUNNER_TEMP/media/parity-media"
