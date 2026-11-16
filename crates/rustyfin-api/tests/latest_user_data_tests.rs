@@ -93,7 +93,9 @@ async fn library_lists_carry_each_shows_episode_count() {
 }
 
 /// Plezy's Continue Watching is Resume (MediaTypes=Video) plus NextUp with a
-/// NextUpDateCutoff: no tracks, and no shows never started.
+/// NextUpDateCutoff: no tracks. A show never started still offers its first
+/// episode, as Jellyfin 10.10 does (the cutoff only drops shows last watched
+/// before it); DisableFirstEpisode=true leaves those out (owner, 2026-11-15).
 #[tokio::test]
 async fn continue_watching_keeps_to_video_and_shows_in_progress() {
     let app = common::TestApp::new().await;
@@ -165,15 +167,31 @@ async fn continue_watching_keeps_to_video_and_shows_in_progress() {
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{next}");
-    let shows: Vec<&str> = next["Items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|i| i["SeriesId"].as_str().unwrap())
-        .collect();
-    assert_eq!(shows, [started.to_string()], "{next}");
+    let shows = |next: &serde_json::Value| -> Vec<String> {
+        let mut s: Vec<String> = next["Items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["SeriesId"].as_str().unwrap().to_string())
+            .collect();
+        s.sort();
+        s
+    };
+    let mut both = vec![started.to_string(), untouched.to_string()];
+    both.sort();
+    assert_eq!(shows(&next), both, "{next}");
+    let (_, next) = app
+        .get(
+            &format!(
+                "/Shows/NextUp?Limit=20&NextUpDateCutoff={}&DisableFirstEpisode=true",
+                cutoff.replace('+', "%2B")
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(shows(&next), [started.to_string()], "{next}");
 
-    // A show last watched before the cutoff is left out too.
+    // A show last watched before the cutoff is left out; the untouched one stays.
     sqlx::query("UPDATE user_data SET last_played_date = NOW() - INTERVAL '2 years'")
         .execute(&app.pool)
         .await
@@ -187,6 +205,6 @@ async fn continue_watching_keeps_to_video_and_shows_in_progress() {
             &token,
         )
         .await;
-    assert_eq!(next["Items"], serde_json::json!([]), "{next}");
+    assert_eq!(shows(&next), [untouched.to_string()], "{next}");
     app.cleanup().await;
 }
