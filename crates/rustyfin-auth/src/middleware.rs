@@ -10,6 +10,15 @@ use rustyfin_models::dto::MediaBrowserAuth;
 
 use crate::session::{ResolvedToken, TokenError, resolve_token};
 
+/// The access token a WebSocket upgrade carries.
+pub fn socket_token(_headers: &axum::http::HeaderMap, query: Option<&str>) -> Option<String> {
+    query.and_then(|q| {
+        url::form_urlencoded::parse(q.as_bytes())
+            .find(|(k, _)| k == "api_key")
+            .map(|(_, v)| v.to_string())
+    })
+}
+
 /// Authenticated user extracted from the MediaBrowser auth header.
 /// Used as an Axum extractor on any state `S` where `PgPool: FromRef<S>`.
 #[derive(Debug, Clone)]
@@ -158,6 +167,36 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Plezy opens `/socket?ApiKey=<token>&deviceId=...` (Jellyfin 10.11's
+    /// name); others send `api_key` or a header. All must reach the socket
+    /// (owner's logs: "WebSocket connection rejected: unknown access token").
+    #[test]
+    fn a_socket_finds_its_token_wherever_the_client_put_it() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let none = HeaderMap::new();
+        assert_eq!(
+            socket_token(&none, Some("ApiKey=abc&deviceId=d")).as_deref(),
+            Some("abc")
+        );
+        assert_eq!(
+            socket_token(&none, Some("api_key=abc")).as_deref(),
+            Some("abc")
+        );
+        let mut h = HeaderMap::new();
+        h.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static(r#"MediaBrowser Client="x", Token="hdr""#),
+        );
+        assert_eq!(socket_token(&h, None).as_deref(), Some("hdr"));
+        let mut h = HeaderMap::new();
+        h.insert("X-Emby-Token", HeaderValue::from_static("emby"));
+        assert_eq!(
+            socket_token(&h, Some("deviceId=d")).as_deref(),
+            Some("emby")
+        );
+        assert_eq!(socket_token(&none, Some("deviceId=d")), None);
+    }
 
     // ── Task 9: MediaBrowser header parsing tests ────────────────────────
 

@@ -1,9 +1,8 @@
 use axum::{
-    extract::{Query, State, WebSocketUpgrade, ws::WebSocket},
+    extract::{State, WebSocketUpgrade, ws::WebSocket},
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::session::{TokenError, resolve_token};
@@ -11,22 +10,16 @@ use rustyfin_models::dto::{OutboundWebSocketMessage, SessionCommand};
 
 use crate::router::AppState;
 
-#[derive(Debug, Deserialize)]
-pub struct SocketQuery {
-    pub api_key: Option<String>,
-    #[serde(rename = "DeviceId")]
-    pub device_id: Option<String>,
-}
-
 /// `GET /socket` — WebSocket endpoint for real-time updates.
 pub async fn websocket_handler(
     State(state): State<AppState>,
-    Query(query): Query<SocketQuery>,
+    headers: axum::http::HeaderMap,
+    uri: axum::http::Uri,
     ws: WebSocketUpgrade,
 ) -> Response {
     // The same check HTTP requests get: an unknown, logged-out or expired session,
     // or a disabled user, must not be able to open a socket.
-    let token = query.api_key.unwrap_or_default();
+    let token = rustyfin_auth::middleware::socket_token(&headers, uri.query()).unwrap_or_default();
     let session = match resolve_token(&state.pool, &token).await {
         Ok(resolved) => Some(resolved.session),
         Err(TokenError::Database(e)) => {
