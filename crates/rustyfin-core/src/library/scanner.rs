@@ -25,7 +25,17 @@ pub struct LibraryScanner {
     enrichment: EnrichmentService,
     /// Collection art (`<tmdb-id>/poster.jpg`, ...), beside the people folder.
     collection_art_dir: Option<std::path::PathBuf>,
+    /// Probes run ahead of ingestion by `prefetch_probes`, taken by `probe`.
+    probed: tokio::sync::Mutex<std::collections::HashMap<PathBuf, Option<probe::ProbeResult>>>,
 }
+
+/// ffprobe runs this many at once while a scan meets new files. One probe
+/// takes ~100 ms whatever the file, so a serial first scan of 75,000 tracks
+/// spent two hours waiting on it (11d stress run, 2026-11-16).
+const PROBE_CONCURRENCY: usize = 8;
+
+/// New files are probed in batches of this many, then ingested in order.
+const PROBE_BATCH: usize = 64;
 
 /// Below this many files under a root, the "more than half are gone" guard does
 /// not apply: a small library losing its only film is normal.
@@ -52,7 +62,52 @@ impl LibraryScanner {
             pool,
             enrichment,
             collection_art_dir,
+            probed: Default::default(),
         }
+    }
+
+    /// The file's probe: the one `prefetch_probes` already ran, else a new one.
+    async fn probe(&self, path: &Path) -> Option<probe::ProbeResult> {
+        if let Some(done) = self.probed.lock().await.remove(path) {
+            return done;
+        }
+        probe_file_graceful(path).await
+    }
+
+    /// Probe the files a scan has never seen, several at once, so the serial
+    /// ingestion that follows finds them done. Files already in the library
+    /// are left to the usual etag check (most are skipped unprobed). Ingestion
+    /// itself stays in order: it creates folders and artists as it goes.
+    async fn prefetch_probes(&self, files: &[PathBuf]) {
+        use futures_util::StreamExt;
+        if files.is_empty() {
+            return;
+        }
+        let paths: Vec<String> = files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        let known: std::collections::HashSet<String> =
+            media_items::existing_paths(&self.pool, &paths)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+        let new: Vec<PathBuf> = files
+            .iter()
+            .zip(&paths)
+            .filter(|(_, s)| !known.contains(*s))
+            .map(|(p, _)| p.clone())
+            .collect();
+        let done: Vec<(PathBuf, Option<probe::ProbeResult>)> = futures_util::stream::iter(new)
+            .map(|p| async move {
+                let r = probe_file_graceful(&p).await;
+                (p, r)
+            })
+            .buffer_unordered(PROBE_CONCURRENCY)
+            .collect()
+            .await;
+        self.probed.lock().await.extend(done);
     }
 
     /// Scan a library and ingest media items.
@@ -188,7 +243,12 @@ impl LibraryScanner {
         let mut owners: std::collections::HashMap<PathBuf, Vec<(String, Uuid)>> =
             std::collections::HashMap::new();
 
-        for file_path in films {
+        for (i, file_path) in films.iter().enumerate() {
+            if i % PROBE_BATCH == 0 {
+                let end = (i + PROBE_BATCH).min(films.len());
+                self.prefetch_probes(&films[i..end]).await;
+            }
+            let file_path = file_path.clone();
             match self.ingest_movie(&file_path, library_id).await {
                 Ok(IngestOutcome::Added) => result.items_added += 1,
                 Ok(IngestOutcome::Updated) => result.items_updated += 1,
@@ -213,6 +273,10 @@ impl LibraryScanner {
             }
         }
 
+        let extra_paths: Vec<PathBuf> = extras.iter().map(|e| e.path.clone()).collect();
+        for chunk in extra_paths.chunks(PROBE_BATCH) {
+            self.prefetch_probes(chunk).await;
+        }
         for extra in extras {
             let Some(owner) = owners
                 .get(&extra.owner_dir)
@@ -269,7 +333,7 @@ impl LibraryScanner {
             self.refresh_stale_streams(e.id, file_path).await;
             return Ok(IngestOutcome::Skipped);
         }
-        let probe_result = probe_file_graceful(file_path).await;
+        let probe_result = self.probe(file_path).await;
         let video_stream = probe_result
             .as_ref()
             .and_then(|p| p.streams.iter().find(|s| s.stream_type == "Video"));
@@ -346,7 +410,7 @@ impl LibraryScanner {
             }
             // File or NFO changed — update
             let resolved = resolve_movie(file_path);
-            let probe_result = probe_file_graceful(file_path).await;
+            let probe_result = self.probe(file_path).await;
 
             let video_stream = probe_result
                 .as_ref()
@@ -393,7 +457,7 @@ impl LibraryScanner {
 
         // New item
         let resolved = resolve_movie(file_path);
-        let probe_result = probe_file_graceful(file_path).await;
+        let probe_result = self.probe(file_path).await;
 
         let video_stream = probe_result
             .as_ref()
@@ -557,6 +621,7 @@ impl LibraryScanner {
 
                 // Process episodes in this season; its extras belong to it.
                 let videos = collect_video_files(subdir).await;
+                self.prefetch_probes(&videos).await;
                 for video in videos {
                     if let Some(kind) = rustyfin_common::naming::extra_kind(&video, false) {
                         self.ingest_extra_counted(&video, library_id, season_id, kind, result)
@@ -825,6 +890,7 @@ impl LibraryScanner {
                 .collect();
 
         let audio_files = collect_audio_files(album_dir).await;
+        self.prefetch_probes(&audio_files).await;
 
         for audio_file in &audio_files {
             let filename = audio_file
@@ -921,7 +987,7 @@ impl LibraryScanner {
             (title, track_num, disc_num, year)
         };
         if let Some(existing) = existing {
-            let probe_result = probe_file_graceful(file_path).await;
+            let probe_result = self.probe(file_path).await;
 
             let item = media_items::NewMediaItem {
                 item_type: resolved.item_type.clone(),
@@ -956,7 +1022,7 @@ impl LibraryScanner {
         }
 
         // New track
-        let probe_result = probe_file_graceful(file_path).await;
+        let probe_result = self.probe(file_path).await;
 
         let item = media_items::NewMediaItem {
             item_type: resolved.item_type,
@@ -1089,7 +1155,7 @@ impl LibraryScanner {
             }
 
             let resolved = resolve_episode(file_path, series_name);
-            let probe_result = probe_file_graceful(file_path).await;
+            let probe_result = self.probe(file_path).await;
 
             let (ep_name, idx, parent_idx, container) = if let Some(ref r) = resolved {
                 (
@@ -1150,7 +1216,7 @@ impl LibraryScanner {
 
         // New episode
         let resolved = resolve_episode(file_path, series_name);
-        let probe_result = probe_file_graceful(file_path).await;
+        let probe_result = self.probe(file_path).await;
 
         let (ep_name, idx, parent_idx, container) = if let Some(ref r) = resolved {
             (
@@ -1417,7 +1483,7 @@ impl LibraryScanner {
     async fn refresh_stale_streams(&self, item_id: Uuid, file_path: &Path) {
         match media_streams::lacks_details(&self.pool, item_id).await {
             Ok(true) => {
-                let probe_result = probe_file_graceful(file_path).await;
+                let probe_result = self.probe(file_path).await;
                 self.replace_streams(item_id, &probe_result).await;
             }
             Ok(false) => {}

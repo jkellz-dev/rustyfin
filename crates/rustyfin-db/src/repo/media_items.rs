@@ -156,6 +156,14 @@ pub async fn list_ancestors(pool: &PgPool, id: Uuid) -> Result<Vec<MediaItemRow>
     .await
 }
 
+/// Which of `paths` some item already has.
+pub async fn existing_paths(pool: &PgPool, paths: &[String]) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT path FROM media_items WHERE path = ANY($1)")
+        .bind(paths)
+        .fetch_all(pool)
+        .await
+}
+
 /// List items by parent ID with pagination.
 /// The children of every parent in `parent_ids`, parent by parent in that order,
 /// each parent's in `list_by_parent` order (by sort name, then name), at most

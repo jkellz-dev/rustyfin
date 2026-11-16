@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+futures-util.workspace = true
 rustyfin-common.workspace = true
 rustyfin-db.workspace = true
 rustyfin-models.workspace = true
