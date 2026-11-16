@@ -1286,6 +1286,38 @@ structured keys, compiled to CSS at startup and served via `/Branding/Css`.
 
 ---
 
+## Phase 16 — Multi-Server (owner, 2026-11-16)
+
+Watch from a friend's Rustyfin as well as your own. Roadmap only: nothing here starts until the owner picks it up.
+
+### 16a. A friend's server beside yours (no new server code expected)
+
+The friend shares their Rustyfin node with your tailnet (Tailscale node sharing). Their forward-auth proxy then
+sees your own Tailscale login, and you add their server as a second server in your client (Plezy and other Jellyfin
+clients support several servers). Browsing, playback, transcoding and watched state all stay on their server.
+
+- [ ] Check that forward auth signs in a shared-in tailnet user (the identity headers carry the visitor's login) and
+      creates the account on their first `AuthenticateByName`; decide which libraries a new remote user sees by default
+- [ ] Operator guide in `docs/`: sharing the node, ACLs, what the friend's admin controls, adding the server in Plezy
+
+### 16b. Linked libraries (needs a design-boundary decision first)
+
+Your server shows a friend's libraries inside its own, e.g. "Alex's Movies". Jellyfin has no equivalent, so there is
+no parity to follow. It adds a second way in besides forward auth (a server-to-server key), so the Design Boundaries
+section must be changed, with the owner's OK, before work starts.
+
+- [ ] Design: link config in the TOML config file (friend's URL plus a scoped, read-only key the friend issues);
+      what the link may see; behaviour when the friend's server is down (libraries hidden or marked offline)
+- [ ] Remote catalogue fetched live and cached briefly, not mirrored into the local database; remote item ids
+      namespaced so they never collide with local ones
+- [ ] Browse, search, images and `PlaybackInfo` passed through; streams relayed, or the client sent to the friend's
+      server; transcoding stays on the friend's server
+- [ ] Watched state and resume points kept locally per user for remote items
+- [ ] Admin: link status (reachable, latency, item counts) on the dashboard; metrics per link
+- [ ] Parity and tests: a second sandbox Rustyfin as the "friend", Hurl cases through the link
+
+---
+
 ## Current Maturity Summary
 
 | Area | Status | Notes |
