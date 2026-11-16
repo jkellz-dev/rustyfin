@@ -894,32 +894,31 @@ impl LibraryScanner {
         // An album's tracks are ingested several at once: each writes its own
         // row, and the album- and artist-level ids it adds are merged in one
         // statement, so the order does not matter (11d stress run).
-        use futures_util::StreamExt;
-        let outcomes: Vec<(&PathBuf, anyhow::Result<IngestOutcome>)> =
-            futures_util::stream::iter(&audio_files)
+        // Plain futures joined per chunk: a stream adapter over borrowed paths
+        // makes the scan future fail tokio::spawn's Send bound.
+        let mut outcomes: Vec<(&PathBuf, anyhow::Result<IngestOutcome>)> =
+            Vec::with_capacity(audio_files.len());
+        for chunk in audio_files.chunks(PROBE_CONCURRENCY) {
+            let futures: Vec<_> = chunk
+                .iter()
                 .map(|audio_file| {
                     let filename = audio_file
                         .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("");
-                    let nfo_track = track_map.get(filename).copied();
-                    async move {
-                        let outcome = self
-                            .ingest_audio_track(
-                                audio_file,
-                                library_id,
-                                artist_id,
-                                album_id,
-                                artist_name,
-                                nfo_track,
-                            )
-                            .await;
-                        (audio_file, outcome)
-                    }
+                    self.ingest_audio_track(
+                        audio_file,
+                        library_id,
+                        artist_id,
+                        album_id,
+                        artist_name,
+                        track_map.get(filename).copied(),
+                    )
                 })
-                .buffer_unordered(PROBE_CONCURRENCY)
-                .collect()
-                .await;
+                .collect();
+            let done = futures_util::future::join_all(futures).await;
+            outcomes.extend(chunk.iter().zip(done));
+        }
         for (audio_file, outcome) in outcomes {
             match outcome {
                 Ok(IngestOutcome::Added) => result.items_added += 1,
