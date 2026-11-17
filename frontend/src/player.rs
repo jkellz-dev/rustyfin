@@ -302,7 +302,7 @@ impl Player {
         if is_hls {
             if !el.can_play_type("application/vnd.apple.mpegurl").is_empty() {
                 el.set_src(&url);
-            } else if let Err(e) = attach_hls(&el, &url).await {
+            } else if let Err(e) = attach_hls(&el, &url, self).await {
                 return self.fail(e);
             }
         } else {
@@ -595,7 +595,7 @@ async fn load_hls_js() -> Result<JsValue, String> {
     Reflect::get(&window, &"Hls".into()).map_err(|_| "could not load the HLS player".to_string())
 }
 
-async fn attach_hls(el: &HtmlMediaElement, url: &str) -> Result<(), String> {
+async fn attach_hls(el: &HtmlMediaElement, url: &str, p: Player) -> Result<(), String> {
     let ctor = load_hls_js().await?;
     let supported = Reflect::get(&ctor, &"isSupported".into())
         .ok()
@@ -614,6 +614,27 @@ async fn attach_hls(el: &HtmlMediaElement, url: &str) -> Result<(), String> {
             .and_then(|f| f.dyn_into::<Function>().ok())
             .map(|f| f.call1(&hls, arg))
     };
+    // A fatal stream error (nothing decodable, the transcode died) is told,
+    // not left as a player that never starts.
+    let on_error = Closure::<dyn FnMut(JsValue, JsValue)>::new(move |_: JsValue, data: JsValue| {
+        let fatal = Reflect::get(&data, &"fatal".into())
+            .ok()
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if fatal {
+            let detail = Reflect::get(&data, &"details".into())
+                .ok()
+                .and_then(|v| v.as_string())
+                .unwrap_or_default();
+            p.fail(format!("The stream could not be played ({detail})."));
+        }
+    });
+    if let Ok(on) = Reflect::get(&hls, &"on".into())
+        && let Ok(on) = on.dyn_into::<Function>()
+    {
+        let _ = on.call2(&hls, &JsValue::from_str("hlsError"), on_error.as_ref());
+    }
+    on_error.forget();
     call("loadSource", &JsValue::from_str(url));
     call("attachMedia", el.as_ref());
     HLS.with(|h| *h.borrow_mut() = Some(hls));
