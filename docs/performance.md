@@ -9,10 +9,13 @@ yourself to get numbers for your own machine.
 mise run bench                         # the full library: 81,390 files
 mise run bench -- --scale 0.1          # a tenth of it
 mise run bench -- --clients 20 --seconds 60
+mise run bench -- --meilisearch        # with a Meilisearch for the server
 ```
 
-It needs a Postgres role that may create databases (`DATABASE_URL`) and `ffprobe` on `PATH`. The task builds the
-release server and `rustyfin-bench` (`crates/rustyfin-bench`), which then:
+It needs a Postgres role that may create databases (`DATABASE_URL`) and `ffprobe` on `PATH`; `--meilisearch` also
+needs `meilisearch` on `PATH`. Without it, the server searches with Postgres only, as it does when
+`[search] meilisearch_url` is unset. The task builds the release server and `rustyfin-bench`
+(`crates/rustyfin-bench`), which then:
 
 1. writes a library with `tests/stress/make_library.sh`: at scale 1, 2,700 films (one in ten with a trailer and a
    featurette), 300 shows with 3,150 episodes, and 1,500 artists × 5 albums × 10 tracks;
@@ -20,7 +23,9 @@ release server and `rustyfin-bench` (`crates/rustyfin-bench`), which then:
 3. adds a Movies, a Shows and a Music library and times the first scan, then a rescan;
 4. runs each browsing query below with `--clients` clients (default 5) for `--seconds` (default 30), from the same
    machine;
-5. prints the report and writes the same numbers, with the machine, Postgres and ffprobe versions, to
+5. with `--meilisearch`, also times how long the search index takes to catch up after each scan (the server sends
+   every item to Meilisearch once the libraries are idle) and counts the documents it holds;
+6. prints the report and writes the same numbers, with the machine, Postgres, ffprobe and Meilisearch versions, to
    `bench-results.toml`.
 
 The library's files are empty. A scan therefore measures walking the folders, naming, ffprobe on every new file (it

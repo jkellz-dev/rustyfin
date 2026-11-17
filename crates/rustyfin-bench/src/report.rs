@@ -18,7 +18,28 @@ pub struct Results {
     pub machine: Machine,
     pub first_scan: Scan,
     pub rescan: Scan,
+    /// `None`: the server ran without Meilisearch (search is Postgres only).
+    pub search: Option<Search>,
     pub browse: Vec<Browse>,
+}
+
+/// Meilisearch, when the run started one (`--meilisearch`).
+#[derive(Debug, Serialize)]
+pub struct Search {
+    pub meilisearch: String,
+    pub first_scan: SearchIndex,
+    pub rescan: SearchIndex,
+    pub peak_memory_mib: Option<f64>,
+}
+
+/// The index after a scan: the server reindexes once every library is idle.
+#[derive(Debug, Serialize)]
+pub struct SearchIndex {
+    /// From the end of the scan until Meilisearch had processed the server's
+    /// documents; `None` if that never happened within the wait.
+    pub seconds_after_scan: Option<f64>,
+    pub documents: u64,
+    pub failed_tasks: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -82,9 +103,13 @@ impl Results {
             self.scale,
             self.files
         );
+        let search = self.search.as_ref().map_or_else(
+            || "; search: Postgres only (no Meilisearch)".to_string(),
+            |x| format!(", Meilisearch {}", x.meilisearch),
+        );
         let _ = writeln!(
             s,
-            "Postgres {}, ffprobe {}\n",
+            "Postgres {}, ffprobe {}{search}\n",
             m.postgres.as_deref().unwrap_or("?"),
             m.ffprobe.as_deref().unwrap_or("?")
         );
@@ -106,6 +131,23 @@ impl Results {
                 scan.errors
             );
         }
+        if let Some(search) = &self.search {
+            let _ = writeln!(s, "\n| Search index | Ready | Documents | Tasks |");
+            let _ = writeln!(s, "| --- | --- | --- | --- |");
+            for (name, index) in [
+                ("the first scan", &search.first_scan),
+                ("the rescan", &search.rescan),
+            ] {
+                let ready = index
+                    .seconds_after_scan
+                    .map_or_else(|| "did not settle".to_string(), duration);
+                let _ = writeln!(
+                    s,
+                    "| Meilisearch index after {name} | {ready} | {} of {} items | {} failed |",
+                    index.documents, i.total, index.failed_tasks
+                );
+            }
+        }
         let clients = self.browse.first().map_or(0, |b| b.clients);
         let _ = writeln!(s, "\nBrowsing, {clients} concurrent clients per query:\n");
         let _ = writeln!(s, "| Query | Requests/s | p50 | p95 | p99 | Errors |");
@@ -124,6 +166,13 @@ impl Results {
             opt(self.browse_memory_mib, "MiB"),
             opt(self.peak_memory_mib, "MiB")
         );
+        if let Some(search) = &self.search {
+            let _ = writeln!(
+                s,
+                "Meilisearch memory: peak {}.",
+                opt(search.peak_memory_mib, "MiB")
+            );
+        }
         s
     }
 }
@@ -220,13 +269,18 @@ mod tests {
     #[test]
     fn markdown_reports_the_search_index() {
         let md = with_meilisearch().markdown();
-        assert!(md.contains("Postgres 17.2, ffprobe 7.0.2, Meilisearch 1.57.0"), "{md}");
+        assert!(
+            md.contains("Postgres 17.2, ffprobe 7.0.2, Meilisearch 1.57.0"),
+            "{md}"
+        );
         assert!(
             md.contains("| Meilisearch index after the first scan | 12.5 s | 9000 of 9000 items | 0 failed |"),
             "{md}"
         );
         assert!(
-            md.contains("| Meilisearch index after the rescan | 3.0 s | 9000 of 9000 items | 0 failed |"),
+            md.contains(
+                "| Meilisearch index after the rescan | 3.0 s | 9000 of 9000 items | 0 failed |"
+            ),
             "{md}"
         );
         assert!(md.contains("Meilisearch memory: peak 210 MiB."), "{md}");
@@ -241,7 +295,9 @@ mod tests {
         }
         let md = r.markdown();
         assert!(
-            md.contains("| Meilisearch index after the first scan | did not settle | 100 of 9000 items |"),
+            md.contains(
+                "| Meilisearch index after the first scan | did not settle | 100 of 9000 items |"
+            ),
             "{md}"
         );
     }
@@ -249,7 +305,10 @@ mod tests {
     #[test]
     fn without_meilisearch_the_report_says_postgres_only() {
         let md = sample().markdown();
-        assert!(md.contains("Search: Postgres only (no Meilisearch)"), "{md}");
+        assert!(
+            md.contains("ffprobe 7.0.2; search: Postgres only (no Meilisearch)"),
+            "{md}"
+        );
         assert!(!md.contains("Meilisearch index"), "{md}");
     }
 
