@@ -2,8 +2,12 @@ mod api;
 mod browse;
 mod components;
 mod dashboard_view;
+#[allow(dead_code)]
+mod media_route;
 mod pages;
 mod types;
+#[allow(dead_code)]
+mod user_view;
 
 use sycamore::prelude::*;
 use sycamore_router::{HistoryIntegration, Route, Router};
