@@ -17,7 +17,8 @@ pub struct ApiKeyUser {
 fn hash_key(key: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(key.as_bytes());
-    format!("{:x}", hasher.finalize())
+    // Lowercase hex, as stored: the same text `{:x}` gave with sha2 0.10.
+    hex::encode(hasher.finalize())
 }
 
 impl<S> FromRequestParts<S> for ApiKeyUser
@@ -70,4 +71,19 @@ where
 /// Hash a plaintext API key for storage. Used when creating keys.
 pub fn hash_api_key(key: &str) -> String {
     hash_key(key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Stored API keys are looked up by this text: it must not change when
+    /// the hashing crate does (sha2 0.11 dropped `{:x}` on digests).
+    #[test]
+    fn stored_key_hashes_keep_their_form() {
+        assert_eq!(
+            hash_key("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 }

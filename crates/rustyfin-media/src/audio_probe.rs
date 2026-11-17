@@ -127,10 +127,10 @@ fn mp4_codec(path: &Path) -> Option<&'static str> {
     let mut file = std::fs::File::open(path).ok()?;
     let mp4 = Mp4File::read_from(&mut file, ParseOptions::new()).ok()?;
     Some(match mp4.properties().codec() {
-        Mp4Codec::AAC => "aac",
-        Mp4Codec::ALAC => "alac",
-        Mp4Codec::MP3 => "mp3",
-        Mp4Codec::FLAC => "flac",
+        Some(Mp4Codec::AAC) => "aac",
+        Some(Mp4Codec::ALAC) => "alac",
+        Some(Mp4Codec::MP3) => "mp3",
+        Some(Mp4Codec::FLAC) => "flac",
         _ => return None,
     })
 }

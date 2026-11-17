@@ -44,7 +44,10 @@ pub fn cache_path(cache_dir: &Path, source_path: &str, opts: &ImageOptions) -> P
         opts.format,
         CACHE_VERSION,
     );
-    let hash = format!("{:x}", Sha256::digest(key.as_bytes()));
+    let hash: String = Sha256::digest(key.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let ext = match opts.format {
         ImageFormat::Webp => "webp",
         ImageFormat::Png => "png",
