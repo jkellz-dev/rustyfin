@@ -108,6 +108,9 @@ pub fn srt_to_vtt(srt: &str) -> String {
 mod tests {
     use super::*;
 
+    /// File name, codec, language, forced, default, hearing impaired.
+    type Summary = (String, &'static str, Option<String>, bool, bool, bool);
+
     fn names(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| s.to_string()).collect()
     }
@@ -130,7 +133,7 @@ mod tests {
                 "Film (2020).en.sub",
             ]),
         );
-        let summary: Vec<(String, &str, Option<String>, bool, bool, bool)> = found
+        let summary: Vec<Summary> = found
             .iter()
             .map(|s| {
                 (

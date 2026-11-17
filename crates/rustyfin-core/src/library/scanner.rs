@@ -1685,17 +1685,18 @@ impl LibraryScanner {
         if !pr.streams.iter().any(|s| s.stream_type == "Video") {
             return;
         }
-        let mut next = pr
+        let first = pr
             .streams
             .iter()
             .map(|s| s.stream_index)
             .max()
             .unwrap_or(-1)
             + 1;
-        for file in rustyfin_common::subtitle_files::find_subtitle_files(file_path) {
+        let files = rustyfin_common::subtitle_files::find_subtitle_files(file_path);
+        for (stream_index, file) in (first..).zip(files) {
             let new_stream = media_streams::NewMediaStream {
                 item_id,
-                stream_index: next,
+                stream_index,
                 stream_type: "Subtitle".to_string(),
                 codec: Some(file.codec.to_string()),
                 language: file.language.clone(),
@@ -1709,7 +1710,6 @@ impl LibraryScanner {
             if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
                 tracing::error!("Failed to insert subtitle file for {item_id}: {e}");
             }
-            next += 1;
         }
     }
 
