@@ -1290,7 +1290,10 @@ async fn search_index_pages_cover_every_item_once() {
     let lib = app.create_library("Music", "music").await;
     let mut want = Vec::new();
     for n in 0..25 {
-        want.push(app.create_media_item(&format!("Track {n}"), "Audio", lib, None).await);
+        want.push(
+            app.create_media_item(&format!("Track {n}"), "Audio", lib, None)
+                .await,
+        );
     }
     want.sort();
 
