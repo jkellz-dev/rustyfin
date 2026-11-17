@@ -112,6 +112,8 @@ pub fn UserDetail(user_id: String) -> View {
                             found.map_or(0, |t| t.plays),
                         )
                     })
+                    // "Other" only when there is some.
+                    .filter(|(label, _, plays)| label != "Other" || *plays > 0)
                     .collect();
                 let total_label = user_view::duration_label(s.total_minutes);
                 let total_plays = s.plays;

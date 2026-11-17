@@ -164,6 +164,78 @@ pub fn Dashboard() -> View {
                         }
                     })
 
+                    // Streams
+                    h3(class="dashboard-heading") {
+                        "Streams"
+                        span(class="text-muted dashboard-count") { (sessions.with(Vec::len)) }
+                    }
+                    (if sessions.with(|s| !s.is_empty()) {
+                        view! {
+                            div(class="card session-list") {
+                                Indexed(
+                                    list=move || sessions.get_clone(),
+                                    view=move |s: SessionInfo| {
+                                        let state = s.play_state.clone().unwrap_or_default();
+                                        let title = s.now_playing_item.as_ref().map(|i| match &i.series_name {
+                                            Some(series) => format!("{series}: {}", i.name),
+                                            None => i.name.clone(),
+                                        });
+                                        let line = dashboard_view::session_label(
+                                            s.user_name.as_deref(),
+                                            &s.client,
+                                            &s.device_name,
+                                            title.as_deref(),
+                                            state.is_paused,
+                                        );
+                                        let pct = s
+                                            .now_playing_item
+                                            .as_ref()
+                                            .and_then(|i| i.runtime_ticks)
+                                            .zip(state.position_ticks)
+                                            .filter(|(run, _)| *run > 0)
+                                            .map(|(run, pos)| (pos as f64 * 100.0 / run as f64).clamp(0.0, 100.0));
+                                        let how = user_view::stream_method_label(
+                                            state.play_method.as_deref().unwrap_or_default(),
+                                        );
+                                        let item_path = s
+                                            .now_playing_item
+                                            .as_ref()
+                                            .map(|i| MediaRoute::Item { id: i.id.clone() }.path());
+                                        let title_view = match item_path {
+                                            Some(path) => {
+                                                let href = path.clone();
+                                                view! {
+                                                    a(href=href, on:click=move |e: web_sys::MouseEvent| {
+                                                        e.prevent_default();
+                                                        navigate(&path);
+                                                    }) { (line) }
+                                                }
+                                            }
+                                            None => view! { span { (line) } },
+                                        };
+                                        view! {
+                                            div(class="session-row") {
+                                                div(class="session-line") {
+                                                    (title_view)
+                                                    span(class="badge badge-type") { (how) }
+                                                }
+                                                (match pct {
+                                                    Some(p) => {
+                                                        let style = format!("width: {p:.1}%;");
+                                                        view! { div(class="session-progress") { div(class="card-progress-fill", style=style) {} } }
+                                                    }
+                                                    None => view! {},
+                                                })
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        view! { div(class="card text-muted") { "No one is streaming." } }
+                    })
+
                     // Library cards
                     (if let Some(st) = stats.get_clone().filter(|s| !s.libraries.is_empty()) {
                         let libs = st.libraries.clone();
@@ -265,78 +337,6 @@ pub fn Dashboard() -> View {
                         }
                     } else {
                         view! {}
-                    })
-
-                    // Streams
-                    h3(class="dashboard-heading") {
-                        "Streams"
-                        span(class="text-muted dashboard-count") { (sessions.with(Vec::len)) }
-                    }
-                    (if sessions.with(|s| !s.is_empty()) {
-                        view! {
-                            div(class="card session-list") {
-                                Indexed(
-                                    list=move || sessions.get_clone(),
-                                    view=move |s: SessionInfo| {
-                                        let state = s.play_state.clone().unwrap_or_default();
-                                        let title = s.now_playing_item.as_ref().map(|i| match &i.series_name {
-                                            Some(series) => format!("{series}: {}", i.name),
-                                            None => i.name.clone(),
-                                        });
-                                        let line = dashboard_view::session_label(
-                                            s.user_name.as_deref(),
-                                            &s.client,
-                                            &s.device_name,
-                                            title.as_deref(),
-                                            state.is_paused,
-                                        );
-                                        let pct = s
-                                            .now_playing_item
-                                            .as_ref()
-                                            .and_then(|i| i.runtime_ticks)
-                                            .zip(state.position_ticks)
-                                            .filter(|(run, _)| *run > 0)
-                                            .map(|(run, pos)| (pos as f64 * 100.0 / run as f64).clamp(0.0, 100.0));
-                                        let how = user_view::stream_method_label(
-                                            state.play_method.as_deref().unwrap_or_default(),
-                                        );
-                                        let item_path = s
-                                            .now_playing_item
-                                            .as_ref()
-                                            .map(|i| MediaRoute::Item { id: i.id.clone() }.path());
-                                        let title_view = match item_path {
-                                            Some(path) => {
-                                                let href = path.clone();
-                                                view! {
-                                                    a(href=href, on:click=move |e: web_sys::MouseEvent| {
-                                                        e.prevent_default();
-                                                        navigate(&path);
-                                                    }) { (line) }
-                                                }
-                                            }
-                                            None => view! { span { (line) } },
-                                        };
-                                        view! {
-                                            div(class="session-row") {
-                                                div(class="session-line") {
-                                                    (title_view)
-                                                    span(class="badge badge-type") { (how) }
-                                                }
-                                                (match pct {
-                                                    Some(p) => {
-                                                        let style = format!("width: {p:.1}%;");
-                                                        view! { div(class="session-progress") { div(class="card-progress-fill", style=style) {} } }
-                                                    }
-                                                    None => view! {},
-                                                })
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    } else {
-                        view! { div(class="card text-muted") { "No one is streaming." } }
                     })
 
                     // Recently added
