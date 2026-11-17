@@ -34,6 +34,8 @@ pub fn Dashboard() -> View {
     let activity: Signal<Vec<ActivityLogEntry>> = create_signal(Vec::new());
     let sessions: Signal<Vec<SessionInfo>> = create_signal(Vec::new());
     let latest: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
+    let resume: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
+    let player = use_context::<crate::player::Player>();
     // Streams refresh every 10 s while the dashboard is open (owner,
     // 2026-11-17: the dashboard lists current streams).
     let alive = std::rc::Rc::new(std::cell::Cell::new(true));
@@ -85,6 +87,9 @@ pub fn Dashboard() -> View {
             loading.set(false);
             // The widgets below fill in as they arrive; each may fail alone.
             refresh_streams().await;
+            if let Ok(items) = api::get_resume_items(12).await {
+                resume.set(items.items);
+            }
             if let Ok(items) = api::get_latest_items(12).await {
                 latest.set(items);
             }
@@ -327,6 +332,61 @@ pub fn Dashboard() -> View {
                                                 span(class=dot) {}
                                                 span(class="health-name") { (c.name) }
                                                 span(class="text-muted health-detail") { (detail) }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        view! {}
+                    })
+
+                    // Continue watching: plays from the saved position.
+                    (if resume.with(|l| !l.is_empty()) {
+                        view! {
+                            h3(class="dashboard-heading") { "Continue watching" }
+                            div(class="recent-row") {
+                                Indexed(
+                                    list=move || resume.get_clone(),
+                                    view=move |item: BaseItemDto| {
+                                        let tag = item
+                                            .image_tags
+                                            .as_ref()
+                                            .and_then(|t| t.get("Primary").cloned());
+                                        let card = dashboard_view::recent_card(
+                                            &item.id,
+                                            &item.item_type,
+                                            &item.name,
+                                            tag.as_deref(),
+                                            item.series_name.as_deref(),
+                                            item.album_artist.as_deref(),
+                                        );
+                                        let label = card.label.clone();
+                                        let shape = card.shape;
+                                        let art = match card.image {
+                                            Some(src) => view! { img(class=shape, src=src, alt="", loading="lazy") },
+                                            None => {
+                                                let placeholder = format!("{shape} recent-art-empty");
+                                                let initial = label.chars().next().map(String::from).unwrap_or_default();
+                                                view! { div(class=placeholder) { (initial) } }
+                                            }
+                                        };
+                                        let pct = item.user_data.as_ref().and_then(|u| u.played_percentage).unwrap_or(0.0);
+                                        let bar = format!("width: {pct:.1}%;");
+                                        let full = label.clone();
+                                        let id = item.id.clone();
+                                        view! {
+                                            button(
+                                                class="recent-card resume-card",
+                                                title=full,
+                                                on:click=move |_| player.play(id.clone())
+                                            ) {
+                                                div(class="resume-art") {
+                                                    (art)
+                                                    div(class="card-progress") { div(class="card-progress-fill", style=bar) {} }
+                                                }
+                                                div(class="recent-title") { (label) }
                                             }
                                         }
                                     }
