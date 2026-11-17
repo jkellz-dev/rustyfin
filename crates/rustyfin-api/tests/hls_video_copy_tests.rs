@@ -111,6 +111,13 @@ async fn playback_info_passes_a_refused_copy_on() {
             "EnableDirectPlay": false,
             "EnableDirectStream": false,
             "EnableTranscoding": true,
+            // The stream address is built from the player's profile.
+            "DeviceProfile": {
+                "TranscodingProfiles": [{
+                    "Type": "Video", "Container": "ts", "VideoCodec": "h264",
+                    "AudioCodec": "aac", "Protocol": "hls", "Context": "Streaming"
+                }]
+            },
         });
         if let Some(a) = allow {
             body["AllowVideoStreamCopy"] = serde_json::json!(a);
