@@ -31,8 +31,11 @@ name = "rustyfin-server"
 git_tag_enable = true
 
 # A developer tool (`mise run bench`), never released. In git-only mode
-# release-plz also compares each package with the last tag, which fails for
-# a crate the tag does not have.
+# release-plz looks every package up at the newest tag matching its
+# git_tag_name, and the product's vX.Y.Z tags predate this crate. Its own tag
+# name has no tags, so release-plz takes it as new; `release = false` then
+# leaves it alone.
 [[package]]
 name = "rustyfin-bench"
 release = false
+git_tag_name = "rustyfin-bench-v{{ version }}"
