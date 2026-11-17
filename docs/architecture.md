@@ -142,7 +142,7 @@ without knowing the whole state. The scan board is one shared instance for the p
 - **Forward auth first**: identity comes from the proxy (or LDAPS); no stored passwords, no OIDC, no plugins.
 - **Read-only media**: the server never writes to media folders; the `rustyfin` tool is the one writer.
 - **One binary per role**: the server embeds the admin and the migrations.
-- **Measured performance**: changes to scanning, browsing or streaming are timed on an 80,000-item library before and
+- **Measured performance**: changes to scanning, browsing or streaming are timed with `mise run bench` before and
   after ([Performance](performance.md)).
 
 ## Conventions

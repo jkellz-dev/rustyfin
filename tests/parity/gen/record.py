@@ -13,7 +13,8 @@ Rustyfin is a parity gap. Run with -I (isolated mode):
     python3 -I tests/parity/gen/record.py            # all areas
     python3 -I tests/parity/gen/record.py system     # one area
 
-Needs: kubectl, the `hurl-runner` and `jellyfin` pods in `hermes-sandbox`, and a
+Needs: kubectl, the `hurl-runner` and `jellyfin` pods in the `PARITY_NAMESPACE`
+namespace (default `rustyfin-parity`), and a
 bootstrapped Jellyfin (tests/parity/bootstrap/jellyfin.hurl).
 """
 import json
@@ -24,7 +25,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-NS = "hermes-sandbox"
+NS = os.environ.get("PARITY_NAMESPACE", "rustyfin-parity")
 RUNNER = "hurl-runner"
 JELLYFIN = "http://jellyfin:8096"
 KUBECTL = os.environ.get("KUBECTL", "kubectl")
@@ -222,7 +223,7 @@ REQUESTS = [
     ("extras", "GET", "/Items/{movie_id}/SpecialFeatures", {"UserId": "{user_id}"}, True, None),
     ("extras", "GET", "/Users/{user_id}/Items/{movie_id}", {}, True, None),
     ("extras", "GET", "/Items", {"Recursive": "true", "IncludeItemTypes": "Movie"}, True, None),
-    # Fourth slice (roadmap 11a): the owner's Plezy session, 2026-11-16, exact queries.
+    # Fourth slice (roadmap 11a): a Plezy session, 2026-11-16, exact queries.
     ("plezy", "GET", "/UserItems/Resume", {'UserId': '{user_id}', 'Limit': '21', 'Fields': 'Overview,DateCreated', 'MediaTypes': 'Video', 'Recursive': 'true', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
     ("plezy", "GET", "/Shows/NextUp", {'UserId': '{user_id}', 'Limit': '21', 'Fields': 'Overview,DateCreated', 'EnableResumable': 'false', 'NextUpDateCutoff': '2025-11-16T00:00:00Z', 'EnableTotalRecordCount': 'false', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),
     ("plezy", "GET", "/Users/{user_id}/Items/Latest", {'Limit': '20', 'ParentId': '{movies_lib_id}', 'Fields': 'Overview,DateCreated', 'EnableImageTypes': 'Primary,Backdrop,Logo', 'ImageTypeLimit': '3'}, True, None),

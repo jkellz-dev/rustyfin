@@ -1,12 +1,11 @@
-# Performance at 80,000 items
+# Performance
 
-Roadmap 11b/11d, measured 2026-11-16 in the `hermes-sandbox` namespace with a
-library shaped like the owner's: `tests/stress/make_library.sh` writes 81,390
-files (2,700 films with 540 extras, 300 shows with 3,150 episode files, 1,500
-artists × 5 albums × 10 tracks = 75,000 tracks). The files are empty, so this
-measures walking, naming, the database and the API, not media parsing; ffprobe
-still runs on every new file. Server limits 4 CPU / 4 GiB (the live pod has
-none); Postgres 17 with 4 CPU.
+Measured 2026-11-16 on a generated library: `tests/stress/make_library.sh` writes
+81,390 files (2,700 films with 540 extras, 300 shows with 3,150 episode files,
+1,500 artists × 5 albums × 10 tracks = 75,000 tracks). The files are empty, so
+this measures walking, naming, the database and the API, not media parsing;
+ffprobe still runs on every new file. Server limits 4 CPU / 4 GiB; Postgres 17
+with 4 CPU, in a Kubernetes namespace.
 
 ## First scan
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust `#[test]`/`#[tokio::test]`, existing `TestApp` harness for integration tests. No new test dependencies.
 
-**Reference Jellyfin source:** `/home/jonathan/src/jellyfin/tests/`
+**Reference Jellyfin source:** `jellyfin/tests/`
 
 ---
 
@@ -54,7 +54,7 @@ fn episode_foo_s04e011() {
 **Files:**
 - Modify: `crates/rustyfin-common/src/naming.rs` (append to `#[cfg(test)] mod tests`)
 
-**Reference:** `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/TV/EpisodePathParserTest.cs`
+**Reference:** `jellyfin/tests/Jellyfin.Naming.Tests/TV/EpisodePathParserTest.cs`
 
 Port the 23 active `[InlineData]` cases from `ParseEpisodesCorrectly`. Each becomes a `#[test]` fn. The Jellyfin tests use directory paths (no extension) when `isDirectory=true`; for rustyfin, add `.mkv` extension since `resolve_episode` expects a file path.
 
@@ -103,7 +103,7 @@ fn episode_false_positive_pixel_rate() {
 **Files:**
 - Modify: `crates/rustyfin-common/src/naming.rs` (append to test module)
 
-**Reference:** `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/TV/SimpleEpisodeTests.cs`
+**Reference:** `jellyfin/tests/Jellyfin.Naming.Tests/TV/SimpleEpisodeTests.cs`
 
 Port the 16 active `[InlineData]` cases. Note: some have `seasonNumber: null` (anime-style absolute numbering) — if rustyfin doesn't support this, the test will fail and reveal the gap.
 
@@ -138,7 +138,7 @@ Port the 16 active `[InlineData]` cases. Note: some have `seasonNumber: null` (a
 **Files:**
 - Modify: `crates/rustyfin-common/src/naming.rs` (append to test module)
 
-**Reference:** `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/TV/SeasonPathParserTests.cs`
+**Reference:** `jellyfin/tests/Jellyfin.Naming.Tests/TV/SeasonPathParserTests.cs`
 
 Port ~75 `[InlineData]` cases. Rustyfin's `parse_season_folder()` takes a folder name, returns `Option<u32>`. The Jellyfin tests use full paths; extract just the folder name for rustyfin's API.
 
@@ -161,9 +161,9 @@ Port ~75 `[InlineData]` cases. Rustyfin's `parse_season_folder()` takes a folder
 - Modify: `crates/rustyfin-common/src/naming.rs` (append to test module)
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Video/VideoResolverTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Video/CleanDateTimeTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Video/CleanStringTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Video/VideoResolverTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Video/CleanDateTimeTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Video/CleanStringTests.cs`
 
 **VideoResolver (16 cases):** Test `resolve_movie()` with paths like:
 ```
@@ -198,9 +198,9 @@ Port ~75 `[InlineData]` cases. Rustyfin's `parse_season_folder()` takes a folder
 - Modify: `crates/rustyfin-common/src/naming.rs` (append to test module)
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Video/ExtraTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Video/StubTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Video/Format3DTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Video/ExtraTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Video/StubTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Video/Format3DTests.cs`
 
 These test features rustyfin may not support yet (extras detection, disc stubs, 3D format). Port them as-is. Failures reveal capability gaps.
 
@@ -216,10 +216,10 @@ These test features rustyfin may not support yet (extras detection, disc stubs, 
 - Modify: `crates/rustyfin-common/src/naming.rs` (append to test module)
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/Music/MultiDiscAlbumTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/AudioBook/AudioBookResolverTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/AudioBook/AudioBookFileInfoTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Naming.Tests/AudioBook/AudioBookListResolverTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/Music/MultiDiscAlbumTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/AudioBook/AudioBookResolverTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/AudioBook/AudioBookFileInfoTests.cs`
+- `jellyfin/tests/Jellyfin.Naming.Tests/AudioBook/AudioBookListResolverTests.cs`
 
 Test `resolve_audio_track()` and `extract_album_year()`. Rustyfin has basic audio naming; audiobook support is likely incomplete. Port tests to discover gaps.
 
@@ -235,9 +235,9 @@ Test `resolve_audio_track()` and `extract_album_year()`. Rustyfin has basic audi
 - Modify: `crates/rustyfin-common/src/nfo.rs` (append to `#[cfg(test)] mod tests`)
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/MovieNfoParserTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/SeriesNfoParserTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Test Data/`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/MovieNfoParserTests.cs`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/SeriesNfoParserTests.cs`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Test Data/`
 
 Embed test NFO XML as `const &str` in the test module. Test `parse_movie_nfo()` and `parse_series_nfo()` for:
 - Title, year, plot
@@ -263,10 +263,10 @@ Embed test NFO XML as `const &str` in the test module. Test `parse_movie_nfo()` 
 - Modify: `crates/rustyfin-common/src/nfo.rs` (append to test module)
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/EpisodeNfoProviderTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/MusicAlbumNfoProviderTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/MusicArtistNfoParserTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/SeasonNfoProviderTests.cs`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/EpisodeNfoProviderTests.cs`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/MusicAlbumNfoProviderTests.cs`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/MusicArtistNfoParserTests.cs`
+- `jellyfin/tests/Jellyfin.XbmcMetadata.Tests/Parsers/SeasonNfoProviderTests.cs`
 
 Port episode NFO tests (season/episode numbers, aired date) and music NFO tests (artist bio, album metadata, genres from NFO).
 
@@ -282,7 +282,7 @@ Port episode NFO tests (season/episode numbers, aired date) and music NFO tests 
 **Files:**
 - Modify: `crates/rustyfin-auth/src/forward_auth.rs` (append to `#[cfg(test)] mod tests`)
 
-**Reference:** `/home/jonathan/src/jellyfin/tests/Jellyfin.Api.Tests/Auth/CustomAuthenticationHandlerTests.cs`
+**Reference:** `jellyfin/tests/Jellyfin.Api.Tests/Auth/CustomAuthenticationHandlerTests.cs`
 
 First, read rustyfin's current forward_auth.rs to understand the parse function signature. Then port tests for:
 - Standard `Authorization: MediaBrowser Client="...", Device="...", DeviceId="...", Version="...", Token="..."` header
@@ -325,8 +325,8 @@ Read rustyfin-auth source to find where token extraction from `X-Emby-Token`, `X
 - Determine where comma/pipe parsing lives in rustyfin-api, then add tests there
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Api.Tests/ModelBinders/CommaDelimitedCollectionModelBinderTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Api.Tests/ModelBinders/PipeDelimitedCollectionModelBinderTests.cs`
+- `jellyfin/tests/Jellyfin.Api.Tests/ModelBinders/CommaDelimitedCollectionModelBinderTests.cs`
+- `jellyfin/tests/Jellyfin.Api.Tests/ModelBinders/PipeDelimitedCollectionModelBinderTests.cs`
 
 Rustyfin parses comma/pipe-delimited query params inline in route handlers. Find the parsing helpers and test:
 
@@ -357,7 +357,7 @@ null → []
 **Files:**
 - Modify: `crates/rustyfin-api/tests/crud_tests.rs` (or new file `user_parity_tests.rs`)
 
-**Reference:** `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/UserControllerTests.cs`
+**Reference:** `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/UserControllerTests.cs`
 
 Port 8 tests using existing `TestApp` harness:
 
@@ -382,7 +382,7 @@ Port 8 tests using existing `TestApp` harness:
 **Files:**
 - Create: `crates/rustyfin-api/tests/items_parity_tests.rs`
 
-**Reference:** `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/ItemsControllerTests.cs`
+**Reference:** `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/ItemsControllerTests.cs`
 
 Port 3 tests:
 ```rust
@@ -403,8 +403,8 @@ Port 3 tests:
 - Create: `crates/rustyfin-api/tests/library_parity_tests.rs`
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/UserLibraryControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/PlaystateControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/UserLibraryControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/PlaystateControllerTests.cs`
 
 **UserLibrary (4 tests):**
 ```rust
@@ -434,9 +434,9 @@ Port 3 tests:
 - Create: `crates/rustyfin-api/tests/library_structure_parity_tests.rs`
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/LibraryStructureControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/MediaStructureControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/LibraryControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/LibraryStructureControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/MediaStructureControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/LibraryControllerTests.cs`
 
 **LibraryStructure (5 tests):**
 ```rust
@@ -476,11 +476,11 @@ Port 3 tests:
 - Create: `crates/rustyfin-api/tests/misc_parity_tests.rs`
 
 **Reference:**
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/BrandingControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/ActivityLogControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/PersonsControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/MusicGenreControllerTests.cs`
-- `/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/PluginsControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/BrandingControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/ActivityLogControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/PersonsControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/MusicGenreControllerTests.cs`
+- `jellyfin/tests/Jellyfin.Server.Integration.Tests/Controllers/PluginsControllerTests.cs`
 
 **Tests (9 total):**
 ```rust

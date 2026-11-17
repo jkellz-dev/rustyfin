@@ -89,7 +89,7 @@ pub async fn get_info(State(state): State<AppState>, _auth: AuthenticatedUser) -
 }
 
 /// `GET /System/Endpoint` — Where the caller is. Every request arrives through the
-/// forward-auth proxy on the tailnet, so nobody is local and everybody is in the
+/// forward-auth proxy, so nobody is local and everybody is in the
 /// network.
 pub async fn get_endpoint(_auth: AuthenticatedUser) -> Json<EndPointInfo> {
     Json(EndPointInfo {

@@ -1,4 +1,4 @@
-//! Roadmap 11a, from the owner's Plezy session (parity case `plezy.hurl`):
+//! Roadmap 11a, from a Plezy session (parity case `plezy.hurl`):
 //! Plezy opens a show with `Fields=...,SortName,...,MediaSources` on
 //! `/Shows/{id}/Episodes` and on `/Shows/NextUp?SeriesId=`, to badge quality
 //! and decide direct play. Rustyfin left `MediaSources` off both routes, and

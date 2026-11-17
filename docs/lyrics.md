@@ -42,19 +42,16 @@ rate_window_secs = 10
 LRCLIB is run by volunteers; keep the default pace for the public service. A
 self-hosted copy (LRCLIB publishes its database dump) can go faster.
 
-In Kubernetes, run it where the media is writable: the `rustyfin-meta`
-sidecar (settings from `RUSTYFIN__LRCLIB__*` there) or the artwork Job; the
-server's own mount is read-only:
+Run it where the music is writable; the server's own mount is read-only. In Kubernetes, a `rustyfin-meta` sidecar
+beside the server (settings from `RUSTYFIN__LRCLIB__*` there) can run it:
 
 ```sh
-kubectl -n media-stack exec deploy/rustyfin -c rustyfin-meta -- \
-  rustyfin lyrics /mnt/media/music
+kubectl exec deploy/rustyfin -c rustyfin-meta -- rustyfin lyrics /media/music
 ```
 
-A one-off Job does the same with the meta image
-(`local_cluster_config/media-stack/media/rustyfin/jobs/lyrics-job.sh`):
+A one-off Job with the `rustyfin-meta` image, the music mounted read-write, does the same; its log ends with the
+`Done:` line. With Docker:
 
 ```sh
-media-stack/media/rustyfin/jobs/lyrics-job.sh /mnt/media/music
-kubectl -n media-stack logs -f job/<name>     # ends with the Done: line
+docker run --rm -v /path/to/music:/music ghcr.io/jkellz-dev/rustyfin-meta lyrics /music
 ```

@@ -386,9 +386,9 @@ mod tests {
         assert_eq!(
             library_detail(
                 "Empty",
-                &folders(&[("/a", "Ok"), ("/mnt/media/music", "Empty")])
+                &folders(&[("/a", "Ok"), ("/media/music", "Empty")])
             ),
-            "/mnt/media/music: empty: is the share mounted?"
+            "/media/music: empty: is the share mounted?"
         );
         assert_eq!(
             library_detail("Missing", &folders(&[("/gone", "Missing")])),

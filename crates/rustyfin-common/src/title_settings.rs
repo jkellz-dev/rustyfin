@@ -237,7 +237,7 @@ pub fn record_lyrics_checked_now(dir: &Path) -> std::io::Result<()> {
 
 /// Record the collection TMDB puts the film in `dir` in (`None`: in none), as
 /// checked now. Same rules as `record_missing_checked`; a collection recorded
-/// before is kept when TMDB now names none (the owner may delete it).
+/// before is kept when TMDB now names none (the user may delete it).
 pub fn record_collection_checked(dir: &Path, found: Option<(i64, &str)>) -> std::io::Result<()> {
     let p = path(dir);
     let old = match std::fs::read_to_string(&p) {

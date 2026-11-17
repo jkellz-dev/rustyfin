@@ -1,4 +1,4 @@
-//! Browsing bugs the owner hit in real apps (2026-11-15):
+//! Browsing bugs found in real apps (2026-11-15):
 //! - episodes listed in name order, not season and episode order;
 //! - a show's badge showing its seasons, not its unwatched episodes;
 //! - Continue Watching in the TV library listing films;

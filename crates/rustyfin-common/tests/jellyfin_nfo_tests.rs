@@ -1,5 +1,5 @@
-//! A movie NFO as Jellyfin's NFO saver writes it (a real one from the owner's
-//! library, cast trimmed): a UTF-8 byte-order mark, ids as top-level
+//! A movie NFO as Jellyfin's NFO saver writes it (a real one, cast
+//! trimmed): a UTF-8 byte-order mark, ids as top-level
 //! `<tmdbid>`/`<imdbid>`/`<id>` instead of Kodi's `<uniqueid>`, cast ordered by
 //! `<sortorder>`, and actor thumbs that are paths inside Jellyfin's own config
 //! folder, which no other program can read.

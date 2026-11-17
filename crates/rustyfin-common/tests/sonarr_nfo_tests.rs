@@ -1,5 +1,5 @@
 //! Show and episode NFOs as Sonarr's Kodi metadata writes them (real ones
-//! from the owner's library, cast trimmed): `<uniqueid>` ids (including
+//! cast trimmed): `<uniqueid>` ids (including
 //! Sonarr's own and TVmaze, which are ignored), TheTVDB photo addresses for
 //! the cast with no `<order>`, an `<episodeguide>` of JSON, and the TheTVDB
 //! page as a plain line after `</tvshow>`.

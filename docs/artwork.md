@@ -25,8 +25,8 @@ Done: checked=183, complete=182, downloaded=0, headshots=0, collections=0, colle
 | Art | Location |
 |-----|----------|
 | Poster, fanart, season posters | Beside the media (`poster.jpg`, `fanart.jpg`, `seasonNN-poster.jpg`) |
-| Headshots | `[output] people_cache_dir` (cluster: `rustyfin-cache/people`), `tmdb-<id>.jpg` or `img-<sha256>.jpg` |
-| Collection art | `collections/<tmdb-collection-id>/poster.jpg`, `backdrop.jpg` beside the people folder (cluster: `rustyfin-cache/collections`) |
+| Headshots | `[output] people_cache_dir`, `tmdb-<id>.jpg` or `img-<sha256>.jpg` |
+| Collection art | `collections/<tmdb-collection-id>/poster.jpg`, `backdrop.jpg` beside the people folder |
 
 The server attaches collection art to automatic collections at scan time, so scan the library after a run.
 
@@ -80,18 +80,25 @@ run would re-ask TMDB about the same titles. To try again sooner, delete that li
 A title whose `.rustyfin.toml` says `[artwork] skip = true` is left alone, and `[ids]` there replaces the ids the
 folder name or NFO gives.
 
-## In the cluster
+## In a container
 
-`media-stack/media/rustyfin/jobs/artwork-job.sh` in `local_cluster_config` starts a one-off Job running
-`rustyfin artwork` with the sidecar's image, credentials and cache mounts:
+`rustyfin artwork` writes into the media folders, so run it where they are writable, with the same TMDB key and
+`[output]` folders the server is configured with. The `rustyfin-meta` image runs the tool:
 
 ```bash
-media-stack/media/rustyfin/jobs/artwork-job.sh -t movies movies movies_kids
-media-stack/media/rustyfin/jobs/artwork-job.sh -t tvshows --dry-run <tv-folder>
-media-stack/media/rustyfin/jobs/artwork-job.sh -t movies --collections-only movies
-media-stack/media/rustyfin/jobs/artwork-job.sh -t movies --collections-only --check-collections movies /mnt/media/movies
-media-stack/media/rustyfin/jobs/artwork-job.sh -t movies /mnt/media/<folder>
+docker run --rm \
+  -v /path/to/media:/media \
+  -v /path/to/cache:/cache \
+  -e RUSTYFIN__METADATA__TMDB_API_KEY=your-key \
+  -e RUSTYFIN__OUTPUT__PEOPLE_CACHE_DIR=/cache/people \
+  ghcr.io/jkellz-dev/rustyfin-meta artwork /media/movies -t movies
 ```
 
-Folders are relative to `/data/media`, or full paths under `/data/media` or `/mnt/media` (the external disk). Follow a
-run with `kubectl -n media-stack logs -f job/<name>`.
+In Kubernetes, a `rustyfin-meta` sidecar beside the server (with its own read-write mount of the media) can run it:
+
+```bash
+kubectl exec deploy/rustyfin -c rustyfin-meta -- rustyfin artwork /media/movies -t movies
+```
+
+For a long run, a one-off Job with the same image, mounts and settings keeps it apart from the server; follow it with
+`kubectl logs -f job/<name>` until the `Done:` line.

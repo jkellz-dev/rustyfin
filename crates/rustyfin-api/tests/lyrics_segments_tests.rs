@@ -1,4 +1,4 @@
-//! Roadmap 11a, from the owner's Plezy session: `GET /Audio/{id}/Lyrics` and
+//! Roadmap 11a, from a Plezy session: `GET /Audio/{id}/Lyrics` and
 //! `GET /MediaSegments/{id}` had no route. Shapes measured on Jellyfin 10.10.7:
 //! lyrics come from a sidecar `<track>.lrc` (synced, `Start` in ticks, one line
 //! per timestamp, sorted, untimed lines dropped) or `<track>.txt` (every line,

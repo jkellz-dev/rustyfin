@@ -192,7 +192,7 @@ mod tests {
 
     /// Plezy opens `/socket?ApiKey=<token>&deviceId=...` (Jellyfin 10.11's
     /// name); others send `api_key` or a header. All must reach the socket
-    /// (owner's logs: "WebSocket connection rejected: unknown access token").
+    /// (seen in a server log: "WebSocket connection rejected: unknown access token").
     #[test]
     fn a_socket_finds_its_token_wherever_the_client_put_it() {
         use axum::http::{HeaderMap, HeaderValue};

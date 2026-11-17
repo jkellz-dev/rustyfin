@@ -82,7 +82,7 @@ Create real sessions in the DB with real tokens. The `AuthenticatedUser` extract
 
 ### Method
 
-Controller-by-controller comparison of rustyfin handlers against Jellyfin source (`/home/jonathan/src/jellyfin/Jellyfin.Api/Controllers/`). Both codebases indexed (rustyfin via coderlm, Jellyfin via claude-context).
+Controller-by-controller comparison of rustyfin handlers against Jellyfin source (`jellyfin/Jellyfin.Api/Controllers/`). Both codebases indexed (rustyfin via coderlm, Jellyfin via claude-context).
 
 ### Focus Areas (client-impacting gaps)
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Writes a synthetic library shaped like the owner's (~80,000 items: 2,700 films,
+# Writes a synthetic library (~80,000 items: 2,700 films,
 # 300 shows with 3,600 episodes, 1,500 artists with 74,000 tracks) as empty
 # files with real names, for the 11b/11c/11d stress test. Empty files are not
 # playable; the scan records them (probe and tag reads fail softly), which is

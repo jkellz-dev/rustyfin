@@ -10,7 +10,7 @@ recording is wrong, not the server). Rustyfin's failures are the parity gaps.
     python3 -I tests/parity/run.py --all           # every failing assert, not the first 12
 
 Needs kubectl and the `hurl-runner`, `jellyfin` and `rustyfin-server` services in
-`hermes-sandbox`, both servers bootstrapped (tests/parity/bootstrap/*.hurl).
+the `PARITY_NAMESPACE` namespace (default `rustyfin-parity`), both servers bootstrapped (tests/parity/bootstrap/*.hurl).
 
 Offline, against Rustyfin alone (the nightly CI run): the cases already hold
 Jellyfin's recorded answers, so no Jellyfin is needed.
@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-NS = "hermes-sandbox"
+NS = os.environ.get("PARITY_NAMESPACE", "rustyfin-parity")
 RUNNER = "hurl-runner"
 KUBECTL = os.environ.get("KUBECTL", "kubectl")
 ROOT = Path(__file__).resolve().parent

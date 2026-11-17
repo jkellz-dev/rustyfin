@@ -10,7 +10,7 @@ Rustyfin has 101 tests but the roadmap identifies ~260 more needed for confidenc
 
 ## Scope
 
-~260 tests across 5 categories, ported literally from Jellyfin's test projects at `/home/jonathan/src/jellyfin/tests/`. If rustyfin diverges from Jellyfin behavior, the test fails — we discover parity gaps.
+~260 tests across 5 categories, ported literally from Jellyfin's test projects at `jellyfin/tests/`. If rustyfin diverges from Jellyfin behavior, the test fails — we discover parity gaps.
 
 All unit tests use inline `#[cfg(test)]` modules. Integration tests use the existing `TestApp` harness in `crates/rustyfin-api/tests/common/mod.rs`.
 

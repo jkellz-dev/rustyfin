@@ -1,4 +1,4 @@
-# MusicBrainz: API Caching, Setup Script, & Kubernetes Deployment
+# MusicBrainz: API Caching & Setup Script
 
 **Date**: 2026-02-17
 
@@ -7,8 +7,6 @@
 The `rustyfin` CLI queries the public MusicBrainz API at 1 req/sec. For large music libraries, repeat scans re-fetch the same data from the API even though MusicBrainz metadata rarely changes. A disk cache eliminates redundant requests and makes repeat scans nearly instant.
 
 Separately, the self-hosted MusicBrainz Docker setup always clones the official `musicbrainz-docker` repo. Users who already have a clone shouldn't need to re-clone.
-
-Finally, a personal Kubernetes deployment of MusicBrainz server replaces the Docker Compose setup for cluster environments. This lives in the `local_cluster_config` repo, not in Rustyfin itself.
 
 ---
 
@@ -110,84 +108,6 @@ pub struct MusicBrainzConfig {
 - Rate limiting still applies on cache misses
 - `NfoMetadata` merge logic unchanged
 - Scan flow structure unchanged — cache is transparent at the client level
-
----
-
-## Piece 3: Kubernetes MusicBrainz Deployment (Personal)
-
-**Location**: `/home/jonathan/projects/local_cluster_config/media-stack/musicbrainz-server/`
-
-This is separate from the Rustyfin project. It deploys the MusicBrainz server API for unlimited local lookups in a Kubernetes cluster.
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────┐
-│  musicbrainz-server/ (Kustomize)            │
-│                                             │
-│  Deployments:                               │
-│  ├── musicbrainz-db    (postgres:16)        │
-│  ├── musicbrainz       (metabrainz/...      │
-│  │                      musicbrainz-server) │
-│  ├── musicbrainz-redis (redis:7-alpine)     │
-│  └── musicbrainz-solr  (metabrainz/mb-solr) │
-│                                             │
-│  Job:                                       │
-│  └── musicbrainz-import (one-time dump)     │
-│                                             │
-│  CronJob:                                   │
-│  └── musicbrainz-replication (daily ~3 AM)  │
-│                                             │
-│  Ingress:                                   │
-│  └── tailscale (musicbrainz-api)            │
-└─────────────────────────────────────────────┘
-```
-
-### Manifests
-
-| File | Purpose |
-|------|---------|
-| `kustomization.yaml` | Resource list, namespace, labels |
-| `storage.yaml` | Dedicated PV/PVC: `musicbrainz-db-pv` (hostPath `/var/lib/data/musicbrainz-db`, 60Gi) |
-| `postgres.yaml` | Postgres 16 Deployment + ClusterIP Service (`musicbrainz-db:5432`) |
-| `deployment.yaml` | MusicBrainz server Deployment (port 5000) |
-| `redis.yaml` | Redis 7 Deployment + ClusterIP Service |
-| `solr.yaml` | Solr Deployment + ClusterIP Service |
-| `service.yaml` | MusicBrainz server ClusterIP Service |
-| `ingress.yaml` | Tailscale ingress for API access |
-| `secrets.yaml` | OnePasswordItem for MetaBrainz access token + Postgres credentials |
-| `import-job.yaml` | One-time Job: download full dump (~30GB), pg_restore into dedicated Postgres |
-| `replication-cronjob.yaml` | Daily CronJob: download incremental packet, apply to Postgres |
-
-### Patterns (matching existing cluster conventions)
-
-- **Namespace**: `media-stack`
-- **Storage**: Manual hostPath PV/PVC, custom StorageClass `musicbrainz-db`
-- **Ingress**: `ingressClassName: tailscale`
-- **Resources**: Postgres 4Gi memory limit, MusicBrainz server 2Gi, Redis/Solr 512Mi
-- **Security**: `fsGroup: 1000`
-- **Secrets**: OnePasswordItem CRD
-
-### Import Job
-
-Runs once after initial deploy:
-1. Download latest full database dump from `data.metabrainz.org`
-2. Extract and `pg_restore` into dedicated Postgres
-3. Build Solr search indexes
-
-### Replication CronJob
-
-Runs daily at 3 AM UTC:
-1. Download incremental replication packet (few MB)
-2. Apply to Postgres via `replication.sh` from the MusicBrainz image
-3. Requires MetaBrainz access token (free registration)
-
-### Integration with `media-stack/kustomization.yaml`
-
-Add resource entry:
-```yaml
-- ./musicbrainz-server
-```
 
 ---
 

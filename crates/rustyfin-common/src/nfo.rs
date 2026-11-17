@@ -1777,7 +1777,7 @@ mod tests {
     }
 
     /// Lidarr writes a track's duration as `mm:ss` (or `h:mm:ss`). One odd
-    /// value must not cost the whole album its NFO (owner's scan, 2026-11-16).
+    /// value must not cost the whole album its NFO (seen in a real scan, 2026-11-16).
     #[test]
     fn nfo_album_track_durations_in_clock_form() {
         let xml = r#"<?xml version="1.0" encoding="UTF-8"?>

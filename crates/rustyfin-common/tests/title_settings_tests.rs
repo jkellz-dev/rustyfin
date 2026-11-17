@@ -1,6 +1,6 @@
 //! `.rustyfin.toml`: optional per-title settings in a film's or show's folder
 //! (owner, 2026-11-15). Hand-written keys override the NFO and folder name;
-//! `rustyfin artwork` records when TMDB had no art, keeping the owner's
+//! `rustyfin artwork` records when TMDB had no art, keeping the user's
 //! comments and other keys.
 use chrono::{TimeZone, Utc};
 use rustyfin_common::title_settings::{self, TitleSettings};

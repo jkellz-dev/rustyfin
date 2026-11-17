@@ -9,7 +9,7 @@ These are **not** on the roadmap — they are intentional exclusions:
 - Runtime server config mutation — config files are read-only
 - Server writing to the media filesystem — the server is a read-only consumer of media; a separate CLI tool
   (`rustyfin-meta`) handles metadata fetching and writing NFO/artwork to disk. In Kubernetes the CLI runs as a
-  sidecar in the server's pod with its own writable media mount (owner decision 2026-11-14); the server
+  sidecar in the server's pod with its own writable media mount (decided 2026-11-14); the server
   container's mount stays read-only
 - Live TV, DVR, TV tuners
 - Photo / book library scanning
@@ -365,14 +365,14 @@ providers are only queried by the CLI when key fields are missing (artist bio, a
 
 For users who want unlimited lookups with no rate limits and full offline capability. MusicBrainz publishes full
 Postgres dumps at <https://metabrainz.org/datasets/postgres-dumps#musicbrainz>. We run a dockerized MusicBrainz server
-(`/home/jonathan/src/musicbrainz-server/`) backed by these dumps, with a job to pull daily incremental updates.
+(the `musicbrainz-server` repository) backed by these dumps, with a job to pull daily incremental updates.
 
 - [x] Docker Compose service: MusicBrainz server + Postgres, seeded from full dump
 - [x] Init script: download latest full dump from metabrainz.org, import into Postgres
 - [x] Daily update job: fetch and apply incremental replication packets (MusicBrainz publishes daily diffs)
 - [x] `rustyfin` config: `musicbrainz_url` — point at local instance instead of public API
 - [x] No rate limiting needed when querying local instance
-- [x] Reference: MusicBrainz server source at `/home/jonathan/src/musicbrainz-server/`
+- [x] Reference: MusicBrainz server source at the `musicbrainz-server` repository
 - [x] Documentation: storage requirements (~30 GB for full dump), update cadence, Docker resource needs
 
 ### ~~10e. Parental Controls~~ → moved to Phase 15 stretch goals
@@ -442,13 +442,13 @@ low-priority admin features.
 - [x] Series and album folders split `Name (YYYY)` into name and `ProductionYear`, store their directory as `Path`,
       are found again by directory (older rows renamed in place, ids kept), and are no longer shared between
       libraries that hold a folder of the same name
-- [x] Scans prune items whose files are gone (owner decision 2026-11-14): only when the library folder is a
+- [x] Scans prune items whose files are gone (decided 2026-11-14): only when the library folder is a
       readable non-empty directory, only under the scanned root, never more than half of a library of 10+ files in
       one scan; emptied series/seasons/albums/artists go too, user data cascades
-- [x] Placeholder primary image for items without artwork (owner decision 2026-11-14): `ImageTags.Primary`,
+- [x] Placeholder primary image for items without artwork (decided 2026-11-14): `ImageTags.Primary`,
       BlurHash and aspect ratio in the item's shape (2:3 poster, 16:9 episode/library, 1:1 music), served and
       resized at `/Items/{id}/Images/Primary`; real artwork always wins. Video frame extraction stays deferred
-- [x] Music fields (owner decision 2026-11-14): tracks carry `Album`, `AlbumId`, `AlbumPrimaryImageTag`,
+- [x] Music fields (decided 2026-11-14): tracks carry `Album`, `AlbumId`, `AlbumPrimaryImageTag`,
       `AlbumArtist(s)`, `Artists` (tags via `media_items.artists`, else the album artist) and `ArtistItems` (artist
       folders of the same library), `HasLyrics: false`; albums name their artist; albums and artists total their
       tracks' `RunTimeTicks`
@@ -470,9 +470,9 @@ low-priority admin features.
 - [x] Episode thumbnails (owner, 2026-11-14): an episode's image is its own `<episode>-thumb.jpg` (Sonarr/Kodi), else a
       frame grabbed once with ffmpeg at 10% of the runtime into the image cache (landscape placeholder if that
       fails); episodes no longer take the season folder's poster; the admin shows episodes as 16:9 cards
-- [x] A track's release date is its year (owner decision 2026-11-14): `ProductionYear` from the tag, else the
+- [x] A track's release date is its year (decided 2026-11-14): `ProductionYear` from the tag, else the
       album's; no `PremiereDate`. Parity lists it in `KNOWN_DIFFERENCES`
-- [x] CORS same-origin by default (owner decision 2026-11-14); `[server] cors_allowed_origins` allowlists web
+- [x] CORS same-origin by default (decided 2026-11-14); `[server] cors_allowed_origins` allowlists web
       clients on other origins, validated at startup
 - [x] Branding (2/3 — missing Css/Splashscreen config POST)
 - [x] Universal Audio (1/1)
@@ -691,7 +691,7 @@ Jellyfin parity.
 #### Jellyfin Parity Tests (translated from Jellyfin.Server.Integration.Tests)
 
 Port Jellyfin's 64 integration tests to verify Rustyfin behaves identically. Reference source:
-`/home/jonathan/src/jellyfin/tests/Jellyfin.Server.Integration.Tests/`. Adapt for forward auth (no startup wizard) and
+`jellyfin/tests/Jellyfin.Server.Integration.Tests/`. Adapt for forward auth (no startup wizard) and
 Postgres (not SQLite).
 
 **User controller parity** (from `UserControllerTests.cs`, 8 tests):
@@ -880,14 +880,14 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
 - [x] Handle missing/corrupt media files during scan (log and skip, don't crash): dangling links, truncated NFOs,
       non-images named as artwork, files that are not media and non-UTF-8 names scan without failing the rest
       (`broken_files_tests`); artwork that cannot be decoded is served as missing (the placeholder), not a 500
-- [x] From the first real library (2026-11-14): hidden files and folders (`._*` AppleDouble, `.Trash-*`) and NAS
+- [x] From real-world libraries (2026-11-14): hidden files and folders (`._*` AppleDouble, `.Trash-*`) and NAS
       folders (`@eaDir`, `#recycle`) are not media, and items made from them are pruned; artwork is decoded and
       typed by contents (`.tbn`, PNGs named `.jpg`); ffprobe failures say why; 4xx answers are not logged as errors
 - [x] Database connection pool exhaustion behavior (graceful degradation): a request waits at most 5 s for a
       connection, then answers 503 (with `Retry-After` from API errors), never a 401 that signs clients out; an
       unreachable database is 503 too (`pool_exhaustion_tests`)
-- [x] Large library stress: 10k+ items, deeply nested seasons/episodes (81,390 files shaped like the owner's
-      library, `tests/stress/make_library.sh`; results in `docs/performance.md`)
+- [x] Large library stress: 10k+ items, deeply nested seasons/episodes (a generated library,
+      `tests/stress/make_library.sh`; results in `docs/performance.md`)
 
 ### 11d. Load & Performance Testing
 
@@ -895,8 +895,7 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       indexes, from up to 4.7 s)
 - [x] Benchmark: concurrent streaming sessions (direct play, no transcode): line rate of the 1 Gbit/s link (112 MB/s)
       from 10 to 50 clients, 1.5 cores
-- [x] Benchmark: library scan time for large libraries (1k, 10k files): 81,390 new files in ~1 h (was ~3.6 h;
-      ffprobe now runs 8 at once)
+- [x] Benchmark: library scan time for large libraries (`mise run bench`, `docs/performance.md`)
 - [x] Benchmark: search latency (Meilisearch vs Postgres ILIKE fallback): hints 12 ms p50 (Meilisearch);
       `SearchTerm` 5 ms with the trigram index (was 1.95 s)
 - [x] Profile memory usage under sustained load: 84 MiB browsing at 350 requests/s, ~300 MiB streaming at line rate,
@@ -1012,8 +1011,8 @@ Stubs re-evaluated for real implementation to support major Jellyfin clients (We
 Black-box tests that send the same requests to a real Jellyfin and to Rustyfin and compare the answers. The Rust
 tests check Rustyfin against what we believe Jellyfin does; this suite checks it against Jellyfin itself.
 
-- [x] Choose how the two servers are run: a pinned Jellyfin 10.10.7 pod and the published Rustyfin image in
-      `hermes-sandbox`, a `hurl-runner` pod beside them (the namespace fence blocks anything outside), both scanning
+- [x] Choose how the two servers are run: a pinned Jellyfin 10.10.7 pod and the published Rustyfin image in one
+      Kubernetes namespace, a `hurl-runner` pod beside them (a network policy blocks anything outside), both scanning
       synthetic media from `tests/parity/media/make_media.sh`. Still to decide: running it in CI
 - [x] `tests/parity/` of [Hurl](https://hurl.dev) files (first slice: system, users, library, playback, sessions;
       generated from a real Jellyfin by `gen/record.py`), one per area (system, users, auth, libraries, items, images,
@@ -1038,14 +1037,14 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
 
 ### 11i. Metadata Sidecar & Collection Art
 
-Owner decisions (2026-11-14): NFO files (written by Radarr/Sonarr) stay the metadata input; what they lack goes in a
+Decided (2026-11-14): NFO files (written by Radarr/Sonarr) stay the metadata input; what they lack goes in a
 Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh. Downloaded art is stored as fetched.
 
 - [x] Check what Radarr's Kodi NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?).
       Answered from Radarr's writer (`XbmcMetadata.cs`, develop, 2026-11-16): `<set tmdbcolid>` with the collection
       name, `<uniqueid>` TMDB and IMDb ids; actors carry `name`, `role`, `order` and a `thumb` (the TMDB profile
       URL) but no TMDB person id
-- [x] Sidecar file beside each NFO: the per-title `.rustyfin.toml` (`docs/title-settings.md`; TOML, owner rule):
+- [x] Sidecar file beside each NFO: the per-title `.rustyfin.toml` (`docs/title-settings.md`; TOML):
       `[ids]` overrides the NFO's ids, `[artwork]` and `[lyrics]` hold the tools' state. The collection id needs no
       sidecar (Radarr writes `<set tmdbcolid>`); actor ids do not either (next item)
 - [x] Collections keyed by TMDB collection id when known (Radarr's `<set tmdbcolid>`); their art fetched by
@@ -1053,7 +1052,7 @@ Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh.
       `collections/<tmdb-id>/poster.jpg|backdrop.jpg|…` (owner, 2026-11-14), beside the people folder, attached by
       the scan; else the earliest film's poster
 - [x] Cast without an NFO actor id gets its TMDB id from the sidecar, so headshots are `tmdb-<id>.jpg` not `img-<hash>`.
-      Not needed (decided 2026-11-16, owner may overrule): `img-<hash>` is the hash of the TMDB profile path, which is
+      Not needed (decided 2026-11-16): `img-<hash>` is the hash of the TMDB profile path, which is
       the same for a person in every film, so each headshot is already fetched and stored once per person
 
 ### 11j. Extras (owner, 2026-11-16)
@@ -1085,7 +1084,7 @@ Done 2026-11-16: `naming::ExtraKind`, extras stored with `owner_id`, `routes/ext
 
 ### 11k. Lyrics (owner, 2026-11-16)
 
-The owner's library already has about 34,000 `.lrc` files; the owner wants LRCLIB for the rest.
+Many music libraries already keep `.lrc` files beside the tracks; LRCLIB fills in the rest.
 
 - [x] `GET /Audio/{id}/Lyrics`, matching Jellyfin 10.10.7: the track's sidecar `.lrc`/`.elrc` (synced) or `.txt`, else
       lyrics embedded in its tags; 404 when there are none (Plezy asks; found in the 11a request log; was 15e)
@@ -1164,7 +1163,7 @@ validation, and polish needed for daily use.
       (`media_route.rs`), so back/forward, reload and bookmarks work; breadcrumbs come from the item's ancestors
 - [x] Search filters (scope by type: movies, series, music, episodes): films, shows, episodes, albums, artists, tracks;
       in the address
-- [ ] TV and music collections (deferred, owner 2026-11-16): only Radarr's movie `<set>` creates collections today.
+- [ ] TV and music collections (deferred 2026-11-16): only Radarr's movie `<set>` creates collections today.
       Add `collections = ["..."]` to a title's `.rustyfin.toml` (scan creates and fills them), then a media-browser
       action to create a collection and add shows or albums. Plezy lists collections server-wide, as Jellyfin does.
 
@@ -1369,7 +1368,7 @@ structured keys, compiled to CSS at startup and served via `/Branding/Css`.
 
 ## Phase 16 — Multi-Server (owner, 2026-11-16)
 
-Watch from a friend's Rustyfin as well as your own. Roadmap only: nothing here starts until the owner picks it up.
+Watch from a friend's Rustyfin as well as your own. Roadmap only: nothing here starts until the maintainer picks it up.
 
 ### 16a. A friend's server beside yours (no new server code expected)
 
@@ -1385,7 +1384,7 @@ clients support several servers). Browsing, playback, transcoding and watched st
 
 Your server shows a friend's libraries inside its own, e.g. "Alex's Movies". Jellyfin has no equivalent, so there is
 no parity to follow. It adds a second way in besides forward auth (a server-to-server key), so the Design Boundaries
-section must be changed, with the owner's OK, before work starts.
+section must be changed, with the maintainer's OK, before work starts.
 
 - [ ] Design: link config in the TOML config file (friend's URL plus a scoped, read-only key the friend issues);
       what the link may see; behaviour when the friend's server is down (libraries hidden or marked offline)

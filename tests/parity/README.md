@@ -22,8 +22,9 @@ JSON shape (each key present and of the same kind). Values that legitimately dif
 
 ## Running it
 
-Both servers run in the `hermes-sandbox` namespace with a `hurl-runner` pod beside
-them (the namespace fence stops anything outside from reaching them). Copy the media
+Both servers run in one Kubernetes namespace (`PARITY_NAMESPACE`, default
+`rustyfin-parity`) with a `hurl-runner` pod beside them; a network policy stops
+anything outside from reaching them. Copy the media
 into each server (`/media/parity-media` on Jellyfin, `/data/media/parity-media` on
 Rustyfin), run the two bootstrap files from the runner (Rustyfin's with
 `--variable media_root=/data/media/parity-media`), then:
@@ -56,7 +57,7 @@ both servers is still how cases are recorded and Jellyfin's own pass is checked.
 ## Known differences
 
 Deliberate departures from Jellyfin live in `KNOWN_DIFFERENCES` in `gen/record.py`,
-each with the owner decision behind it. The recorder writes the matching assert as a
+each with the decision behind it. The recorder writes the matching assert as a
 `# known difference, not asserted: ...` comment, so it stays visible in the case file.
 
 - Tracks carry only `ProductionYear`, not `PremiereDate` (owner decision 2026-11-14).

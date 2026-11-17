@@ -1,5 +1,5 @@
 // Load test of the requests clients make most (roadmap 11d), shaped like
-// Plezy's (from the owner's request log). Runs from a pod beside the server:
+// Plezy's (from a request log). Runs from a pod beside the server:
 //   k6 run -e BASE=http://rustyfin-server -e VUS=20 -e DURATION=60s browse.js
 // Sign-in goes through forward auth, so the pod must be a trusted proxy.
 import http from 'k6/http';

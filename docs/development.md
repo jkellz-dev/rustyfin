@@ -113,8 +113,8 @@ Then open **<http://localhost:8097>** (not 8096) — Caddy injects the auth head
 ```text
 Browser → localhost:8097 (Caddy) → localhost:8096 (Rustyfin)
                  │
-                 └── Injects: Remote-User: jonathan
-                              Remote-Name: Jonathan
+                 └── Injects: Remote-User: alice
+                              Remote-Name: Alice
 ```
 
 Caddy is configured in `Caddyfile.dev`:
@@ -165,7 +165,7 @@ trusted proxy list):
 # Authenticate (creates user + session)
 curl -X POST http://localhost:8096/Users/AuthenticateByName \
   -H 'Authorization: MediaBrowser Client="curl", Device="dev", DeviceId="dev1", Version="1.0"' \
-  -H 'Remote-User: jonathan' \
+  -H 'Remote-User: alice' \
   -H 'Content-Type: application/json' \
   -d '{}'
 

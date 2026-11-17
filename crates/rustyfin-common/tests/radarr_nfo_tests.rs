@@ -1,5 +1,5 @@
-//! A movie NFO as Radarr's Kodi metadata writes it (a real one from the
-//! owner's library, cast trimmed): `<uniqueid>` ids, `<ratings>`, TMDB web
+//! A movie NFO as Radarr's Kodi metadata writes it (a real one, cast
+//! trimmed): `<uniqueid>` ids, `<ratings>`, TMDB web
 //! addresses for art and cast photos, cast out of order, empty elements, and
 //! the film's TMDB and IMDb pages as plain lines after `</movie>`.
 

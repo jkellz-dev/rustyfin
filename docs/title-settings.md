@@ -64,11 +64,11 @@ When TMDB has no poster or backdrop for a title that is missing one, `rustyfin a
 does not ask about that title again for 30 days. To ask again sooner:
 
 - **One title:** delete its `missing_checked` line (or the whole file if that is all it holds).
-- **Everything:** delete every `missing_checked` line. In the cluster, from the sidecar, which can write to the media:
+- **Everything:** delete every `missing_checked` line, from wherever the media is writable (for example the
+  `rustyfin-meta` container):
 
   ```bash
-  kubectl -n media-stack exec deploy/rustyfin -c rustyfin-meta -- \
-    find /data/media /mnt/media -name .rustyfin.toml -exec sed -i '/^missing_checked/d' {} +
+  find /path/to/media -name .rustyfin.toml -exec sed -i '/^missing_checked/d' {} +
   ```
 
 - **One run:** `--force` ignores `missing_checked` (and also replaces images that already exist, so it is slower).
