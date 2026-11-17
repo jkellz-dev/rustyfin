@@ -149,6 +149,66 @@ pub fn stream_method_label(method: &str) -> &'static str {
     }
 }
 
+/// "just now", "5 min ago", "2 hours ago", "yesterday", "3 days ago",
+/// "5 weeks ago", "3 months ago", "2 years ago": how long before `now_ms`
+/// (both milliseconds since 1970) `then_ms` was.
+pub fn ago_label(now_ms: f64, then_ms: f64) -> String {
+    let _ = (now_ms, then_ms);
+    String::new()
+}
+
+/// How the user list is ordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserSort {
+    Name,
+    LastActive,
+    Role,
+}
+
+impl UserSort {
+    pub const ALL: [(UserSort, &'static str); 3] = [
+        (UserSort::Name, "Name"),
+        (UserSort::LastActive, "Last active"),
+        (UserSort::Role, "Role"),
+    ];
+
+    pub fn from_label(label: &str) -> UserSort {
+        UserSort::ALL
+            .iter()
+            .find(|(_, l)| *l == label)
+            .map_or(UserSort::Name, |(s, _)| *s)
+    }
+}
+
+/// Which users the list shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoleFilter {
+    All,
+    Admins,
+    Users,
+}
+
+/// One user as the list sees it: name, administrator, last active (ms).
+#[derive(Debug, Clone, PartialEq)]
+pub struct UserRow<'a> {
+    pub name: &'a str,
+    pub admin: bool,
+    pub last_active_ms: Option<f64>,
+}
+
+/// The positions of the users to show, in order: names containing `words`
+/// (any case), of the role asked for, sorted by `sort` (most recent first for
+/// last active, never-active last; administrators first for role; then name).
+pub fn sort_and_filter(
+    rows: &[UserRow<'_>],
+    words: &str,
+    role: RoleFilter,
+    sort: UserSort,
+) -> Vec<usize> {
+    let _ = (words, role, sort);
+    (0..rows.len()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +275,73 @@ mod tests {
         );
         assert_eq!(kind_label("Audio"), "Music");
         assert_eq!(kind_label("Trailer"), "Other");
+    }
+
+    #[test]
+    fn times_read_as_how_long_ago() {
+        let now = 1_794_897_780_000.0;
+        let min = 60_000.0;
+        assert_eq!(ago_label(now, now - 20_000.0), "just now");
+        assert_eq!(ago_label(now, now + 5_000.0), "just now");
+        assert_eq!(ago_label(now, now - 5.0 * min), "5 min ago");
+        assert_eq!(ago_label(now, now - 60.0 * min), "1 hour ago");
+        assert_eq!(ago_label(now, now - 150.0 * min), "2 hours ago");
+        assert_eq!(ago_label(now, now - 30.0 * 60.0 * min), "yesterday");
+        assert_eq!(ago_label(now, now - 3.0 * 1440.0 * min), "3 days ago");
+        assert_eq!(ago_label(now, now - 15.0 * 1440.0 * min), "2 weeks ago");
+        assert_eq!(ago_label(now, now - 95.0 * 1440.0 * min), "3 months ago");
+        assert_eq!(ago_label(now, now - 800.0 * 1440.0 * min), "2 years ago");
+    }
+
+    #[test]
+    fn the_user_list_sorts_and_filters() {
+        let rows = [
+            UserRow {
+                name: "carol",
+                admin: false,
+                last_active_ms: Some(10.0),
+            },
+            UserRow {
+                name: "Alice",
+                admin: true,
+                last_active_ms: None,
+            },
+            UserRow {
+                name: "bob",
+                admin: false,
+                last_active_ms: Some(30.0),
+            },
+            UserRow {
+                name: "dave",
+                admin: true,
+                last_active_ms: Some(20.0),
+            },
+        ];
+        assert_eq!(
+            sort_and_filter(&rows, "", RoleFilter::All, UserSort::Name),
+            vec![1, 2, 0, 3]
+        );
+        assert_eq!(
+            sort_and_filter(&rows, "", RoleFilter::All, UserSort::LastActive),
+            vec![2, 3, 0, 1]
+        );
+        assert_eq!(
+            sort_and_filter(&rows, "", RoleFilter::All, UserSort::Role),
+            vec![1, 3, 2, 0]
+        );
+        assert_eq!(
+            sort_and_filter(&rows, "", RoleFilter::Admins, UserSort::Name),
+            vec![1, 3]
+        );
+        assert_eq!(
+            sort_and_filter(&rows, "", RoleFilter::Users, UserSort::Name),
+            vec![2, 0]
+        );
+        assert_eq!(
+            sort_and_filter(&rows, " A ", RoleFilter::All, UserSort::Name),
+            vec![1, 0, 3]
+        );
+        assert_eq!(UserSort::from_label("Last active"), UserSort::LastActive);
+        assert_eq!(UserSort::from_label("?"), UserSort::Name);
     }
 }
