@@ -166,6 +166,7 @@ mod tests {
             },
             first_scan: scan(372.0),
             rescan: scan(4.2),
+            search: None,
             browse: vec![Browse {
                 query: "7500 tracks, first page".into(),
                 url: "/Items?IncludeItemTypes=Audio".into(),
@@ -197,6 +198,67 @@ mod tests {
             md.contains("| 7500 tracks, first page | 33 | 12 ms | 21 ms | 31 ms | 0 |"),
             "{md}"
         );
+    }
+
+    fn with_meilisearch() -> Results {
+        let index = |seconds| SearchIndex {
+            seconds_after_scan: Some(seconds),
+            documents: 9000,
+            failed_tasks: 0,
+        };
+        Results {
+            search: Some(Search {
+                meilisearch: "1.57.0".into(),
+                first_scan: index(12.5),
+                rescan: index(3.0),
+                peak_memory_mib: Some(210.0),
+            }),
+            ..sample()
+        }
+    }
+
+    #[test]
+    fn markdown_reports_the_search_index() {
+        let md = with_meilisearch().markdown();
+        assert!(md.contains("Postgres 17.2, ffprobe 7.0.2, Meilisearch 1.57.0"), "{md}");
+        assert!(
+            md.contains("| Meilisearch index after the first scan | 12.5 s | 9000 of 9000 items | 0 failed |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| Meilisearch index after the rescan | 3.0 s | 9000 of 9000 items | 0 failed |"),
+            "{md}"
+        );
+        assert!(md.contains("Meilisearch memory: peak 210 MiB."), "{md}");
+    }
+
+    #[test]
+    fn an_index_that_never_settles_says_so() {
+        let mut r = with_meilisearch();
+        if let Some(search) = r.search.as_mut() {
+            search.first_scan.seconds_after_scan = None;
+            search.first_scan.documents = 100;
+        }
+        let md = r.markdown();
+        assert!(
+            md.contains("| Meilisearch index after the first scan | did not settle | 100 of 9000 items |"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn without_meilisearch_the_report_says_postgres_only() {
+        let md = sample().markdown();
+        assert!(md.contains("Search: Postgres only (no Meilisearch)"), "{md}");
+        assert!(!md.contains("Meilisearch index"), "{md}");
+    }
+
+    #[test]
+    fn search_results_are_toml() {
+        let text = toml::to_string(&with_meilisearch()).unwrap();
+        assert!(text.contains("[search.first_scan]"), "{text}");
+        assert!(text.contains("meilisearch = \"1.57.0\""), "{text}");
+        assert!(!toml::to_string(&sample()).unwrap().contains("[search"));
     }
 
     #[test]
