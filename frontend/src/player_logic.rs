@@ -10,26 +10,60 @@ pub const TICKS_PER_SEC: f64 = 10_000_000.0;
 /// How often a playing item reports its position (Jellyfin web: 10 s).
 pub const REPORT_EVERY_MS: f64 = 10_000.0;
 
+/// A saved position closer to the start than this is not resumed.
+const MIN_RESUME_SECS: f64 = 5.0;
+
 pub fn ticks_to_secs(ticks: i64) -> f64 {
-    let _ = ticks;
-    0.0
+    ticks as f64 / TICKS_PER_SEC
 }
 
 pub fn secs_to_ticks(secs: f64) -> i64 {
-    let _ = secs;
-    0
+    (secs * TICKS_PER_SEC).round() as i64
 }
 
 /// "4:05", or "1:02:03" past an hour.
 pub fn clock(secs: f64) -> String {
-    let _ = secs;
-    String::new()
+    let total = if secs.is_finite() && secs > 0.0 {
+        secs.floor() as u64
+    } else {
+        0
+    };
+    let (h, m, s) = (total / 3600, total / 60 % 60, total % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
 }
 
 /// The browser's playback abilities, as a Jellyfin `DeviceProfile`: what
 /// every current browser plays itself, and HLS (H.264/AAC) for the rest.
 pub fn browser_profile() -> Value {
-    json!({})
+    json!({
+        "Name": "Rustyfin Admin",
+        "MaxStreamingBitrate": 120_000_000,
+        "MaxStaticBitrate": 120_000_000,
+        "DirectPlayProfiles": [
+            {"Type": "Video", "Container": "mp4,m4v", "VideoCodec": "h264,vp9,av1", "AudioCodec": "aac,mp3,opus,flac"},
+            {"Type": "Video", "Container": "webm", "VideoCodec": "vp8,vp9,av1", "AudioCodec": "vorbis,opus"},
+            {"Type": "Audio", "Container": "mp3,flac,m4a,aac,ogg,oga,opus,webm,wav"}
+        ],
+        "TranscodingProfiles": [
+            {"Type": "Video", "Container": "ts", "VideoCodec": "h264", "AudioCodec": "aac",
+             "Protocol": "hls", "Context": "Streaming"},
+            {"Type": "Audio", "Container": "ts", "AudioCodec": "aac",
+             "Protocol": "hls", "Context": "Streaming"}
+        ],
+        "SubtitleProfiles": [
+            {"Format": "vtt", "Method": "External"},
+            {"Format": "srt", "Method": "External"},
+            {"Format": "subrip", "Method": "External"},
+            {"Format": "ass", "Method": "Encode"},
+            {"Format": "ssa", "Method": "Encode"},
+            {"Format": "pgssub", "Method": "Encode"},
+            {"Format": "dvdsub", "Method": "Encode"}
+        ]
+    })
 }
 
 /// What to load into the media element.
@@ -50,15 +84,31 @@ pub fn choose_source(
     play_session_id: &str,
     token: &str,
 ) -> Option<PlaySource> {
-    let _ = (source, item_id, is_audio, play_session_id, token);
-    None
+    if source["SupportsDirectPlay"].as_bool() == Some(true) {
+        let kind = if is_audio { "Audio" } else { "Videos" };
+        let ms = source["Id"].as_str().unwrap_or(item_id);
+        return Some(PlaySource::Direct(format!(
+            "/{kind}/{item_id}/stream?static=true&MediaSourceId={ms}&PlaySessionId={play_session_id}&api_key={token}"
+        )));
+    }
+    let url = source["TranscodingUrl"].as_str()?;
+    let lower = url.to_ascii_lowercase();
+    let url = if lower.contains("api_key=") {
+        url.to_string()
+    } else {
+        let sep = if url.contains('?') { '&' } else { '?' };
+        format!("{url}{sep}api_key={token}")
+    };
+    Some(PlaySource::Hls(url))
 }
 
 /// Where playback starts: the saved position unless the item was finished
 /// (or barely started).
 pub fn resume_secs(position_ticks: Option<i64>, played: bool) -> f64 {
-    let _ = (position_ticks, played);
-    0.0
+    match position_ticks {
+        Some(t) if !played && ticks_to_secs(t) >= MIN_RESUME_SECS => ticks_to_secs(t),
+        _ => 0.0,
+    }
 }
 
 /// A keyboard shortcut in the player.
@@ -72,8 +122,15 @@ pub enum Shortcut {
 }
 
 pub fn shortcut(key: &str) -> Option<Shortcut> {
-    let _ = key;
-    None
+    match key {
+        " " | "k" | "K" => Some(Shortcut::TogglePlay),
+        "ArrowLeft" => Some(Shortcut::Seek(-10.0)),
+        "ArrowRight" => Some(Shortcut::Seek(10.0)),
+        "m" | "M" => Some(Shortcut::Mute),
+        "f" | "F" => Some(Shortcut::Fullscreen),
+        "Escape" => Some(Shortcut::Close),
+        _ => None,
+    }
 }
 
 /// The items to play in order and where we are.
@@ -85,26 +142,31 @@ pub struct Queue {
 
 impl Queue {
     pub fn new(ids: Vec<String>, start: &str) -> Self {
-        let _ = (ids, start);
-        Queue::default()
+        let index = ids.iter().position(|i| i == start).unwrap_or(0);
+        Queue { ids, index }
     }
 
     pub fn current(&self) -> Option<&str> {
-        None
+        self.ids.get(self.index).map(String::as_str)
     }
 
     /// Move on; `None` at the end.
     pub fn next(&mut self) -> Option<&str> {
-        None
+        if !self.has_next() {
+            return None;
+        }
+        self.index += 1;
+        self.current()
     }
 
     /// Back one (stays on the first).
     pub fn previous(&mut self) -> Option<&str> {
-        None
+        self.index = self.index.saturating_sub(1);
+        self.current()
     }
 
     pub fn has_next(&self) -> bool {
-        false
+        self.index + 1 < self.ids.len()
     }
 }
 
@@ -116,17 +178,79 @@ pub struct TrackChoice {
     pub is_default: bool,
 }
 
+fn channels_label(channels: i64) -> Option<String> {
+    match channels {
+        0 => None,
+        1 => Some("mono".into()),
+        2 => Some("stereo".into()),
+        6 => Some("5.1".into()),
+        8 => Some("7.1".into()),
+        n => Some(format!("{n} ch")),
+    }
+}
+
 /// The audio or subtitle choices from an item's `MediaStreams` (`kind` is
-/// "Audio" or "Subtitle"); labels like "English · AC3 5.1" or "Commentary".
+/// "Audio" or "Subtitle"); labels like "ENG · AC3 5.1" or "Commentary · AAC stereo".
 pub fn track_choices(streams: &[Value], kind: &str) -> Vec<TrackChoice> {
-    let _ = (streams, kind);
-    Vec::new()
+    streams
+        .iter()
+        .filter(|s| s["Type"] == kind)
+        .map(|s| {
+            let index = s["Index"].as_i64().unwrap_or(0) as i32;
+            let name = s["Title"]
+                .as_str()
+                .filter(|t| !t.is_empty())
+                .map(str::to_string)
+                .or_else(|| {
+                    s["Language"]
+                        .as_str()
+                        .filter(|l| !l.is_empty())
+                        .map(str::to_uppercase)
+                })
+                .unwrap_or_else(|| format!("Track {}", index + 1));
+            let mut detail = s["Codec"]
+                .as_str()
+                .map(str::to_uppercase)
+                .unwrap_or_default();
+            if kind == "Audio"
+                && let Some(ch) = channels_label(s["Channels"].as_i64().unwrap_or(0))
+            {
+                detail = format!("{detail} {ch}").trim().to_string();
+            }
+            let label = if detail.is_empty() {
+                name
+            } else {
+                format!("{name} · {detail}")
+            };
+            TrackChoice {
+                index,
+                label,
+                is_default: s["IsDefault"].as_bool().unwrap_or(false),
+            }
+        })
+        .collect()
 }
 
 /// Chapter marks on the seek bar: (percent along, name, start in seconds).
 pub fn chapter_marks(chapters: &[Value], runtime_ticks: Option<i64>) -> Vec<(f64, String, f64)> {
-    let _ = (chapters, runtime_ticks);
-    Vec::new()
+    let Some(runtime) = runtime_ticks.filter(|r| *r > 0) else {
+        return Vec::new();
+    };
+    chapters
+        .iter()
+        .filter_map(|c| {
+            let start = c["StartPositionTicks"].as_i64()?;
+            if start >= runtime {
+                return None;
+            }
+            let name = c["Name"].as_str().unwrap_or("Chapter").to_string();
+            Some((
+                start as f64 * 100.0 / runtime as f64,
+                name,
+                ticks_to_secs(start),
+            ))
+        })
+        .collect()
 }
 
 /// The body of a `/Sessions/Playing*` report.
@@ -138,15 +262,30 @@ pub fn report_body(
     position_secs: f64,
     paused: bool,
 ) -> Value {
-    let _ = (
-        item_id,
-        play_session_id,
-        media_source_id,
-        play_method,
-        position_secs,
-        paused,
-    );
-    json!({})
+    json!({
+        "ItemId": item_id,
+        "PlaySessionId": play_session_id,
+        "MediaSourceId": media_source_id,
+        "PlayMethod": play_method,
+        "PositionTicks": secs_to_ticks(position_secs.max(0.0)),
+        "IsPaused": paused,
+        "CanSeek": true,
+    })
+}
+
+/// The Play button's text for an item, or `None` when it cannot be played
+/// (folders, shows, people): "Resume 12:34" when there is a saved position.
+pub fn play_label(item_type: &str, position_ticks: Option<i64>, played: bool) -> Option<String> {
+    match item_type {
+        "Movie" | "Episode" | "Video" | "MusicVideo" | "Trailer" | "Audio" | "MusicAlbum" => {}
+        _ => return None,
+    }
+    let at = resume_secs(position_ticks, played);
+    Some(if at > 0.0 && item_type != "MusicAlbum" {
+        format!("Resume {}", clock(at))
+    } else {
+        "Play".to_string()
+    })
 }
 
 #[cfg(test)]
@@ -328,5 +467,24 @@ mod tests {
         assert_eq!(b["PositionTicks"], 125_000_000);
         assert_eq!(b["IsPaused"], true);
         assert_eq!(b["CanSeek"], true);
+    }
+
+    #[test]
+    fn play_buttons_say_play_or_resume() {
+        assert_eq!(play_label("Movie", None, false).as_deref(), Some("Play"));
+        assert_eq!(
+            play_label("Episode", Some(754 * 10_000_000), false).as_deref(),
+            Some("Resume 12:34")
+        );
+        assert_eq!(
+            play_label("Episode", Some(754 * 10_000_000), true).as_deref(),
+            Some("Play")
+        );
+        assert_eq!(
+            play_label("MusicAlbum", None, false).as_deref(),
+            Some("Play")
+        );
+        assert_eq!(play_label("Series", None, false), None);
+        assert_eq!(play_label("Folder", None, false), None);
     }
 }

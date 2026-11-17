@@ -8,6 +8,8 @@ use crate::browse::{self, ChildQuery};
 use crate::components::error_notice::ErrorNotice;
 use crate::components::loading::Loading;
 use crate::media_route::{self, Crumb, MediaRoute};
+use crate::player::Player;
+use crate::player_logic;
 use crate::types::*;
 
 // ── View state machine ──────────────────────────────────
@@ -105,6 +107,7 @@ fn select_value(e: web_sys::Event) -> String {
 #[component(inline_props)]
 pub fn Media(path: String) -> View {
     api::new_page();
+    let player = use_context::<Player>();
     let route = MediaRoute::parse(&path);
     let current_view: Signal<MediaView> = create_signal(match &route {
         MediaRoute::Libraries => MediaView::Libraries,
@@ -767,6 +770,7 @@ pub fn Media(path: String) -> View {
                                                 let img_url = primary_image_url(&item.id, primary_tag(&item).as_deref(), browse::CARD_IMAGE_WIDTH);
                                                 let item_type = item.item_type.clone();
                                                 let item_for_click = item.clone();
+                                                let play_item_id = item.id.clone();
                                                 let child_count = item.child_count;
                                                 let user = item.user_data.clone().unwrap_or_default();
                                                 let badge = browse::card_badge(is_folder, user.played, user.unplayed_item_count);
@@ -801,9 +805,24 @@ pub fn Media(path: String) -> View {
                                                     }
                                                 };
 
+                                                let play_id = (player_logic::play_label(&item_type, None, false).is_some())
+                                                    .then(|| play_item_id.clone());
                                                 view! {
                                                     div(class=card_class, on:click=on_click) {
                                                         div(class="media-card-art") {
+                                                        (match play_id.clone() {
+                                                            Some(id) => view! {
+                                                                button(
+                                                                    class="card-play",
+                                                                    aria-label="Play",
+                                                                    on:click=move |e: web_sys::MouseEvent| {
+                                                                        e.stop_propagation();
+                                                                        player.play(id.clone());
+                                                                    }
+                                                                ) { "▶" }
+                                                            },
+                                                            None => view! {},
+                                                        })
                                                         (if has_image {
                                                             let url = img_url.clone();
                                                             view! { img(class=poster_class, src=url, alt="", loading="lazy") }
@@ -953,6 +972,22 @@ pub fn Media(path: String) -> View {
 
                                         // Actions
                                         div(class="detail-actions") {
+                                            (match player_logic::play_label(
+                                                &item.item_type,
+                                                item.user_data.as_ref().and_then(|u| u.playback_position_ticks),
+                                                item.user_data.as_ref().is_some_and(|u| u.played),
+                                            ) {
+                                                Some(label) => {
+                                                    let id = item.id.clone();
+                                                    view! {
+                                                        button(
+                                                            class="btn btn-primary btn-sm btn-play",
+                                                            on:click=move |_| player.play(id.clone())
+                                                        ) { "▶ " (label) }
+                                                    }
+                                                }
+                                                None => view! {},
+                                            })
                                             button(
                                                 class="btn btn-primary btn-sm",
                                                 disabled=refreshing.get(),

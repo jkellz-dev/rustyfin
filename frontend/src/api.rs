@@ -65,6 +65,17 @@ async fn dropped<T>() -> T {
 /// Send a request and return the answer's body. GETs of browsing data are
 /// served from a 30-second cache when possible; anything else empties it.
 async fn send(method: &str, path: &str, body: Option<String>) -> Result<String, ApiError> {
+    send_with(method, path, body, true).await
+}
+
+/// `tied`: the request belongs to the page (aborted and dropped when it is
+/// left). The player's requests are not tied: playback outlives pages.
+async fn send_with(
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    tied: bool,
+) -> Result<String, ApiError> {
     let page = PAGES.with(|p| p.borrow().current());
     let now = js_sys::Date::now();
     let is_get = method == "GET";
@@ -72,7 +83,9 @@ async fn send(method: &str, path: &str, body: Option<String>) -> Result<String, 
         if let Some(hit) = CACHE.with(|c| c.borrow().get(path, now).map(str::to_string)) {
             return Ok(hit);
         }
-    } else if !is_get {
+    } else if !is_get && tied {
+        // The player's reports every 10 s would empty it constantly; a
+        // finished play empties it in report_playback.
         CACHE.with(|c| c.borrow_mut().clear());
     }
     let url = format!("{}{path}", base_url());
@@ -83,7 +96,7 @@ async fn send(method: &str, path: &str, body: Option<String>) -> Result<String, 
     }
     .header("Authorization", &auth_header());
     // Only reads are cancelled on leaving a page: a change still goes through.
-    let signal = if is_get {
+    let signal = if is_get && tied {
         ABORT.with(|a| a.borrow().as_ref().map(|c| c.signal()))
     } else {
         None
@@ -111,7 +124,7 @@ async fn send(method: &str, path: &str, body: Option<String>) -> Result<String, 
             }
         }
     };
-    if !PAGES.with(|p| p.borrow().is_current(page)) {
+    if tied && !PAGES.with(|p| p.borrow().is_current(page)) {
         return dropped().await;
     }
     if is_get
@@ -411,4 +424,50 @@ pub fn store(key: &str, value: &str) {
     if let Some(s) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
         let _ = s.set_item(key, value);
     }
+}
+
+// ── Player (not tied to a page) ──────────────────────────
+
+/// Any JSON the player reads (items, track lists).
+pub async fn player_get(path: &str) -> Result<serde_json::Value, ApiError> {
+    parse(&send_with("GET", path, None, false).await?)
+}
+
+/// `POST /Items/{id}/PlaybackInfo` with the browser's profile.
+pub async fn playback_info(
+    item_id: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, ApiError> {
+    let path = format!("/Items/{item_id}/PlaybackInfo");
+    parse(&send_with("POST", &path, Some(body.to_string()), false).await?)
+}
+
+/// `POST /Sessions/Playing`, `/Progress` or `/Stopped` (`what`: "", "Progress", "Stopped").
+pub async fn report_playback(what: &str, body: &serde_json::Value) -> Result<(), ApiError> {
+    let path = if what.is_empty() {
+        "/Sessions/Playing".to_string()
+    } else {
+        format!("/Sessions/Playing/{what}")
+    };
+    if what == "Stopped" {
+        // Played state and resume points change.
+        CACHE.with(|c| c.borrow_mut().clear());
+    }
+    send_with("POST", &path, Some(body.to_string()), false)
+        .await
+        .map(|_| ())
+}
+
+/// End a transcode the player no longer needs.
+pub async fn stop_encoding(play_session_id: &str) -> Result<(), ApiError> {
+    let path = format!("/Videos/ActiveEncodings?DeviceId=admin-ui&PlaySessionId={play_session_id}");
+    send_with("DELETE", &path, None, false).await.map(|_| ())
+}
+
+/// The resume list for the dashboard's Continue watching.
+pub async fn get_resume_items(limit: i32) -> Result<QueryResult<BaseItemDto>, ApiError> {
+    get_json(&format!(
+        "/UserItems/Resume?Limit={limit}&MediaTypes=Video&Fields=UserData,SeriesName&EnableImages=true"
+    ))
+    .await
 }
