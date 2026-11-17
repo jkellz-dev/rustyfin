@@ -571,25 +571,14 @@ mod tests {
 
         const SEC: i64 = 10_000_000;
 
-        /// A stand-in for ffmpeg: logs its arguments next to the session folders,
-        /// writes the playlist and segment `<start_number>.ts`, then sleeps
-        /// `sleep` seconds and exits with `code`.
-        fn fake_ffmpeg(root: &Path, code: i32, sleep: u32) -> String {
-            let script = root.join(format!("ffmpeg-{code}-{sleep}.sh"));
-            std::fs::write(
-                &script,
-                format!(
-                    "#!/bin/sh\nfor a; do last=$a; done\ndir=$(dirname \"$last\")\n\
-                     echo \"$*\" >> \"{log}\"\nn=0\nprev=\nfor a; do [ \"$prev\" = -start_number ] && n=$a; prev=$a; done\n\
-                     : > \"$dir/$n.ts\"\nprintf '#EXTM3U\\n#EXTINF:6,\\n%s.ts\\n#EXT-X-ENDLIST\\n' \"$n\" > \"$last\"\n\
-                     sleep {sleep}\nexit {code}\n",
-                    log = root.join("calls.log").display()
-                ),
+        /// A stand-in for ffmpeg from `tests/fixtures/fake-ffmpeg`. They are
+        /// committed files: writing a script at run time and executing it
+        /// while a parallel test forks fails now and then with "Text file busy".
+        fn fake(name: &str) -> String {
+            format!(
+                "{}/tests/fixtures/fake-ffmpeg/{name}.sh",
+                env!("CARGO_MANIFEST_DIR")
             )
-            .unwrap();
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-            script.to_string_lossy().into_owned()
         }
 
         fn root(name: &str) -> PathBuf {
@@ -663,7 +652,7 @@ mod tests {
         #[tokio::test]
         async fn a_finished_transcode_stays_until_the_player_leaves() {
             let root = root("finished");
-            let tm = manager(&root, fake_ffmpeg(&root, 0, 0));
+            let tm = manager(&root, fake("finishes"));
             tm.start_transcode(request(&root, "s1", 2470))
                 .await
                 .unwrap();
@@ -684,7 +673,7 @@ mod tests {
         #[tokio::test]
         async fn a_failed_transcode_is_cleaned_up() {
             let root = root("failed");
-            let tm = manager(&root, fake_ffmpeg(&root, 1, 0));
+            let tm = manager(&root, fake("fails"));
             tm.start_transcode(request(&root, "s2", 0)).await.unwrap();
             wait_exit(&tm, "s2").await;
 
@@ -699,7 +688,7 @@ mod tests {
         #[tokio::test]
         async fn a_seek_in_a_resumed_session_restarts_from_the_resume_point() {
             let root = root("seek");
-            let tm = manager(&root, fake_ffmpeg(&root, 0, 0));
+            let tm = manager(&root, fake("finishes"));
             tm.start_transcode(request(&root, "s3", 2470))
                 .await
                 .unwrap();
@@ -726,7 +715,7 @@ mod tests {
         #[tokio::test]
         async fn restart_decisions_use_the_session_clock() {
             let root = root("clock");
-            let tm = manager(&root, fake_ffmpeg(&root, 0, 30));
+            let tm = manager(&root, fake("runs"));
             tm.start_transcode(request(&root, "s4", 0)).await.unwrap();
             tm.restart_at_segment("s4", 10).await.unwrap();
             tm.update_position("s4", 5 * SEC).await;
@@ -743,28 +732,13 @@ mod tests {
             tm.kill_all().await;
         }
 
-        /// Like ffmpeg run with `-nostdin`: ignores its stdin, exits on SIGTERM.
-        fn deaf_ffmpeg(root: &Path) -> String {
-            let script = root.join("deaf.sh");
-            std::fs::write(
-                &script,
-                "#!/bin/sh\nfor a; do last=$a; done\ndir=$(dirname \"$last\")\n\
-                 : > \"$dir/0.ts\"\nprintf '#EXTM3U\\n' > \"$last\"\n\
-                 trap 'exit 255' TERM\nsleep 30 &\nwait $!\n",
-            )
-            .unwrap();
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-            script.to_string_lossy().into_owned()
-        }
-
         // ffmpeg runs with -nostdin, so the 'q' written to its stdin never
         // reached it: every stop waited 5 s and force-killed it, holding the
         // manager's lock (and so every other transcode request) meanwhile.
         #[tokio::test]
         async fn stopping_a_running_transcode_is_prompt() {
             let root = root("stop");
-            let tm = manager(&root, deaf_ffmpeg(&root));
+            let tm = manager(&root, fake("deaf"));
             tm.start_transcode(request(&root, "s6", 0)).await.unwrap();
             tm.start_transcode(request(&root, "s7", 0)).await.unwrap();
             tm.jobs.read().await["s7"].pause(); // throttled
@@ -785,7 +759,7 @@ mod tests {
         #[tokio::test]
         async fn throttling_measures_from_the_player() {
             let root = root("throttle");
-            let tm = manager(&root, fake_ffmpeg(&root, 0, 30));
+            let tm = manager(&root, fake("runs"));
             tm.start_transcode(request(&root, "s5", 0)).await.unwrap();
             tm.touch_segment("s5", 20).await; // the player is at 120 s
             tm.update_position("s5", 150 * SEC).await; // 30 s ahead of it
