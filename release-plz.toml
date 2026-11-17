@@ -29,3 +29,10 @@ pr_labels = ["release"]
 [[package]]
 name = "rustyfin-server"
 git_tag_enable = true
+
+# A developer tool (`mise run bench`), never released. In git-only mode
+# release-plz also compares each package with the last tag, which fails for
+# a crate the tag does not have.
+[[package]]
+name = "rustyfin-bench"
+release = false
