@@ -34,6 +34,7 @@ pub struct TestApp {
     pub transcodes: Arc<TranscodeManager>,
     /// Libraries being scanned (shared with the scheduler and webhooks).
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
+    pub scan_board: rustyfin_core::library::progress::ScanBoard,
 }
 
 impl TestApp {
@@ -116,6 +117,7 @@ impl TestApp {
         let transcodes = transcode_manager.clone();
 
         let scan_in_flight = Arc::new(RwLock::new(HashSet::new()));
+        let scan_board = rustyfin_core::library::progress::ScanBoard::new();
         let state = AppState {
             pool: pool.clone(),
             server_id: "test-server-id".to_string(),
@@ -130,6 +132,7 @@ impl TestApp {
             transcode_manager,
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
             scan_in_flight: scan_in_flight.clone(),
+            scan_board: scan_board.clone(),
             scan_schedules: serde_json::json!({}),
             people_cache_dir,
             user_image_url_template: None,
@@ -150,6 +153,7 @@ impl TestApp {
             shutdown,
             transcodes,
             scan_in_flight,
+            scan_board,
         }
     }
 
