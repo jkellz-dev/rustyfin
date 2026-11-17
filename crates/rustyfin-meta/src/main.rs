@@ -1,3 +1,4 @@
+mod album_art;
 mod artwork;
 mod config;
 mod fetch;
@@ -47,14 +48,15 @@ enum Command {
         media_type: String,
     },
     /// Download missing posters, fanart and season posters from TMDB, for
-    /// libraries another tool (Sonarr, Radarr) manages. Existing files and NFOs
+    /// libraries another tool (Sonarr, Radarr) manages; with `-t music`,
+    /// album covers from the Cover Art Archive (by MusicBrainz id). Existing files and NFOs
     /// are left alone (--force replaces images); folders are matched by the id
     /// in their name or NFO, never by title.
     Artwork {
         /// Also fetches cast and crew headshots, once per person, into the
         /// shared people folder (`[output] people_cache_dir`).
         path: PathBuf,
-        /// `movies` or `tvshows`
+        /// `movies`, `tvshows` or `music`
         #[arg(long, short = 't', default_value = "tvshows")]
         library_type: String,
         /// Only fetch the art of the collections the films belong to.
@@ -171,6 +173,20 @@ async fn main() -> anyhow::Result<()> {
             collections_only,
             ..
         } => {
+            if matches!(library_type.as_str(), "music" | "audio") {
+                let s = album_art::fill_album_art(&path, &opts).await?;
+                tracing::info!(
+                    "Done: albums={}, had_cover={}, downloaded={}, not_found={}, recently_checked={}, no_id={}, errors={}",
+                    s.albums,
+                    s.had_cover,
+                    s.downloaded,
+                    s.not_found,
+                    s.recently_checked,
+                    s.no_id,
+                    s.errors
+                );
+                return Ok(());
+            }
             let stats = if collections_only {
                 artwork::fill_collection_art(&path, &opts).await?
             } else {

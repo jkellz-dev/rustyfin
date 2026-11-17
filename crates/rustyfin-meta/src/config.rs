@@ -20,6 +20,8 @@ pub struct MetaConfig {
     pub server: ServerConfig,
     #[serde(default)]
     pub lrclib: LrclibConfig,
+    #[serde(default)]
+    pub coverart: CoverArtConfig,
     /// Accepts the same `metadata.tmdb_api_key` field as the server config,
     /// so both binaries can share `RUSTYFIN__METADATA__TMDB_API_KEY`.
     #[serde(default)]
@@ -263,6 +265,31 @@ fn default_lrclib_url() -> String {
 /// Requests per `rate_window_secs`: polite for a public, volunteer-run service.
 fn default_lrclib_rate_limit() -> u32 {
     20
+}
+
+/// The Cover Art Archive, for `rustyfin artwork -t music`.
+#[derive(Debug, Deserialize)]
+pub struct CoverArtConfig {
+    #[serde(default = "default_coverart_url")]
+    pub url: String,
+    #[serde(default = "default_lrclib_rate_limit")]
+    pub rate_limit: u32,
+    #[serde(default = "default_rate_window")]
+    pub rate_window_secs: u64,
+}
+
+impl Default for CoverArtConfig {
+    fn default() -> Self {
+        Self {
+            url: default_coverart_url(),
+            rate_limit: default_lrclib_rate_limit(),
+            rate_window_secs: default_rate_window(),
+        }
+    }
+}
+
+fn default_coverart_url() -> String {
+    "https://coverartarchive.org".to_string()
 }
 
 #[derive(Debug, Deserialize, Default)]
