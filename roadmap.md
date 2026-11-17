@@ -1284,9 +1284,9 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 ### 14c. Website
 
-- [ ] Choose static site generator (Zola preferred, evaluate alternatives)
+- [x] Choose static site generator (Zola preferred, evaluate alternatives): Zola, repo `rustyfin.org`
 - [ ] Site structure: landing page, docs, roadmap, changelog
-- [ ] Hosting on GitHub Pages or Cloudflare Pages (CI-driven deploy)
+- [x] Hosting on GitHub Pages or Cloudflare Pages (CI-driven deploy): Cloudflare, deployed from `main`
 - [ ] Apply design book branding to site theme
 - [ ] Docs integration (either in-repo markdown rendered by site generator, or separate docs site)
 - [ ] Changelog / release notes page (auto-generated or manually curated)
