@@ -34,6 +34,16 @@ pub async fn report_playback_start(
             };
 
         state.session_manager.ensure_tracked(auth.session_id).await;
+        super::play_history::record(
+            &state,
+            &auth,
+            item_id,
+            body.play_session_id.as_deref(),
+            body.is_paused.unwrap_or(false),
+            body.position_ticks,
+            body.play_method.as_deref(),
+        )
+        .await;
         state
             .session_manager
             .report_playback_start(
@@ -105,6 +115,18 @@ pub async fn report_playback_progress(
             .await;
     }
 
+    if let Some(item_id) = body.item_id {
+        super::play_history::record(
+            &state,
+            &auth,
+            item_id,
+            body.play_session_id.as_deref(),
+            body.is_paused.unwrap_or(false),
+            body.position_ticks,
+            body.play_method.as_deref(),
+        )
+        .await;
+    }
     state
         .session_manager
         .report_playback_progress(
@@ -137,6 +159,17 @@ pub async fn report_playback_stopped(
             false,
             false,
             0,
+        )
+        .await;
+    }
+
+    if let Some(item_id) = body.item_id {
+        super::play_history::record_stop(
+            &state,
+            &auth,
+            item_id,
+            body.play_session_id.as_deref(),
+            body.position_ticks,
         )
         .await;
     }

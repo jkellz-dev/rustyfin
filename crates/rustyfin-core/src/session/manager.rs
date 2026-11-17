@@ -238,6 +238,11 @@ impl SessionManager {
     }
 
     /// Get all tracked sessions, optionally filtered by recent activity.
+    /// One tracked session, if any.
+    pub async fn get_session(&self, session_id: Uuid) -> Option<TrackedSession> {
+        self.sessions.read().await.get(&session_id).cloned()
+    }
+
     pub async fn get_sessions(&self, active_within_seconds: Option<i64>) -> Vec<TrackedSession> {
         let sessions = self.sessions.read().await;
         let now = Utc::now();
