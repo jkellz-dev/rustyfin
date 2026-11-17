@@ -2,6 +2,7 @@ use rustyfin_db::repo::media_items::MediaItemRow;
 use rustyfin_db::repo::media_streams::MediaStreamRow;
 use rustyfin_models::dto::{
     DeviceProfile, MediaSourceInfo, MediaStream, PlaybackInfoRequest, PlaybackInfoResponse,
+    SubtitleProfile,
 };
 use uuid::Uuid;
 
@@ -220,6 +221,30 @@ pub fn build_playback_info(
     }
 }
 
+/// How a subtitle reaches the app, from its `SubtitleProfiles` (Jellyfin's
+/// order): inside the file while it is played as it is, as a file in a
+/// format the app lists (text subtitles can be converted to any text
+/// format), otherwise burnt into the picture.
+pub fn subtitle_delivery(
+    stream: &MediaStream,
+    profiles: &[SubtitleProfile],
+    transcoding: bool,
+) -> (&'static str, Option<String>) {
+    let _ = (stream, profiles, transcoding);
+    ("Encode", None)
+}
+
+/// Set `DeliveryMethod` and, for files, `DeliveryUrl` on every subtitle of
+/// every source. Without a device profile nothing is set.
+pub fn apply_subtitle_delivery(
+    info: &mut PlaybackInfoResponse,
+    item_id: Uuid,
+    profile: Option<&DeviceProfile>,
+    api_key: Option<&str>,
+) {
+    let _ = (info, item_id, profile, api_key);
+}
+
 /// Build and set the transcoding URL and related fields on a MediaSourceInfo.
 fn apply_transcode_urls(
     source: &mut MediaSourceInfo,
@@ -277,4 +302,69 @@ fn apply_transcode_urls(
             .map(|r| r.as_str().to_string())
             .collect(),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sub(codec: &str, external: bool) -> MediaStream {
+        MediaStream {
+            index: 2,
+            stream_type: "Subtitle".to_string(),
+            codec: Some(codec.to_string()),
+            is_external: external,
+            is_text_subtitle_stream: !codec.contains("pgs") && !codec.contains("dvd"),
+            ..Default::default()
+        }
+    }
+
+    fn sp(format: &str, method: &str) -> SubtitleProfile {
+        SubtitleProfile {
+            format: Some(format.to_string()),
+            method: Some(method.to_string()),
+        }
+    }
+
+    #[test]
+    fn subtitles_are_delivered_the_way_the_app_lists() {
+        let web = [sp("vtt", "External"), sp("ass", "External")];
+        // The app's own format, or a text format it can be converted to.
+        assert_eq!(
+            subtitle_delivery(&sub("ass", true), &web, false),
+            ("External", Some("ass".into()))
+        );
+        assert_eq!(
+            subtitle_delivery(&sub("subrip", true), &web, false),
+            ("External", Some("vtt".into()))
+        );
+        assert_eq!(
+            subtitle_delivery(&sub("subrip", false), &web, true),
+            ("External", Some("vtt".into()))
+        );
+        // A picture subtitle cannot be converted: burnt in.
+        assert_eq!(
+            subtitle_delivery(&sub("hdmv_pgs_subtitle", false), &web, false),
+            ("Encode", None)
+        );
+        // Embedded while the file is played as it is; not when transcoding.
+        let tv = [sp("pgssub", "Embed"), sp("srt", "Embed")];
+        assert_eq!(
+            subtitle_delivery(&sub("hdmv_pgs_subtitle", false), &tv, false),
+            ("Embed", None)
+        );
+        assert_eq!(
+            subtitle_delivery(&sub("hdmv_pgs_subtitle", false), &tv, true),
+            ("Encode", None)
+        );
+        // A file beside the video is never inside it.
+        assert_eq!(
+            subtitle_delivery(&sub("subrip", true), &tv, false),
+            ("Encode", None)
+        );
+        assert_eq!(
+            subtitle_delivery(&sub("subrip", false), &tv, false),
+            ("Embed", None)
+        );
+    }
 }

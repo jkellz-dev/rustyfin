@@ -405,6 +405,15 @@ pub struct MediaStream {
     pub is_text_subtitle_stream: bool,
     pub supports_external_stream: bool,
     pub is_anamorphic: bool,
+    /// How the app gets this subtitle: `External`, `Embed`, `Encode` or `Hls`
+    /// (set by PlaybackInfo from the app's `SubtitleProfiles`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_method: Option<String>,
+    /// Where an `External` subtitle is fetched from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_external_url: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub average_frame_rate: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
