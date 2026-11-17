@@ -1287,7 +1287,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 ### 14b. Project Documentation
 
-- [ ] Getting started guide (install, configure `rustyfin.toml`, connect a client)
+- [x] Getting started guide (install, configure `rustyfin.toml`, connect a client): `docs/getting-started.md`
 - [x] Configuration reference (all `rustyfin.toml` options, env vars, defaults): `docs/configuration.md`, checked
       against `config.rs`
 - [x] Architecture overview (crate map, request lifecycle, auth flow): `docs/architecture.md` rewritten for the 11

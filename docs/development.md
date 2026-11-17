@@ -122,8 +122,8 @@ Caddy is configured in `Caddyfile.dev`:
 ```text
 :8097 {
     reverse_proxy host.docker.internal:8096 {
-        header_up Remote-User "jonathan"
-        header_up Remote-Name "Jonathan"
+        header_up Remote-User "dev"
+        header_up Remote-Name "Developer"
     }
 }
 ```

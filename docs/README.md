@@ -7,6 +7,7 @@ Jellyfin Media Player) connect to it seamlessly.
 
 | Document | Description |
 |----------|-------------|
+| [Getting Started](getting-started.md) | Run it with Docker Compose, add a library, connect an app |
 | [Architecture](architecture.md) | Crate structure, dependency graph, design decisions |
 | [Configuration](configuration.md) | Config file, environment variables, deployment |
 | [API Reference](api-reference.md) | Complete HTTP API documentation (40+ routes) |
@@ -26,17 +27,15 @@ Jellyfin Media Player) connect to it seamlessly.
 
 ## Quick Start
 
+To run it: [Getting Started](getting-started.md) (Docker Compose with Postgres and a sign-in proxy). To work on it:
+
 ```bash
-# Start dependencies
-docker compose up -d
-
-# Build and run
-cargo build
-cargo run --bin rustyfin-server
-
-# Server starts on http://localhost:8096
-# Admin UI at http://localhost:8096/web
+docker compose up -d                 # Postgres, Meilisearch and a dev sign-in proxy
+cp rustyfin.example.toml rustyfin.toml
+cargo run --bin rustyfin-server      # http://localhost:8097/web through the proxy
 ```
+
+More in the [Development Guide](development.md).
 
 ## Key Design Decisions
 
@@ -51,14 +50,4 @@ cargo run --bin rustyfin-server
 
 ## Project Status
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1. Crate Scaffolding | Done | 9 crates, 40+ API routes, DB repos, forward auth, HTTP Range streaming |
-| 2. Library Scanner | Done | File naming, ffprobe, sidecar images, scan orchestrator |
-| 3. Client Compatibility | Done | Image tags, WebSocket, media streams, child counts |
-| 4. Metadata Enrichment | Done | NFO parsing, TMDB/TVDB providers, people/cast |
-| 5. Admin Frontend | Done | Sycamore WASM UI: library CRUD, scan triggers, user management, setup wizard |
-| 6. Polish & Advanced | Done | Meilisearch integration, session tracking, activity logging, chapters |
-| 6b. API Endpoint Stubs | Done | ~30 stub routes to prevent client 404 breakage |
-| 6c. Auth Audit | Done | Admin vs user authorization aligned with Jellyfin controller annotations |
-| 7. Transcoding | Done | ffmpeg HLS pipeline, device profiles, subtitle delivery, throttling, seek |
+What is done and what is next, phase by phase, is in [`roadmap.md`](../roadmap.md).

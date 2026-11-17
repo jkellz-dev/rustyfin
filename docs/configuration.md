@@ -234,29 +234,11 @@ docker compose down -v     # Also remove volumes (destroys data)
 
 ## Deployment
 
-### Docker Compose (Standalone)
+### Docker Compose
 
-```yaml
-services:
-  rustyfin:
-    image: ghcr.io/jkellz-dev/rustyfin-server:latest
-    environment:
-      RUSTYFIN__DATABASE__HOST: postgres
-      RUSTYFIN__DATABASE__USER: rustyfin
-      RUSTYFIN__DATABASE__PASSWORD: rustyfin
-      RUSTYFIN__DATABASE__NAME: rustyfin
-    volumes:
-      - ./rustyfin.toml:/app/rustyfin.toml:ro
-      - ./media:/data/media:ro
-      - rustyfin_config:/data/config
-    ports:
-      - "8096:8096"
-    depends_on:
-      - postgres
-
-volumes:
-  rustyfin_config:
-```
+A complete setup (Postgres, Rustyfin and a forward-auth proxy) is in [Getting Started](getting-started.md). In the
+container, the server's working directory is `/app`: mount the configuration at `/app/rustyfin.toml`, and the media
+read-only.
 
 ### Kubernetes
 
