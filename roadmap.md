@@ -1136,13 +1136,13 @@ validation, and polish needed for daily use.
 
 ### 12c. Form Validation & Error Handling
 
-- [ ] Library name: empty check, duplicate name detection
-- [ ] Library paths: empty path check, duplicate path across libraries
-- [ ] Folder picker: permission denied handling, error recovery with retry
-- [ ] User-friendly error messages (not raw HTTP status codes)
-- [ ] Retry buttons on failed network requests
-- [ ] Graceful degradation (if one API call fails, don't blank the whole page)
-- [ ] Request deduplication (prevent double-submit on button clicks)
+- [x] Library name: empty check, duplicate name detection (`form_rules.rs`, any case)
+- [x] Library paths: empty path check, duplicate path across libraries (also relative paths and the same folder twice)
+- [x] Folder picker: permission denied handling, error recovery with retry (the server's reason, "Try again")
+- [x] User-friendly error messages (not raw HTTP status codes): `api_error.rs`
+- [x] Retry buttons on failed network requests (every error notice: Retry reloads the page, Dismiss hides it)
+- [x] Graceful degradation (if one API call fails, don't blank the whole page): the dashboard keeps its widgets
+- [x] Request deduplication (prevent double-submit on button clicks): create, save and delete are disabled while sent
 
 ### 12d. Media Browser Polish
 
@@ -1188,7 +1188,8 @@ validation, and polish needed for daily use.
 - [ ] Client-side caching (avoid re-fetching on back navigation)
 - [ ] Skeleton loaders instead of spinners for content areas
 - [ ] Loading state consolidation (page-level spinner, not per-component)
-- [ ] Structured error types in API client (not just strings)
+- [x] Structured error types in API client (not just strings): `api::ApiError` (network, status with the server's
+      reason, parse)
 - [ ] Optimistic updates where safe (e.g. toggle favorite immediately, reconcile on response)
 
 ### 12h. Mobile Layout (owner, 2026-11-16)

@@ -58,7 +58,7 @@ pub fn Setup() -> View {
                         let _ = api::scan_library(Some(&lib.item_id)).await;
                         step.set(2);
                     }
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 creating.set(false);
             }

@@ -1,10 +1,8 @@
 mod api;
-#[allow(dead_code)]
 mod api_error;
 mod browse;
 mod components;
 mod dashboard_view;
-#[allow(dead_code)]
 mod form_rules;
 mod media_route;
 mod pages;

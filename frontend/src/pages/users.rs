@@ -3,6 +3,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::components::error_notice::ErrorNotice;
 use crate::types::{UpdateUserPolicyRequest, UserDto, VirtualFolderInfo};
 use crate::user_view;
 
@@ -33,7 +34,7 @@ pub fn Users() -> View {
             async move {
                 match api::get_users().await {
                     Ok(u) => users.set(u),
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 loading.set(false);
             }
@@ -71,14 +72,19 @@ pub fn Users() -> View {
                         });
                         toast.set(Some("User policy updated".to_string()));
                     }
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
             }
         });
     };
 
+    let deleting = create_signal(false);
     let confirm_delete = move |_| {
+        if deleting.get() {
+            return;
+        }
         if let Some(target) = delete_target.get_clone() {
+            deleting.set(true);
             let id = target.id.clone();
             spawn_local({
                 async move {
@@ -87,8 +93,9 @@ pub fn Users() -> View {
                             users.update(|list| list.retain(|u| u.id != id));
                             toast.set(Some("User deleted".to_string()));
                         }
-                        Err(e) => error.set(Some(e)),
+                        Err(e) => error.set(Some(e.to_string())),
                     }
+                    deleting.set(false);
                     delete_target.set(None);
                 }
             });
@@ -104,7 +111,7 @@ pub fn Users() -> View {
             async move {
                 match api::get_libraries().await {
                     Ok(libs) => all_libraries.set(libs),
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
             }
         });
@@ -145,7 +152,7 @@ pub fn Users() -> View {
                             lib_access_target.set(None);
                             toast.set(Some("Library access updated".to_string()));
                         }
-                        Err(e) => error.set(Some(e)),
+                        Err(e) => error.set(Some(e.to_string())),
                     }
                     lib_access_saving.set(false);
                 }
@@ -184,7 +191,9 @@ pub fn Users() -> View {
                             p { "Are you sure you want to delete \"" (target.name) "\"? This cannot be undone." }
                             div(class="modal-actions") {
                                 button(class="btn btn-secondary", on:click=move |_| delete_target.set(None)) { "Cancel" }
-                                button(class="btn btn-danger", on:click=confirm_delete) { "Delete" }
+                                button(class="btn btn-danger", on:click=confirm_delete, disabled=deleting.get()) {
+                                    (if deleting.get() { "Deleting..." } else { "Delete" })
+                                }
                             }
                         }
                     }
@@ -274,11 +283,7 @@ pub fn Users() -> View {
             }
 
             // Error
-            (if let Some(err) = error.get_clone() {
-                view! { div(class="card") { p(class="text-muted") { (err) } } }
-            } else {
-                view! {}
-            })
+            ErrorNotice(error=error)
 
             // Users table
             (if loading.get() {

@@ -1561,3 +1561,19 @@ select:focus {
     text-align: left;
   }
 }
+
+/* ── Errors and form checks (12c) ───────────────────────── */
+.error-notice {
+  border-left: 3px solid var(--danger, #e5484d);
+}
+.error-notice p {
+  margin: 0 0 8px;
+}
+.form-problems {
+  margin: 8px 0;
+  padding-left: 20px;
+  color: var(--danger, #e5484d);
+}
+.folder-error p {
+  margin: 0 0 8px;
+}

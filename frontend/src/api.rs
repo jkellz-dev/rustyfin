@@ -1,6 +1,7 @@
 use gloo_net::http::Request;
 use wasm_bindgen::JsValue;
 
+pub use crate::api_error::ApiError;
 use crate::types::*;
 
 pub(crate) fn get_token() -> Option<String> {
@@ -32,37 +33,39 @@ pub(crate) fn base_url() -> String {
     location.origin().unwrap_or_default()
 }
 
-async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
+async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, ApiError> {
     let url = format!("{}{path}", base_url());
     let resp = Request::get(&url)
         .header("Authorization", &auth_header())
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
 
-    resp.json::<T>()
-        .await
-        .map_err(|e| format!("Parse error: {e}"))
+    resp.json::<T>().await.map_err(|_| ApiError::Parse)
 }
 
-async fn post_json<T: serde::Serialize>(path: &str, body: &T) -> Result<(), String> {
+async fn post_json<T: serde::Serialize>(path: &str, body: &T) -> Result<(), ApiError> {
     let url = format!("{}{path}", base_url());
-    let body_str = serde_json::to_string(body).map_err(|e| format!("Serialize error: {e}"))?;
+    let body_str = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
     let resp = Request::post(&url)
         .header("Authorization", &auth_header())
         .header("Content-Type", "application/json")
         .body(JsValue::from_str(&body_str))
-        .map_err(|e| format!("Request build error: {e}"))?
+        .map_err(|_| ApiError::Network)?
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
     Ok(())
 }
@@ -70,51 +73,55 @@ async fn post_json<T: serde::Serialize>(path: &str, body: &T) -> Result<(), Stri
 async fn post_json_resp<T: serde::Serialize, R: serde::de::DeserializeOwned>(
     path: &str,
     body: &T,
-) -> Result<R, String> {
+) -> Result<R, ApiError> {
     let url = format!("{}{path}", base_url());
-    let body_str = serde_json::to_string(body).map_err(|e| format!("Serialize error: {e}"))?;
+    let body_str = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
     let resp = Request::post(&url)
         .header("Authorization", &auth_header())
         .header("Content-Type", "application/json")
         .body(JsValue::from_str(&body_str))
-        .map_err(|e| format!("Request build error: {e}"))?
+        .map_err(|_| ApiError::Network)?
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
 
-    resp.json::<R>()
-        .await
-        .map_err(|e| format!("Parse error: {e}"))
+    resp.json::<R>().await.map_err(|_| ApiError::Parse)
 }
 
-async fn delete_path(path: &str) -> Result<(), String> {
+async fn delete_path(path: &str) -> Result<(), ApiError> {
     let url = format!("{}{path}", base_url());
     let resp = Request::delete(&url)
         .header("Authorization", &auth_header())
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
     Ok(())
 }
 
-async fn post_empty(path: &str) -> Result<(), String> {
+async fn post_empty(path: &str) -> Result<(), ApiError> {
     let url = format!("{}{path}", base_url());
     let resp = Request::post(&url)
         .header("Authorization", &auth_header())
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
     Ok(())
 }
@@ -127,16 +134,16 @@ fn url_encode(s: &str) -> String {
 
 // ── Public API Functions ────────────────────────────────
 
-pub async fn get_system_info() -> Result<SystemInfo, String> {
+pub async fn get_system_info() -> Result<SystemInfo, ApiError> {
     get_json("/System/Info/Public").await
 }
 
-pub async fn get_dashboard_stats() -> Result<DashboardStats, String> {
+pub async fn get_dashboard_stats() -> Result<DashboardStats, ApiError> {
     get_json("/System/Stats").await
 }
 
 /// The latest activity log entries, newest first.
-pub async fn get_activity_log(limit: i32) -> Result<QueryResult<ActivityLogEntry>, String> {
+pub async fn get_activity_log(limit: i32) -> Result<QueryResult<ActivityLogEntry>, ApiError> {
     get_json(&format!(
         "/System/ActivityLog/Entries?StartIndex=0&Limit={limit}"
     ))
@@ -144,36 +151,36 @@ pub async fn get_activity_log(limit: i32) -> Result<QueryResult<ActivityLogEntry
 }
 
 /// Sessions active in the last 15 minutes.
-pub async fn get_active_sessions() -> Result<Vec<SessionInfo>, String> {
+pub async fn get_active_sessions() -> Result<Vec<SessionInfo>, ApiError> {
     get_json("/Sessions?ActiveWithinSeconds=960").await
 }
 
 /// The latest media added across every library, as Jellyfin's home screen
 /// shows it: new tracks as their album, new episodes as their show.
-pub async fn get_latest_items(limit: i32) -> Result<Vec<BaseItemDto>, String> {
+pub async fn get_latest_items(limit: i32) -> Result<Vec<BaseItemDto>, ApiError> {
     get_json(&format!("/Items/Latest?Limit={limit}")).await
 }
 
-pub async fn get_libraries() -> Result<Vec<VirtualFolderInfo>, String> {
+pub async fn get_libraries() -> Result<Vec<VirtualFolderInfo>, ApiError> {
     get_json("/Library/VirtualFolders").await
 }
 
-pub async fn create_library(req: &CreateLibraryRequest) -> Result<VirtualFolderInfo, String> {
+pub async fn create_library(req: &CreateLibraryRequest) -> Result<VirtualFolderInfo, ApiError> {
     post_json_resp("/Library/VirtualFolders", req).await
 }
 
 pub async fn update_library(
     id: &str,
     req: &UpdateLibraryRequest,
-) -> Result<VirtualFolderInfo, String> {
+) -> Result<VirtualFolderInfo, ApiError> {
     post_json_resp(&format!("/Library/VirtualFolders/Update?Id={id}"), req).await
 }
 
-pub async fn delete_library(id: &str) -> Result<(), String> {
+pub async fn delete_library(id: &str) -> Result<(), ApiError> {
     delete_path(&format!("/Library/VirtualFolders?Id={id}")).await
 }
 
-pub async fn scan_library(id: Option<&str>) -> Result<(), String> {
+pub async fn scan_library(id: Option<&str>) -> Result<(), ApiError> {
     let path = match id {
         Some(id) => format!("/Library/Refresh?Id={id}"),
         None => "/Library/Refresh".to_string(),
@@ -183,34 +190,36 @@ pub async fn scan_library(id: Option<&str>) -> Result<(), String> {
         .header("Authorization", &auth_header())
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
     Ok(())
 }
 
-pub async fn get_users() -> Result<Vec<UserDto>, String> {
+pub async fn get_users() -> Result<Vec<UserDto>, ApiError> {
     get_json("/Users").await
 }
 
-pub async fn delete_user(id: &str) -> Result<(), String> {
+pub async fn delete_user(id: &str) -> Result<(), ApiError> {
     delete_path(&format!("/Users/{id}")).await
 }
 
-pub async fn update_user_policy(id: &str, req: &UpdateUserPolicyRequest) -> Result<(), String> {
+pub async fn update_user_policy(id: &str, req: &UpdateUserPolicyRequest) -> Result<(), ApiError> {
     post_json(&format!("/Users/{id}/Policy"), req).await
 }
 
-pub async fn get_startup_config() -> Result<StartupConfiguration, String> {
+pub async fn get_startup_config() -> Result<StartupConfiguration, ApiError> {
     get_json("/Startup/Configuration").await
 }
 
 /// Auto-authenticate via forward auth. Calls AuthenticateByName with an empty
 /// body — the reverse proxy injects identity headers, so no credentials needed.
 /// Stores the returned token in localStorage for subsequent API calls.
-pub async fn ensure_authenticated() -> Result<(), String> {
+pub async fn ensure_authenticated() -> Result<(), ApiError> {
     if get_token().is_some() {
         // Already have a token — check if it's still valid
         if get_json::<serde_json::Value>("/Users/Me").await.is_ok() {
@@ -223,19 +232,18 @@ pub async fn ensure_authenticated() -> Result<(), String> {
         .header("Authorization", &auth_header())
         .header("Content-Type", "application/json")
         .body(JsValue::from_str("{}"))
-        .map_err(|e| format!("Request build error: {e}"))?
+        .map_err(|_| ApiError::Network)?
         .send()
         .await
-        .map_err(|e| format!("Auth request failed: {e}"))?;
+        .map_err(|_| ApiError::Network)?;
 
     if !resp.ok() {
-        return Err(format!("Authentication failed: HTTP {}", resp.status()));
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ApiError::from_status(code, &body));
     }
 
-    let result: AuthenticationResult = resp
-        .json()
-        .await
-        .map_err(|e| format!("Auth parse error: {e}"))?;
+    let result: AuthenticationResult = resp.json().await.map_err(|_| ApiError::Parse)?;
 
     set_token(&result.access_token);
     Ok(())
@@ -243,7 +251,7 @@ pub async fn ensure_authenticated() -> Result<(), String> {
 
 // ── Environment API ──────────────────────────────────────
 
-pub async fn get_directory_contents(path: &str) -> Result<Vec<FileSystemEntry>, String> {
+pub async fn get_directory_contents(path: &str) -> Result<Vec<FileSystemEntry>, ApiError> {
     let encoded = url_encode(path);
     get_json(&format!("/Environment/DirectoryContents?Path={encoded}")).await
 }
@@ -251,27 +259,27 @@ pub async fn get_directory_contents(path: &str) -> Result<Vec<FileSystemEntry>, 
 // ── Media Browsing API ──────────────────────────────────
 
 /// The collections an item is in (Rustyfin's `/Items/{id}/Collections`).
-pub async fn get_item_collections(item_id: &str) -> Result<QueryResult<BaseItemDto>, String> {
+pub async fn get_item_collections(item_id: &str) -> Result<QueryResult<BaseItemDto>, ApiError> {
     get_json(&format!("/Items/{item_id}/Collections")).await
 }
 
 /// An item's ancestors, nearest first (its season, show, library, root).
-pub async fn get_ancestors(item_id: &str) -> Result<Vec<BaseItemDto>, String> {
+pub async fn get_ancestors(item_id: &str) -> Result<Vec<BaseItemDto>, ApiError> {
     get_json(&format!("/Items/{item_id}/Ancestors")).await
 }
 
 /// A user, by id.
-pub async fn get_user(user_id: &str) -> Result<UserDto, String> {
+pub async fn get_user(user_id: &str) -> Result<UserDto, ApiError> {
     get_json(&format!("/Users/{user_id}")).await
 }
 
 /// A user's signed-in devices.
-pub async fn get_devices(user_id: &str) -> Result<QueryResult<DeviceInfo>, String> {
+pub async fn get_devices(user_id: &str) -> Result<QueryResult<DeviceInfo>, ApiError> {
     get_json(&format!("/Devices?UserId={user_id}")).await
 }
 
 /// Sign a device out (its tokens stop working).
-pub async fn delete_device(device_id: &str) -> Result<(), String> {
+pub async fn delete_device(device_id: &str) -> Result<(), ApiError> {
     delete_path(&format!(
         "/Devices?Id={}",
         crate::media_route::encode(device_id)
@@ -280,24 +288,24 @@ pub async fn delete_device(device_id: &str) -> Result<(), String> {
 }
 
 /// Minutes and plays per kind of media.
-pub async fn get_play_stats(user_id: &str) -> Result<PlayStats, String> {
+pub async fn get_play_stats(user_id: &str) -> Result<PlayStats, ApiError> {
     get_json(&format!("/Users/{user_id}/PlayStats")).await
 }
 
 /// A page of a user's plays (`query` from `user_view::history_query`).
-pub async fn get_play_history(query: &str) -> Result<QueryResult<PlayEntry>, String> {
+pub async fn get_play_history(query: &str) -> Result<QueryResult<PlayEntry>, ApiError> {
     get_json(query).await
 }
 
 /// A title's extras: its trailers, then its other extras (featurettes, ...).
-pub async fn get_extras(item_id: &str) -> Result<Vec<BaseItemDto>, String> {
+pub async fn get_extras(item_id: &str) -> Result<Vec<BaseItemDto>, ApiError> {
     let mut all: Vec<BaseItemDto> = get_json(&format!("/Items/{item_id}/LocalTrailers")).await?;
     let more: Vec<BaseItemDto> = get_json(&format!("/Items/{item_id}/SpecialFeatures")).await?;
     all.extend(more);
     Ok(all)
 }
 
-pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, String> {
+pub async fn get_user_views() -> Result<QueryResult<BaseItemDto>, ApiError> {
     get_json("/UserViews").await
 }
 
@@ -313,7 +321,7 @@ pub async fn get_items(
     sort_order: &str,
     recursive: bool,
     person_id: Option<&str>,
-) -> Result<QueryResult<BaseItemDto>, String> {
+) -> Result<QueryResult<BaseItemDto>, ApiError> {
     let mut path = format!(
         "/Items?StartIndex={start_index}&Limit={limit}\
          &SortBy={sort_by}&SortOrder={sort_order}&Recursive={recursive}\
@@ -331,34 +339,37 @@ pub async fn get_items(
     get_json(&path).await
 }
 
-pub async fn get_item(item_id: &str) -> Result<BaseItemDto, String> {
+pub async fn get_item(item_id: &str) -> Result<BaseItemDto, ApiError> {
     get_json(&format!(
         "/Items/{item_id}?Fields=Overview,Genres,Studios,People,MediaStreams,Chapters,ProviderIds,Path"
     )).await
 }
 
-pub async fn refresh_item(item_id: &str) -> Result<(), String> {
+pub async fn refresh_item(item_id: &str) -> Result<(), ApiError> {
     post_empty(&format!("/Items/{item_id}/Refresh")).await
 }
 
 // ── Scheduled Tasks API ──────────────────────────────────
 
-pub async fn get_scheduled_tasks() -> Result<Vec<TaskInfoDto>, String> {
+pub async fn get_scheduled_tasks() -> Result<Vec<TaskInfoDto>, ApiError> {
     get_json("/ScheduledTasks").await
 }
 
-pub async fn run_scheduled_task(task_id: &str) -> Result<(), String> {
+pub async fn run_scheduled_task(task_id: &str) -> Result<(), ApiError> {
     post_empty(&format!("/ScheduledTasks/Running/{task_id}")).await
 }
 
-pub async fn stop_scheduled_task(task_id: &str) -> Result<(), String> {
+pub async fn stop_scheduled_task(task_id: &str) -> Result<(), ApiError> {
     delete_path(&format!("/ScheduledTasks/Running/{task_id}")).await
 }
 
 // ── Search API ───────────────────────────────────────────
 
 /// Search everything, or one library (`parent_id`).
-pub async fn search_hints(term: &str, parent_id: Option<&str>) -> Result<SearchHintResult, String> {
+pub async fn search_hints(
+    term: &str,
+    parent_id: Option<&str>,
+) -> Result<SearchHintResult, ApiError> {
     let encoded = url_encode(term);
     let scope = parent_id
         .map(|p| format!("&ParentId={p}"))

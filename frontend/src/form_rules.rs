@@ -18,8 +18,46 @@ pub fn library_problems(
     others: &[LibraryFacts<'_>],
     editing: Option<&str>,
 ) -> Vec<String> {
-    let _ = (name, paths, others, editing);
-    Vec::new()
+    let mut problems = Vec::new();
+    let name = name.trim();
+    let others: Vec<&LibraryFacts> = others.iter().filter(|o| Some(o.id) != editing).collect();
+    if name.is_empty() {
+        problems.push("Give the library a name.".to_string());
+    } else if let Some(o) = others
+        .iter()
+        .find(|o| o.name.trim().eq_ignore_ascii_case(name))
+    {
+        problems.push(format!("There is already a library named \"{}\".", o.name));
+    }
+    // Folders compare without a trailing slash.
+    let norm = |p: &str| p.trim().trim_end_matches('/').to_string();
+    let given: Vec<&String> = paths.iter().filter(|p| !p.trim().is_empty()).collect();
+    if given.is_empty() {
+        problems.push("Add at least one folder.".to_string());
+    }
+    let mut seen: Vec<String> = Vec::new();
+    for p in given {
+        let shown = p.trim();
+        if !shown.starts_with('/') {
+            problems.push(format!(
+                "\"{shown}\" is not a full path (it should start with /)."
+            ));
+            continue;
+        }
+        let key = norm(shown);
+        if seen.contains(&key) {
+            problems.push(format!("\"{shown}\" is listed twice."));
+            continue;
+        }
+        seen.push(key.clone());
+        if let Some(o) = others
+            .iter()
+            .find(|o| o.paths.iter().any(|q| norm(q) == key))
+        {
+            problems.push(format!("\"{shown}\" is already in \"{}\".", o.name));
+        }
+    }
+    problems
 }
 
 #[cfg(test)]

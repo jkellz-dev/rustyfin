@@ -7,6 +7,7 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::components::error_notice::ErrorNotice;
 use crate::media_route::MediaRoute;
 use crate::types::{DeviceInfo, PlayEntry, PlayStats, UserDto};
 use crate::user_view;
@@ -60,7 +61,7 @@ pub fn UserDetail(user_id: String) -> View {
                     total.set(result.total_record_count);
                     plays.set(result.items);
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             loading.set(false);
         });
@@ -74,12 +75,12 @@ pub fn UserDetail(user_id: String) -> View {
         let uid = user_id.clone();
         spawn_local(async move {
             if let Err(e) = api::ensure_authenticated().await {
-                error.set(Some(e));
+                error.set(Some(e.to_string()));
                 return;
             }
             match api::get_user(&uid).await {
                 Ok(u) => user.set(Some(u)),
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             if let Ok(s) = api::get_play_stats(&uid).await {
                 stats.set(Some(s));
@@ -99,7 +100,7 @@ pub fn UserDetail(user_id: String) -> View {
                         devices.update(|list| list.retain(|d| d.id != device.id));
                         toast.set(Some(format!("Signed out {}", device.name)));
                     }
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 sign_out_target.set(None);
             });
@@ -145,11 +146,7 @@ pub fn UserDetail(user_id: String) -> View {
                 }) { "All users" }
             }
 
-            (if let Some(err) = error.get_clone() {
-                view! { div(class="card mb-16") { p(class="text-muted") { (err) } } }
-            } else {
-                view! {}
-            })
+            ErrorNotice(error=error)
 
             // Time per kind of media
             (if let Some(s) = stats.get_clone() {

@@ -2,6 +2,7 @@ use sycamore::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::components::error_notice::ErrorNotice;
 use crate::dashboard_view;
 use crate::media_route::MediaRoute;
 use crate::timer::sleep_ms;
@@ -64,7 +65,7 @@ pub fn Dashboard() -> View {
         async move {
             // Ensure we have a valid session token (auto-login via forward auth)
             if let Err(e) = api::ensure_authenticated().await {
-                error.set(Some(e));
+                error.set(Some(e.to_string()));
                 loading.set(false);
                 return;
             }
@@ -74,7 +75,7 @@ pub fn Dashboard() -> View {
 
             match info_result {
                 Ok(i) => info.set(Some(i)),
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             if let Ok(s) = stats_result {
                 stats.set(Some(s));
@@ -97,7 +98,7 @@ pub fn Dashboard() -> View {
             async move {
                 match api::scan_library(None).await {
                     Ok(()) => {}
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 scan_loading.set(false);
             }
@@ -113,10 +114,9 @@ pub fn Dashboard() -> View {
                 }
             }
 
+            ErrorNotice(error=error)
             (if loading.get() {
                 view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
-            } else if let Some(err) = error.get_clone() {
-                view! { div(class="card") { p(class="text-muted") { (err) } } }
             } else {
                 view! {
                     // Server info card

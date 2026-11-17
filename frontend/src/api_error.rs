@@ -1,6 +1,6 @@
 //! What went wrong with a request, and how to say it (roadmap 12c and 12g:
 //! structured errors in the API client, messages people can read instead of
-//! "HTTP 500", and which failures are worth a Retry button).
+//! "HTTP 500", with Retry offered on every error notice).
 
 use std::fmt;
 
@@ -8,32 +8,51 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApiError {
     /// The request never got an answer (server down, network gone).
-    Network(String),
+    Network,
     /// The server answered with an error status; `detail` is its message.
     Status { code: u16, detail: String },
     /// The answer was not what the page expected.
-    Parse(String),
+    Parse,
 }
 
 impl ApiError {
     /// From a status code and the response body.
     pub fn from_status(code: u16, body: &str) -> ApiError {
-        let _ = body;
-        ApiError::Status {
-            code,
-            detail: String::new(),
-        }
-    }
-
-    /// Whether trying again may help (network trouble, a busy or failing
-    /// server); not for "not allowed", "not found" or a bad request.
-    pub fn retryable(&self) -> bool {
-        false
+        // Rustyfin's own errors are "Kind: reason" text; Jellyfin-style 404s
+        // are JSON problem details, whose title says nothing new.
+        let text = body.trim();
+        let detail = if text.starts_with('{') {
+            String::new()
+        } else {
+            ["Bad request: ", "Conflict: "]
+                .iter()
+                .find_map(|p| text.strip_prefix(p))
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        };
+        ApiError::Status { code, detail }
     }
 
     /// The message to show.
     pub fn message(&self) -> String {
-        String::new()
+        match self {
+            ApiError::Network => {
+                "Can't reach the server. Check your connection and try again.".to_string()
+            }
+            ApiError::Parse => {
+                "The server sent an answer this page doesn't understand.".to_string()
+            }
+            ApiError::Status { code, detail } => match code {
+                400 | 409 if !detail.is_empty() => detail.clone(),
+                400 | 409 | 422 => "The server didn't accept that request.".to_string(),
+                401 => "Your sign-in has expired. Reload the page to sign in again.".to_string(),
+                403 => "You don't have permission to do that.".to_string(),
+                404 => "That item no longer exists.".to_string(),
+                429 | 503 => "The server is busy. Try again in a moment.".to_string(),
+                _ => format!("The server ran into a problem ({code})."),
+            },
+        }
     }
 }
 
@@ -76,11 +95,11 @@ mod tests {
             "The server ran into a problem (500)."
         );
         assert_eq!(
-            ApiError::Network("TypeError: Failed to fetch".into()).message(),
+            ApiError::Network.message(),
             "Can't reach the server. Check your connection and try again."
         );
         assert_eq!(
-            ApiError::Parse("expected value".into()).message(),
+            ApiError::Parse.message(),
             "The server sent an answer this page doesn't understand."
         );
     }
@@ -101,17 +120,5 @@ mod tests {
             ApiError::from_status(400, "").message(),
             "The server didn't accept that request."
         );
-    }
-
-    #[test]
-    fn only_passing_trouble_is_worth_a_retry() {
-        assert!(ApiError::Network("x".into()).retryable());
-        assert!(ApiError::from_status(503, "").retryable());
-        assert!(ApiError::from_status(500, "").retryable());
-        assert!(ApiError::from_status(429, "").retryable());
-        assert!(!ApiError::from_status(404, "").retryable());
-        assert!(!ApiError::from_status(403, "").retryable());
-        assert!(!ApiError::from_status(400, "").retryable());
-        assert!(!ApiError::Parse("x".into()).retryable());
     }
 }

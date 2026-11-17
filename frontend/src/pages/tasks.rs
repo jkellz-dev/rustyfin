@@ -2,6 +2,7 @@ use sycamore::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::components::error_notice::ErrorNotice;
 use crate::timer::sleep_ms;
 use crate::types::TaskInfoDto;
 
@@ -25,7 +26,7 @@ pub fn Tasks() -> View {
                         start_polling(tasks, polling);
                     }
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             loading.set(false);
         });
@@ -46,7 +47,7 @@ pub fn Tasks() -> View {
                         start_polling(tasks, polling);
                     }
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
         });
     };
@@ -60,7 +61,7 @@ pub fn Tasks() -> View {
                         tasks.set(t);
                     }
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
         });
     };
@@ -90,11 +91,7 @@ pub fn Tasks() -> View {
             }
 
             // Error
-            (if let Some(err) = error.get_clone() {
-                view! { div(class="card") { p(class="text-muted") { (err) } } }
-            } else {
-                view! {}
-            })
+            ErrorNotice(error=error)
 
             // Tasks table
             (if loading.get() {

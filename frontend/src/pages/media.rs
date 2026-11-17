@@ -5,6 +5,7 @@ use sycamore_router::navigate;
 
 use crate::api;
 use crate::browse::{self, ChildQuery};
+use crate::components::error_notice::ErrorNotice;
 use crate::media_route::{self, Crumb, MediaRoute};
 use crate::types::*;
 
@@ -150,7 +151,7 @@ pub fn Media(path: String) -> View {
                         start_index.set(result.start_index);
                         items.set(result.items);
                     }
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 loading.set(false);
             });
@@ -176,14 +177,14 @@ pub fn Media(path: String) -> View {
     let route_for_load = route.clone();
     spawn_local(async move {
         if let Err(e) = api::ensure_authenticated().await {
-            error.set(Some(e));
+            error.set(Some(e.to_string()));
             loading.set(false);
             return;
         }
         let libs = match api::get_user_views().await {
             Ok(result) => result.items,
             Err(e) => {
-                error.set(Some(e));
+                error.set(Some(e.to_string()));
                 Vec::new()
             }
         };
@@ -217,7 +218,7 @@ pub fn Media(path: String) -> View {
                     load_items(id, query, start, None);
                 }
                 Err(e) => {
-                    error.set(Some(e));
+                    error.set(Some(e.to_string()));
                     loading.set(false);
                 }
             },
@@ -266,7 +267,7 @@ pub fn Media(path: String) -> View {
                         set_trail(ancestors, label);
                         detail_item.set(Some(item));
                     }
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 detail_loading.set(false);
             }
@@ -297,7 +298,7 @@ pub fn Media(path: String) -> View {
                 scope_library.set(library.clone());
                 match api::search_hints(&words, library.as_deref()).await {
                     Ok(result) => search_results.set(result.search_hints),
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 search_loading.set(false);
             }
@@ -362,7 +363,7 @@ pub fn Media(path: String) -> View {
             async move {
                 match api::refresh_item(&item_id).await {
                     Ok(()) => toast.set(Some("Metadata refresh started".to_string())),
-                    Err(e) => error.set(Some(e)),
+                    Err(e) => error.set(Some(e.to_string())),
                 }
                 refreshing.set(false);
             }
@@ -395,15 +396,7 @@ pub fn Media(path: String) -> View {
             })
 
             // Error
-            (if let Some(err) = error.get_clone() {
-                view! {
-                    div(class="card mb-16") {
-                        p(class="text-muted") { (err) }
-                    }
-                }
-            } else {
-                view! {}
-            })
+            ErrorNotice(error=error)
 
             // Page header with search
             div(class="page-header") {
