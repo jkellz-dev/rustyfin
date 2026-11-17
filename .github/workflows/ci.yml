@@ -469,6 +469,7 @@ jobs:
           git switch "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "number=$(jq -r '.number' <<<"$PR")" >> "$GITHUB_OUTPUT"
 
       - name: Write the changelog
         if: steps.release-plz.outputs.prs_created == 'true'
@@ -491,6 +492,32 @@ jobs:
           git diff --staged --quiet && exit 0
           git commit -m "chore: changelog for ${TAG}"
           git push origin "HEAD:${BRANCH}"
+
+      # release-plz's own changelog is off (release-plz.toml), so the PR body
+      # it writes lists no changes: show git-cliff's section for the version.
+      - name: Release notes for the PR
+        id: notes
+        if: steps.release-plz.outputs.prs_created == 'true'
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
+        with:
+          config: cliff.toml
+          args: --unreleased --tag ${{ steps.branch.outputs.tag }} --strip header
+
+      - name: Put the notes in the release PR
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ steps.branch.outputs.number }}
+          TAG: ${{ steps.branch.outputs.tag }}
+          NOTES: ${{ steps.notes.outputs.content }}
+        run: |
+          {
+            echo "Merge with a rebase to release ${TAG}: CI tags the commit, publishes the GitHub release with these"
+            echo "notes and the binaries, and adds ${TAG} to the images."
+            echo
+            echo "$NOTES"
+          } > body.md
+          gh pr edit "$NUMBER" --body-file body.md
 
   # On the run for a merged release PR: release-plz tags the commit (vX.Y.Z),
   # then this job publishes the GitHub release with git-cliff's notes and the
