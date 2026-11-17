@@ -2,10 +2,12 @@ use sycamore::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
+use crate::components::loading::Loading;
 use crate::types::CreateLibraryRequest;
 
 #[component]
 pub fn Setup() -> View {
+    api::new_page();
     let step = create_signal(0u32); // 0=Welcome, 1=Add Library, 2=Done
     let error: Signal<Option<String>> = create_signal(None);
     let checking = create_signal(true);
@@ -74,7 +76,7 @@ pub fn Setup() -> View {
     view! {
         div(class="setup-layout") {
             (if checking.get() {
-                view! { div(class="loading-container") { span(class="spinner") {} " Checking..." } }
+                view! { Loading(kind="rows") }
             } else {
                 view! {
                     div(class="setup-container") {

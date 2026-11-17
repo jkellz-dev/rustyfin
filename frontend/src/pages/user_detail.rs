@@ -8,6 +8,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
+use crate::components::loading::Loading;
 use crate::media_route::MediaRoute;
 use crate::types::{DeviceInfo, PlayEntry, PlayStats, UserDto};
 use crate::user_view;
@@ -25,6 +26,7 @@ fn local_time(iso: &str) -> String {
 
 #[component(inline_props)]
 pub fn UserDetail(user_id: String) -> View {
+    api::new_page();
     let user: Signal<Option<UserDto>> = create_signal(None);
     let stats: Signal<Option<PlayStats>> = create_signal(None);
     let plays: Signal<Vec<PlayEntry>> = create_signal(Vec::new());
@@ -274,7 +276,7 @@ pub fn UserDetail(user_id: String) -> View {
             }
 
             (if loading.get() {
-                view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                view! { Loading(kind="rows") }
             } else if plays.with(Vec::is_empty) {
                 view! { div(class="empty-state") { "Nothing played yet." } }
             } else {

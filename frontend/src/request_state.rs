@@ -14,8 +14,8 @@ pub struct Pages {
 impl Pages {
     /// A new page was opened; returns its number.
     pub fn open(&mut self) -> u64 {
-        let _ = self;
-        0
+        self.current += 1;
+        self.current
     }
 
     pub fn current(&self) -> u64 {
@@ -24,8 +24,7 @@ impl Pages {
 
     /// Whether an answer for page `n` may still be used.
     pub fn is_current(&self, n: u64) -> bool {
-        let _ = n;
-        true
+        n == self.current
     }
 }
 
@@ -49,17 +48,35 @@ impl ResponseCache {
 
     /// The answer for `path` if it is younger than the time to live.
     pub fn get(&self, path: &str, now_ms: f64) -> Option<&str> {
-        let _ = (path, now_ms);
-        None
+        self.entries
+            .get(path)
+            .filter(|(at, _)| now_ms - at <= self.ttl_ms)
+            .map(|(_, body)| body.as_str())
     }
 
     pub fn put(&mut self, path: &str, body: String, now_ms: f64) {
-        let _ = (path, body, now_ms, self.max_entries, self.ttl_ms);
+        if !self.entries.contains_key(path) && self.entries.len() >= self.max_entries {
+            let oldest = self
+                .entries
+                .iter()
+                .min_by(|a, b| a.1.0.total_cmp(&b.1.0))
+                .map(|(k, _)| k.clone());
+            if let Some(k) = oldest {
+                self.entries.remove(&k);
+            }
+        }
+        self.entries.insert(path.to_string(), (now_ms, body));
     }
 
     pub fn clear(&mut self) {
         self.entries.clear();
     }
+}
+
+/// Whether a GET may be answered from the cache: browsing data (titles,
+/// libraries, filters), never live state (sessions, scans, tasks, users).
+pub fn cacheable(path: &str) -> bool {
+    path.starts_with("/Items") || path.starts_with("/UserViews")
 }
 
 #[cfg(test)]
@@ -86,6 +103,17 @@ mod tests {
         assert_eq!(cache.get("/Items?b", 2_000.0), None);
         cache.clear();
         assert_eq!(cache.get("/Items?a", 2_000.0), None, "a change forgets all");
+    }
+
+    #[test]
+    fn only_browsing_data_is_cached() {
+        assert!(cacheable("/Items?ParentId=x"));
+        assert!(cacheable("/Items/abc/Ancestors"));
+        assert!(cacheable("/UserViews"));
+        assert!(!cacheable("/Sessions"));
+        assert!(!cacheable("/Library/VirtualFolders"));
+        assert!(!cacheable("/ScheduledTasks"));
+        assert!(!cacheable("/Users/Me"));
     }
 
     #[test]

@@ -4,6 +4,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
+use crate::components::loading::Loading;
 use crate::dashboard_view;
 use crate::form_rules;
 use crate::timer::sleep_ms;
@@ -13,6 +14,7 @@ use crate::types::{
 
 #[component]
 pub fn Libraries() -> View {
+    api::new_page();
     let libs: Signal<Vec<VirtualFolderInfo>> = create_signal(Vec::new());
     let loading = create_signal(true);
     let error: Signal<Option<String>> = create_signal(None);
@@ -352,7 +354,7 @@ pub fn Libraries() -> View {
                                 }
 
                                 (if browse_loading.get() {
-                                    view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                                    view! { Loading(kind="rows") }
                                 } else if let Some(err) = browse_error.get_clone() {
                                     view! {
                                         div(class="folder-error", role="alert") {
@@ -520,7 +522,7 @@ pub fn Libraries() -> View {
 
                 // Libraries table
                 (if loading.get() {
-                    view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                    view! { Loading(kind="rows") }
                 } else if libs.get_clone().is_empty() {
                     view! { div(class="empty-state") { "No libraries yet. Add one above." } }
                 } else {

@@ -1187,13 +1187,13 @@ validation, and polish needed for daily use.
 
 ### 12g. Frontend Infrastructure
 
-- [ ] Request cancellation on navigation (AbortController)
-- [ ] Client-side caching (avoid re-fetching on back navigation)
-- [ ] Skeleton loaders instead of spinners for content areas
-- [ ] Loading state consolidation (page-level spinner, not per-component)
+- [x] Request cancellation on navigation (AbortController): reads of a page left are aborted and no answer reaches it
+- [x] Client-side caching (avoid re-fetching on back navigation): browsing reads kept 30 s; any change clears them
+- [x] Skeleton loaders instead of spinners for content areas
+- [x] Loading state consolidation (page-level spinner, not per-component): one `Loading` component
 - [x] Structured error types in API client (not just strings): `api::ApiError` (network, status with the server's
       reason, parse)
-- [ ] Optimistic updates where safe (e.g. toggle favorite immediately, reconcile on response)
+- [x] Optimistic updates where safe (e.g. toggle favorite immediately, reconcile on response): admin role, mark played
 
 ### 12h. Mobile Layout (owner, 2026-11-16)
 

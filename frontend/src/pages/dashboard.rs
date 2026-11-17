@@ -3,6 +3,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
+use crate::components::loading::Loading;
 use crate::dashboard_view;
 use crate::media_route::MediaRoute;
 use crate::timer::sleep_ms;
@@ -24,6 +25,7 @@ fn age_seconds(iso: &str) -> Option<i64> {
 
 #[component]
 pub fn Dashboard() -> View {
+    api::new_page();
     let info: Signal<Option<SystemInfo>> = create_signal(None);
     let stats: Signal<Option<DashboardStats>> = create_signal(None);
     let loading = create_signal(true);
@@ -116,7 +118,7 @@ pub fn Dashboard() -> View {
 
             ErrorNotice(error=error)
             (if loading.get() {
-                view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                view! { Loading(kind="rows") }
             } else {
                 view! {
                     // Server info card

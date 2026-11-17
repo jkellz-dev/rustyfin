@@ -3,11 +3,13 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
+use crate::components::loading::Loading;
 use crate::timer::sleep_ms;
 use crate::types::TaskInfoDto;
 
 #[component]
 pub fn Tasks() -> View {
+    api::new_page();
     let tasks: Signal<Vec<TaskInfoDto>> = create_signal(Vec::new());
     let loading = create_signal(true);
     let error: Signal<Option<String>> = create_signal(None);
@@ -89,7 +91,7 @@ pub fn Tasks() -> View {
 
             // Tasks table
             (if loading.get() {
-                view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                view! { Loading(kind="rows") }
             } else {
                 view! {
                     div(class="card") {

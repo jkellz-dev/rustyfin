@@ -6,7 +6,6 @@ mod dashboard_view;
 mod form_rules;
 mod media_route;
 mod pages;
-#[allow(dead_code)]
 mod request_state;
 mod timer;
 mod types;

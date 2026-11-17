@@ -4,11 +4,13 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
+use crate::components::loading::Loading;
 use crate::types::{UpdateUserPolicyRequest, UserDto, VirtualFolderInfo};
 use crate::user_view;
 
 #[component]
 pub fn Users() -> View {
+    api::new_page();
     let users: Signal<Vec<UserDto>> = create_signal(Vec::new());
     let loading = create_signal(true);
     let error: Signal<Option<String>> = create_signal(None);
@@ -43,9 +45,18 @@ pub fn Users() -> View {
 
     load_users();
 
+    // Optimistic (roadmap 12g): the role changes at once and changes back if
+    // the server refuses.
     let on_toggle_admin = move |user_id: String, current_admin: bool| {
-        // Read the current user's library settings to preserve them
         let user = users.get_clone().into_iter().find(|u| u.id == user_id);
+        let set_admin = move |id: &str, admin: bool| {
+            users.update(|list| {
+                for u in list.iter_mut().filter(|u| u.id == id) {
+                    u.policy.is_administrator = admin;
+                }
+            });
+        };
+        set_admin(&user_id, !current_admin);
         spawn_local({
             async move {
                 let (enable_all, folders) = if let Some(u) = user {
@@ -62,17 +73,11 @@ pub fn Users() -> View {
                     enabled_folders: folders,
                 };
                 match api::update_user_policy(&user_id, &req).await {
-                    Ok(()) => {
-                        users.update(|list| {
-                            for u in list.iter_mut() {
-                                if u.id == user_id {
-                                    u.policy.is_administrator = !current_admin;
-                                }
-                            }
-                        });
-                        toast.set(Some("User policy updated".to_string()));
+                    Ok(()) => toast.set(Some("User policy updated".to_string())),
+                    Err(e) => {
+                        set_admin(&user_id, current_admin);
+                        error.set(Some(e.to_string()));
                     }
-                    Err(e) => error.set(Some(e.to_string())),
                 }
             }
         });
@@ -279,7 +284,7 @@ pub fn Users() -> View {
 
             // Users table
             (if loading.get() {
-                view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                view! { Loading(kind="rows") }
             } else if users.get_clone().is_empty() {
                 view! { div(class="empty-state") { "No users yet." } }
             } else {

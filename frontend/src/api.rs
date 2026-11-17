@@ -2,6 +2,7 @@ use gloo_net::http::Request;
 use wasm_bindgen::JsValue;
 
 pub use crate::api_error::ApiError;
+use crate::request_state;
 use crate::types::*;
 
 pub(crate) fn get_token() -> Option<String> {
@@ -33,97 +34,122 @@ pub(crate) fn base_url() -> String {
     location.origin().unwrap_or_default()
 }
 
-async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, ApiError> {
-    let url = format!("{}{path}", base_url());
-    let resp = Request::get(&url)
-        .header("Authorization", &auth_header())
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
+thread_local! {
+    static PAGES: std::cell::RefCell<request_state::Pages> =
+        std::cell::RefCell::new(request_state::Pages::default());
+    static CACHE: std::cell::RefCell<request_state::ResponseCache> =
+        std::cell::RefCell::new(request_state::ResponseCache::new(30_000.0, 64));
+    static ABORT: std::cell::RefCell<Option<web_sys::AbortController>> =
+        const { std::cell::RefCell::new(None) };
+}
 
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
+/// A page was opened (call at the top of every page): reads the previous
+/// page still had in flight are cancelled, and no answer meant for it is
+/// handed back (its state is gone; touching it panics the admin).
+pub fn new_page() {
+    PAGES.with(|p| p.borrow_mut().open());
+    ABORT.with(|a| {
+        let mut a = a.borrow_mut();
+        if let Some(old) = a.take() {
+            old.abort();
+        }
+        *a = web_sys::AbortController::new().ok();
+    });
+}
+
+/// Never finishes: what an answer for a page that was left turns into.
+async fn dropped<T>() -> T {
+    std::future::pending().await
+}
+
+/// Send a request and return the answer's body. GETs of browsing data are
+/// served from a 30-second cache when possible; anything else empties it.
+async fn send(method: &str, path: &str, body: Option<String>) -> Result<String, ApiError> {
+    let page = PAGES.with(|p| p.borrow().current());
+    let now = js_sys::Date::now();
+    let is_get = method == "GET";
+    if is_get && request_state::cacheable(path) {
+        if let Some(hit) = CACHE.with(|c| c.borrow().get(path, now).map(str::to_string)) {
+            return Ok(hit);
+        }
+    } else if !is_get {
+        CACHE.with(|c| c.borrow_mut().clear());
     }
+    let url = format!("{}{path}", base_url());
+    let builder = match method {
+        "POST" => Request::post(&url),
+        "DELETE" => Request::delete(&url),
+        _ => Request::get(&url),
+    }
+    .header("Authorization", &auth_header());
+    // Only reads are cancelled on leaving a page: a change still goes through.
+    let signal = if is_get {
+        ABORT.with(|a| a.borrow().as_ref().map(|c| c.signal()))
+    } else {
+        None
+    };
+    let builder = builder.abort_signal(signal.as_ref());
+    let sent = match body {
+        Some(b) => {
+            builder
+                .header("Content-Type", "application/json")
+                .body(JsValue::from_str(&b))
+                .map_err(|_| ApiError::Network)?
+                .send()
+                .await
+        }
+        None => builder.send().await,
+    };
+    let result = match sent {
+        Err(_) => Err(ApiError::Network),
+        Ok(resp) => {
+            let text = resp.text().await.unwrap_or_default();
+            if resp.ok() {
+                Ok(text)
+            } else {
+                Err(ApiError::from_status(resp.status(), &text))
+            }
+        }
+    };
+    if !PAGES.with(|p| p.borrow().is_current(page)) {
+        return dropped().await;
+    }
+    if is_get
+        && request_state::cacheable(path)
+        && let Ok(text) = &result
+    {
+        CACHE.with(|c| c.borrow_mut().put(path, text.clone(), now));
+    }
+    result
+}
 
-    resp.json::<T>().await.map_err(|_| ApiError::Parse)
+fn parse<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, ApiError> {
+    serde_json::from_str(text).map_err(|_| ApiError::Parse)
+}
+
+async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, ApiError> {
+    parse(&send("GET", path, None).await?)
 }
 
 async fn post_json<T: serde::Serialize>(path: &str, body: &T) -> Result<(), ApiError> {
-    let url = format!("{}{path}", base_url());
-    let body_str = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
-    let resp = Request::post(&url)
-        .header("Authorization", &auth_header())
-        .header("Content-Type", "application/json")
-        .body(JsValue::from_str(&body_str))
-        .map_err(|_| ApiError::Network)?
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
-
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
-    }
-    Ok(())
+    let body = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
+    send("POST", path, Some(body)).await.map(|_| ())
 }
 
 async fn post_json_resp<T: serde::Serialize, R: serde::de::DeserializeOwned>(
     path: &str,
     body: &T,
 ) -> Result<R, ApiError> {
-    let url = format!("{}{path}", base_url());
-    let body_str = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
-    let resp = Request::post(&url)
-        .header("Authorization", &auth_header())
-        .header("Content-Type", "application/json")
-        .body(JsValue::from_str(&body_str))
-        .map_err(|_| ApiError::Network)?
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
-
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
-    }
-
-    resp.json::<R>().await.map_err(|_| ApiError::Parse)
+    let body = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
+    parse(&send("POST", path, Some(body)).await?)
 }
 
 async fn delete_path(path: &str) -> Result<(), ApiError> {
-    let url = format!("{}{path}", base_url());
-    let resp = Request::delete(&url)
-        .header("Authorization", &auth_header())
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
-
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
-    }
-    Ok(())
+    send("DELETE", path, None).await.map(|_| ())
 }
 
 async fn post_empty(path: &str) -> Result<(), ApiError> {
-    let url = format!("{}{path}", base_url());
-    let resp = Request::post(&url)
-        .header("Authorization", &auth_header())
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
-
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
-    }
-    Ok(())
+    send("POST", path, None).await.map(|_| ())
 }
 
 fn url_encode(s: &str) -> String {
@@ -185,19 +211,7 @@ pub async fn scan_library(id: Option<&str>) -> Result<(), ApiError> {
         Some(id) => format!("/Library/Refresh?Id={id}"),
         None => "/Library/Refresh".to_string(),
     };
-    let url = format!("{}{path}", base_url());
-    let resp = Request::post(&url)
-        .header("Authorization", &auth_header())
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
-
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
-    }
-    Ok(())
+    post_empty(&path).await
 }
 
 pub async fn get_users() -> Result<Vec<UserDto>, ApiError> {
@@ -227,23 +241,8 @@ pub async fn ensure_authenticated() -> Result<(), ApiError> {
         }
     }
 
-    let url = format!("{}/Users/AuthenticateByName", base_url());
-    let resp = Request::post(&url)
-        .header("Authorization", &auth_header())
-        .header("Content-Type", "application/json")
-        .body(JsValue::from_str("{}"))
-        .map_err(|_| ApiError::Network)?
-        .send()
-        .await
-        .map_err(|_| ApiError::Network)?;
-
-    if !resp.ok() {
-        let code = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(ApiError::from_status(code, &body));
-    }
-
-    let result: AuthenticationResult = resp.json().await.map_err(|_| ApiError::Parse)?;
+    let result: AuthenticationResult =
+        parse(&send("POST", "/Users/AuthenticateByName", Some("{}".to_string())).await?)?;
 
     set_token(&result.access_token);
     Ok(())

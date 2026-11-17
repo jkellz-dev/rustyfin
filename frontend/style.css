@@ -1685,3 +1685,44 @@ select:focus {
     margin-left: 0;
   }
 }
+
+/* ── Loading placeholders (12g) ─────────────────────────── */
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+}
+.skeleton-grid .skeleton-block {
+  aspect-ratio: 2 / 3;
+}
+.skeleton-rows .skeleton-block {
+  height: 48px;
+  margin-bottom: 8px;
+}
+.skeleton-detail .skeleton-block {
+  height: 320px;
+}
+.skeleton-block {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.09),
+    rgba(255, 255, 255, 0.04)
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (max-width: 768px) {
+  .skeleton-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

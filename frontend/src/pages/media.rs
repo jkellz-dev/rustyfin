@@ -6,6 +6,7 @@ use sycamore_router::navigate;
 use crate::api;
 use crate::browse::{self, ChildQuery};
 use crate::components::error_notice::ErrorNotice;
+use crate::components::loading::Loading;
 use crate::media_route::{self, Crumb, MediaRoute};
 use crate::types::*;
 
@@ -103,6 +104,7 @@ fn select_value(e: web_sys::Event) -> String {
 /// back and forward buttons move through the browser's places.
 #[component(inline_props)]
 pub fn Media(path: String) -> View {
+    api::new_page();
     let route = MediaRoute::parse(&path);
     let current_view: Signal<MediaView> = create_signal(match &route {
         MediaRoute::Libraries => MediaView::Libraries,
@@ -403,8 +405,24 @@ pub fn Media(path: String) -> View {
             return;
         }
         bulk_busy.set(true);
+        // Optimistic (roadmap 12g): ticks change at once; failures are put back.
+        let marks = match action {
+            "played" => Some(true),
+            "unplayed" => Some(false),
+            _ => None,
+        };
+        let set_played = move |which: &[String], played: bool| {
+            items.update(|list| {
+                for item in list.iter_mut().filter(|i| which.contains(&i.id)) {
+                    item.user_data.get_or_insert_with(Default::default).played = played;
+                }
+            });
+        };
+        if let Some(played) = marks {
+            set_played(&ids, played);
+        }
         spawn_local(async move {
-            let mut failed = 0;
+            let mut failed_ids: Vec<String> = Vec::new();
             for id in &ids {
                 let r = match action {
                     "played" => api::set_played(id, true).await,
@@ -412,18 +430,15 @@ pub fn Media(path: String) -> View {
                     _ => api::refresh_item(id).await,
                 };
                 if r.is_err() {
-                    failed += 1;
+                    failed_ids.push(id.clone());
                 }
             }
-            if action != "refresh" {
-                let played = action == "played";
-                items.update(|list| {
-                    for item in list.iter_mut().filter(|i| ids.contains(&i.id)) {
-                        let ud = item.user_data.get_or_insert_with(Default::default);
-                        ud.played = played;
-                    }
-                });
+            if let Some(played) = marks
+                && !failed_ids.is_empty()
+            {
+                set_played(&failed_ids, !played);
             }
+            let failed = failed_ids.len();
             let done = ids.len() - failed;
             let what = match action {
                 "played" => "marked played",
@@ -552,7 +567,7 @@ pub fn Media(path: String) -> View {
             (match current_view.get_clone() {
                 MediaView::Libraries => {
                     if loading.get() {
-                        view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                        view! { Loading(kind="grid") }
                     } else {
                         let lib_list = libraries.get_clone();
                         if lib_list.is_empty() {
@@ -583,7 +598,7 @@ pub fn Media(path: String) -> View {
                 },
                 MediaView::Grid => {
                     if loading.get() {
-                        view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                        view! { Loading(kind="grid") }
                     } else {
                         let item_list = items.get_clone();
                         let total = total_count.get();
@@ -858,7 +873,7 @@ pub fn Media(path: String) -> View {
                 MediaView::Detail(ref item_id) => {
                     let detail_id = item_id.clone();
                     if detail_loading.get() {
-                        view! { div(class="loading-container") { span(class="spinner") {} " Loading..." } }
+                        view! { Loading(kind="detail") }
                     } else if let Some(item) = detail_item.get_clone() {
                         let has_image = has_primary_image(&item);
                         let img_url = primary_image_url(&item.id, primary_tag(&item).as_deref(), browse::DETAIL_IMAGE_WIDTH);
@@ -1379,7 +1394,7 @@ pub fn Media(path: String) -> View {
                         }
                     };
                     let body = if search_loading.get() {
-                        view! { div(class="loading-container") { span(class="spinner") {} " Searching..." } }
+                        view! { Loading(kind="rows") }
                     } else {
                         let results = search_results.get_clone();
                         if results.is_empty() {
