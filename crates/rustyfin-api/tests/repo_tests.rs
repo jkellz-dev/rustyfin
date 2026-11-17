@@ -1281,3 +1281,30 @@ async fn switching_a_library_off_and_on_through_the_options_route() {
     }
     app.cleanup().await;
 }
+
+/// The search index is filled page by page: every shared item exactly once,
+/// whatever the page size (the old reindex stopped at 100,000 items).
+#[tokio::test]
+async fn search_index_pages_cover_every_item_once() {
+    let app = common::TestApp::new().await;
+    let lib = app.create_library("Music", "music").await;
+    let mut want = Vec::new();
+    for n in 0..25 {
+        want.push(app.create_media_item(&format!("Track {n}"), "Audio", lib, None).await);
+    }
+    want.sort();
+
+    let mut got = Vec::new();
+    let mut after = None;
+    loop {
+        let page = media_items::search_index_page(&app.pool, after, 7)
+            .await
+            .expect("page");
+        assert!(page.len() <= 7);
+        let Some(last) = page.last() else { break };
+        after = Some(last.id);
+        got.extend(page.iter().map(|i| i.id));
+    }
+    assert_eq!(got, want, "every item, once, in id order");
+    app.cleanup().await;
+}
