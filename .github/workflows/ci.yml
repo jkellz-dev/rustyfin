@@ -4,11 +4,13 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ['v[0-9]*']
 
+# A newer push cancels a pull request's run. On main, runs queue instead: the
+# release job runs only on the run for a merged release PR, and a cancelled
+# run would skip that release.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read-only by default: a job that publishes asks for its own write scope.
 permissions:
@@ -381,11 +383,6 @@ jobs:
             TAGS="${TAGS},${IMAGE}:latest"
           fi
 
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-            TAGS="${TAGS},${IMAGE}:${VERSION}"
-          fi
-
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -429,108 +426,156 @@ jobs:
           build-args: |
             BASE_IMAGE=ghcr.io/jkellz-dev/rustyfin-base:${{ matrix.base }}-${{ needs.base-images.outputs.key }}
 
-  release:
-    name: GitHub Release
+  # release-plz (release-plz.toml) keeps a release PR open with the next
+  # version, from the conventional commits since the last tag. git-cliff then
+  # rewrites CHANGELOG.md on that branch from every commit (release-plz's own
+  # changelog would list only commits that touch a crate).
+  release-pr:
+    name: Release PR
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [container-push]
+    if: github.event_name == 'push'
     permissions:
-      contents: write # push the changelog commit and tag, create the release
+      contents: write # push the release branch
+      pull-requests: write # open and update the release PR
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # Kept on purpose: later steps `git push` the changelog and the tag.
+          # Kept on purpose: the changelog step pushes to the release branch.
           persist-credentials: true
 
-      - name: Validate semver tag
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          if ! echo "$TAG" | grep -qE '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$'; then
-            echo "::error::Tag '$TAG' is not a valid semver version"
-            exit 1
-          fi
-          echo "Version: $TAG"
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
 
-      - name: Generate full changelog
+      - name: Open or update the release PR
+        id: release-plz
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out the release branch
+        id: branch
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          PR: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          BRANCH=$(jq -r '.head_branch' <<<"$PR")
+          VERSION=$(jq -r '.releases[0].version' <<<"$PR")
+          git fetch origin "$BRANCH"
+          git switch "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Write the changelog
+        if: steps.release-plz.outputs.prs_created == 'true'
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
-          args: --verbose
+          args: --tag ${{ steps.branch.outputs.tag }}
         env:
           OUTPUT: CHANGELOG.md
 
-      - name: Determine changelog range
-        id: cliff_args
+      - name: Commit the changelog to the release PR
+        if: steps.release-plz.outputs.prs_created == 'true'
+        env:
+          BRANCH: ${{ steps.branch.outputs.branch }}
+          TAG: ${{ steps.branch.outputs.tag }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          if echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            # Stable release: include everything since last stable tag
-            # (skip prereleases when finding the previous boundary)
-            PREV=$(git tag -l 'v[0-9]*' --sort=-v:refname \
-              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-              | grep -v "^${TAG}$" \
-              | head -1)
-            if [ -n "$PREV" ]; then
-              echo "args=${PREV}..${TAG} --strip header" >> "$GITHUB_OUTPUT"
-            else
-              echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            # Prerelease: just the delta since the last tag (any kind)
-            echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: changelog for ${TAG}"
+          git push origin "HEAD:${BRANCH}"
 
-      - name: Generate release notes
-        id: changelog
+  # On the run for a merged release PR: release-plz tags the commit (vX.Y.Z),
+  # then this job publishes the GitHub release with git-cliff's notes and the
+  # binaries this run built, and adds the version to both images. On any other
+  # push release-plz finds no release PR and the remaining steps skip.
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [container-push]
+    permissions:
+      contents: write # tag and create the release
+      packages: write # add the version tag to the images
+    concurrency:
+      group: release-plz-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
+
+      - name: Tag a merged release PR
+        id: release-plz
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read the tag
+        id: tag
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          TAG=$(jq -r '.[0].tag' <<<"$RELEASES")
+          git fetch --tags origin
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        id: notes
+        if: steps.release-plz.outputs.releases_created == 'true'
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
-          args: ${{ steps.cliff_args.outputs.args }}
-
-      - name: Commit changelog
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git diff --staged --quiet && echo "No changelog changes" || {
-            git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
-            git push origin HEAD:main
-          }
-
-      - name: Annotate tag with release notes
-        env:
-          NOTES: ${{ steps.changelog.outputs.content }}
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          git tag -d "$TAG"
-          git tag -a "$TAG" -m "$NOTES"
-          git push origin "$TAG" --force
-
-      - name: Determine prerelease
-        id: prerelease
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          if echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "flag=" >> "$GITHUB_OUTPUT"
-          else
-            echo "flag=--prerelease" >> "$GITHUB_OUTPUT"
-          fi
+          args: --latest --strip header
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.release-plz.outputs.releases_created == 'true'
         with:
           pattern: binaries-*
           merge-multiple: true
           path: release-artifacts/
 
-      - name: Create GitHub Release
+      - name: Create the GitHub release
+        if: steps.release-plz.outputs.releases_created == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_NOTES: ${{ steps.changelog.outputs.content }}
-          PRERELEASE_FLAG: ${{ steps.prerelease.outputs.flag }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          NOTES: ${{ steps.notes.outputs.content }}
+        run: gh release create "$TAG" --title "$TAG" --notes "$NOTES" --verify-tag release-artifacts/*
+
+      - name: Log in to GHCR
+        if: steps.release-plz.outputs.releases_created == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: steps.release-plz.outputs.releases_created == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Add the version to the images
+        if: steps.release-plz.outputs.releases_created == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "${RELEASE_NOTES}" \
-            ${PRERELEASE_FLAG} \
-            release-artifacts/*
+          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          for IMAGE in rustyfin-server rustyfin-meta; do
+            docker buildx imagetools create \
+              --tag "ghcr.io/jkellz-dev/${IMAGE}:${TAG}" \
+              "ghcr.io/jkellz-dev/${IMAGE}:sha-${SHORT_SHA}"
+          done

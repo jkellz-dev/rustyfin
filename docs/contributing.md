@@ -46,9 +46,22 @@ planned, and the design boundaries every change must respect, are at the top of 
 
 On every pull request and push (`.github/workflows/ci.yml`): formatting and clippy, unit tests, the integration tests
 against Postgres 17, and the admin build with trunk. Pushes to `main` also build the release binaries and publish the
-`rustyfin-server` and `rustyfin-meta` images to `ghcr.io/jkellz-dev/` (tags `sha-<commit>` and `latest`); a `v*` tag
-adds a version tag and a GitHub release with the changelog. `parity.yml` runs nightly: the Hurl parity suite against
-the published image, checked against Jellyfin's recorded answers (`tests/parity`).
+`rustyfin-server` and `rustyfin-meta` images to `ghcr.io/jkellz-dev/` (tags `sha-<commit>` and `latest`). `parity.yml`
+runs nightly: the Hurl parity suite against the published image, checked against Jellyfin's recorded answers
+(`tests/parity`).
+
+## Releases
+
+[release-plz](https://release-plz.dev) (`release-plz.toml`) keeps a release PR open on every push to `main`. It
+proposes the next version from the conventional commits since the last tag: a `fix` bumps the patch, and while the
+version is 0.x a breaking change bumps the minor. All crates share the workspace version, and nothing goes to
+crates.io. The same job writes `CHANGELOG.md` on the PR's branch with git-cliff (`cliff.toml`) from every commit, so the
+admin, docs and CI changes are in it too.
+
+To release, review the PR's version and changelog and merge it with a rebase. CI on that commit runs as usual; when it
+has built, release-plz tags the commit `vX.Y.Z`, and the GitHub release is created with the changelog section as notes
+and the binaries attached, and both images get the `vX.Y.Z` tag. Edit the version in the PR (the workspace `version` in
+`Cargo.toml`) to release a different one.
 
 ## Writing
 
