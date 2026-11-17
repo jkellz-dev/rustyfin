@@ -84,6 +84,13 @@ pub fn decide_play_method(
         .unwrap_or("")
         .to_lowercase();
     let source_bitrate = source.bitrate.map(|b| b as i64);
+    // Jellyfin matches a file against the profile entries of its own kind: a
+    // file without a video stream (music) against the Audio entries.
+    let wanted_type = if video_stream.is_some() {
+        "Video"
+    } else {
+        "Audio"
+    };
 
     // Check direct play
     if enable_direct_play != Some(false) {
@@ -97,7 +104,7 @@ pub fn decide_play_method(
             let type_ok = dp
                 .profile_type
                 .as_deref()
-                .is_none_or(|t| t.eq_ignore_ascii_case("Video"));
+                .is_none_or(|t| t.eq_ignore_ascii_case(wanted_type));
             if !type_ok {
                 continue;
             }
@@ -110,10 +117,11 @@ pub fn decide_play_method(
                 container_supported = true;
             }
 
-            let video_ok = dp
-                .video_codec
-                .as_deref()
-                .is_none_or(|c| csv_contains(c, &source_video_codec));
+            let video_ok = video_stream.is_none()
+                || dp
+                    .video_codec
+                    .as_deref()
+                    .is_none_or(|c| csv_contains(c, &source_video_codec));
             if video_ok {
                 video_supported = true;
             }
@@ -180,7 +188,7 @@ pub fn decide_play_method(
                 .find(|tp| {
                     tp.profile_type
                         .as_deref()
-                        .is_none_or(|t| t.eq_ignore_ascii_case("Video"))
+                        .is_none_or(|t| t.eq_ignore_ascii_case(wanted_type))
                 })
                 .and_then(|tp| tp.container.clone());
 
@@ -208,11 +216,11 @@ pub fn decide_play_method(
         };
     }
 
-    // Find a video transcoding profile
+    // Find a transcoding profile of the file's kind
     let transcode_profile = profile.transcoding_profiles.iter().find(|tp| {
         tp.profile_type
             .as_deref()
-            .is_none_or(|t| t.eq_ignore_ascii_case("Video"))
+            .is_none_or(|t| t.eq_ignore_ascii_case(wanted_type))
     });
 
     let (target_video, target_audio, target_container) = if let Some(tp) = transcode_profile {

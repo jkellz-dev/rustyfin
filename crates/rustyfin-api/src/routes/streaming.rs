@@ -128,7 +128,11 @@ async fn serve_item_file(
     let path = item.path.ok_or(ApiError::NotFound)?;
     streaming::serve_file(&path, headers)
         .await
-        .map_err(|_| ApiError::Internal("Failed to stream file".to_string()))
+        .map_err(|code| match code {
+            // The file went away since the last scan.
+            StatusCode::NOT_FOUND => ApiError::NotFound,
+            _ => ApiError::Internal("Failed to stream file".to_string()),
+        })
 }
 
 fn mime_from_path(path: &str) -> &'static str {
