@@ -231,12 +231,23 @@ fn apply_transcode_urls(
     let video_codec = decision.target_video_codec.as_deref().unwrap_or("h264");
     let audio_codec = decision.target_audio_codec.as_deref().unwrap_or("aac");
     let container = decision.target_container.as_deref().unwrap_or("ts");
+    // Music goes through the audio playlist (as Jellyfin's does): the video
+    // one maps a video stream a song does not have, and ffmpeg fails.
+    let audio_only = !source
+        .media_streams
+        .as_ref()
+        .is_some_and(|streams| streams.iter().any(|s| s.stream_type == "Video"));
+    let (kind, video_part) = if audio_only {
+        ("Audio", String::new())
+    } else {
+        ("Videos", format!("&VideoCodec={video_codec}"))
+    };
 
     let mut url = format!(
-        "/Videos/{item_id}/master.m3u8\
+        "/{kind}/{item_id}/master.m3u8\
          ?MediaSourceId={item_id}\
          &PlaySessionId={play_session_id}\
-         &VideoCodec={video_codec}\
+         {video_part}\
          &AudioCodec={audio_codec}\
          &TranscodingContainer={container}",
     );
