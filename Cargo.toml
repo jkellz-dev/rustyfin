@@ -11,6 +11,7 @@ members = [
     "crates/rustyfin-frontend",
     "crates/rustyfin-common",
     "crates/rustyfin-meta",
+    "crates/rustyfin-bench",
 ]
 exclude = ["frontend"]
 resolver = "2"
