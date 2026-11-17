@@ -108,9 +108,12 @@ pub fn play_detail(
     if let Some(p) = parent.filter(|p| !p.is_empty()) {
         parts.push(p.to_string());
     }
+    // Plays recorded before the server unescaped names still hold `%20`.
+    let client = client.map(crate::media_route::decode);
+    let device = device.map(crate::media_route::decode);
     match (
-        client.filter(|c| !c.is_empty()),
-        device.filter(|d| !d.is_empty()),
+        client.as_deref().filter(|c| !c.is_empty()),
+        device.as_deref().filter(|d| !d.is_empty()),
     ) {
         (Some(c), Some(d)) => parts.push(format!("{c} on {d}")),
         (Some(c), None) => parts.push(c.to_string()),
@@ -121,6 +124,19 @@ pub fn play_detail(
         parts.push(stream_method_label(m).to_string());
     }
     parts.join(" · ")
+}
+
+/// The shape of a play's picture: a show's poster for an episode (its own
+/// frame only when the show has none), an album cover for music.
+pub fn picture_shape(
+    kind: &str,
+    item_id: Option<&str>,
+    image_item_id: Option<&str>,
+) -> &'static str {
+    match kind {
+        "Episode" if image_item_id.is_some() && image_item_id != item_id => "poster",
+        _ => crate::browse::card_shape(kind),
+    }
 }
 
 /// How a stream is played, in words.
@@ -167,6 +183,18 @@ mod tests {
         assert_eq!(js_iso(1_794_897_780_000.0), "2026-11-17T06:43:00Z");
         // A leap day.
         assert_eq!(js_iso(1_709_164_800_000.0), "2024-02-29T00:00:00Z");
+    }
+
+    #[test]
+    fn an_episode_shows_its_shows_poster() {
+        assert_eq!(picture_shape("Episode", Some("e"), Some("show")), "poster");
+        assert_eq!(picture_shape("Episode", Some("e"), Some("e")), "landscape");
+        assert_eq!(picture_shape("Audio", Some("t"), Some("album")), "square");
+        assert_eq!(picture_shape("Movie", Some("m"), Some("m")), "poster");
+        assert_eq!(
+            play_detail(None, Some("Plezy%20tvOS"), Some("Apple%20TV"), None),
+            "Plezy tvOS on Apple TV"
+        );
     }
 
     #[test]

@@ -107,6 +107,21 @@ async fn playing_time_is_counted_per_kind_and_listed() {
         "{history}"
     );
     assert_eq!(items[1]["InProgress"], false);
+    // Each play names the picture to show (owner, 2026-11-17): the film's
+    // own (its placeholder here), the episode's show poster when there is
+    // one, else the episode's own.
+    assert_eq!(items[1]["ImageItemId"], items[1]["ItemId"], "{history}");
+    assert!(
+        items[1]["ImageTag"].as_str().is_some_and(|t| !t.is_empty()),
+        "{history}"
+    );
+    assert_eq!(items[0]["ImageItemId"], items[0]["ItemId"], "{history}");
+    assert!(
+        items[0]["ImageTag"]
+            .as_str()
+            .is_some_and(|t| t.starts_with("frame-")),
+        "{history}"
+    );
 
     // Filters: kind, words in the title, dates.
     let (_, only) = app

@@ -121,6 +121,40 @@ pub async fn upsert(
     .await
 }
 
+/// Save a play state from playback: played, resume point and play count,
+/// stamping the last played date when `stamp` is set. Favourites, ratings
+/// and track choices are left as they are.
+pub async fn save_play_state(
+    pool: &PgPool,
+    user_id: Uuid,
+    item_id: Uuid,
+    played: bool,
+    position_ticks: i64,
+    play_count: i32,
+    stamp: bool,
+) -> Result<UserDataRow, sqlx::Error> {
+    sqlx::query_as::<_, UserDataRow>(
+        r#"
+        INSERT INTO user_data (user_id, item_id, playback_position_ticks, played, play_count, last_played_date)
+        VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN NOW() END)
+        ON CONFLICT (user_id, item_id) DO UPDATE SET
+            playback_position_ticks = EXCLUDED.playback_position_ticks,
+            played = EXCLUDED.played,
+            play_count = EXCLUDED.play_count,
+            last_played_date = CASE WHEN $6 THEN NOW() ELSE user_data.last_played_date END
+        RETURNING *
+        "#,
+    )
+    .bind(user_id)
+    .bind(item_id)
+    .bind(position_ticks)
+    .bind(played)
+    .bind(play_count)
+    .bind(stamp)
+    .fetch_one(pool)
+    .await
+}
+
 /// Apply a partial update: each `Some` field is set, the rest kept. Setting
 /// `played` to true without a play count counts one play and stamps the date,
 /// as marking played does.

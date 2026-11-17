@@ -5,7 +5,59 @@ use rustyfin_db::repo::{media_items, user_data};
 use rustyfin_models::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
 
 use crate::error::ApiError;
+use crate::play_state::{self, Kind};
 use crate::router::AppState;
+
+/// The play-state change a report makes.
+enum Report {
+    Start,
+    Position(i64),
+    StopWithoutPosition,
+}
+
+/// Apply a report to the user's played state for the item (Jellyfin's
+/// rules, `play_state`). Failures are logged: playback never fails on them.
+async fn update_play_state(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    item_id: uuid::Uuid,
+    report: Report,
+) {
+    let item = match media_items::find_by_id(&state.pool, item_id).await {
+        Ok(Some(item)) => item,
+        _ => return,
+    };
+    let kind = Kind::of(&item.item_type, item.is_folder, item.extra_type.as_deref());
+    let current = match user_data::get(&state.pool, user_id, item_id).await {
+        Ok(Some(ud)) => play_state::State {
+            played: ud.played,
+            position_ticks: ud.playback_position_ticks,
+            play_count: ud.play_count,
+        },
+        _ => play_state::State::default(),
+    };
+    let (next, stamp) = match report {
+        Report::Start => (play_state::on_start(current, kind), true),
+        Report::Position(position) => {
+            let (next, _) = play_state::on_position(current, kind, position, item.runtime_ticks);
+            (next, false)
+        }
+        Report::StopWithoutPosition => (play_state::on_stop_without_position(current, kind), true),
+    };
+    if let Err(e) = user_data::save_play_state(
+        &state.pool,
+        user_id,
+        item_id,
+        next.played,
+        next.position_ticks,
+        next.play_count,
+        stamp,
+    )
+    .await
+    {
+        tracing::warn!("Play state for {item_id}: {e}");
+    }
+}
 
 /// `POST /Sessions/Playing` — Report playback started.
 pub async fn report_playback_start(
@@ -14,16 +66,7 @@ pub async fn report_playback_start(
     Json(body): Json<PlaybackStartInfo>,
 ) -> Result<StatusCode, ApiError> {
     if let Some(item_id) = body.item_id {
-        let _ = user_data::upsert(
-            &state.pool,
-            auth.user_id,
-            item_id,
-            body.position_ticks.unwrap_or(0),
-            false,
-            false,
-            0,
-        )
-        .await;
+        update_play_state(&state, auth.user_id, item_id, Report::Start).await;
 
         // Look up item for session tracking
         let (item_name, item_type) =
@@ -74,16 +117,7 @@ pub async fn report_playback_progress(
     if let Some(item_id) = body.item_id
         && let Some(position) = body.position_ticks
     {
-        let _ = user_data::upsert(
-            &state.pool,
-            auth.user_id,
-            item_id,
-            position,
-            false,
-            false,
-            0,
-        )
-        .await;
+        update_play_state(&state, auth.user_id, item_id, Report::Position(position)).await;
     }
 
     // A session tracked again after a restart has no playback yet: the start
@@ -149,18 +183,14 @@ pub async fn report_playback_stopped(
     auth: AuthenticatedUser,
     Json(body): Json<PlaybackStopInfo>,
 ) -> Result<StatusCode, ApiError> {
-    if let Some(item_id) = body.item_id {
-        let position = body.position_ticks.unwrap_or(0);
-        let _ = user_data::upsert(
-            &state.pool,
-            auth.user_id,
-            item_id,
-            position,
-            false,
-            false,
-            0,
-        )
-        .await;
+    if let Some(item_id) = body.item_id
+        && !body.failed.unwrap_or(false)
+    {
+        let report = match body.position_ticks {
+            Some(position) => Report::Position(position),
+            None => Report::StopWithoutPosition,
+        };
+        update_play_state(&state, auth.user_id, item_id, report).await;
     }
 
     if let Some(item_id) = body.item_id {

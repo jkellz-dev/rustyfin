@@ -30,6 +30,28 @@ pub fn count_noun(collection_type: &str, count: i64) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
 }
 
+/// What a stream is playing: an episode as `Show: Title (S02E04)`.
+pub fn playing_title(
+    item_type: &str,
+    name: &str,
+    series: Option<&str>,
+    season: Option<i32>,
+    episode: Option<i32>,
+) -> String {
+    if item_type != "Episode" {
+        return name.to_string();
+    }
+    let number = match (season, episode) {
+        (Some(s), Some(e)) => format!(" (S{s:02}E{e:02})"),
+        (None, Some(e)) => format!(" (E{e:02})"),
+        _ => String::new(),
+    };
+    match series.filter(|s| !s.is_empty()) {
+        Some(show) => format!("{show}: {name}{number}"),
+        None => format!("{name}{number}"),
+    }
+}
+
 /// A session's line: who, on what, and what they are playing.
 pub fn session_label(
     user: Option<&str>,
@@ -39,6 +61,9 @@ pub fn session_label(
     paused: bool,
 ) -> String {
     let who = user.unwrap_or("Someone");
+    // Sessions made before the server unescaped these still hold `%20`.
+    let client = crate::media_route::decode(client);
+    let device = crate::media_route::decode(device);
     let on = if device.is_empty() {
         client.to_string()
     } else {
@@ -262,6 +287,41 @@ mod tests {
         assert_eq!(count_noun("tvshows", 2), "2 episodes");
         assert_eq!(count_noun("music", 0), "0 tracks");
         assert_eq!(count_noun("mixed", 3), "3 items");
+    }
+
+    #[test]
+    fn episodes_name_the_show_and_number() {
+        assert_eq!(
+            playing_title("Episode", "Firewall", Some("Severance"), Some(2), Some(4)),
+            "Severance: Firewall (S02E04)"
+        );
+        assert_eq!(
+            playing_title("Episode", "Pilot", Some("Show"), None, Some(1)),
+            "Show: Pilot (E01)"
+        );
+        assert_eq!(
+            playing_title("Episode", "Special", None, Some(0), Some(12)),
+            "Special (S00E12)"
+        );
+        assert_eq!(playing_title("Movie", "Heat", None, None, None), "Heat");
+        assert_eq!(
+            playing_title("Audio", "Loaded", Some("x"), Some(1), Some(1)),
+            "Loaded"
+        );
+    }
+
+    #[test]
+    fn names_sessions_sent_escaped_are_readable() {
+        assert_eq!(
+            session_label(
+                Some("jk"),
+                "Plezy%20tvOS",
+                "Apple%20TV",
+                Some("Andor"),
+                false
+            ),
+            "jk (Plezy tvOS on Apple TV): playing Andor"
+        );
     }
 
     #[test]

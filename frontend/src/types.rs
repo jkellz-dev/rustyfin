@@ -478,4 +478,9 @@ pub struct PlayEntry {
     pub play_method: Option<String>,
     #[serde(default)]
     pub in_progress: bool,
+    /// The picture to show (the show's poster for an episode).
+    #[serde(default)]
+    pub image_item_id: Option<String>,
+    #[serde(default)]
+    pub image_tag: Option<String>,
 }
