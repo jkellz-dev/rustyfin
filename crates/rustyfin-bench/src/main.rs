@@ -13,6 +13,9 @@
 //!
 //! Needs a Postgres it may create databases in (`DATABASE_URL`), `ffprobe` on
 //! PATH (the scan probes every new file) and a release build of the server.
+//! With `--meilisearch` it also starts `meilisearch` (on PATH) for the server,
+//! times how long the index takes to catch up after each scan and counts
+//! what it holds.
 
 mod machine;
 mod report;
@@ -30,7 +33,13 @@ use sqlx::Connection;
 use tokio::process::{Child, Command};
 
 use crate::machine::round1;
-use crate::report::{Browse, Results, Scan};
+use crate::report::{Browse, Results, Scan, Search, SearchIndex};
+
+/// How long to wait for the search index to catch up after a scan.
+const INDEX_WAIT: Duration = Duration::from_secs(60 * 60);
+/// The index has caught up once every document batch is processed and no new
+/// one has arrived for this long (the server may send several).
+const INDEX_QUIET: Duration = Duration::from_secs(10);
 
 #[derive(Parser, Debug)]
 #[command(about = "Scan and browse a generated library; report the timings")]
@@ -61,6 +70,10 @@ struct Args {
     /// Keep the work folder and the database.
     #[arg(long)]
     keep: bool,
+    /// Start Meilisearch (`meilisearch` on PATH) and point the server at it.
+    /// Without it the server searches with Postgres only.
+    #[arg(long)]
+    meilisearch: bool,
 }
 
 /// The repository root (this crate sits in `crates/rustyfin-bench`).
@@ -93,6 +106,14 @@ async fn main() -> anyhow::Result<()> {
         .output();
     if !ffprobe.is_ok_and(|o| o.status.success()) {
         bail!("ffprobe is not on PATH; the scan probes every new file with it");
+    }
+    if args.meilisearch {
+        let meili = std::process::Command::new("meilisearch")
+            .arg("--version")
+            .output();
+        if !meili.is_ok_and(|o| o.status.success()) {
+            bail!("--meilisearch needs `meilisearch` on PATH");
+        }
     }
 
     let stamp = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
@@ -141,8 +162,15 @@ impl Run<'_> {
         eprintln!("library: {} files in {}", counts.files, media.display());
 
         let postgres = create_database(&self.args.database_url, self.db_name).await?;
+        let meili = if self.args.meilisearch {
+            Some(Meili::start(&self.work.join("meilisearch")).await?)
+        } else {
+            None
+        };
         let port = free_port()?;
-        let mut server = self.start_server(server_bin, port).await?;
+        let mut server = self
+            .start_server(server_bin, port, meili.as_ref().map(|m| m.url.as_str()))
+            .await?;
         let pid = server.id().context("server pid")?;
         let api = Api::sign_in(port).await?;
 
@@ -155,9 +183,17 @@ impl Run<'_> {
         }
 
         eprintln!("first scan ...");
+        let since = chrono::Utc::now();
         let cpu0 = machine::cpu_seconds(pid);
         let first = api.scan().await?;
         let cpu1 = machine::cpu_seconds(pid);
+        let first_index = match &meili {
+            Some(m) => {
+                eprintln!("waiting for the search index ...");
+                Some(m.settle(since).await?)
+            }
+            None => None,
+        };
         let first_scan = Scan {
             seconds: round1(first.as_secs_f64()),
             server_cores: cores(cpu0, cpu1, first),
@@ -167,9 +203,17 @@ impl Run<'_> {
         };
 
         eprintln!("rescan ...");
+        let since = chrono::Utc::now();
         let cpu0 = machine::cpu_seconds(pid);
         let again = api.scan().await?;
         let cpu1 = machine::cpu_seconds(pid);
+        let rescan_index = match &meili {
+            Some(m) => {
+                eprintln!("waiting for the search index ...");
+                Some(m.settle(since).await?)
+            }
+            None => None,
+        };
         let rescan = Scan {
             seconds: round2(again.as_secs_f64()),
             server_cores: cores(cpu0, cpu1, again),
@@ -207,6 +251,19 @@ impl Run<'_> {
         let browse_memory_mib = machine::memory_mib(pid);
         let peak_memory_mib = machine::peak_memory_mib(pid);
         let _ = server.kill().await;
+        let search = match (meili, first_index, rescan_index) {
+            (Some(mut m), Some(first_scan), Some(rescan)) => {
+                let peak_memory_mib = m.child.id().and_then(machine::peak_memory_mib);
+                let _ = m.child.kill().await;
+                Some(Search {
+                    meilisearch: m.version,
+                    first_scan,
+                    rescan,
+                    peak_memory_mib,
+                })
+            }
+            _ => None,
+        };
 
         Ok(Results {
             date: chrono::Utc::now().to_rfc3339(),
@@ -216,6 +273,7 @@ impl Run<'_> {
             machine: machine::describe(Some(postgres)),
             first_scan,
             rescan,
+            search,
             browse,
             idle_memory_mib,
             browse_memory_mib,
@@ -225,7 +283,12 @@ impl Run<'_> {
 
     /// The server in its own folder (a stray `rustyfin.toml` in the current
     /// directory must not reach it), with the repository's migrations.
-    async fn start_server(&self, bin: &Path, port: u16) -> anyhow::Result<Child> {
+    async fn start_server(
+        &self,
+        bin: &Path,
+        port: u16,
+        meilisearch_url: Option<&str>,
+    ) -> anyhow::Result<Child> {
         let dir = self.work.join("server");
         std::fs::create_dir_all(&dir)?;
         let migrations = dir.join("migrations");
@@ -233,7 +296,7 @@ impl Run<'_> {
             std::os::unix::fs::symlink(self.root.join("migrations"), &migrations)?;
         }
         let db = Url::parse(&self.args.database_url).context("DATABASE_URL")?;
-        let config = serde_json::json!({
+        let mut config = serde_json::json!({
             "server": {
                 "port": port,
                 "base_url": format!("http://127.0.0.1:{port}"),
@@ -252,6 +315,9 @@ impl Run<'_> {
                 "admin_group": "admin",
             }},
         });
+        if let Some(url) = meilisearch_url {
+            config["search"] = serde_json::json!({ "meilisearch_url": url });
+        }
         let config_path = dir.join("rustyfin.toml");
         std::fs::write(&config_path, toml::to_string(&config)?)?;
         let log = std::fs::File::create(dir.join("server.log"))?;
@@ -355,7 +421,143 @@ fn browse_queries(items: &report::Items) -> Vec<(String, String)> {
             "name search over every item".to_string(),
             "/Items?Recursive=true&SearchTerm=track%2042&Limit=50".to_string(),
         ),
+        // The search box: Meilisearch when the server has it, else Postgres.
+        (
+            "search hints over every item".to_string(),
+            "/Search/Hints?SearchTerm=track%2042&Limit=20".to_string(),
+        ),
     ]
+}
+
+/// A Meilisearch for this run only: its own folder and port, on 127.0.0.1,
+/// without a master key.
+struct Meili {
+    child: Child,
+    url: String,
+    http: reqwest::Client,
+    version: String,
+}
+
+impl Meili {
+    async fn start(dir: &Path) -> anyhow::Result<Self> {
+        std::fs::create_dir_all(dir)?;
+        let port = free_port()?;
+        let log = std::fs::File::create(dir.join("meilisearch.log"))?;
+        let child = Command::new("meilisearch")
+            .current_dir(dir)
+            .arg("--db-path")
+            .arg(dir.join("data.ms"))
+            .arg("--dump-dir")
+            .arg(dir.join("dumps"))
+            .arg("--http-addr")
+            .arg(format!("127.0.0.1:{port}"))
+            .args(["--env", "development", "--no-analytics"])
+            .stdin(Stdio::null())
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .kill_on_drop(true)
+            .spawn()
+            .context("start meilisearch")?;
+        let url = format!("http://127.0.0.1:{port}");
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()?;
+        for _ in 0..120 {
+            let health = http.get(format!("{url}/health")).send().await;
+            if health.is_ok_and(|r| r.status().is_success()) {
+                let v: Value = http
+                    .get(format!("{url}/version"))
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await?;
+                let version = v["pkgVersion"].as_str().unwrap_or("?").to_string();
+                return Ok(Self {
+                    child,
+                    url,
+                    http,
+                    version,
+                });
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        bail!(
+            "meilisearch did not answer within 60 s; see {}",
+            dir.join("meilisearch.log").display()
+        )
+    }
+
+    /// Waits until Meilisearch has processed the documents the server sent
+    /// since `since` (and nothing new arrives for [`INDEX_QUIET`]), then
+    /// counts the index. Called right after a scan ends.
+    async fn settle(&self, since: chrono::DateTime<chrono::Utc>) -> anyhow::Result<SearchIndex> {
+        let scan_end = Instant::now();
+        let after = since.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        // (tasks seen, failed among them, when they were all first done)
+        let mut done: Option<(usize, u64, Instant)> = None;
+        let mut seconds_after_scan = None;
+        let mut failed_tasks = 0;
+        while scan_end.elapsed() < INDEX_WAIT {
+            let r: Value = self
+                .http
+                .get(format!("{}/tasks", self.url))
+                .query(&[
+                    ("types", "documentAdditionOrUpdate"),
+                    ("afterEnqueuedAt", after.as_str()),
+                    ("limit", "1000"),
+                ])
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+            let tasks = r["results"].as_array().cloned().unwrap_or_default();
+            let finished = |t: &Value| {
+                matches!(
+                    t["status"].as_str(),
+                    Some("succeeded" | "failed" | "canceled")
+                )
+            };
+            if !tasks.is_empty() && tasks.iter().all(finished) {
+                let failed = tasks.iter().filter(|t| t["status"] == "failed").count() as u64;
+                match done {
+                    Some((n, _, at)) if n == tasks.len() => {
+                        if at.elapsed() >= INDEX_QUIET {
+                            seconds_after_scan = Some(round1((at - scan_end).as_secs_f64()));
+                            failed_tasks = failed;
+                            break;
+                        }
+                    }
+                    _ => done = Some((tasks.len(), failed, Instant::now())),
+                }
+            } else {
+                done = None;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        if seconds_after_scan.is_none() {
+            failed_tasks = done.map_or(0, |(_, failed, _)| failed);
+        }
+        Ok(SearchIndex {
+            seconds_after_scan,
+            documents: self.documents().await?,
+            failed_tasks,
+        })
+    }
+
+    async fn documents(&self) -> anyhow::Result<u64> {
+        let r = self
+            .http
+            .get(format!("{}/indexes/media_items/stats", self.url))
+            .send()
+            .await?;
+        if r.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(0);
+        }
+        let v: Value = r.error_for_status()?.json().await?;
+        Ok(v["numberOfDocuments"].as_u64().unwrap_or(0))
+    }
 }
 
 fn free_port() -> anyhow::Result<u16> {
