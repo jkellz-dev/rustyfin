@@ -75,13 +75,11 @@ async fn a_collection_recorded_from_tmdb_joins_films_with_stale_nfos() {
         .id;
     let scanner = LibraryScanner::new(app.pool.clone(), None);
     scanner.scan(lib, &[t.root()]).await.unwrap();
-    // Without a lookup, the stale names stay apart (as before).
+    // Without a lookup, the stale names stay apart (as before); the new
+    // name's collection has one film, so it is not listed.
     assert_eq!(
         sets(&app, &token).await,
-        [
-            ("28 Days/Weeks Later Collection".to_string(), 2),
-            ("28 Days/Weeks/Years Later Collection".to_string(), 1)
-        ]
+        [("28 Days/Weeks Later Collection".to_string(), 2)]
     );
 
     let found = "[collection]\ntmdb = 1565\nname = \"28 Days/Weeks/Years Later Collection\"\n\

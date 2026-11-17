@@ -211,7 +211,8 @@ pub async fn list_auto_tmdb_ids(
 /// hand are always listed.
 pub fn hidden_single_sql(t: &str) -> String {
     format!(
-        "({t}.item_type = 'BoxSet' AND {t}.extra_data->>'AutoCollection' = 'true' \
+        "({t}.item_type = 'BoxSet' \
+         AND COALESCE({t}.extra_data->>'AutoCollection', 'false') = 'true' \
          AND (SELECT COUNT(*) FROM collection_items ci WHERE ci.collection_id = {t}.id) < 2)"
     )
 }

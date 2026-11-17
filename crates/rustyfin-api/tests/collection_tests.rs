@@ -141,6 +141,7 @@ async fn a_film_that_leaves_the_series_leaves_the_collection_and_empty_ones_go()
     let (_, token) = app.create_user("viewer", true).await;
     let tree = Tree::new();
     tree.movie("Alien (1979)", Some("<set>Alien Collection</set>"));
+    tree.movie("Aliens (1986)", Some("<set>Alien Collection</set>"));
     let lib = libraries::create(&app.pool, "Movies", "movies", &[tree.root()])
         .await
         .unwrap()
@@ -148,11 +149,24 @@ async fn a_film_that_leaves_the_series_leaves_the_collection_and_empty_ones_go()
     scan(&app, lib, &tree).await;
     let url = format!("/Items?ParentId={lib}&IncludeItemTypes=BoxSet&Recursive=true");
     assert_eq!(names(&app, &token, &url).await, vec!["Alien Collection"]);
+    let boxsets = || async {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM media_items WHERE item_type = 'BoxSet'")
+            .fetch_one(&app.pool)
+            .await
+            .unwrap()
+    };
 
-    // Radarr rewrites the NFO without the set.
-    tree.movie("Alien (1979)", None);
+    // Radarr rewrites one NFO without the set: one film left, not listed,
+    // but kept (with its art) in case a film joins again.
+    tree.movie("Aliens (1986)", None);
     scan(&app, lib, &tree).await;
     assert!(names(&app, &token, &url).await.is_empty());
+    assert_eq!(boxsets().await, 1);
+
+    // And the other: empty, so it goes.
+    tree.movie("Alien (1979)", None);
+    scan(&app, lib, &tree).await;
+    assert_eq!(boxsets().await, 0);
     app.cleanup().await;
 }
 

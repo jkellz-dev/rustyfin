@@ -229,6 +229,11 @@ async fn a_collection_lists_a_film_with_versions_once() {
         br#"<movie><title>Film</title><set tmdbcolid="1565"><name>Film Collection</name></set></movie>"#,
     );
     t.file(&format!("{DIR}/Film (2002) [tmdbid-170]-trailer.mkv"), b"t");
+    // A second film: collections of one film are not listed.
+    t.file(
+        "Other (2001)/Other (2001).nfo",
+        br#"<movie><title>Other</title><set tmdbcolid="1565"><name>Film Collection</name></set></movie>"#,
+    );
     let lib = library(&app, &t.root()).await;
     scan(&app, lib, &t.root()).await;
     // Twice, as the live library was: once to make rows, once more.
@@ -244,7 +249,10 @@ async fn a_collection_lists_a_film_with_versions_once() {
     let items = films["Items"]
         .as_array()
         .unwrap_or_else(|| panic!("{films}"));
-    assert_eq!(items.len(), 1, "{films}");
-    assert!(same(&items[0]["Id"], film), "{films}");
+    assert_eq!(items.len(), 2, "{films}");
+    let ids: Vec<&Value> = items.iter().map(|i| &i["Id"]).collect();
+    assert_eq!(ids.iter().filter(|v| same(v, film)).count(), 1, "{films}");
+    let other = id_of(&app, &t.path(WEBDL)).await;
+    assert!(!ids.iter().any(|v| same(v, other)), "{films}");
     app.cleanup().await;
 }
