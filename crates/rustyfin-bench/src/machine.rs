@@ -10,24 +10,52 @@ pub struct Machine {
     pub cpu: String,
     /// CPUs this process may use (cgroup limits included).
     pub cpus: usize,
+    /// The memory this process may use: its cgroup's limit, else the machine's.
     pub memory_gib: Option<f64>,
     pub os: String,
+    pub postgres: Option<String>,
+    pub ffprobe: Option<String>,
 }
 
-pub fn describe() -> Machine {
+pub fn describe(postgres: Option<String>) -> Machine {
     let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
     let cpu = cpuinfo
         .lines()
         .find_map(|l| l.strip_prefix("model name").and_then(|r| r.split_once(':')))
         .map(|(_, v)| v.trim().to_string())
         .unwrap_or_else(|| std::env::consts::ARCH.to_string());
-    let memory_gib = meminfo_kib("MemTotal").map(|k| round1(k / 1024.0 / 1024.0));
+    let machine_kib = meminfo_kib("MemTotal");
+    let limit_kib = std::fs::read_to_string("/sys/fs/cgroup/memory.max")
+        .ok()
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .map(|bytes| bytes / 1024.0);
+    let kib = match (limit_kib, machine_kib) {
+        (Some(l), Some(m)) => Some(l.min(m)),
+        (l, m) => l.or(m),
+    };
     Machine {
         cpu,
         cpus: std::thread::available_parallelism().map_or(1, |n| n.get()),
-        memory_gib,
+        memory_gib: kib.map(|k| round1(k / 1024.0 / 1024.0)),
         os: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+        postgres,
+        ffprobe: ffprobe_version(),
     }
+}
+
+/// `ffprobe version 7.0.2-static ...` -> `7.0.2-static`.
+fn ffprobe_version() -> Option<String> {
+    let out = std::process::Command::new("ffprobe")
+        .arg("-version")
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let first = text.lines().next()?;
+    first
+        .strip_prefix("ffprobe version ")?
+        .split_whitespace()
+        .next()
+        .map(str::to_string)
 }
 
 fn meminfo_kib(key: &str) -> Option<f64> {
@@ -63,14 +91,18 @@ pub fn peak_memory_mib(pid: u32) -> Option<f64> {
     status_mib(pid, "VmHWM")
 }
 
-/// User plus system CPU time the process has used, in seconds.
+/// CPU time the process and its finished children (the ffprobe runs of a
+/// scan) have used, user plus system, in seconds.
 pub fn cpu_seconds(pid: u32) -> Option<f64> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     // Fields after the command name, which is in parentheses and may hold spaces.
     let rest = &stat[stat.rfind(')')? + 2..];
     let fields: Vec<&str> = rest.split_whitespace().collect();
-    // utime and stime are fields 14 and 15 of the line, 12 and 13 here.
-    let ticks: f64 = fields.get(11)?.parse::<f64>().ok()? + fields.get(12)?.parse::<f64>().ok()?;
+    // utime, stime, cutime and cstime are fields 14 to 17 of the line, 12 to 15 here.
+    let mut ticks = 0.0;
+    for i in 11..=14 {
+        ticks += fields.get(i)?.parse::<f64>().ok()?;
+    }
     Some(ticks / clock_ticks())
 }
 
@@ -111,7 +143,7 @@ mod tests {
 
     #[test]
     fn describes_the_machine() {
-        let m = describe();
+        let m = describe(None);
         assert!(m.cpus >= 1);
         assert!(!m.cpu.is_empty());
     }
