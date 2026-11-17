@@ -113,7 +113,7 @@ pub fn UserDetail(user_id: String) -> View {
         div {
             (if let Some(msg) = toast.get_clone() {
                 crate::timer::clear_toast_later(toast, msg.clone());
-                view! { div(class="toast-container") { div(class="toast toast-success") { (msg) } } }
+                view! { div(class="toast-container", role="status", aria-live="polite") { div(class="toast toast-success") { (msg) } } }
             } else {
                 view! {}
             })
@@ -121,7 +121,7 @@ pub fn UserDetail(user_id: String) -> View {
                 let label = format!("{} ({})", target.name, target.app_name);
                 view! {
                     div(class="modal-overlay") {
-                        div(class="modal") {
+                        div(class="modal", role="dialog", aria-modal="true") {
                             h3 { "Sign out device" }
                             p { "Sign out " (label) "? The app will have to sign in again; anything playing on it stops reporting." }
                             div(class="modal-actions") {

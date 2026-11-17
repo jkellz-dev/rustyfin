@@ -1177,13 +1177,14 @@ validation, and polish needed for daily use.
 
 ### 12f. Accessibility
 
-- [ ] ARIA attributes on interactive elements (`aria-label`, `aria-describedby`, `aria-live`)
-- [ ] Keyboard navigation (tab order, Escape to close modals, arrow keys in folder picker)
-- [ ] Focus management (modal open → focus first input, modal close → restore focus)
-- [ ] Screen reader announcements for page loads, errors, toast notifications
-- [ ] Skip-to-content link
-- [ ] Alt text for poster images
-- [ ] `@media (prefers-reduced-motion)` support
+- [x] ARIA attributes on interactive elements (`aria-label`, `aria-describedby`, `aria-live`): dialogs, toasts, errors,
+      filters, menu
+- [x] Keyboard navigation (tab order, Escape to close modals, arrow keys in folder picker)
+- [x] Focus management (modal open → focus first input, modal close → restore focus)
+- [x] Screen reader announcements for page loads, errors, toast notifications (page name in the tab title too)
+- [x] Skip-to-content link
+- [x] Alt text for poster images (empty where the title is written beside the image, so it is not read twice)
+- [x] `@media (prefers-reduced-motion)` support
 
 ### 12g. Frontend Infrastructure
 

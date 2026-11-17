@@ -216,7 +216,7 @@ pub fn Libraries() -> View {
                 (if let Some(msg) = toast.get_clone() {
                     crate::timer::clear_toast_later(toast, msg.clone());
                     view! {
-                        div(class="toast-container") {
+                        div(class="toast-container", role="status", aria-live="polite") {
                             div(class="toast toast-success") { (msg) }
                         }
                     }
@@ -228,7 +228,7 @@ pub fn Libraries() -> View {
                 (if let Some(target) = delete_target.get_clone() {
                     view! {
                         div(class="modal-overlay") {
-                            div(class="modal") {
+                            div(class="modal", role="dialog", aria-modal="true") {
                                 h3 { "Delete Library" }
                                 p { "Are you sure you want to delete \"" (target.name) "\"? This cannot be undone." }
                                 div(class="modal-actions") {
@@ -249,7 +249,7 @@ pub fn Libraries() -> View {
                     let current_edit_paths = edit_paths.get_clone();
                     view! {
                         div(class="modal-overlay") {
-                            div(class="modal") {
+                            div(class="modal", role="dialog", aria-modal="true") {
                                 h3 { "Edit Library" }
                                 div(class="form-group") {
                                     label { "Name" }
@@ -342,7 +342,7 @@ pub fn Libraries() -> View {
                     };
                     view! {
                         div(class="modal-overlay") {
-                            div(class="modal folder-picker") {
+                            div(class="modal folder-picker", role="dialog", aria-modal="true", aria-label="Browse folders") {
                                 h3 { "Browse Folders" }
                                 div(class="folder-path") { (browse_path.get_clone()) }
 
@@ -368,7 +368,7 @@ pub fn Libraries() -> View {
                                 } else {
                                     let items = browse_entries.get_clone();
                                     view! {
-                                        div(class="folder-list") {
+                                        div(class="folder-list", data-arrow-list="true") {
                                             Indexed(
                                                 list=move || items.clone(),
                                                 view={
@@ -376,7 +376,7 @@ pub fn Libraries() -> View {
                                                         let entry_path = entry.path.clone();
                                                         let entry_name = entry.name.clone();
                                                         view! {
-                                                            div(class="folder-item", on:click={
+                                                            button(class="folder-item", r#type="button", on:click={
                                                                 let entry_path = entry_path.clone();
                                                                 move |_| load_directory(entry_path.clone())
                                                             }) {

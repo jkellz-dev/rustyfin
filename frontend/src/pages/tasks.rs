@@ -74,7 +74,7 @@ pub fn Tasks() -> View {
             (if let Some(msg) = toast.get_clone() {
                 crate::timer::clear_toast_later(toast, msg.clone());
                 view! {
-                    div(class="toast-container") {
+                    div(class="toast-container", role="status", aria-live="polite") {
                         div(class="toast toast-success") { (msg) }
                     }
                 }

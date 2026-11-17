@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 mod a11y;
 mod api;
 mod api_error;
@@ -46,6 +45,7 @@ enum AppRoutes {
 }
 
 fn main() {
+    a11y::install();
     sycamore::render(|| {
         view! {
             Router(
@@ -54,10 +54,18 @@ fn main() {
                     // Static root node — Router's click handler attaches here and persists
                     view! {
                         div(class="app-layout") {
+                            a(class="skip-link", href="#main") { "Skip to content" }
+                            div(id="sr-announcer", class="sr-only", aria-live="polite") {}
                             Sidebar {}
-                            main(class="main-content") {
+                            main(class="main-content", id="main", tabindex="-1") {
                                 // Only this dynamic block rebuilds on route changes
-                                (match route.get_clone() {
+                                (match {
+                                    let path = web_sys::window()
+                                        .and_then(|w| w.location().pathname().ok())
+                                        .unwrap_or_default();
+                                    a11y::announce_page(&path);
+                                    route.get_clone()
+                                } {
                                     AppRoutes::Setup => view! { Setup {} },
                                     AppRoutes::Libraries => view! { Libraries {} },
                                     AppRoutes::Media { path } => view! { Media(path=format!("/web/media/{}", path.join("/"))) },

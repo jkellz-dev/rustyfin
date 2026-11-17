@@ -41,7 +41,7 @@ pub fn Sidebar() -> View {
         })
         .collect();
     view! {
-        nav(class=move || sidebar_class(open.get())) {
+        nav(class=move || sidebar_class(open.get()), aria-label="Admin") {
             div(class="sidebar-brand") {
                 span { "Rustyfin" }
                 button(

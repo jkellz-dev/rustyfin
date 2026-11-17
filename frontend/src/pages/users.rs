@@ -171,7 +171,7 @@ pub fn Users() -> View {
             (if let Some(msg) = toast.get_clone() {
                 crate::timer::clear_toast_later(toast, msg.clone());
                 view! {
-                    div(class="toast-container") {
+                    div(class="toast-container", role="status", aria-live="polite") {
                         div(class="toast toast-success") { (msg) }
                     }
                 }
@@ -183,7 +183,7 @@ pub fn Users() -> View {
             (if let Some(target) = delete_target.get_clone() {
                 view! {
                     div(class="modal-overlay") {
-                        div(class="modal") {
+                        div(class="modal", role="dialog", aria-modal="true") {
                             h3 { "Delete User" }
                             p { "Are you sure you want to delete \"" (target.name) "\"? This cannot be undone." }
                             div(class="modal-actions") {
@@ -204,7 +204,7 @@ pub fn Users() -> View {
                 let libs = all_libraries.get_clone();
                 view! {
                     div(class="modal-overlay") {
-                        div(class="modal") {
+                        div(class="modal", role="dialog", aria-modal="true") {
                             h3 { "Library Access — " (target.name) }
                             div(class="toggle-row") {
                                 span { "Access all libraries" }

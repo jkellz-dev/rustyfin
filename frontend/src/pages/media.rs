@@ -505,7 +505,7 @@ pub fn Media(path: String) -> View {
             (if let Some(msg) = toast.get_clone() {
                 crate::timer::clear_toast_later(toast, msg.clone());
                 view! {
-                    div(class="toast-container") {
+                    div(class="toast-container", role="status", aria-live="polite") {
                         div(class="toast toast-success") { (msg) }
                     }
                 }
@@ -806,7 +806,7 @@ pub fn Media(path: String) -> View {
                                                         div(class="media-card-art") {
                                                         (if has_image {
                                                             let url = img_url.clone();
-                                                            view! { img(class=poster_class, src=url, loading="lazy") }
+                                                            view! { img(class=poster_class, src=url, alt="", loading="lazy") }
                                                         } else {
                                                             let icon = icon_for_item_type(&item_type);
                                                             view! { div(class=placeholder_class) { (icon) } }
@@ -1132,7 +1132,7 @@ pub fn Media(path: String) -> View {
                                                                 div(class="media-card", on:click=move |_| view_detail(film_id.clone())) {
                                                                     (if has_image {
                                                                         let url = url.clone();
-                                                                        view! { img(class=poster_class, src=url, loading="lazy") }
+                                                                        view! { img(class=poster_class, src=url, alt="", loading="lazy") }
                                                                     } else {
                                                                         view! { div(class=placeholder_class) { (icon) } }
                                                                     })
@@ -1436,7 +1436,7 @@ pub fn Media(path: String) -> View {
                                                 ) {
                                                     (if has_image {
                                                         let url = img_url.clone();
-                                                        view! { img(class=thumb_class, src=url, loading="lazy") }
+                                                        view! { img(class=thumb_class, src=url, alt="", loading="lazy") }
                                                     } else {
                                                         let class = format!("{thumb_class} media-poster-placeholder");
                                                         view! { div(class=class) { (icon) } }
