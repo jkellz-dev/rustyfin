@@ -21,6 +21,13 @@ pub struct VirtualFolderInfo {
     pub refresh_status: Option<String>,
     #[serde(default)]
     pub last_scanned: Option<String>,
+    /// Percent done while scanning.
+    #[serde(default)]
+    pub refresh_progress: Option<f64>,
+    #[serde(default)]
+    pub last_scan_errors: Option<u64>,
+    #[serde(default)]
+    pub last_scan_failure: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

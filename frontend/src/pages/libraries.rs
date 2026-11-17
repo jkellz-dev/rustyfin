@@ -547,6 +547,7 @@ pub fn Libraries() -> View {
                                             let locations = lib.locations.join(", ");
                                             let scan_id = lib.item_id.clone();
                                             let scanning = dashboard_view::is_scanning(lib.refresh_status.as_deref());
+                                            let progress = lib.refresh_progress;
                                             let last = dashboard_view::last_scanned_label(lib.last_scanned.as_deref());
                                             let del_lib = lib.clone();
                                             let edit_lib = lib.clone();
@@ -578,7 +579,8 @@ pub fn Libraries() -> View {
                                                                 }
                                                             ) {
                                                                 (if scanning {
-                                                                    view! { span(class="spinner spinner-sm") {} " Scanning…" }
+                                                                    let label = dashboard_view::scanning_label(progress);
+                                                                    view! { span(class="spinner spinner-sm") {} " " (label) }
                                                                 } else {
                                                                     view! { "Scan" }
                                                                 })
@@ -632,9 +634,20 @@ fn poll_scans(
             let after = flags(&now);
             let done = dashboard_view::scans_finished(&before, &after);
             let any_active = after.iter().any(|(_, active)| *active);
-            libs.set(now);
+            libs.set(now.clone());
             if !done.is_empty() {
-                toast.set(Some(format!("Scan finished: {}", done.join(", "))));
+                let messages: Vec<String> = done
+                    .iter()
+                    .filter_map(|name| now.iter().find(|l| &l.name == name))
+                    .map(|l| {
+                        dashboard_view::scan_outcome(
+                            &l.name,
+                            l.last_scan_errors,
+                            l.last_scan_failure.as_deref(),
+                        )
+                    })
+                    .collect();
+                toast.set(Some(messages.join(" · ")));
             }
             if !any_active {
                 polling.set(false);

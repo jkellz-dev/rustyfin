@@ -167,6 +167,29 @@ pub fn scans_finished(before: &[(String, bool)], now: &[(String, bool)]) -> Vec<
         .collect()
 }
 
+/// The Scan button while a scan runs: "Scanning… 42%" once progress is known.
+pub fn scanning_label(progress: Option<f64>) -> String {
+    match progress {
+        Some(p) if p > 0.0 => format!("Scanning… {}%", p.floor() as u32),
+        _ => "Scanning…".to_string(),
+    }
+}
+
+/// What to say when a library's scan ends: plainly when it went well, with
+/// the number of files it could not read, or why it failed.
+pub fn scan_outcome(name: &str, errors: Option<u64>, failure: Option<&str>) -> String {
+    match (failure, errors.unwrap_or(0)) {
+        (Some(why), _) => format!("Scan of {name} failed: {why}"),
+        (None, 0) => format!("Scan finished: {name}"),
+        (None, 1) => {
+            format!("Scan of {name} finished; 1 file could not be read (see the activity log)")
+        }
+        (None, n) => {
+            format!("Scan of {name} finished; {n} files could not be read (see the activity log)")
+        }
+    }
+}
+
 /// "Last scanned 2026-11-16 01:50" from an RFC 3339 time (UTC).
 pub fn last_scanned_label(iso: Option<&str>) -> String {
     match iso {
@@ -404,5 +427,25 @@ mod tests {
         assert_eq!(severity_class("Error"), "activity-dot activity-error");
         assert_eq!(severity_class("Warning"), "activity-dot activity-warning");
         assert_eq!(severity_class("Information"), "activity-dot");
+    }
+
+    #[test]
+    fn scans_say_how_far_they_got_and_how_they_ended() {
+        assert_eq!(scanning_label(None), "Scanning…");
+        assert_eq!(scanning_label(Some(0.0)), "Scanning…");
+        assert_eq!(scanning_label(Some(42.7)), "Scanning… 42%");
+        assert_eq!(
+            scan_outcome("Movies", Some(0), None),
+            "Scan finished: Movies"
+        );
+        assert_eq!(scan_outcome("Movies", None, None), "Scan finished: Movies");
+        assert_eq!(
+            scan_outcome("Movies", Some(3), None),
+            "Scan of Movies finished; 3 files could not be read (see the activity log)"
+        );
+        assert_eq!(
+            scan_outcome("Music", Some(1), Some("path gone")),
+            "Scan of Music failed: path gone"
+        );
     }
 }
