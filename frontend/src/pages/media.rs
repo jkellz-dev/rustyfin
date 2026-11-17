@@ -191,7 +191,9 @@ pub fn Media(path: String) -> View {
         libraries.set(libs.clone());
         match route_for_load {
             MediaRoute::Libraries => loading.set(false),
-            MediaRoute::Library { id, sort, start } => {
+            MediaRoute::Library {
+                id, sort, start, ..
+            } => {
                 let Some(lib) = libs.iter().find(|l| l.id == id) else {
                     error.set(Some("That library is not available.".to_string()));
                     loading.set(false);
@@ -271,7 +273,7 @@ pub fn Media(path: String) -> View {
                 }
                 detail_loading.set(false);
             }
-            MediaRoute::Search { words, library } => {
+            MediaRoute::Search { words, library, .. } => {
                 loading.set(false);
                 let mut crumbs = Vec::new();
                 if let Some(lib) = library
@@ -284,6 +286,7 @@ pub fn Media(path: String) -> View {
                             MediaRoute::Library {
                                 id: lib.id.clone(),
                                 sort: None,
+                                filter: Default::default(),
                                 start: 0,
                             }
                             .path(),
@@ -311,6 +314,7 @@ pub fn Media(path: String) -> View {
         go(MediaRoute::Library {
             id: lib.id,
             sort: None,
+            filter: Default::default(),
             start: 0,
         })
     };
@@ -328,6 +332,7 @@ pub fn Media(path: String) -> View {
             go(MediaRoute::Library {
                 id,
                 sort: Some(label),
+                filter: Default::default(),
                 start: 0,
             });
         }
@@ -348,6 +353,7 @@ pub fn Media(path: String) -> View {
         go(MediaRoute::Search {
             words: words.trim().to_string(),
             library: scope_library.get_clone(),
+            kind: None,
         });
     };
 

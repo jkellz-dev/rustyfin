@@ -301,6 +301,47 @@ pub fn extra_label(extra_type: Option<&str>) -> &'static str {
     }
 }
 
+/// How a library's titles are laid out (roadmap 12d); remembered in the
+/// browser under `VIEW_MODE_KEY`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewMode {
+    Grid,
+    List,
+}
+
+pub const VIEW_MODE_KEY: &str = "rustyfin_view_mode";
+
+impl ViewMode {
+    /// From the stored value; anything else is the grid.
+    pub fn from_stored(value: Option<&str>) -> ViewMode {
+        let _ = value;
+        ViewMode::Grid
+    }
+
+    pub fn stored(self) -> &'static str {
+        match self {
+            ViewMode::Grid => "grid",
+            ViewMode::List => "list",
+        }
+    }
+}
+
+/// Add `id` to the selection, or take it out when it is there.
+pub fn toggle_selected(selected: &mut Vec<String>, id: &str) {
+    let _ = (selected, id);
+}
+
+/// The kinds a search can be narrowed to: (IncludeItemTypes value, label).
+pub const SEARCH_KINDS: [(&str, &str); 7] = [
+    ("", "Everything"),
+    ("Movie", "Films"),
+    ("Series", "Shows"),
+    ("Episode", "Episodes"),
+    ("MusicAlbum", "Albums"),
+    ("MusicArtist", "Artists"),
+    ("Audio", "Tracks"),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +525,26 @@ mod tests {
         assert_eq!(card_label("Episode", "Pilot", None), "Pilot");
         assert_eq!(card_label("Audio", "Song", Some(3)), "3. Song");
         assert_eq!(card_label("Season", "Season 2", Some(2)), "Season 2");
+    }
+
+    #[test]
+    fn the_view_mode_is_remembered() {
+        assert_eq!(ViewMode::from_stored(Some("list")), ViewMode::List);
+        assert_eq!(ViewMode::from_stored(Some("grid")), ViewMode::Grid);
+        assert_eq!(ViewMode::from_stored(Some("??")), ViewMode::Grid);
+        assert_eq!(ViewMode::from_stored(None), ViewMode::Grid);
+        assert_eq!(
+            ViewMode::from_stored(Some(ViewMode::List.stored())),
+            ViewMode::List
+        );
+    }
+
+    #[test]
+    fn selecting_twice_unselects() {
+        let mut s = Vec::new();
+        toggle_selected(&mut s, "a");
+        toggle_selected(&mut s, "b");
+        toggle_selected(&mut s, "a");
+        assert_eq!(s, vec!["b".to_string()]);
     }
 }

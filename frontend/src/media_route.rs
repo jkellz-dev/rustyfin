@@ -10,6 +10,26 @@
 //! - `/web/media/person/<id>/<name>[/start/<n>]`: a person's titles
 //! - `/web/media/search/<words>[/in/<library id>]`: search results
 
+/// What a library's titles are narrowed to (roadmap 12d).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LibraryFilter {
+    pub genre: Option<String>,
+    pub year: Option<i32>,
+    /// At least this community rating (out of 10).
+    pub min_rating: Option<u8>,
+}
+
+impl LibraryFilter {
+    pub fn is_empty(&self) -> bool {
+        self.genre.is_none() && self.year.is_none() && self.min_rating.is_none()
+    }
+
+    /// The `/Items` query parameters for this filter (leading `&`).
+    pub fn query(&self) -> String {
+        String::new()
+    }
+}
+
 /// One place in the media browser.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaRoute {
@@ -17,6 +37,7 @@ pub enum MediaRoute {
     Library {
         id: String,
         sort: Option<String>,
+        filter: LibraryFilter,
         start: i32,
     },
     Folder {
@@ -34,6 +55,8 @@ pub enum MediaRoute {
     Search {
         words: String,
         library: Option<String>,
+        /// Only this kind: Movie, Series, Episode, MusicAlbum, Audio, ...
+        kind: Option<String>,
     },
 }
 
@@ -66,6 +89,7 @@ impl MediaRoute {
             Some("library") if segs.len() >= 2 => MediaRoute::Library {
                 id: segs[1].clone(),
                 sort: opt("sort"),
+                filter: LibraryFilter::default(),
                 start: start(),
             },
             Some("folder") if segs.len() >= 2 => MediaRoute::Folder {
@@ -89,6 +113,7 @@ impl MediaRoute {
             Some("search") if segs.len() >= 2 => MediaRoute::Search {
                 words: segs[1].clone(),
                 library: opt("in"),
+                kind: None,
             },
             _ => MediaRoute::Libraries,
         }
@@ -105,7 +130,9 @@ impl MediaRoute {
         };
         match self {
             MediaRoute::Libraries => BASE.to_string(),
-            MediaRoute::Library { id, sort, start: s } => {
+            MediaRoute::Library {
+                id, sort, start: s, ..
+            } => {
                 let sort = sort
                     .as_deref()
                     .map(|o| format!("/sort/{}", encode(o)))
@@ -119,7 +146,7 @@ impl MediaRoute {
             MediaRoute::Person { id, name, start: s } => {
                 format!("{BASE}/person/{}/{}{}", encode(id), encode(name), start(*s))
             }
-            MediaRoute::Search { words, library } => {
+            MediaRoute::Search { words, library, .. } => {
                 let scope = library
                     .as_deref()
                     .map(|l| format!("/in/{}", encode(l)))
@@ -165,6 +192,7 @@ pub fn trail(ancestors: &[(String, String, String)], current: &str) -> Vec<Crumb
                     MediaRoute::Library {
                         id: id.clone(),
                         sort: None,
+                        filter: LibraryFilter::default(),
                         start: 0,
                     }
                 } else {
@@ -229,11 +257,13 @@ mod tests {
             MediaRoute::Library {
                 id: "lib1".into(),
                 sort: None,
+                filter: LibraryFilter::default(),
                 start: 0,
             },
             MediaRoute::Library {
                 id: "lib1".into(),
                 sort: Some("Date added".into()),
+                filter: LibraryFilter::default(),
                 start: 100,
             },
             MediaRoute::Folder {
@@ -249,10 +279,12 @@ mod tests {
             MediaRoute::Search {
                 words: "28 days".into(),
                 library: Some("lib1".into()),
+                kind: None,
             },
             MediaRoute::Search {
                 words: "100% fun?".into(),
                 library: None,
+                kind: None,
             },
         ];
         for place in places {
@@ -272,6 +304,7 @@ mod tests {
             MediaRoute::Library {
                 id: "l".into(),
                 sort: Some("Name".into()),
+                filter: LibraryFilter::default(),
                 start: 50
             }
             .path(),
@@ -306,6 +339,7 @@ mod tests {
         let lib = MediaRoute::Library {
             id: "l".into(),
             sort: Some("Year".into()),
+            filter: LibraryFilter::default(),
             start: 0,
         };
         assert_eq!(
@@ -313,6 +347,7 @@ mod tests {
             MediaRoute::Library {
                 id: "l".into(),
                 sort: Some("Year".into()),
+                filter: LibraryFilter::default(),
                 start: 100
             }
         );
@@ -370,5 +405,60 @@ mod tests {
         assert_eq!(decode("100%"), "100%");
         assert_eq!(decode("a%2"), "a%2");
         assert_eq!(decode("caf%C3%A9"), "café");
+    }
+
+    #[test]
+    fn library_filters_and_search_kinds_live_in_the_address() {
+        let place = MediaRoute::Library {
+            id: "l".into(),
+            sort: Some("Year".into()),
+            filter: LibraryFilter {
+                genre: Some("Science Fiction".into()),
+                year: Some(1999),
+                min_rating: Some(7),
+            },
+            start: 50,
+        };
+        assert_eq!(
+            place.path(),
+            "/web/media/library/l/sort/Year/genre/Science%20Fiction/year/1999/rating/7/start/50"
+        );
+        assert_eq!(MediaRoute::parse(&place.path()), place);
+        // Paging keeps the filter.
+        let MediaRoute::Library { filter, .. } = place.with_start(100) else {
+            panic!()
+        };
+        assert_eq!(filter.year, Some(1999));
+        let search = MediaRoute::Search {
+            words: "alien".into(),
+            library: None,
+            kind: Some("Movie".into()),
+        };
+        assert_eq!(search.path(), "/web/media/search/alien/type/Movie");
+        assert_eq!(MediaRoute::parse(&search.path()), search);
+        // Nonsense values are dropped.
+        assert_eq!(
+            MediaRoute::parse("/web/media/library/l/year/abc/rating/99"),
+            MediaRoute::Library {
+                id: "l".into(),
+                sort: None,
+                filter: LibraryFilter::default(),
+                start: 0
+            }
+        );
+    }
+
+    #[test]
+    fn a_filter_becomes_query_parameters() {
+        assert_eq!(LibraryFilter::default().query(), "");
+        let f = LibraryFilter {
+            genre: Some("Sci-Fi & Fantasy".into()),
+            year: Some(2004),
+            min_rating: Some(8),
+        };
+        assert_eq!(
+            f.query(),
+            "&Genres=Sci-Fi%20%26%20Fantasy&Years=2004&MinCommunityRating=8"
+        );
     }
 }
