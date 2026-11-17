@@ -765,6 +765,43 @@ mod tests {
             tm.kill_all().await;
         }
 
+        /// Like ffmpeg run with `-nostdin`: ignores its stdin, exits on SIGTERM.
+        fn deaf_ffmpeg(root: &Path) -> String {
+            let script = root.join("deaf.sh");
+            std::fs::write(
+                &script,
+                "#!/bin/sh\nfor a; do last=$a; done\ndir=$(dirname \"$last\")\n\
+                 : > \"$dir/0.ts\"\nprintf '#EXTM3U\\n' > \"$last\"\n\
+                 trap 'exit 255' TERM\nsleep 30 &\nwait $!\n",
+            )
+            .unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            script.to_string_lossy().into_owned()
+        }
+
+        // ffmpeg runs with -nostdin, so the 'q' written to its stdin never
+        // reached it: every stop waited 5 s and force-killed it, holding the
+        // manager's lock (and so every other transcode request) meanwhile.
+        #[tokio::test]
+        async fn stopping_a_running_transcode_is_prompt() {
+            let root = root("stop");
+            let tm = manager(&root, deaf_ffmpeg(&root));
+            tm.start_transcode(request(&root, "s6", 0)).await.unwrap();
+            tm.start_transcode(request(&root, "s7", 0)).await.unwrap();
+            tm.jobs.read().await["s7"].pause(); // throttled
+
+            let started = std::time::Instant::now();
+            tm.kill_job("s6").await;
+            tm.kill_job("s7").await;
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "took {:?}",
+                started.elapsed()
+            );
+            assert!(tm.get_job_output_dir("s6").await.is_none());
+        }
+
         // Throttling pauses an encoder that is far ahead of the player, measured
         // from the segment the player last asked for.
         #[tokio::test]
