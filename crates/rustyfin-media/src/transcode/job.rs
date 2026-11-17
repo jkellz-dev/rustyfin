@@ -18,8 +18,18 @@ pub struct TranscodeJob {
     pub process: Option<Child>,
     pub started_at: DateTime<Utc>,
     pub last_segment_request: DateTime<Utc>,
-    /// How far ffmpeg has encoded (in 100ns ticks).
+    /// How far ffmpeg has encoded, on the session clock (100ns ticks from the
+    /// start of segment 0).
     pub transcoding_position_ticks: i64,
+    /// Where this encoder's first segment sits on the session clock (its
+    /// `-start_number` times the segment duration); ffmpeg's own clock starts
+    /// at 0 there.
+    pub offset_ticks: i64,
+    /// The file position of segment 0, so a restart at segment n seeks to
+    /// this plus n segments.
+    pub session_start_ticks: i64,
+    /// The start of the segment the player last asked for, on the session clock.
+    pub player_ticks: i64,
     pub kill_timer: Option<JoinHandle<()>>,
     /// The segment duration in seconds, needed for seek calculations.
     pub segment_duration: u32,
@@ -69,6 +79,17 @@ impl TranscodeJob {
         }
 
         self.cleanup().await;
+    }
+
+    /// Whether the session can still serve the player: ffmpeg is running, or it
+    /// finished the file (exit 0) and its segments are all on disk. A failed or
+    /// killed encoder is not.
+    pub fn is_usable(&mut self) -> bool {
+        match self.process.as_mut().map(|p| p.try_wait()) {
+            Some(Ok(None)) => true,
+            Some(Ok(Some(status))) => status.success(),
+            _ => false,
+        }
     }
 
     /// Check if the ffmpeg process is still running.

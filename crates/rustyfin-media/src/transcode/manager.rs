@@ -119,6 +119,8 @@ impl TranscodeManager {
 
         let now = chrono::Utc::now();
         let segment_duration = request.params.segment_duration;
+        let offset_ticks = request.params.start_number as i64 * segment_duration as i64 * TICKS;
+        let session_start_ticks = request.params.start_time_ticks.unwrap_or(0) - offset_ticks;
         let job = TranscodeJob {
             id: Uuid::new_v4(),
             play_session_id: request.play_session_id.clone(),
@@ -129,7 +131,10 @@ impl TranscodeManager {
             process: Some(child),
             started_at: now,
             last_segment_request: now,
-            transcoding_position_ticks: 0,
+            transcoding_position_ticks: offset_ticks,
+            offset_ticks,
+            session_start_ticks,
+            player_ticks: offset_ticks,
             kill_timer: None,
             segment_duration,
             stream_params_cache: Some(request.params),
@@ -251,32 +256,41 @@ impl TranscodeManager {
         play_session_id: &str,
         segment_id: u32,
     ) -> anyhow::Result<()> {
-        let seg_duration = self
-            .get_segment_duration(play_session_id)
+        let Some((session_start, duration)) = self
+            .jobs
+            .read()
             .await
-            .unwrap_or(6);
-        let start_ticks = segment_id as i64 * seg_duration as i64 * 10_000_000;
+            .get(play_session_id)
+            .map(|j| (j.session_start_ticks, j.segment_duration))
+        else {
+            return Ok(());
+        };
+        let start_ticks = session_start + segment_start_ticks(segment_id, duration);
         self.restart_at(play_session_id, start_ticks, segment_id)
             .await
     }
 
     /// Whether a missing segment needs the encoder restarted at it, rather than
-    /// waiting for the running encoder to reach it.
+    /// waiting for the running encoder to reach it: it lies before this
+    /// encoder's first segment (nothing will write it), or more than two
+    /// minutes past what it has encoded.
     pub async fn needs_restart(&self, play_session_id: &str, segment_id: u32) -> bool {
-        let seg_duration = self
-            .get_segment_duration(play_session_id)
-            .await
-            .unwrap_or(6);
-        let segment_start_ticks = segment_id as i64 * seg_duration as i64 * 10_000_000;
-        let current_pos = self
-            .get_transcoding_position(play_session_id)
-            .await
-            .unwrap_or(0);
-        segment_start_ticks > current_pos + 120 * 10_000_000i64
+        let jobs = self.jobs.read().await;
+        let Some(job) = jobs.get(play_session_id) else {
+            return false;
+        };
+        let start = segment_start_ticks(segment_id, job.segment_duration);
+        start < job.offset_ticks || start > job.transcoding_position_ticks + SEEK_AHEAD_TICKS
     }
 
-    /// Record a segment request: the player is at that segment.
-    pub async fn touch_segment(&self, play_session_id: &str, _segment_id: u32) {
+    /// Record a segment request: the player is at that segment. Resumes a
+    /// throttled encoder.
+    pub async fn touch_segment(&self, play_session_id: &str, segment_id: u32) {
+        let mut jobs = self.jobs.write().await;
+        if let Some(job) = jobs.get_mut(play_session_id) {
+            job.player_ticks = segment_start_ticks(segment_id, job.segment_duration);
+        }
+        drop(jobs);
         self.touch_job(play_session_id).await;
     }
 
@@ -286,14 +300,12 @@ impl TranscodeManager {
         jobs.get(play_session_id).map(|j| j.output_dir.clone())
     }
 
-    /// Check if a job exists and is alive for the given play session ID.
+    /// Whether the session has a usable transcode: ffmpeg running, or finished
+    /// with every segment on disk (see [`TranscodeJob::is_usable`]).
     pub async fn has_active_job(&self, play_session_id: &str) -> bool {
         let mut jobs = self.jobs.write().await;
-        if let Some(job) = jobs.get_mut(play_session_id) {
-            job.is_alive()
-        } else {
-            false
-        }
+        jobs.get_mut(play_session_id)
+            .is_some_and(|job| job.is_usable())
     }
 
     /// Update the last segment request timestamp for a job.
@@ -372,24 +384,16 @@ impl TranscodeManager {
     /// To avoid wasting CPU and disk, pause it when it's >120s ahead
     /// and resume when it's <30s ahead.
     pub async fn throttle_jobs(&self) {
-        let throttle_ahead = 120 * 10_000_000i64; // 120 seconds in ticks
-        let resume_threshold = 30 * 10_000_000i64; // 30 seconds in ticks
+        let throttle_ahead = 120 * TICKS;
+        let resume_threshold = 30 * TICKS;
 
         let mut jobs = self.jobs.write().await;
         for job in jobs.values_mut() {
             if !job.is_alive() {
                 continue;
             }
-
-            // Estimate the client's playback position from the last segment request time
-            // and the job's segment duration. If a segment was last requested N seconds ago,
-            // the client is likely at: last_request_time's segment position.
-            // Simpler heuristic: compare transcoding position to a "reasonable ahead" threshold.
-            let ahead = job.transcoding_position_ticks;
-            // We don't track the client's exact position here, so use the
-            // last_segment_request staleness as a proxy — if no segments requested recently
-            // and ffmpeg is far ahead, throttle it.
-
+            // How far the encoder is past the segment the player last asked for.
+            let ahead = job.transcoding_position_ticks - job.player_ticks;
             if ahead > throttle_ahead && !job.is_paused {
                 job.pause();
                 job.is_paused = true;
@@ -412,10 +416,11 @@ impl TranscodeManager {
             .map(|(k, _)| k.clone())
             .collect();
 
-        // Also find jobs whose process has exited
+        // Also find jobs whose encoder failed or was killed. One that finished
+        // the file stays until the player stops asking for its segments.
         let mut dead: Vec<String> = Vec::new();
         for (k, j) in jobs.iter_mut() {
-            if !j.is_alive() && !stale.contains(k) {
+            if !j.is_usable() && !stale.contains(k) {
                 dead.push(k.clone());
             }
         }
@@ -481,14 +486,17 @@ impl TranscodeManager {
         if self.max_concurrent == 0 {
             return false; // unlimited
         }
-        self.jobs.read().await.len() >= self.max_concurrent
+        // Count running encoders only: a finished session holds no ffmpeg.
+        let mut jobs = self.jobs.write().await;
+        jobs.values_mut().filter(|j| j.is_alive()).count() >= self.max_concurrent
     }
 
     /// Update the transcoding position for a job.
     pub(crate) async fn update_position(&self, play_session_id: &str, position_ticks: i64) {
         let mut jobs = self.jobs.write().await;
         if let Some(job) = jobs.get_mut(play_session_id) {
-            job.transcoding_position_ticks = position_ticks;
+            // ffmpeg's clock starts at 0 at this encoder's first segment.
+            job.transcoding_position_ticks = job.offset_ticks + position_ticks;
         }
     }
 }
@@ -527,6 +535,17 @@ async fn monitor_progress(
     }
 
     info!(play_session_id, "ffmpeg progress monitor ended");
+}
+
+/// 100ns ticks per second.
+const TICKS: i64 = 10_000_000;
+
+/// A missing segment further than this past the encoder restarts it there.
+const SEEK_AHEAD_TICKS: i64 = 120 * TICKS;
+
+/// Where segment `n` starts on the session clock.
+fn segment_start_ticks(segment_id: u32, segment_duration: u32) -> i64 {
+    segment_id as i64 * segment_duration as i64 * TICKS
 }
 
 /// Parse ffmpeg timestamp "HH:MM:SS.ms" to 100ns ticks.
