@@ -208,6 +208,22 @@ mod tests {
         assert_eq!(auth.token.as_deref(), Some("secret-token"));
     }
 
+    /// Clients percent-encode the values (Plezy sends `Plezy%20tvOS`);
+    /// Jellyfin unescapes them, so names show as `Plezy tvOS`.
+    #[test]
+    fn auth_values_are_unescaped() {
+        let header = r#"MediaBrowser Client="Plezy%20tvOS", Device="Apple%20TV", DeviceId="a%2Fb", Version="1.0", Token="t""#;
+        let auth = parse_mediabrowser_header(header);
+        assert_eq!(auth.client.as_deref(), Some("Plezy tvOS"));
+        assert_eq!(auth.device.as_deref(), Some("Apple TV"));
+        assert_eq!(auth.device_id.as_deref(), Some("a/b"));
+        // Not an escape: kept as sent.
+        let auth =
+            parse_mediabrowser_header(r#"MediaBrowser Client="100%", Device="J%C3%BCrgen%zz""#);
+        assert_eq!(auth.client.as_deref(), Some("100%"));
+        assert_eq!(auth.device.as_deref(), Some("Jürgen%zz"));
+    }
+
     #[test]
     fn auth_emby_prefix() {
         let header = r#"Emby Client="Emby Theater", Device="Windows", DeviceId="xyz", Version="3.0", Token="tok""#;
