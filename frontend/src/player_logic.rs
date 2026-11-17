@@ -86,8 +86,48 @@ pub const PROBES: &[(&str, &str)] = &[
 /// The profile for a browser that plays the codecs `can` says yes to
 /// (names from `PROBES`), as Jellyfin web builds it from `canPlayType`.
 pub fn profile_for(can: &dyn Fn(&str) -> bool) -> Value {
-    let _ = can;
-    browser_profile()
+    let pick = |names: &[&str]| -> String {
+        names
+            .iter()
+            .copied()
+            .filter(|n| can(n))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let mut direct = Vec::new();
+    let mp4_video = pick(&["h264", "hevc", "av1"]);
+    if !mp4_video.is_empty() {
+        direct.push(
+            json!({"Type": "Video", "Container": "mp4,m4v", "VideoCodec": mp4_video,
+                           "AudioCodec": pick(&["aac", "mp3", "opus", "flac", "ac3", "eac3"])}),
+        );
+    }
+    let webm_video = pick(&["vp8", "vp9", "av1"]);
+    if !webm_video.is_empty() {
+        direct.push(
+            json!({"Type": "Video", "Container": "webm", "VideoCodec": webm_video,
+                           "AudioCodec": pick(&["vorbis", "opus"])}),
+        );
+    }
+    let mut audio: Vec<&str> = Vec::new();
+    for (codec, containers) in [
+        ("mp3", &["mp3"][..]),
+        ("flac", &["flac"][..]),
+        ("aac", &["m4a", "aac"][..]),
+        ("vorbis", &["ogg", "oga"][..]),
+        ("opus", &["opus", "webm"][..]),
+        ("wav", &["wav"][..]),
+    ] {
+        if can(codec) {
+            audio.extend(containers);
+        }
+    }
+    if !audio.is_empty() {
+        direct.push(json!({"Type": "Audio", "Container": audio.join(",")}));
+    }
+    let mut profile = browser_profile();
+    profile["DirectPlayProfiles"] = Value::Array(direct);
+    profile
 }
 
 /// What to load into the media element.

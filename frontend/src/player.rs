@@ -127,6 +127,18 @@ impl Player {
     }
 
     async fn start(self, item_id: String, at: Option<f64>, audio: Option<i32>, sub: Option<i32>) {
+        self.start_with(item_id, at, audio, sub, false).await;
+    }
+
+    /// `force_transcode`: the browser failed to play the file as it is.
+    async fn start_with(
+        self,
+        item_id: String,
+        at: Option<f64>,
+        audio: Option<i32>,
+        sub: Option<i32>,
+        force_transcode: bool,
+    ) {
         self.loading.set(true);
         self.error.set(None);
         let same_item = self
@@ -161,9 +173,9 @@ impl Player {
                 .iter()
                 .any(|s| s["Index"].as_i64() == Some(i64::from(i)) && !is_text_subtitle(s))
         });
-        let other_audio = audio.is_some() && audio != default_audio;
+        let other_audio = force_transcode || (audio.is_some() && audio != default_audio);
         let mut body = json!({
-            "DeviceProfile": logic::browser_profile(),
+            "DeviceProfile": device_profile(),
             "StartTimeTicks": logic::secs_to_ticks(start_at),
             "MaxStreamingBitrate": 120_000_000,
             "EnableDirectPlay": !(image_sub || other_audio),
@@ -297,7 +309,7 @@ impl Player {
             PENDING_SEEK.with(|p| *p.borrow_mut() = (start_at > 0.0).then_some(start_at));
             el.set_src(&url);
         }
-        let _ = el.play();
+        play_element(&el);
         LAST_REPORT.with(|r| *r.borrow_mut() = js_sys::Date::now());
         self.loading.set(false);
         let _ = api::report_playback("", &self.report(false)).await;
@@ -398,7 +410,7 @@ impl Player {
     fn toggle(self) {
         if let Some(el) = media() {
             if el.paused() {
-                let _ = el.play();
+                play_element(&el);
             } else {
                 let _ = el.pause();
             }
@@ -472,6 +484,42 @@ async fn album_tracks(album_id: &str) -> Vec<String> {
             })
             .unwrap_or_default(),
         Err(_) => Vec::new(),
+    }
+}
+
+/// The browser's own answers, asked once.
+fn device_profile() -> Value {
+    thread_local! {
+        static PROFILE: RefCell<Option<Value>> = const { RefCell::new(None) };
+    }
+    if let Some(p) = PROFILE.with(|p| p.borrow().clone()) {
+        return p;
+    }
+    let probe = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.create_element("video").ok())
+        .and_then(|v| v.dyn_into::<HtmlMediaElement>().ok());
+    let can = |codec: &str| {
+        let Some(el) = probe.as_ref() else {
+            return false;
+        };
+        logic::PROBES
+            .iter()
+            .find(|(name, _)| *name == codec)
+            .is_some_and(|(_, mime)| !el.can_play_type(mime).is_empty())
+    };
+    let profile = logic::profile_for(&can);
+    PROFILE.with(|p| *p.borrow_mut() = Some(profile.clone()));
+    profile
+}
+
+/// Start the element; a refused start (a newer load, autoplay rules) is
+/// not an error worth reporting.
+fn play_element(el: &HtmlMediaElement) {
+    if let Ok(promise) = el.play() {
+        spawn_local(async move {
+            let _ = JsFuture::from(promise).await;
+        });
     }
 }
 
@@ -650,8 +698,18 @@ fn attach(p: Player, el: HtmlMediaElement, shell: web_sys::Element) {
         }
     });
     listen(target, "error", move |_| {
-        if p.now.with_untracked(Option::is_some) && HLS.with(|h| h.borrow().is_none()) {
-            p.fail("The file could not be played.".into());
+        let Some((item, is_hls, audio, sub)) = p.now.with_untracked(|n| {
+            n.as_ref()
+                .map(|n| (n.item_id.clone(), n.is_hls, n.audio_index, n.subtitle_index))
+        }) else {
+            return;
+        };
+        if is_hls {
+            p.fail("The stream could not be played.".into());
+        } else {
+            // The browser said yes but cannot: ask the server for a transcode.
+            let at = p.position.get_untracked();
+            spawn_local(async move { p.start_with(item, Some(at), audio, sub, true).await });
         }
     });
     // Leaving the admin altogether still reports the stop.
