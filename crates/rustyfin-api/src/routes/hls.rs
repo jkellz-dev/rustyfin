@@ -310,6 +310,10 @@ async fn get_segment_inner(
     // Segment doesn't exist yet — check if we need to seek or just wait
     let segment_id = segment_number(segment_file);
 
+    // The player is here now: a throttled (paused) encoder must resume before
+    // the wait below, or the segment is never written.
+    tm.touch_segment(play_session_id, segment_id).await;
+
     if tm.needs_restart(play_session_id, segment_id).await {
         info!(
             play_session_id = %play_session_id,

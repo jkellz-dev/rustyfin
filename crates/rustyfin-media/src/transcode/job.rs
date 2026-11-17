@@ -22,8 +22,8 @@ pub struct TranscodeJob {
     /// start of segment 0).
     pub transcoding_position_ticks: i64,
     /// Where this encoder's first segment sits on the session clock (its
-    /// `-start_number` times the segment duration); ffmpeg's own clock starts
-    /// at 0 there.
+    /// `-start_number` times the segment duration). ffmpeg itself reports file
+    /// time (`-copyts`).
     pub offset_ticks: i64,
     /// The file position of segment 0, so a restart at segment n seeks to
     /// this plus n segments.

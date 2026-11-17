@@ -477,8 +477,9 @@ impl TranscodeManager {
     pub(crate) async fn update_position(&self, play_session_id: &str, position_ticks: i64) {
         let mut jobs = self.jobs.write().await;
         if let Some(job) = jobs.get_mut(play_session_id) {
-            // ffmpeg's clock starts at 0 at this encoder's first segment.
-            job.transcoding_position_ticks = job.offset_ticks + position_ticks;
+            // ffmpeg runs with -copyts, so it reports file time; segment 0
+            // sits at the session's start in the file.
+            job.transcoding_position_ticks = position_ticks - job.session_start_ticks;
         }
     }
 }
