@@ -1455,16 +1455,21 @@ select:focus {
     border-bottom: none;
   }
   td {
-    display: flex;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    column-gap: 12px;
     padding: 4px 0;
     border: none;
     white-space: normal;
     overflow-wrap: anywhere;
   }
+  td > * {
+    grid-column: 2;
+  }
   td[data-label]::before {
     content: attr(data-label);
-    flex: 0 0 96px;
+    grid-column: 1;
+    grid-row: 1 / span 9;
     color: var(--text-muted);
     font-size: 0.85em;
   }
