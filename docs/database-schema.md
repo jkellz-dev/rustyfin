@@ -37,13 +37,14 @@ Stores user accounts. Users are auto-provisioned via forward auth headers.
 | `max_parental_rating` | INT | Yes | | Parental rating limit |
 | `audio_language_preference` | VARCHAR(255) | Yes | | Preferred audio language |
 | `subtitle_language_preference` | VARCHAR(255) | Yes | | Preferred subtitle language |
-| `subtitle_mode` | INT | No | `0` | Subtitle display mode |
+| `subtitle_mode` | INT | No | `0` | Jellyfin's `SubtitlePlaybackMode`: 0 Default, 1 Always, 2 OnlyForced, 3 None, 4 Smart |
 | `play_default_audio_track` | BOOLEAN | No | `true` | Play default audio track |
 | `enable_next_episode_auto_play` | BOOLEAN | No | `true` | Auto-play next episode |
 | `last_login_date` | TIMESTAMPTZ | Yes | | Last login timestamp |
 | `last_activity_date` | TIMESTAMPTZ | Yes | | Last API activity |
 | `created_at` | TIMESTAMPTZ | No | `NOW()` | Row creation time |
 | `updated_at` | TIMESTAMPTZ | No | `NOW()` | Last update time |
+| `configuration` | JSONB | Yes | | The rest of the app's `UserConfiguration` (ordered views, excludes, ...), as sent |
 
 **Unique constraints**: `username`, `remote_user_id`
 
