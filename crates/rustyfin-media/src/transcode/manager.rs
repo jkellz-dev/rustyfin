@@ -244,6 +244,42 @@ impl TranscodeManager {
         Ok(())
     }
 
+    /// Restart the session's transcode at a segment (a seek the encoder has not
+    /// reached).
+    pub async fn restart_at_segment(
+        self: &Arc<Self>,
+        play_session_id: &str,
+        segment_id: u32,
+    ) -> anyhow::Result<()> {
+        let seg_duration = self
+            .get_segment_duration(play_session_id)
+            .await
+            .unwrap_or(6);
+        let start_ticks = segment_id as i64 * seg_duration as i64 * 10_000_000;
+        self.restart_at(play_session_id, start_ticks, segment_id)
+            .await
+    }
+
+    /// Whether a missing segment needs the encoder restarted at it, rather than
+    /// waiting for the running encoder to reach it.
+    pub async fn needs_restart(&self, play_session_id: &str, segment_id: u32) -> bool {
+        let seg_duration = self
+            .get_segment_duration(play_session_id)
+            .await
+            .unwrap_or(6);
+        let segment_start_ticks = segment_id as i64 * seg_duration as i64 * 10_000_000;
+        let current_pos = self
+            .get_transcoding_position(play_session_id)
+            .await
+            .unwrap_or(0);
+        segment_start_ticks > current_pos + 120 * 10_000_000i64
+    }
+
+    /// Record a segment request: the player is at that segment.
+    pub async fn touch_segment(&self, play_session_id: &str, _segment_id: u32) {
+        self.touch_job(play_session_id).await;
+    }
+
     /// Get a reference to a job by play session ID.
     pub async fn get_job_output_dir(&self, play_session_id: &str) -> Option<PathBuf> {
         let jobs = self.jobs.read().await;
@@ -523,6 +559,202 @@ async fn wait_for_any_file(paths: &[&std::path::Path]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod sessions {
+        use super::super::*;
+        use crate::transcode::params::{
+            AudioCodec, HardwareAccel, SegmentFormat, SubtitleMode, VideoCodec,
+        };
+        use std::path::Path;
+        use std::time::Duration;
+
+        const SEC: i64 = 10_000_000;
+
+        /// A stand-in for ffmpeg: logs its arguments next to the session folders,
+        /// writes the playlist and segment `<start_number>.ts`, then sleeps
+        /// `sleep` seconds and exits with `code`.
+        fn fake_ffmpeg(root: &Path, code: i32, sleep: u32) -> String {
+            let script = root.join(format!("ffmpeg-{code}-{sleep}.sh"));
+            std::fs::write(
+                &script,
+                format!(
+                    "#!/bin/sh\nfor a; do last=$a; done\ndir=$(dirname \"$last\")\n\
+                     echo \"$*\" >> \"{log}\"\nn=0\nprev=\nfor a; do [ \"$prev\" = -start_number ] && n=$a; prev=$a; done\n\
+                     : > \"$dir/$n.ts\"\nprintf '#EXTM3U\\n#EXTINF:6,\\n%s.ts\\n#EXT-X-ENDLIST\\n' \"$n\" > \"$last\"\n\
+                     sleep {sleep}\nexit {code}\n",
+                    log = root.join("calls.log").display()
+                ),
+            )
+            .unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            script.to_string_lossy().into_owned()
+        }
+
+        fn root(name: &str) -> PathBuf {
+            let dir =
+                std::env::temp_dir().join(format!("rf-session-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+
+        fn manager(root: &Path, ffmpeg: String) -> Arc<TranscodeManager> {
+            Arc::new(TranscodeManager::new(
+                ffmpeg,
+                Some(root.join("t").to_string_lossy().into_owned()),
+                "none".into(),
+                4,
+                6,
+                0,
+            ))
+        }
+
+        fn request(root: &Path, session: &str, start_secs: i64) -> TranscodeRequest {
+            TranscodeRequest {
+                play_session_id: session.into(),
+                item_id: Uuid::nil(),
+                device_id: "d".into(),
+                user_id: Uuid::nil(),
+                params: StreamParams {
+                    input_path: PathBuf::from("/media/film.mkv"),
+                    output_dir: root.join("t").join(session),
+                    start_time_ticks: Some(start_secs * SEC),
+                    video_codec: VideoCodec::H264,
+                    video_bitrate: None,
+                    max_width: None,
+                    max_height: None,
+                    max_framerate: None,
+                    audio_codec: AudioCodec::AAC,
+                    audio_bitrate: None,
+                    audio_channels: Some(2),
+                    audio_sample_rate: Some(48000),
+                    audio_stream_index: None,
+                    subtitle_mode: SubtitleMode::None,
+                    subtitle_stream_index: None,
+                    segment_duration: 6,
+                    segment_format: SegmentFormat::MpegTs,
+                    start_number: 0,
+                    hardware_accel: HardwareAccel::None,
+                    threads: 0,
+                    audio_only: false,
+                },
+            }
+        }
+
+        async fn wait_exit(tm: &TranscodeManager, session: &str) {
+            for _ in 0..40 {
+                let alive = {
+                    let mut jobs = tm.jobs.write().await;
+                    jobs.get_mut(session).is_some_and(|j| j.is_alive())
+                };
+                if !alive {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            panic!("fake ffmpeg did not exit");
+        }
+
+        // An encoder that reached the end of the file (exit 0) leaves a complete
+        // session: the player is still reading its segments, so a playlist
+        // reload must not start it again and the cleanup must not delete it.
+        #[tokio::test]
+        async fn a_finished_transcode_stays_until_the_player_leaves() {
+            let root = root("finished");
+            let tm = manager(&root, fake_ffmpeg(&root, 0, 0));
+            tm.start_transcode(request(&root, "s1", 2470))
+                .await
+                .unwrap();
+            wait_exit(&tm, "s1").await;
+
+            assert!(
+                tm.has_active_job("s1").await,
+                "a finished session is still usable"
+            );
+            tm.cleanup_stale_jobs().await;
+            let dir = tm
+                .get_job_output_dir("s1")
+                .await
+                .expect("kept by the cleanup");
+            assert!(dir.join("0.ts").exists(), "its segments are kept");
+        }
+
+        #[tokio::test]
+        async fn a_failed_transcode_is_cleaned_up() {
+            let root = root("failed");
+            let tm = manager(&root, fake_ffmpeg(&root, 1, 0));
+            tm.start_transcode(request(&root, "s2", 0)).await.unwrap();
+            wait_exit(&tm, "s2").await;
+
+            assert!(!tm.has_active_job("s2").await);
+            tm.cleanup_stale_jobs().await;
+            assert!(tm.get_job_output_dir("s2").await.is_none());
+        }
+
+        // Segment numbers count from where the session started, so a seek in a
+        // session resumed at 41:10 must restart there plus the segment's offset,
+        // not at the segment's offset from the start of the file.
+        #[tokio::test]
+        async fn a_seek_in_a_resumed_session_restarts_from_the_resume_point() {
+            let root = root("seek");
+            let tm = manager(&root, fake_ffmpeg(&root, 0, 0));
+            tm.start_transcode(request(&root, "s3", 2470))
+                .await
+                .unwrap();
+            wait_exit(&tm, "s3").await;
+            tm.restart_at_segment("s3", 10).await.unwrap();
+
+            let calls = std::fs::read_to_string(root.join("calls.log")).unwrap();
+            let second = calls.lines().nth(1).expect("ffmpeg started again");
+            assert!(second.contains("-ss 2530.000"), "{second}");
+            assert!(second.contains("-start_number 10"), "{second}");
+        }
+
+        // After a restart at segment 10, ffmpeg's clock starts at 0 again: its
+        // 5 s are the session's 65 s.
+        #[tokio::test]
+        async fn restart_decisions_use_the_session_clock() {
+            let root = root("clock");
+            let tm = manager(&root, fake_ffmpeg(&root, 0, 30));
+            tm.start_transcode(request(&root, "s4", 0)).await.unwrap();
+            tm.restart_at_segment("s4", 10).await.unwrap();
+            tm.update_position("s4", 5 * SEC).await;
+
+            assert!(
+                !tm.needs_restart("s4", 30).await,
+                "180 s is within 2 min of 65 s"
+            );
+            assert!(tm.needs_restart("s4", 31).await, "186 s is beyond it");
+            assert!(
+                tm.needs_restart("s4", 2).await,
+                "before the restart point nothing will write it"
+            );
+            tm.kill_all().await;
+        }
+
+        // Throttling pauses an encoder that is far ahead of the player, measured
+        // from the segment the player last asked for.
+        #[tokio::test]
+        async fn throttling_measures_from_the_player() {
+            let root = root("throttle");
+            let tm = manager(&root, fake_ffmpeg(&root, 0, 30));
+            tm.start_transcode(request(&root, "s5", 0)).await.unwrap();
+            tm.touch_segment("s5", 20).await; // the player is at 120 s
+            tm.update_position("s5", 150 * SEC).await; // 30 s ahead of it
+
+            tm.throttle_jobs().await;
+            assert!(
+                !tm.jobs.read().await["s5"].is_paused,
+                "30 s ahead is not far ahead"
+            );
+
+            tm.update_position("s5", 250 * SEC).await; // 130 s ahead
+            tm.throttle_jobs().await;
+            assert!(tm.jobs.read().await["s5"].is_paused, "130 s ahead is");
+            tm.kill_all().await;
+        }
+    }
 
     #[test]
     fn test_parse_ffmpeg_time_basic() {

@@ -254,6 +254,15 @@ pub async fn get_segment(
     get_segment_inner(&state, auth.user_id, &play_session_id, &segment_file).await
 }
 
+/// The segment number in `<n>.ts` / `<n>.m4s` (0 for anything else).
+fn segment_number(segment_file: &str) -> u32 {
+    segment_file
+        .split('.')
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0)
+}
+
 /// Shared segment-serving logic for both video and audio HLS segments.
 async fn get_segment_inner(
     state: &AppState,
@@ -293,37 +302,22 @@ async fn get_segment_inner(
 
     // If segment exists, serve it directly
     if segment_path.exists() {
-        tm.touch_job(play_session_id).await;
+        tm.touch_segment(play_session_id, segment_number(segment_file))
+            .await;
         return serve_segment(&segment_path).await;
     }
 
     // Segment doesn't exist yet — check if we need to seek or just wait
-    let segment_id = segment_file
-        .split('.')
-        .next()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
+    let segment_id = segment_number(segment_file);
 
-    let seg_duration = tm.get_segment_duration(play_session_id).await.unwrap_or(6);
-    let segment_start_ticks = segment_id as i64 * seg_duration as i64 * 10_000_000;
-
-    let current_pos = tm
-        .get_transcoding_position(play_session_id)
-        .await
-        .unwrap_or(0);
-
-    // If seeking far ahead (more than 120 seconds ahead), restart transcode
-    let seek_threshold = 120 * 10_000_000i64;
-    if segment_start_ticks > current_pos + seek_threshold {
+    if tm.needs_restart(play_session_id, segment_id).await {
         info!(
             play_session_id = %play_session_id,
             segment_id,
-            segment_start_ticks,
-            current_pos,
-            "seeking ahead — restarting transcode"
+            "segment outside the running encoder's reach — restarting transcode"
         );
 
-        tm.restart_at(play_session_id, segment_start_ticks, segment_id)
+        tm.restart_at_segment(play_session_id, segment_id)
             .await
             .map_err(|e| ApiError::Internal(format!("failed to restart transcode: {e}")))?;
     }
@@ -340,7 +334,7 @@ async fn get_segment_inner(
             ApiError::NotFound
         })?;
 
-    tm.touch_job(play_session_id).await;
+    tm.touch_segment(play_session_id, segment_id).await;
 
     let content_type = if segment_file.ends_with(".m4s") || segment_file.ends_with(".mp4") {
         "video/mp4"
