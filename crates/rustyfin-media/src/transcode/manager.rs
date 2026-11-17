@@ -728,7 +728,16 @@ mod tests {
             wait_exit(&tm, "s3").await;
             tm.restart_at_segment("s3", 10).await.unwrap();
 
-            let calls = std::fs::read_to_string(root.join("calls.log")).unwrap();
+            // The old session's playlist is still there, so the restart returns
+            // before the new encoder has necessarily logged anything.
+            let mut calls = String::new();
+            for _ in 0..50 {
+                calls = std::fs::read_to_string(root.join("calls.log")).unwrap();
+                if calls.lines().count() > 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
             let second = calls.lines().nth(1).expect("ffmpeg started again");
             assert!(second.contains("-ss 2530.000"), "{second}");
             assert!(second.contains("-start_number 10"), "{second}");
