@@ -198,6 +198,9 @@ pub struct PlayState {
     pub position_ticks: Option<i64>,
     #[serde(default)]
     pub is_paused: bool,
+    /// DirectPlay, DirectStream or Transcode.
+    #[serde(default)]
+    pub play_method: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -427,4 +430,52 @@ pub struct SearchHint {
     pub series_name: Option<String>,
     #[serde(default)]
     pub run_time_ticks: Option<i64>,
+}
+
+/// Minutes and plays per kind of media (`/Users/{id}/PlayStats`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PlayStats {
+    #[serde(default)]
+    pub total_minutes: f64,
+    #[serde(default)]
+    pub plays: i64,
+    #[serde(default)]
+    pub by_type: Vec<KindStats>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KindStats {
+    #[serde(rename = "Type")]
+    pub kind: String,
+    #[serde(default)]
+    pub minutes: f64,
+    #[serde(default)]
+    pub plays: i64,
+}
+
+/// One play in a user's history.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PlayEntry {
+    pub id: String,
+    #[serde(default)]
+    pub item_id: Option<String>,
+    pub name: String,
+    #[serde(default)]
+    pub parent_name: Option<String>,
+    #[serde(rename = "Type")]
+    pub kind: String,
+    pub started_at: String,
+    #[serde(default)]
+    pub minutes: f64,
+    #[serde(default)]
+    pub client: Option<String>,
+    #[serde(default)]
+    pub device_name: Option<String>,
+    #[serde(default)]
+    pub play_method: Option<String>,
+    #[serde(default)]
+    pub in_progress: bool,
 }

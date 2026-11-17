@@ -217,14 +217,6 @@ pub fn grid_classes(item_type: &str) -> (&'static str, &'static str) {
     }
 }
 
-/// The library a search is scoped to: the one the breadcrumbs start in
-/// (none from the Libraries page, which searches everything).
-pub fn search_scope(first_crumb_parent: Option<&str>) -> Option<String> {
-    first_crumb_parent
-        .filter(|p| !p.is_empty())
-        .map(str::to_string)
-}
-
 /// The breadcrumb naming a search.
 pub fn search_crumb_label(term: &str) -> String {
     format!("Search: {}", term.trim())
@@ -289,19 +281,6 @@ fn encode(value: &str) -> String {
             }
             _ => format!("%{b:02X}"),
         })
-        .collect()
-}
-
-/// Breadcrumb entries for a keyed list: (index, crumb, is it the last one).
-/// The flag is part of the entry so that when a crumb stops being the last
-/// (going deeper), the entry changes and the list redraws it as a link.
-pub fn crumb_trail<T: Clone>(crumbs: &[T]) -> Vec<(usize, T, bool)> {
-    let last = crumbs.len().saturating_sub(1);
-    crumbs
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(i, c)| (i, c, i == last))
         .collect()
 }
 
@@ -394,10 +373,7 @@ mod tests {
         );
     }
     #[test]
-    fn search_is_scoped_to_the_library_the_crumbs_start_in() {
-        assert_eq!(search_scope(Some("lib-1")).as_deref(), Some("lib-1"));
-        assert_eq!(search_scope(Some("")), None);
-        assert_eq!(search_scope(None), None);
+    fn a_search_is_named_by_its_words() {
         assert_eq!(search_crumb_label(" buddy "), "Search: buddy");
     }
     #[test]
@@ -441,24 +417,6 @@ mod tests {
         );
         assert_eq!(detail_children_sort("MusicAlbum"), Some("IndexNumber"));
         assert_eq!(detail_children_sort("Movie"), None);
-    }
-
-    #[test]
-    fn every_crumb_but_the_last_is_a_link_and_the_flag_moves_when_one_is_added() {
-        let trail = crumb_trail(&["TV Shows"]);
-        assert_eq!(trail, [(0, "TV Shows", true)]);
-        // Going into a show: "TV Shows" is no longer the last crumb. The flag is
-        // part of each entry, so the keyed list re-renders it as a link.
-        let trail = crumb_trail(&["TV Shows", "Agatha All Along", "Season 1"]);
-        assert_eq!(
-            trail,
-            [
-                (0, "TV Shows", false),
-                (1, "Agatha All Along", false),
-                (2, "Season 1", true),
-            ]
-        );
-        assert!(crumb_trail::<&str>(&[]).is_empty());
     }
 
     #[test]

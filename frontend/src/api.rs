@@ -255,6 +255,26 @@ pub async fn get_item_collections(item_id: &str) -> Result<QueryResult<BaseItemD
     get_json(&format!("/Items/{item_id}/Collections")).await
 }
 
+/// An item's ancestors, nearest first (its season, show, library, root).
+pub async fn get_ancestors(item_id: &str) -> Result<Vec<BaseItemDto>, String> {
+    get_json(&format!("/Items/{item_id}/Ancestors")).await
+}
+
+/// A user, by id.
+pub async fn get_user(user_id: &str) -> Result<UserDto, String> {
+    get_json(&format!("/Users/{user_id}")).await
+}
+
+/// Minutes and plays per kind of media.
+pub async fn get_play_stats(user_id: &str) -> Result<PlayStats, String> {
+    get_json(&format!("/Users/{user_id}/PlayStats")).await
+}
+
+/// A page of a user's plays (`query` from `user_view::history_query`).
+pub async fn get_play_history(query: &str) -> Result<QueryResult<PlayEntry>, String> {
+    get_json(query).await
+}
+
 /// A title's extras: its trailers, then its other extras (featurettes, ...).
 pub async fn get_extras(item_id: &str) -> Result<Vec<BaseItemDto>, String> {
     let mut all: Vec<BaseItemDto> = get_json(&format!("/Items/{item_id}/LocalTrailers")).await?;

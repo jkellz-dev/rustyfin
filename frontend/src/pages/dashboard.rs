@@ -3,10 +3,23 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::dashboard_view;
+use crate::media_route::MediaRoute;
 use crate::types::{
     ActivityLogEntry, BaseItemDto, CacheHealth, DashboardStats, LibraryHealth, LibraryStats,
     SessionInfo, SystemInfo,
 };
+use crate::user_view;
+use sycamore_router::navigate;
+
+/// Wait `ms` milliseconds (the browser's timer).
+async fn sleep_ms(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        if let Some(w) = web_sys::window() {
+            let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+        }
+    });
+    let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+}
 
 /// Seconds since an ISO date, by the browser's clock (None if unparsable).
 fn age_seconds(iso: &str) -> Option<i64> {
@@ -27,6 +40,34 @@ pub fn Dashboard() -> View {
     let activity: Signal<Vec<ActivityLogEntry>> = create_signal(Vec::new());
     let sessions: Signal<Vec<SessionInfo>> = create_signal(Vec::new());
     let latest: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
+    // Streams refresh every 10 s while the dashboard is open (owner,
+    // 2026-11-17: the dashboard lists current streams).
+    let alive = std::rc::Rc::new(std::cell::Cell::new(true));
+    {
+        let alive = alive.clone();
+        on_cleanup(move || alive.set(false));
+    }
+    let refresh_streams = move || async move {
+        if let Ok(s) = api::get_active_sessions().await {
+            sessions.set(
+                s.into_iter()
+                    .filter(|s| s.now_playing_item.is_some())
+                    .collect(),
+            );
+        }
+    };
+    {
+        let alive = alive.clone();
+        spawn_local(async move {
+            loop {
+                sleep_ms(10_000).await;
+                if !alive.get() {
+                    break;
+                }
+                refresh_streams().await;
+            }
+        });
+    }
     // Auto-authenticate then load data
     spawn_local({
         async move {
@@ -49,13 +90,7 @@ pub fn Dashboard() -> View {
             }
             loading.set(false);
             // The widgets below fill in as they arrive; each may fail alone.
-            if let Ok(s) = api::get_active_sessions().await {
-                sessions.set(
-                    s.into_iter()
-                        .filter(|s| s.now_playing_item.is_some())
-                        .collect(),
-                );
-            }
+            refresh_streams().await;
             if let Ok(items) = api::get_latest_items(12).await {
                 latest.set(items);
             }
@@ -232,10 +267,13 @@ pub fn Dashboard() -> View {
                         view! {}
                     })
 
-                    // Now playing
+                    // Streams
+                    h3(class="dashboard-heading") {
+                        "Streams"
+                        span(class="text-muted dashboard-count") { (sessions.with(Vec::len)) }
+                    }
                     (if sessions.with(|s| !s.is_empty()) {
                         view! {
-                            h3(class="dashboard-heading") { "Now playing" }
                             div(class="card session-list") {
                                 Indexed(
                                     list=move || sessions.get_clone(),
@@ -259,9 +297,30 @@ pub fn Dashboard() -> View {
                                             .zip(state.position_ticks)
                                             .filter(|(run, _)| *run > 0)
                                             .map(|(run, pos)| (pos as f64 * 100.0 / run as f64).clamp(0.0, 100.0));
+                                        let how = user_view::stream_method_label(
+                                            state.play_method.as_deref().unwrap_or_default(),
+                                        );
+                                        let item_path = s
+                                            .now_playing_item
+                                            .as_ref()
+                                            .map(|i| MediaRoute::Item { id: i.id.clone() }.path());
                                         view! {
                                             div(class="session-row") {
-                                                div { (line) }
+                                                div(class="session-line") {
+                                                    (match item_path.clone() {
+                                                        Some(path) => {
+                                                            let href = path.clone();
+                                                            view! {
+                                                                a(href=href, on:click=move |e: web_sys::MouseEvent| {
+                                                                    e.prevent_default();
+                                                                    navigate(&path);
+                                                                }) { (line) }
+                                                            }
+                                                        }
+                                                        None => view! { span { (line) } },
+                                                    })
+                                                    span(class="badge badge-type") { (how) }
+                                                }
                                                 (match pct {
                                                     Some(p) => {
                                                         let style = format!("width: {p:.1}%;");
@@ -276,7 +335,7 @@ pub fn Dashboard() -> View {
                             }
                         }
                     } else {
-                        view! {}
+                        view! { div(class="card text-muted") { "No one is streaming." } }
                     })
 
                     // Recently added
@@ -312,8 +371,9 @@ pub fn Dashboard() -> View {
                                                 view! { div(class=placeholder) { (initial) } }
                                             }
                                         };
+                                        let path = MediaRoute::Item { id: item.id.clone() }.path();
                                         view! {
-                                            div(class="recent-card") {
+                                            div(class="recent-card", on:click=move |_| navigate(&path)) {
                                                 (art)
                                                 div(class="recent-title") { (label) }
                                             }

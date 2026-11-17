@@ -32,9 +32,15 @@ pub fn kind_label(kind: &str) -> &'static str {
 
 /// "45 min", "2 h 5 min", "3 d 4 h" for a number of minutes.
 pub fn duration_label(minutes: f64) -> String {
-    let _ = ();
-    let _ = minutes;
-    String::new()
+    let total = minutes.max(0.0).round() as i64;
+    let (d, h, m) = (total / 1440, total % 1440 / 60, total % 60);
+    match (d, h) {
+        (0, 0) => format!("{m} min"),
+        (0, _) if m == 0 => format!("{h} h"),
+        (0, _) => format!("{h} h {m} min"),
+        (_, 0) => format!("{d} d"),
+        _ => format!("{d} d {h} h"),
+    }
 }
 
 /// The `/Users/{id}/PlayHistory` query string for a page of the list.
@@ -48,16 +54,46 @@ pub fn history_query(
     search: &str,
     since_ms: Option<f64>,
 ) -> String {
-    let _ = ();
-    let _ = (user_id, start, limit, kind, search, since_ms);
-    String::new()
+    let mut q = format!("/Users/{user_id}/PlayHistory?StartIndex={start}&Limit={limit}");
+    if !kind.is_empty() {
+        q.push_str(&format!("&Type={}", crate::media_route::encode(kind)));
+    }
+    let words = search.trim();
+    if !words.is_empty() {
+        q.push_str(&format!(
+            "&SearchTerm={}",
+            crate::media_route::encode(words)
+        ));
+    }
+    if let Some(ms) = since_ms {
+        let iso = js_iso(ms);
+        q.push_str(&format!("&MinDate={}", crate::media_route::encode(&iso)));
+    }
+    q
 }
 
 /// An ISO 8601 UTC time for milliseconds since 1970, without the browser.
 fn js_iso(ms: f64) -> String {
-    let _ = ();
-    let _ = ms;
-    String::new()
+    let secs = (ms / 1000.0).floor() as i64;
+    let days = secs.div_euclid(86_400);
+    let rem = secs.rem_euclid(86_400);
+    // Civil from days (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
 }
 
 /// A play's line under its title: the show or artists, the device, and how
@@ -68,9 +104,23 @@ pub fn play_detail(
     device: Option<&str>,
     method: Option<&str>,
 ) -> String {
-    let _ = ();
-    let _ = (parent, client, device, method);
-    String::new()
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(p) = parent.filter(|p| !p.is_empty()) {
+        parts.push(p.to_string());
+    }
+    match (
+        client.filter(|c| !c.is_empty()),
+        device.filter(|d| !d.is_empty()),
+    ) {
+        (Some(c), Some(d)) => parts.push(format!("{c} on {d}")),
+        (Some(c), None) => parts.push(c.to_string()),
+        (None, Some(d)) => parts.push(d.to_string()),
+        (None, None) => {}
+    }
+    if let Some(m) = method.filter(|m| !m.is_empty()) {
+        parts.push(stream_method_label(m).to_string());
+    }
+    parts.join(" · ")
 }
 
 /// How a stream is played, in words.

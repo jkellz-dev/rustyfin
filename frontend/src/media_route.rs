@@ -44,22 +44,101 @@ impl MediaRoute {
     /// bar: segments may be percent-encoded). Anything unknown is the
     /// libraries.
     pub fn parse(path: &str) -> MediaRoute {
-        let _ = ();
-        let _ = path;
-        MediaRoute::Libraries
+        let rest = path.strip_prefix(BASE).unwrap_or("").trim_matches('/');
+        let segs: Vec<String> = rest
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .map(decode)
+            .collect();
+        let opt = |key: &str| {
+            segs.windows(2)
+                .skip(2)
+                .find(|w| w[0] == key)
+                .map(|w| w[1].clone())
+        };
+        let start = || {
+            opt("start")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0)
+                .max(0)
+        };
+        match segs.first().map(String::as_str) {
+            Some("library") if segs.len() >= 2 => MediaRoute::Library {
+                id: segs[1].clone(),
+                sort: opt("sort"),
+                start: start(),
+            },
+            Some("folder") if segs.len() >= 2 => MediaRoute::Folder {
+                id: segs[1].clone(),
+                start: start(),
+            },
+            Some("item") if segs.len() >= 2 => MediaRoute::Item {
+                id: segs[1].clone(),
+            },
+            Some("person") if segs.len() >= 3 => MediaRoute::Person {
+                id: segs[1].clone(),
+                name: segs[2].clone(),
+                start: segs
+                    .windows(2)
+                    .skip(3)
+                    .find(|w| w[0] == "start")
+                    .and_then(|w| w[1].parse().ok())
+                    .unwrap_or(0)
+                    .max(0),
+            },
+            Some("search") if segs.len() >= 2 => MediaRoute::Search {
+                words: segs[1].clone(),
+                library: opt("in"),
+            },
+            _ => MediaRoute::Libraries,
+        }
     }
 
     /// The path of this place.
     pub fn path(&self) -> String {
-        let _ = ();
-        String::new()
+        let start = |n: i32| {
+            if n > 0 {
+                format!("/start/{n}")
+            } else {
+                String::new()
+            }
+        };
+        match self {
+            MediaRoute::Libraries => BASE.to_string(),
+            MediaRoute::Library { id, sort, start: s } => {
+                let sort = sort
+                    .as_deref()
+                    .map(|o| format!("/sort/{}", encode(o)))
+                    .unwrap_or_default();
+                format!("{BASE}/library/{}{sort}{}", encode(id), start(*s))
+            }
+            MediaRoute::Folder { id, start: s } => {
+                format!("{BASE}/folder/{}{}", encode(id), start(*s))
+            }
+            MediaRoute::Item { id } => format!("{BASE}/item/{}", encode(id)),
+            MediaRoute::Person { id, name, start: s } => {
+                format!("{BASE}/person/{}/{}{}", encode(id), encode(name), start(*s))
+            }
+            MediaRoute::Search { words, library } => {
+                let scope = library
+                    .as_deref()
+                    .map(|l| format!("/in/{}", encode(l)))
+                    .unwrap_or_default();
+                format!("{BASE}/search/{}{scope}", encode(words))
+            }
+        }
     }
 
     /// The same place, another page of it.
     pub fn with_start(&self, n: i32) -> MediaRoute {
-        let _ = ();
-        let _ = n;
-        self.clone()
+        let mut r = self.clone();
+        match &mut r {
+            MediaRoute::Library { start, .. }
+            | MediaRoute::Folder { start, .. }
+            | MediaRoute::Person { start, .. } => *start = n.max(0),
+            _ => {}
+        }
+        r
     }
 }
 
@@ -75,9 +154,34 @@ pub struct Crumb {
 /// first, as Jellyfin returns them): the library, then e.g. the show and the
 /// season, then the item itself. The root folder is left out.
 pub fn trail(ancestors: &[(String, String, String)], current: &str) -> Vec<Crumb> {
-    let _ = ();
-    let _ = (ancestors, current);
-    Vec::new()
+    let mut crumbs: Vec<Crumb> = ancestors
+        .iter()
+        .rev()
+        .filter(|(_, kind, _)| !matches!(kind.as_str(), "UserRootFolder" | "AggregateFolder"))
+        .map(|(id, kind, name)| Crumb {
+            label: name.clone(),
+            path: Some(
+                if kind == "CollectionFolder" {
+                    MediaRoute::Library {
+                        id: id.clone(),
+                        sort: None,
+                        start: 0,
+                    }
+                } else {
+                    MediaRoute::Folder {
+                        id: id.clone(),
+                        start: 0,
+                    }
+                }
+                .path(),
+            ),
+        })
+        .collect();
+    crumbs.push(Crumb {
+        label: current.to_string(),
+        path: None,
+    });
+    crumbs
 }
 
 /// Percent-encode a path segment (everything but unreserved characters).
@@ -95,8 +199,23 @@ pub fn encode(value: &str) -> String {
 
 /// Undo `encode` (and the browser's own encoding of the address bar).
 pub fn decode(value: &str) -> String {
-    let _ = ();
-    value.to_string()
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(hi), Some(lo)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
+        {
+            out.push((hi * 16 + lo) as u8);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[cfg(test)]
