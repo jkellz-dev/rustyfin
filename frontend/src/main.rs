@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+mod a11y;
 mod api;
 mod api_error;
 mod browse;
