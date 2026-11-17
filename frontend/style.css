@@ -1435,15 +1435,54 @@ select:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
-  table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    white-space: nowrap;
-  }
-  th,
+  /* Tables become stacked cards (roadmap 12h): one card per row, each
+     cell with its column name. */
+  table,
+  tbody,
+  tr,
   td {
-    padding: 10px 12px;
+    display: block;
+    width: 100%;
+  }
+  thead {
+    display: none;
+  }
+  tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:last-child {
+    border-bottom: none;
+  }
+  td {
+    display: flex;
+    gap: 12px;
+    padding: 4px 0;
+    border: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 96px;
+    color: var(--text-muted);
+    font-size: 0.85em;
+  }
+  td .flex-gap {
+    flex-wrap: wrap;
+  }
+  /* Dialogs fill the screen on phones. */
+  .modal-overlay {
+    align-items: stretch;
+  }
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    min-height: 100%;
+    border-radius: 0;
+  }
+  input[type="search"] {
+    font-size: 16px;
   }
   .btn {
     min-height: 44px;
@@ -1466,9 +1505,8 @@ select:focus {
     width: 100%;
   }
   .modal {
-    width: calc(100% - 24px);
     padding: 20px;
-    max-height: calc(100vh - 24px);
+    max-height: 100vh;
     overflow-y: auto;
   }
   .modal-actions {

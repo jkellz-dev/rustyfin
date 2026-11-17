@@ -136,7 +136,7 @@ pub fn Tasks() -> View {
 
                                         view! {
                                             tr {
-                                                td {
+                                                td(data-label="Name") {
                                                     span { (name) }
                                                     (if !task.description.is_empty() {
                                                         let desc = task.description.clone();
@@ -145,16 +145,16 @@ pub fn Tasks() -> View {
                                                         view! {}
                                                     })
                                                 }
-                                                td(class="text-muted") { (category) }
-                                                td {
+                                                td(class="text-muted", data-label="Category") { (category) }
+                                                td(data-label="State") {
                                                     (if is_running {
                                                         view! { span(class="badge badge-running") { "Running" } }
                                                     } else {
                                                         view! { span(class="badge badge-idle") { "Idle" } }
                                                     })
                                                 }
-                                                td(class="text-muted") { (last_run) }
-                                                td {
+                                                td(class="text-muted", data-label="Last run") { (last_run) }
+                                                td(data-label="Result") {
                                                     (match result_status.as_str() {
                                                         "Completed" => view! { span(class="badge badge-success") { "Completed" } },
                                                         "Failed" | "Error" => {
@@ -171,7 +171,7 @@ pub fn Tasks() -> View {
                                                         }
                                                     })
                                                 }
-                                                td {
+                                                td(data-label="Actions") {
                                                     (if is_running {
                                                         view! {
                                                             button(

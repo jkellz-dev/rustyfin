@@ -387,26 +387,26 @@ pub fn Users() -> View {
                                         let href = page.clone();
                                         view! {
                                             tr {
-                                                td {
+                                                td(data-label="Username") {
                                                     a(href=href, on:click=move |e: web_sys::MouseEvent| {
                                                         e.prevent_default();
                                                         sycamore_router::navigate(&page);
                                                     }) { (name) }
                                                 }
-                                                td {
+                                                td(data-label="Role") {
                                                     (if is_admin {
                                                         view! { span(class="badge badge-admin") { "Admin" } }
                                                     } else {
                                                         view! { span(class="text-muted") { "User" } }
                                                     })
                                                 }
-                                                td {
+                                                td(data-label="Libraries") {
                                                     span(class="text-muted") { (lib_access_label) }
                                                 }
-                                                td(class="text-muted") {
+                                                td(class="text-muted", data-label="Last activity") {
                                                     (last_activity)
                                                 }
-                                                td {
+                                                td(data-label="Actions") {
                                                     div(class="flex-gap") {
                                                         button(class="btn btn-secondary btn-sm",
                                                             on:click={

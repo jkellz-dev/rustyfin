@@ -559,13 +559,13 @@ pub fn Libraries() -> View {
                                             let edit_lib = lib.clone();
                                             view! {
                                                 tr {
-                                                    td {
+                                                    td(data-label="Name") {
                                                         div { (name) }
                                                         div(class="text-muted text-small") { (last) }
                                                     }
-                                                    td { span(class="badge badge-type") { (ctype) } }
-                                                    td { (locations) }
-                                                    td {
+                                                    td(data-label="Type") { span(class="badge badge-type") { (ctype) } }
+                                                    td(data-label="Paths") { (locations) }
+                                                    td(data-label="Actions") {
                                                         div(class="flex-gap") {
                                                             button(class="btn btn-secondary btn-sm",
                                                                 on:click={

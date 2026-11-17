@@ -645,7 +645,7 @@ pub fn Media(path: String) -> View {
                                     div(class=detail_poster_class) {
                                         (if has_image {
                                             let url = img_url.clone();
-                                            view! { img(src=url) }
+                                            view! { img(src=url, alt="", decoding="async") }
                                         } else {
                                             let icon = icon_for_item_type(&item.item_type);
                                             view! { div(class=detail_placeholder_class) { (icon) } }
