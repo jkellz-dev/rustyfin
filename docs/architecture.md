@@ -1,188 +1,155 @@
 # Architecture
 
-## Crate Structure
+Rustyfin is one server binary (`rustyfin-server`), one metadata tool (`rustyfin`), and an admin UI compiled to
+WebAssembly and embedded in the server. State lives in Postgres; search can use Meilisearch; media files are only
+read, never written, by the server.
+
+## Workspace
 
 ```text
 rustyfin/
-├── Cargo.toml                  # Workspace root (9 members)
-├── frontend/                   # Sycamore WASM admin UI (NOT a workspace member)
-│   ├── Cargo.toml
-│   ├── Trunk.toml
-│   ├── index.html
-│   ├── style.css
-│   └── src/
-├── migrations/                 # SQL migration files (runtime-loaded)
-├── docker-compose.yml          # Postgres + Meilisearch
-├── rustyfin.toml               # Server configuration
-└── crates/
-    ├── rustyfin-server/        # Binary entry point
-    ├── rustyfin-api/           # HTTP route handlers
-    ├── rustyfin-auth/          # Authentication & authorization
-    ├── rustyfin-core/          # Domain logic (scanning, enrichment)
-    ├── rustyfin-db/            # Database layer (sqlx repos)
-    ├── rustyfin-models/        # Shared types & DTOs
-    ├── rustyfin-search/        # Search integration
-    ├── rustyfin-media/         # Media probing & streaming
-    └── rustyfin-frontend/      # Asset embedding & serving
+├── Cargo.toml                  # Workspace root (11 members)
+├── crates/
+│   ├── rustyfin-server/        # The server binary: config, startup, wiring
+│   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
+│   ├── rustyfin-auth/          # Who is asking: forward auth, LDAPS, tokens, sessions
+│   ├── rustyfin-core/          # Scanner, enrichment, scheduler, sessions, scan progress
+│   ├── rustyfin-db/            # Postgres pool, migrations, repositories
+│   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
+│   ├── rustyfin-search/        # Meilisearch, with Postgres as the fallback
+│   ├── rustyfin-media/         # Probing, play-method decisions, streaming, HLS transcoding
+│   ├── rustyfin-common/        # Naming, NFO, subtitle files, metadata sources (TMDB, ...)
+│   ├── rustyfin-frontend/      # Embeds and serves the admin UI under /web
+│   └── rustyfin-meta/          # The `rustyfin` tool: artwork and lyrics into the media folders
+├── frontend/                   # The admin UI (Sycamore, wasm32; NOT a workspace member)
+├── migrations/                 # SQL migrations, run at startup
+├── tests/                      # Parity suite (Hurl) and stress-library tools
+├── docker/                     # Container images (server, meta, base)
+└── docs/
 ```
 
-## Crate Responsibilities
+Each crate starts with a `//!` overview of what it holds.
 
-### `rustyfin-server` (binary)
-
-The entry point. Handles:
-
-- Configuration loading (TOML file + env vars)
-- Database pool creation and migration
-- Router assembly (API routes + frontend)
-- HTTP server startup with tracing and CORS middleware
-
-### `rustyfin-api` (route handlers)
-
-All Jellyfin-compatible HTTP endpoints. Contains:
-
-- `router.rs` --- `AppState` definition and `build_router()` function
-- `routes/` --- one module per resource (system, users, libraries, items, etc.)
-- `error.rs` --- `ApiError` enum mapped to HTTP status codes
-
-### `rustyfin-auth` (authentication)
-
-Three authentication mechanisms:
-
-- **Forward auth** (`forward_auth.rs`) --- extracts identity from reverse proxy headers (`Remote-User`, `Remote-Name`,
-  etc.)
-- **MediaBrowser header** (`middleware.rs`) --- parses `Authorization: MediaBrowser ...` for token extraction
-- **Session management** (`session.rs`) --- token creation, validation, expiry
-
-Provides Axum extractors:
-
-- `AuthenticatedUser` --- requires valid token, returns user info
-- `AdminUser` --- requires valid token AND `is_administrator = true`
-- `OptionalUser` --- succeeds even without auth
-
-### `rustyfin-core` (domain logic)
-
-Library scanning and metadata enrichment:
-
-- `library/scanner.rs` --- walks filesystem, creates media items, probes files
-- `library/naming.rs` --- filename parsing (movie titles, S01E02 patterns)
-- `library/nfo.rs` --- Kodi-standard NFO XML parsing
-- `library/tmdb.rs` --- TMDB API client for metadata lookup
-- `library/enrichment.rs` --- orchestrates NFO + TMDB enrichment
-- `library/images.rs` --- sidecar image discovery
-
-### `rustyfin-db` (database layer)
-
-PostgreSQL access via sqlx:
-
-- `pool.rs` --- connection pool creation and runtime migrations
-- `repo/` --- one module per table (users, sessions, libraries, media_items, etc.)
-
-All queries use string SQL (not compile-time checked) to avoid requiring a running database at build time.
-
-### `rustyfin-models` (shared types)
-
-DTOs shared across crates:
-
-- `dto/base_item.rs` --- `BaseItemDto` (100+ field central item DTO), `VirtualFolderInfo`, `MediaSourceInfo`,
-  `MediaStream`
-- `dto/user.rs` --- `UserDto`, `UserPolicy`, `UserConfiguration`
-- `dto/system.rs` --- `SystemInfo`, `PublicSystemInfo`
-- `dto/query_result.rs` --- `QueryResult<T>` wrapper
-- `dto/session.rs` --- `SessionInfoDto`, `AuthenticationResult`
-- `dto/playback.rs` --- playback reporting DTOs
-- `dto/auth.rs` --- `MediaBrowserAuth`
-
-All DTOs use `#[serde(rename_all = "PascalCase")]` for Jellyfin JSON compatibility.
-
-### `rustyfin-search` (search)
-
-Abstraction over search backends:
-
-- Default: Postgres `ILIKE` (always available)
-- Optional: Meilisearch (feature-gated behind `meilisearch` feature flag)
-
-### `rustyfin-media` (media handling)
-
-- `probe.rs` --- ffprobe subprocess for extracting media metadata
-- `streaming.rs` --- HTTP Range-based direct play for video and audio files
-- `playback_info.rs` --- builds Jellyfin-compatible `PlaybackInfoResponse` from database rows
-
-### `rustyfin-frontend` (asset embedding)
-
-- Uses `rust-embed` to compile the built Sycamore WASM app into the binary
-- Serves all `/web/*` routes with SPA fallback to `index.html`
-- Shows a "frontend not built" placeholder if `frontend/dist/` is empty
-
-## Dependency Graph
+## How the crates depend on each other
 
 ```text
 rustyfin-server
-├── rustyfin-api
-│   ├── rustyfin-auth
-│   │   ├── rustyfin-db
-│   │   │   └── rustyfin-models
-│   │   └── rustyfin-models
-│   ├── rustyfin-core
-│   │   ├── rustyfin-db
-│   │   ├── rustyfin-media
-│   │   │   ├── rustyfin-db
-│   │   │   └── rustyfin-models
-│   │   └── rustyfin-models
-│   ├── rustyfin-db
-│   ├── rustyfin-media
-│   ├── rustyfin-models
-│   └── rustyfin-search
-│       ├── rustyfin-db
-│       └── rustyfin-models
-├── rustyfin-db
-├── rustyfin-frontend (standalone, no internal deps)
-└── rustyfin-models
+├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-db, rustyfin-models
+│                  ├── rustyfin-core ──── rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-db, rustyfin-models
+│                  ├── rustyfin-media ─── rustyfin-db, rustyfin-models
+│                  ├── rustyfin-search ── rustyfin-db
+│                  └── rustyfin-common
+└── rustyfin-frontend (no internal dependencies)
+
+rustyfin-meta ──── rustyfin-common     (the tool shares no server code beyond common)
 ```
 
-## Application State
+`rustyfin-db`, `rustyfin-models` and `rustyfin-common` depend on no other Rustyfin crate.
 
-```rust
-#[derive(Clone)]
-pub struct AppState {
-    pub pool: PgPool,              // PostgreSQL connection pool
-    pub server_id: String,         // Unique server instance ID (UUID)
-    pub server_name: String,       // Display name ("Rustyfin")
-    pub base_url: String,          // External URL for the server
-    pub port: u16,                 // HTTP listen port
-    pub tmdb_api_key: Option<String>, // Optional TMDB API key
-}
-```
+## What each crate does
 
-`PgPool` is extracted from `AppState` via `FromRef`, enabling auth extractors to access the database without knowing
-about the full state type.
+### `rustyfin-server`
 
-## Startup Flow
+Reads the configuration (`rustyfin.toml` and `RUSTYFIN__...` variables, see [Configuration](configuration.md)),
+connects to Postgres and runs the migrations, builds the shared services, and serves the API and the admin on one port,
+with Prometheus metrics on a second listener when `[metrics] listen` is set.
 
-1. Initialize tracing subscriber with env filter
-2. Load configuration (TOML file + env var overrides)
-3. Create PostgreSQL connection pool
-4. Run database migrations from `migrations/` directory
-5. Generate server instance ID
-6. Build `AppState` from config
-7. Assemble Axum router: API routes + frontend routes
-8. Apply middleware: `TraceLayer` + `CorsLayer`
-9. Bind TCP listener and start serving
+### `rustyfin-api`
 
-## Design Principles
+Every route, one module per area under `routes/` (items, playback, HLS, subtitles, sessions, users, libraries, play
+history, devices, WebSocket, ...). `router.rs` holds `AppState` and builds the router. Shared pieces: `error.rs` (one
+`ApiError` mapped to status codes and log levels), `query_case.rs` (Jellyfin's query names in any case), `play_state.rs`
+(Jellyfin 10.10's played and resume rules), `request_log.rs` and `metrics.rs` (what clients ask for), `health.rs`,
+`login_limit.rs` and `cors.rs`. Route rules are in the [API Reference](api-reference.md).
 
-- **Jellyfin wire compatibility**: The API speaks the exact same JSON format as Jellyfin. No translation layer needed on
-  clients.
-- **Forward auth only**: No password storage, no OIDC complexity. The reverse proxy is the identity provider.
-- **Single binary**: Everything --- API, frontend, migrations --- compiles into one executable.
-- **Runtime migrations**: No compile-time database requirement. Migrations run at startup.
-- **Minimal dependencies**: Prefer stdlib and small crates over frameworks.
-- **Direct play first**: Streaming serves files directly. Transcoding is a future phase.
+### `rustyfin-auth`
+
+Turns a request into a user and a session. Identity comes from a trusted forward-auth proxy or an LDAPS bind; Rustyfin
+stores no passwords. The `AuthenticatedUser`, `AdminUser` and `OptionalUser` extractors read Jellyfin's
+`Authorization: MediaBrowser ...` header (or `X-Emby-Token`, or `api_key`). See [Authentication](authentication.md).
+
+### `rustyfin-core`
+
+The long-running parts: the library scanner (walks folders, probes files, reads NFOs and sidecar files, prunes what is
+gone), enrichment (TMDB and friends), the task scheduler and its tasks, the session manager (who is connected and what
+they play, commands to them), the scan board (scan progress and outcomes, sent over the WebSocket), and image resizing.
+See [Library Scanning](library-scanning.md).
+
+### `rustyfin-db`
+
+The sqlx pool, the migrations in `migrations/`, and one repository module per table or concern (media items, streams,
+user data, play history, sessions, libraries, people, images, ...). Queries are plain SQL strings, so building needs no
+database. See [Database Schema](database-schema.md).
+
+### `rustyfin-models`
+
+Jellyfin's request and response objects (`BaseItemDto`, `MediaSourceInfo`, `PlaybackInfoRequest`, sessions, users, ...)
+in PascalCase JSON, and shared enums.
+
+### `rustyfin-search`
+
+`SearchService` answers searches from Meilisearch when it is configured and healthy, and from Postgres otherwise, and
+keeps the Meilisearch index in step with the library.
+
+### `rustyfin-media`
+
+`probe` (ffprobe) and `audio_probe` (lofty, in-process, for music) read streams and tags; `playback_info` and
+`transcode` decide direct play, remux or transcode from the client's device profile; `transcode` also runs and
+throttles the ffmpeg HLS jobs; `streaming` serves files with HTTP ranges. See [Streaming & Media](streaming.md).
+
+### `rustyfin-common`
+
+What the server and the `rustyfin` tool share: file and folder naming, NFO reading and writing, per-title
+`.rustyfin.toml` settings, subtitle files beside a video, music tags, and the outside metadata sources (TMDB, TVDB,
+fanart.tv, MusicBrainz, Discogs, LRCLIB) with their rate limits and caches.
+
+### `rustyfin-frontend`
+
+Embeds `frontend/dist/` with `rust-embed` and serves it under `/web`: fingerprinted files cached for a year, compressed
+once and kept in memory, and `index.html` for any admin address. See [Admin Frontend](frontend.md).
+
+### `rustyfin-meta`
+
+The `rustyfin` command: fetches artwork and lyrics for what the server scanned and writes them beside the media. It is
+the only writer to the media folders and runs with its own writable mount (a sidecar or a Job). See
+[Artwork](artwork.md) and [Lyrics](lyrics.md).
+
+## Application state
+
+`AppState` (in `rustyfin-api/src/router.rs`) is cloned into every handler. It holds the Postgres pool; the server's id,
+name, address and port; the session manager, search service and transcode manager; the forward-auth and LDAP settings;
+the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the
+login limiter; and the shutdown signal. `PgPool` is reachable through `FromRef`, so extractors can use the database
+without knowing the whole state. The scan board is one shared instance for the process
+(`ScanBoard::global()`), so the scanner can report without being handed the state.
+
+## Startup
+
+1. Tracing, then the configuration; the server refuses to start without a sign-in method.
+2. Postgres pool, then the migrations.
+3. Session manager, search service, and the transcode manager with its cleanup and throttle task.
+4. Image and people cache folders.
+5. The task scheduler and its tasks (library scans, search reindex, activity-log and session pruning, transcode and
+   image-cache cleanup, database maintenance); with `run_on_startup`, each runs once now.
+6. Forward-auth and LDAP settings, CORS, `AppState`.
+7. The metrics listener (if configured), then the API router with the admin merged under `/web`, and `/` redirected to
+   it.
+
+## Design principles
+
+- **Jellyfin's wire format**: clients talk to Rustyfin as to Jellyfin; where Rustyfin adds something, it is extra
+  fields or its own routes, never a changed shape.
+- **Forward auth first**: identity comes from the proxy (or LDAPS); no stored passwords, no OIDC, no plugins.
+- **Read-only media**: the server never writes to media folders; the `rustyfin` tool is the one writer.
+- **One binary per role**: the server embeds the admin and the migrations.
+- **Measured performance**: changes to scanning, browsing or streaming are timed on an 80,000-item library before and
+  after ([Performance](performance.md)).
 
 ## Conventions
 
-- **Edition 2024**: Uses `let chains` (`if let Some(x) = ... && let Some(y) = ...`)
-- **Duration**: All durations are in 100-nanosecond ticks (Jellyfin convention): `seconds * 10_000_000`
-- **PascalCase JSON**: All DTO fields serialize to PascalCase
-- **Legacy routes**: Both `/Items/{id}` and `/Users/{userId}/Items/{id}` work for client compatibility
-- **Error handling**: `ApiError` enum maps to HTTP status codes; database errors become 500s
+- **Edition 2024**, with let chains.
+- **Ticks**: durations are 100-nanosecond ticks (Jellyfin's unit), `seconds * 10_000_000`.
+- **PascalCase JSON** for every DTO.
+- **Legacy routes**: both `/Items/{id}` and `/Users/{userId}/Items/{id}` answer, as Jellyfin's do.
+- **Errors**: one `ApiError`, mapped to status codes; database errors are 500s and logged.
+- How changes are made: [Contributing](contributing.md).
