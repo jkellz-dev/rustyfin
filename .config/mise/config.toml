@@ -75,6 +75,12 @@ run = "cargo test --lib"
 description = "Run integration tests (requires Postgres)"
 run = "cargo test -p rustyfin-api --test '*' -- --test-threads=1"
 
+[tasks.bench]
+description = "Benchmark: scan and browse a generated library (docs/performance.md); args after --, e.g. -- --scale 0.1"
+# Needs DATABASE_URL to name a Postgres role that may create databases, and
+# ffprobe on PATH. The release builds are what the numbers describe.
+run = "cargo build --release --locked -p rustyfin-server -p rustyfin-bench && target/release/rustyfin-bench"
+
 # ── Format & lint ────────────────────────────────────────────
 # Both go through hk, so the steps live in one place: hk.pkl.
 [tasks.format]
