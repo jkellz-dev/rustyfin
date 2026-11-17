@@ -12,7 +12,8 @@ one machine, start with [Getting Started](getting-started.md); every setting is 
   `transcode.temp_dir`). Transcode segments can take several GB while people watch.
 - **A reverse proxy** that signs people in and passes who they are in headers (forward auth), or an LDAPS server for
   apps that ask for a password. Rustyfin stores no passwords.
-- Optional: Meilisearch for search (Postgres answers otherwise), a TMDB API key for metadata.
+- Optional: Meilisearch for search (Postgres answers otherwise). The server makes no outside requests; a TMDB key is
+  for the `rustyfin` metadata tool ([Artwork](artwork.md)).
 
 ## Container
 

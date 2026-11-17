@@ -121,7 +121,7 @@ Metrics get their own listener and are never served on the public port. Unset, t
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `tmdb_api_key` | `String` | --- | TMDB API v3 key for metadata enrichment |
+| `tmdb_api_key` | `String` | --- | Read by the `rustyfin` tool (TMDB key or read access token); the server makes no TMDB requests |
 | `people_cache_dir` | `String` | --- | Headshots fetched by the `rustyfin` tool (`~/` allowed); must match the tool's setting |
 
 ### `[transcode]` (optional)

@@ -1,7 +1,8 @@
 # Getting Started
 
-Run Rustyfin with Docker Compose, add a library, and connect an app. You need Docker, your media folders, and
-(optional, for posters and plots) a [TMDB API key](https://www.themoviedb.org/settings/api).
+Run Rustyfin with Docker Compose, add a library, and connect an app. You need Docker and your media folders. The server
+reads titles, plots and artwork from the files beside your media (NFOs and images, as Radarr, Sonarr and Jellyfin write
+them); to fill in what is missing, the `rustyfin` tool fetches from TMDB and others ([Artwork](artwork.md)).
 
 Rustyfin does not ask for passwords: a reverse proxy in front of it says who each request is from (forward auth). The
 setup below uses Caddy with a fixed user so you can try it on your own machine;
@@ -61,9 +62,6 @@ temp_dir = "/var/cache/rustyfin/transcode"
 # Believe identity headers only from the Docker network (where Caddy is).
 [auth.forward_auth]
 trusted_proxies = ["172.16.0.0/12"]
-
-[metadata]
-# tmdb_api_key = "your-key"
 ```
 
 `Caddyfile`, which signs every request in as one user (only for trying it out):

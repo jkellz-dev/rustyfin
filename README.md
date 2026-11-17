@@ -18,7 +18,8 @@ on real devices is still under way. What is done and what is next: [`roadmap.md`
   what is answered and what is not.
 - **An admin at `/web`**: dashboard, libraries with scan progress, users and their devices and history, a media
   browser, and a player for video and music. Works on a phone.
-- **Metadata**: TMDB and others, and the `rustyfin` tool, which fetches artwork and lyrics into the media folders.
+- **Metadata** from NFO files and artwork beside the media; the `rustyfin` tool fills in what is missing from TMDB,
+  MusicBrainz and others, and fetches lyrics, into the media folders.
 - **Operations**: Prometheus metrics, health on the dashboard, migrations at start.
 
 ## What it leaves out, on purpose

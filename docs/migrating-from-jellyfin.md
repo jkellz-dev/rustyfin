@@ -26,10 +26,10 @@ server at your folders. What lives only in Jellyfin's database does not come acr
 - **Users and passwords.** Rustyfin signs people in through a forward-auth proxy (or an LDAPS server) and creates each
   user the first time they arrive. Library access and the administrator role are set again in the admin.
 - **Metadata Jellyfin fetched but kept only in its database**, and artwork it downloaded into its own data folder.
-  Rustyfin fetches its own from TMDB (`metadata.tmdb_api_key`), and the `rustyfin` tool fetches artwork and lyrics into
-  the media folders (see [Artwork](artwork.md)).
+  The server reads only what is beside the media; the `rustyfin` tool fetches metadata, artwork and lyrics from TMDB and
+  others into the media folders (see [Artwork](artwork.md)), and Jellyfin's NFO saver (below) brings its own across.
 - **Playlists and collections made in Jellyfin's apps.** Rustyfin has playlists, but they start empty; film
-  collections come from NFO `<set>` and TMDB.
+  collections come from NFO `<set>`, or from TMDB through the `rustyfin` tool.
 - **What Rustyfin leaves out on purpose**: plugins, Live TV and DVR, photo and book libraries, SyncPlay and DLNA.
 
 ## Before you switch
@@ -50,7 +50,7 @@ Rustyfin keeps its own Postgres database and never touches Jellyfin's.
 
 ## Then
 
-1. [Configure](configuration.md) Rustyfin: the database, the sign-in proxy, and a TMDB key.
+1. [Configure](configuration.md) Rustyfin: the database and the sign-in proxy.
 2. Open `/web`, add the libraries with the same folders, and let the first scan run (the Scan button shows its
    progress).
 3. Sign in from each app with the new address.

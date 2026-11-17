@@ -71,9 +71,9 @@ stores no passwords. The `AuthenticatedUser`, `AdminUser` and `OptionalUser` ext
 ### `rustyfin-core`
 
 The long-running parts: the library scanner (walks folders, probes files, reads NFOs and sidecar files, prunes what is
-gone), enrichment (TMDB and friends), the task scheduler and its tasks, the session manager (who is connected and what
-they play, commands to them), the scan board (scan progress and outcomes, sent over the WebSocket), and image resizing.
-See [Library Scanning](library-scanning.md).
+gone), enrichment (NFO files and per-title settings into the database), the task scheduler and its tasks, the session
+manager (who is connected and what they play, commands to them), the scan board (scan progress and outcomes, sent over
+the WebSocket), and image resizing. See [Library Scanning](library-scanning.md).
 
 ### `rustyfin-db`
 
