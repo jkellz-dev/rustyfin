@@ -216,6 +216,7 @@ mod tests {
             first_scan: scan(372.0),
             rescan: scan(4.2),
             search: None,
+            streams: Vec::new(),
             browse: vec![Browse {
                 query: "7500 tracks, first page".into(),
                 url: "/Items?IncludeItemTypes=Audio".into(),
@@ -318,6 +319,59 @@ mod tests {
         assert!(text.contains("[search.first_scan]"), "{text}");
         assert!(text.contains("meilisearch = \"1.57.0\""), "{text}");
         assert!(!toml::to_string(&sample()).unwrap().contains("[search"));
+    }
+
+    fn with_streams() -> Results {
+        let row = |mode: &str, streams, kept_up, slowest| StreamRun {
+            mode: mode.into(),
+            streams,
+            start_p50_ms: Some(2400.0),
+            start_max_ms: Some(3100.0),
+            kept_up,
+            stalls: streams - kept_up,
+            stalled_seconds: 1.5,
+            slowest_speed: slowest,
+            server_cores: Some(3.2),
+            peak_memory_mib: Some(850.0),
+            errors: 0,
+        };
+        Results {
+            streams: vec![
+                row("direct play", 4, 4, Some(38.5)),
+                row("transcode", 4, 3, None),
+            ],
+            ..sample()
+        }
+    }
+
+    #[test]
+    fn markdown_reports_concurrent_streams() {
+        let md = with_streams().markdown();
+        assert!(
+            md.contains("| Streams | Mode | Start p50 | Start max | Kept up |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| 4 | direct play | 2400 ms | 3100 ms | 4 of 4 | 0 | 1.5 s | 38.5x | 3.2 cores | 850 MiB | 0 |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| 4 | transcode | 2400 ms | 3100 ms | 3 of 4 | 1 | 1.5 s | n/a | 3.2 cores | 850 MiB | 0 |"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn without_streams_there_is_no_streams_table() {
+        let md = sample().markdown();
+        assert!(!md.contains("| Streams |"), "{md}");
+    }
+
+    #[test]
+    fn stream_results_are_toml() {
+        let text = toml::to_string(&with_streams()).unwrap();
+        assert!(text.contains("[[streams]]"), "{text}");
+        assert!(text.contains("mode = \"transcode\""), "{text}");
     }
 
     #[test]

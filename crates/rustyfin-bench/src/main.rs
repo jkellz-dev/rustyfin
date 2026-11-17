@@ -20,6 +20,7 @@
 mod machine;
 mod report;
 mod stats;
+mod streams;
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
