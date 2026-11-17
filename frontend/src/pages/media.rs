@@ -89,14 +89,12 @@ const PAGE_SIZE: i32 = 50;
 
 // ── Component ───────────────────────────────────────────
 
-#[component]
-pub fn Media() -> View {
-    // Where the browser is comes from the address (back/forward work).
-    let route = MediaRoute::parse(
-        &web_sys::window()
-            .and_then(|w| w.location().pathname().ok())
-            .unwrap_or_default(),
-    );
+/// The media browser at `path` (an address under `/web/media`, see
+/// `media_route`): the router builds a fresh page for each address, so the
+/// back and forward buttons move through the browser's places.
+#[component(inline_props)]
+pub fn Media(path: String) -> View {
+    let route = MediaRoute::parse(&path);
     let current_view: Signal<MediaView> = create_signal(match &route {
         MediaRoute::Libraries => MediaView::Libraries,
         MediaRoute::Item { id } => MediaView::Detail(id.clone()),

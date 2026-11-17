@@ -54,7 +54,7 @@ fn main() {
                                 (match route.get_clone() {
                                     AppRoutes::Setup => view! { Setup {} },
                                     AppRoutes::Libraries => view! { Libraries {} },
-                                    AppRoutes::Media { .. } => view! { Media {} },
+                                    AppRoutes::Media { path } => view! { Media(path=format!("/web/media/{}", path.join("/"))) },
                                     AppRoutes::Users => view! { Users {} },
                                     AppRoutes::UserDetail { id } => view! { UserDetail(user_id=id) },
                                     AppRoutes::Tasks => view! { Tasks {} },
