@@ -300,10 +300,15 @@ impl Player {
         let Some(el) = media() else { return };
         set_subtitle(&el, shown_sub.as_deref());
         if is_hls {
-            if !el.can_play_type("application/vnd.apple.mpegurl").is_empty() {
-                el.set_src(&url);
-            } else if let Err(e) = attach_hls(&el, &url, self).await {
-                return self.fail(e);
+            let native = !el.can_play_type("application/vnd.apple.mpegurl").is_empty();
+            match logic::hls_way(has_media_source(), native) {
+                Some(logic::HlsWay::Script) => {
+                    if let Err(e) = attach_hls(&el, &url, self).await {
+                        return self.fail(e);
+                    }
+                }
+                Some(logic::HlsWay::Native) => el.set_src(&url),
+                None => return self.fail("This browser cannot play streams.".to_string()),
             }
         } else {
             PENDING_SEEK.with(|p| *p.borrow_mut() = (start_at > 0.0).then_some(start_at));
@@ -570,6 +575,16 @@ fn destroy_hls() {
 
 /// hls.js is only fetched the first time a transcode plays (it is 120 KB
 /// gzipped and most plays are direct).
+/// MediaSource (or Safari's ManagedMediaSource), which hls.js needs.
+fn has_media_source() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    ["MediaSource", "ManagedMediaSource"]
+        .iter()
+        .any(|name| Reflect::has(&window, &(*name).into()).unwrap_or(false))
+}
+
 async fn load_hls_js() -> Result<JsValue, String> {
     let window = web_sys::window().ok_or("no window")?;
     let existing = Reflect::get(&window, &"Hls".into()).unwrap_or(JsValue::UNDEFINED);

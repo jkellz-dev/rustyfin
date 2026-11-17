@@ -179,8 +179,11 @@ pub enum HlsWay {
 /// client does): browsers' own HLS differs between them (Chrome's could not
 /// parse Rustyfin's MPEG-TS segments). The browser's own only without it.
 pub fn hls_way(has_media_source: bool, native_hls: bool) -> Option<HlsWay> {
-    let _ = has_media_source;
-    native_hls.then_some(HlsWay::Native)
+    if has_media_source {
+        Some(HlsWay::Script)
+    } else {
+        native_hls.then_some(HlsWay::Native)
+    }
 }
 
 /// Where playback starts: the saved position unless the item was finished
