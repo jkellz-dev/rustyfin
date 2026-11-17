@@ -45,7 +45,8 @@ For every album folder (a folder holding tracks) with no cover file, fetches the
 [Cover Art Archive](https://coverartarchive.org) and saves it as `cover.jpg` beside the tracks; the server uses it at
 the next scan. Albums are matched by MusicBrainz id, never by name: `album.nfo` (Lidarr's `musicbrainzalbumid`,
 `musicbrainzreleasegroupid`), else the first track's tags (Picard, Lidarr). The exact release is tried first, then any
-release of the release group. The 1200 px JPEG is saved, not the original scan.
+release of the release group. The 1200 px JPEG is saved when the archive has made one; for new uploads it has not yet,
+and the original is saved instead.
 
 Albums with a cover file are skipped (`--force` replaces them), and so are albums with no MusicBrainz id
 (`no_id=` in the summary). When the archive has no cover, `missing_checked` is recorded in the album folder's

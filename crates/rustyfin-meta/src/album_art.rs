@@ -22,9 +22,11 @@ use crate::scan::ScanOpts;
 /// An album the archive had no cover for is asked again after this long.
 const RECHECK_AFTER: Duration = Duration::from_secs(30 * 24 * 3600);
 
-/// The archive's 1200 px thumbnail: always a JPEG, a few hundred KB, unlike
-/// the originals (often PNG or TIFF scans of many MB).
-const SIZE: &str = "front-1200";
+/// The archive's 1200 px thumbnail first: always a JPEG, a few hundred KB,
+/// unlike the originals (often PNG or TIFF scans of many MB). New uploads have
+/// no thumbnails for a while (the archive redirects to a missing file), so the
+/// original is the fallback.
+const SIZES: [&str; 2] = ["front-1200", "front"];
 
 /// What a music artwork run did.
 #[derive(Debug, Default)]
@@ -95,16 +97,20 @@ pub fn album_mbids(dir: &Path) -> (Option<String>, Option<String>) {
 }
 
 /// The archive addresses to try, best first: the exact release, then any
-/// release of the release group.
+/// release of the release group; each as the 1200 px thumbnail, then the
+/// original.
 pub fn cover_urls(base: &str, release: Option<&str>, group: Option<&str>) -> Vec<String> {
     let base = base.trim_end_matches('/');
     let safe = |id: &str| id.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
     let mut urls = Vec::new();
-    if let Some(r) = release.filter(|r| safe(r)) {
-        urls.push(format!("{base}/release/{r}/{SIZE}"));
-    }
-    if let Some(g) = group.filter(|g| safe(g)) {
-        urls.push(format!("{base}/release-group/{g}/{SIZE}"));
+    for (kind, id) in [("release", release), ("release-group", group)] {
+        if let Some(id) = id.filter(|i| safe(i)) {
+            urls.extend(
+                SIZES
+                    .iter()
+                    .map(|size| format!("{base}/{kind}/{id}/{size}")),
+            );
+        }
     }
     urls
 }
@@ -279,12 +285,17 @@ mod tests {
             ),
             [
                 "https://coverartarchive.org/release/d56aacad-e477/front-1200",
-                "https://coverartarchive.org/release-group/28b5d5e5-3c90/front-1200"
+                "https://coverartarchive.org/release/d56aacad-e477/front",
+                "https://coverartarchive.org/release-group/28b5d5e5-3c90/front-1200",
+                "https://coverartarchive.org/release-group/28b5d5e5-3c90/front"
             ]
         );
         assert_eq!(
             cover_urls("https://c", None, Some("ab-12")),
-            ["https://c/release-group/ab-12/front-1200"]
+            [
+                "https://c/release-group/ab-12/front-1200",
+                "https://c/release-group/ab-12/front"
+            ]
         );
         // Anything that is not an id is never put in a URL.
         assert!(cover_urls("https://c", Some("../x?y"), None).is_empty());
