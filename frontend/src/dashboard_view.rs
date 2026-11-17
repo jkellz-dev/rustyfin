@@ -38,8 +38,18 @@ pub fn playing_title(
     season: Option<i32>,
     episode: Option<i32>,
 ) -> String {
-    let _ = (item_type, series, season, episode);
-    name.to_string()
+    if item_type != "Episode" {
+        return name.to_string();
+    }
+    let number = match (season, episode) {
+        (Some(s), Some(e)) => format!(" (S{s:02}E{e:02})"),
+        (None, Some(e)) => format!(" (E{e:02})"),
+        _ => String::new(),
+    };
+    match series.filter(|s| !s.is_empty()) {
+        Some(show) => format!("{show}: {name}{number}"),
+        None => format!("{name}{number}"),
+    }
 }
 
 /// A session's line: who, on what, and what they are playing.
@@ -51,6 +61,9 @@ pub fn session_label(
     paused: bool,
 ) -> String {
     let who = user.unwrap_or("Someone");
+    // Sessions made before the server unescaped these still hold `%20`.
+    let client = crate::media_route::decode(client);
+    let device = crate::media_route::decode(device);
     let on = if device.is_empty() {
         client.to_string()
     } else {

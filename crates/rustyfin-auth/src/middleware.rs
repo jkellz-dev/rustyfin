@@ -51,6 +51,31 @@ pub struct AuthenticatedUser {
     pub device_id: String,
 }
 
+/// Undo percent-encoding in a header value, as Jellyfin does (clients send
+/// `Plezy%20tvOS`). A `%` that does not start an escape is kept as it is.
+pub fn unescape(value: &str) -> String {
+    if !value.contains('%') {
+        return value.to_string();
+    }
+    let bytes = value.as_bytes();
+    let hex = |b: u8| (b as char).to_digit(16);
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(hi), Some(lo)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
+        {
+            out.push((hi * 16 + lo) as u8);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Parse the `Authorization: MediaBrowser ...` header.
 pub fn parse_mediabrowser_header(value: &str) -> MediaBrowserAuth {
     let mut auth = MediaBrowserAuth::default();
@@ -67,10 +92,10 @@ pub fn parse_mediabrowser_header(value: &str) -> MediaBrowserAuth {
             let key = key.trim();
             let val = val.trim().trim_matches('"');
             match key {
-                "Client" => auth.client = Some(val.to_string()),
-                "Device" => auth.device = Some(val.to_string()),
-                "DeviceId" => auth.device_id = Some(val.to_string()),
-                "Version" => auth.version = Some(val.to_string()),
+                "Client" => auth.client = Some(unescape(val)),
+                "Device" => auth.device = Some(unescape(val)),
+                "DeviceId" => auth.device_id = Some(unescape(val)),
+                "Version" => auth.version = Some(unescape(val)),
                 "Token" => auth.token = Some(val.to_string()),
                 _ => {}
             }
