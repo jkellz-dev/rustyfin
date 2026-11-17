@@ -1309,7 +1309,8 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 ### 14d. In-Repo Documentation
 
-- [ ] README overhaul (align with design book, badges, quick start)
+- [ ] README overhaul (align with design book, badges, quick start): a plain `README.md` with the quick start is in;
+      branding and badges wait for the design book (14a)
 - [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
 - [x] Crate-level `//!` doc comments for each crate in the workspace (and the admin)
 - [x] Inline doc comments for public API surfaces (models, repos, auth extractors): every top-level public item in
