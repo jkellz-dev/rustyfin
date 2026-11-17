@@ -120,4 +120,7 @@ pub struct PlaybackStopInfo {
     pub media_source_id: Option<String>,
     pub play_session_id: Option<String>,
     pub position_ticks: Option<i64>,
+    /// The client could not play it: the played state is left alone.
+    #[serde(default)]
+    pub failed: Option<bool>,
 }
