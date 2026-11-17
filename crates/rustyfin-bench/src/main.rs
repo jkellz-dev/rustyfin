@@ -29,6 +29,7 @@ use serde_json::Value;
 use sqlx::Connection;
 use tokio::process::{Child, Command};
 
+use crate::machine::round1;
 use crate::report::{Browse, Results, Scan};
 
 #[derive(Parser, Debug)]
@@ -139,7 +140,7 @@ impl Run<'_> {
         let counts = generate_library(self.root, &media, self.args.scale)?;
         eprintln!("library: {} files in {}", counts.files, media.display());
 
-        create_database(&self.args.database_url, self.db_name).await?;
+        let postgres = create_database(&self.args.database_url, self.db_name).await?;
         let port = free_port()?;
         let mut server = self.start_server(server_bin, port).await?;
         let pid = server.id().context("server pid")?;
@@ -158,7 +159,7 @@ impl Run<'_> {
         let first = api.scan().await?;
         let cpu1 = machine::cpu_seconds(pid);
         let first_scan = Scan {
-            seconds: first.as_secs_f64(),
+            seconds: round1(first.as_secs_f64()),
             server_cores: cores(cpu0, cpu1, first),
             peak_memory_mib: machine::peak_memory_mib(pid),
             items: api.counts().await?,
@@ -170,7 +171,7 @@ impl Run<'_> {
         let again = api.scan().await?;
         let cpu1 = machine::cpu_seconds(pid);
         let rescan = Scan {
-            seconds: again.as_secs_f64(),
+            seconds: round2(again.as_secs_f64()),
             server_cores: cores(cpu0, cpu1, again),
             peak_memory_mib: machine::peak_memory_mib(pid),
             items: api.counts().await?,
@@ -196,10 +197,10 @@ impl Run<'_> {
                 clients: self.args.clients,
                 requests: r.latencies_ms.len(),
                 errors: r.errors,
-                per_second: r.latencies_ms.len() as f64 / r.elapsed.as_secs_f64(),
-                p50_ms: stats::percentile(&r.latencies_ms, 50.0),
-                p95_ms: stats::percentile(&r.latencies_ms, 95.0),
-                p99_ms: stats::percentile(&r.latencies_ms, 99.0),
+                per_second: round1(r.latencies_ms.len() as f64 / r.elapsed.as_secs_f64()),
+                p50_ms: round2(stats::percentile(&r.latencies_ms, 50.0)),
+                p95_ms: round2(stats::percentile(&r.latencies_ms, 95.0)),
+                p99_ms: round2(stats::percentile(&r.latencies_ms, 99.0)),
                 server_cores: cores(cpu0, cpu1, r.elapsed),
             });
         }
@@ -212,7 +213,7 @@ impl Run<'_> {
             commit: machine::git_commit(self.root),
             scale: self.args.scale,
             files: counts.files,
-            machine: machine::describe(),
+            machine: machine::describe(Some(postgres)),
             first_scan,
             rescan,
             browse,
@@ -284,7 +285,11 @@ impl Run<'_> {
 }
 
 fn cores(cpu0: Option<f64>, cpu1: Option<f64>, over: Duration) -> Option<f64> {
-    Some((cpu1? - cpu0?) / over.as_secs_f64())
+    Some(round2((cpu1? - cpu0?) / over.as_secs_f64()))
+}
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
 }
 
 struct LibraryCounts {
@@ -360,7 +365,8 @@ fn free_port() -> anyhow::Result<u16> {
 }
 
 /// Database names here are `rustyfin_bench_<digits>`, never user input.
-async fn create_database(admin_url: &str, name: &str) -> anyhow::Result<()> {
+/// Returns the server's version.
+async fn create_database(admin_url: &str, name: &str) -> anyhow::Result<String> {
     let mut conn = sqlx::PgConnection::connect(admin_url)
         .await
         .context("connect to DATABASE_URL")?;
@@ -368,7 +374,10 @@ async fn create_database(admin_url: &str, name: &str) -> anyhow::Result<()> {
         .execute(&mut conn)
         .await
         .context("create the benchmark database (the role needs CREATEDB)")?;
-    Ok(())
+    let (version,): (String,) = sqlx::query_as("SHOW server_version")
+        .fetch_one(&mut conn)
+        .await?;
+    Ok(version)
 }
 
 async fn drop_database(admin_url: &str, name: &str) -> anyhow::Result<()> {

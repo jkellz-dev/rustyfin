@@ -73,7 +73,7 @@ impl Results {
         let m = &self.machine;
         let _ = writeln!(
             s,
-            "Rustyfin {} on {} ({} CPUs, {}), {}, scale {} ({} files)\n",
+            "Rustyfin {} on {} ({} CPUs, {}), {}, scale {} ({} files)",
             self.commit.as_deref().unwrap_or("(unknown commit)"),
             m.cpu,
             m.cpus,
@@ -81,6 +81,12 @@ impl Results {
             m.os,
             self.scale,
             self.files
+        );
+        let _ = writeln!(
+            s,
+            "Postgres {}, ffprobe {}\n",
+            m.postgres.as_deref().unwrap_or("?"),
+            m.ffprobe.as_deref().unwrap_or("?")
         );
         let i = &self.first_scan.items;
         let _ = writeln!(
@@ -155,6 +161,8 @@ mod tests {
                 cpus: 4,
                 memory_gib: Some(16.0),
                 os: "linux x86_64".into(),
+                postgres: Some("17.2".into()),
+                ffprobe: Some("7.0.2".into()),
             },
             first_scan: scan(372.0),
             rescan: scan(4.2),
