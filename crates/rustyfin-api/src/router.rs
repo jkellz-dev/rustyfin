@@ -328,6 +328,14 @@ pub fn build_router(state: AppState) -> Router {
         // ── Playback reporting ──────────────────────────────────
         .route("/Sessions/Playing", post(playback::report_playback_start))
         .route(
+            "/Users/{userId}/PlayStats",
+            get(play_history::get_play_stats),
+        )
+        .route(
+            "/Users/{userId}/PlayHistory",
+            get(play_history::get_play_history),
+        )
+        .route(
             "/Sessions/Playing/Progress",
             post(playback::report_playback_progress),
         )
