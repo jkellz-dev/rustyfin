@@ -1292,7 +1292,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
       against `config.rs`
 - [x] Architecture overview (crate map, request lifecycle, auth flow): `docs/architecture.md` rewritten for the 11
       crates
-- [ ] API compatibility guide (which Jellyfin endpoints are supported, stubs vs real)
+- [x] API compatibility guide (which Jellyfin endpoints are supported, stubs vs real): `docs/api-compatibility.md`
 - [ ] Deployment guide (Docker, systemd, reverse proxy setup with Caddy/nginx/Traefik)
 - [ ] Client compatibility matrix (tested clients, known issues per client)
 - [x] Migration guide from Jellyfin (what transfers, what doesn't): `docs/migrating-from-jellyfin.md`

@@ -11,6 +11,9 @@
 
 ## Current State
 
+These estimates date from February 2026. What is answered today, route by route:
+[API Compatibility](api-compatibility.md).
+
 | Area | Maturity | Notes |
 |------|----------|-------|
 | API routes | ~75% | Core routes + HLS transcoding + subtitle delivery + stubs |

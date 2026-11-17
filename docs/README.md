@@ -10,6 +10,7 @@ Jellyfin Media Player) connect to it seamlessly.
 | [Getting Started](getting-started.md) | Run it with Docker Compose, add a library, connect an app |
 | [Architecture](architecture.md) | Crate structure, dependency graph, design decisions |
 | [Configuration](configuration.md) | Config file, environment variables, deployment |
+| [API Compatibility](api-compatibility.md) | What is answered for real, what is a no-op, what is left out |
 | [API Reference](api-reference.md) | Complete HTTP API documentation (40+ routes) |
 | [Authentication](authentication.md) | Forward auth, session management, extractors |
 | [Database Schema](database-schema.md) | All tables, columns, indexes, relationships |
