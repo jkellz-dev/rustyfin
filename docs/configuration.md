@@ -249,6 +249,8 @@ See the example manifests in your cluster config. Key points:
 - Non-secret database fields (`host`, `port`, `name`) go in the TOML file
 - Media volumes should be mounted read-only
 
+Container, systemd and proxy examples: [Deployment](deployment.md).
+
 ### Reverse Proxy (Forward Auth)
 
 Rustyfin requires a reverse proxy for authentication. The proxy must set these headers on authenticated requests:

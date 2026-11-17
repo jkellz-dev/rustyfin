@@ -8,6 +8,7 @@ Jellyfin Media Player) connect to it seamlessly.
 | Document | Description |
 |----------|-------------|
 | [Getting Started](getting-started.md) | Run it with Docker Compose, add a library, connect an app |
+| [Deployment](deployment.md) | Container, systemd, Caddy/nginx/Traefik with forward auth, upgrades, backups |
 | [Architecture](architecture.md) | Crate structure, dependency graph, design decisions |
 | [Configuration](configuration.md) | Config file, environment variables, deployment |
 | [API Compatibility](api-compatibility.md) | What is answered for real, what is a no-op, what is left out |
