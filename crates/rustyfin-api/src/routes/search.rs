@@ -58,9 +58,19 @@ pub async fn search_hints(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Collections of one film are not listed.
+    let boxsets: Vec<Uuid> = hits
+        .iter()
+        .filter(|h| h.item_type == "BoxSet")
+        .map(|h| h.id)
+        .collect();
+    let hidden = rustyfin_db::repo::collections::hidden_among(&state.pool, &boxsets)
+        .await
+        .map_err(ApiError::Database)?;
     // Filter by library access, and to the library asked for.
     let hits: Vec<_> = hits
         .into_iter()
+        .filter(|hit| !hidden.contains(&hit.id))
         .filter(|hit| {
             accessible
                 .as_ref()

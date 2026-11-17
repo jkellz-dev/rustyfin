@@ -824,11 +824,13 @@ pub async fn count_by_type(
     pool: &PgPool,
     libraries: Option<&[Uuid]>,
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
-    sqlx::query_as(
-        "SELECT item_type, COUNT(*) FROM media_items \
-         WHERE $1::uuid[] IS NULL OR library_id IS NULL OR library_id = ANY($1) \
-         GROUP BY item_type",
-    )
+    sqlx::query_as(&format!(
+        "SELECT t.item_type, COUNT(*) FROM media_items t \
+             WHERE ($1::uuid[] IS NULL OR t.library_id IS NULL OR t.library_id = ANY($1)) \
+             AND t.owner_id IS NULL AND NOT {} \
+             GROUP BY t.item_type",
+        super::collections::hidden_single_sql("t")
+    ))
     .bind(libraries.map(<[Uuid]>::to_vec))
     .fetch_all(pool)
     .await
@@ -1872,7 +1874,8 @@ impl ItemQuery {
         // Scoping. Extras belong to their title and are never listed on
         // their own, unless asked for by id.
         if self.ids.is_empty() {
-            qb.push(" AND mi.owner_id IS NULL");
+            qb.push(" AND mi.owner_id IS NULL AND NOT ");
+            qb.push(super::collections::hidden_single_sql("mi"));
         }
         if !self.ids.is_empty() {
             qb.push(" AND mi.id = ANY(");
