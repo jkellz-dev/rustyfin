@@ -16,7 +16,7 @@ use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_media::transcode::{
     hls::{
         MasterPlaylistParams, generate_audio_master_playlist, generate_master_playlist,
-        rewrite_audio_variant_playlist, rewrite_variant_playlist,
+        rewrite_audio_variant_playlist_with_key, rewrite_variant_playlist_with_key,
     },
     manager::TranscodeRequest,
     names::{encode_query_value, is_valid_segment_name, is_valid_session_id},
@@ -41,6 +41,10 @@ pub struct HlsQueryParams {
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
     pub max_framerate: Option<f64>,
+    /// The token, when the player signs with the address; passed on to the
+    /// playlist's links, which players follow without headers.
+    #[serde(rename = "api_key")]
+    pub api_key: Option<String>,
 }
 
 /// The play session id from the query (`unknown` when absent), checked.
@@ -108,6 +112,9 @@ pub async fn get_master_playlist(
     }
     if let Some(ticks) = params.start_time_ticks {
         extra_qs.push_str(&format!("&StartTimeTicks={ticks}"));
+    }
+    if let Some(ref key) = params.api_key {
+        extra_qs.push_str(&format!("&api_key={}", encode_query_value(key)));
     }
 
     let playlist = generate_master_playlist(&MasterPlaylistParams {
@@ -223,7 +230,12 @@ pub async fn get_variant_playlist(
         .await
         .map_err(|_| ApiError::Internal("timeout waiting for transcode playlist".to_string()))?;
 
-    let rewritten = rewrite_variant_playlist(&playlist_content, item_id, &play_session_id);
+    let rewritten = rewrite_variant_playlist_with_key(
+        &playlist_content,
+        item_id,
+        &play_session_id,
+        params.api_key.as_deref(),
+    );
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -417,6 +429,9 @@ pub async fn get_audio_master_playlist(
     if let Some(br) = params.max_streaming_bitrate {
         extra_qs.push_str(&format!("&MaxStreamingBitrate={br}"));
     }
+    if let Some(ref key) = params.api_key {
+        extra_qs.push_str(&format!("&api_key={}", encode_query_value(key)));
+    }
 
     let playlist = generate_audio_master_playlist(
         item_id,
@@ -512,7 +527,12 @@ pub async fn get_audio_variant_playlist(
         ApiError::Internal("timeout waiting for audio transcode playlist".to_string())
     })?;
 
-    let rewritten = rewrite_audio_variant_playlist(&playlist_content, item_id, &play_session_id);
+    let rewritten = rewrite_audio_variant_playlist_with_key(
+        &playlist_content,
+        item_id,
+        &play_session_id,
+        params.api_key.as_deref(),
+    );
 
     Ok(Response::builder()
         .status(StatusCode::OK)

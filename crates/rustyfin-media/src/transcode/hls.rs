@@ -112,7 +112,7 @@ pub fn rewrite_variant_playlist(
     item_id: Uuid,
     play_session_id: &str,
 ) -> String {
-    rewrite_playlist_segments(raw_playlist, "Videos", item_id, play_session_id)
+    rewrite_playlist_segments(raw_playlist, "Videos", item_id, play_session_id, None)
 }
 
 /// Rewrite ffmpeg's variant playlist for audio streams.
@@ -123,7 +123,7 @@ pub fn rewrite_audio_variant_playlist(
     item_id: Uuid,
     play_session_id: &str,
 ) -> String {
-    rewrite_playlist_segments(raw_playlist, "Audio", item_id, play_session_id)
+    rewrite_playlist_segments(raw_playlist, "Audio", item_id, play_session_id, None)
 }
 
 /// `rewrite_variant_playlist`, with the request's `api_key` on every segment.
@@ -133,8 +133,7 @@ pub fn rewrite_variant_playlist_with_key(
     play_session_id: &str,
     api_key: Option<&str>,
 ) -> String {
-    let _ = api_key;
-    rewrite_variant_playlist(raw_playlist, item_id, play_session_id)
+    rewrite_playlist_segments(raw_playlist, "Videos", item_id, play_session_id, api_key)
 }
 
 /// `rewrite_audio_variant_playlist`, with the request's `api_key` on every segment.
@@ -144,8 +143,7 @@ pub fn rewrite_audio_variant_playlist_with_key(
     play_session_id: &str,
     api_key: Option<&str>,
 ) -> String {
-    let _ = api_key;
-    rewrite_audio_variant_playlist(raw_playlist, item_id, play_session_id)
+    rewrite_playlist_segments(raw_playlist, "Audio", item_id, play_session_id, api_key)
 }
 
 fn rewrite_playlist_segments(
@@ -153,15 +151,20 @@ fn rewrite_playlist_segments(
     prefix: &str,
     item_id: Uuid,
     play_session_id: &str,
+    api_key: Option<&str>,
 ) -> String {
     let mut result = String::with_capacity(raw_playlist.len() * 2);
+    // Players that sign with `api_key` fetch segments without headers.
+    let key = api_key
+        .map(|k| format!("?api_key={}", super::names::encode_query_value(k)))
+        .unwrap_or_default();
 
     for line in raw_playlist.lines() {
         if line.starts_with('#') || line.is_empty() {
             result.push_str(line);
         } else {
             result.push_str(&format!(
-                "/{prefix}/{item_id}/hls1/{play_session_id}/{line}"
+                "/{prefix}/{item_id}/hls1/{play_session_id}/{line}{key}"
             ));
         }
         result.push('\n');
