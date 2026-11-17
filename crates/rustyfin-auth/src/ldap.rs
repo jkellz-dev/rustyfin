@@ -29,6 +29,7 @@ pub struct LdapAuthResult {
     pub is_admin: bool,
 }
 
+/// Why an LDAPS sign-in failed.
 #[derive(Debug, thiserror::Error)]
 pub enum LdapAuthError {
     #[error("LDAP connection failed: {0}")]

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Where remote-controlled items go in the app's queue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlayCommand {
     PlayNow,
@@ -10,6 +11,7 @@ pub enum PlayCommand {
     PlayLast,
 }
 
+/// A playback command sent to a remote-controlled session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlaystateCommand {
     Stop,
@@ -22,6 +24,7 @@ pub enum PlaystateCommand {
     FastForward,
 }
 
+/// `POST /Sessions/{id}/Playing`: what to play on another session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PlayRequest {
@@ -34,6 +37,7 @@ pub struct PlayRequest {
     pub start_index: Option<i32>,
 }
 
+/// `POST /Sessions/{id}/Playing/{command}`: a playback command for another session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PlaystateRequest {
@@ -42,6 +46,7 @@ pub struct PlaystateRequest {
     pub controlling_user_id: Option<String>,
 }
 
+/// A named command with arguments for another session (`SetVolume`, `DisplayContent`, ...).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GeneralCommand {
@@ -51,6 +56,7 @@ pub struct GeneralCommand {
     pub controlling_user_id: Option<String>,
 }
 
+/// A message shown on another session's screen.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageCommand {

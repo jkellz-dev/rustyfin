@@ -48,6 +48,7 @@ pub struct DeviceProfile {
     pub subtitle_profiles: Vec<SubtitleProfile>,
 }
 
+/// A container and codecs the app plays as they are (`DeviceProfile.DirectPlayProfiles`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct DirectPlayProfile {
@@ -58,6 +59,7 @@ pub struct DirectPlayProfile {
     pub profile_type: Option<String>,
 }
 
+/// What the app wants a transcode to be (`DeviceProfile.TranscodingProfiles`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TranscodingProfile {
@@ -70,6 +72,7 @@ pub struct TranscodingProfile {
     pub context: Option<String>,
 }
 
+/// A subtitle format and how the app takes it (`Embed`, `External`, `Encode`, `Hls`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SubtitleProfile {

@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// One `activity_log` entry (sign-ins, scans, errors) shown in the admin.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ActivityLogRow {
     pub id: i64,

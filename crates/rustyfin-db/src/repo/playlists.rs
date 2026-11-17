@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// A playlist and who owns it.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PlaylistRow {
     pub id: Uuid,
@@ -13,6 +14,7 @@ pub struct PlaylistRow {
     pub updated_at: DateTime<Utc>,
 }
 
+/// One entry of a playlist (an item can be in it more than once).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PlaylistItemRow {
     pub id: Uuid,
@@ -21,6 +23,7 @@ pub struct PlaylistItemRow {
     pub sort_order: i32,
 }
 
+/// Another user a playlist is shared with.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PlaylistShareRow {
     pub playlist_id: Uuid,
@@ -28,6 +31,7 @@ pub struct PlaylistShareRow {
     pub can_edit: bool,
 }
 
+/// Create an empty playlist.
 pub async fn create(
     pool: &PgPool,
     name: &str,
@@ -44,6 +48,7 @@ pub async fn create(
     .await
 }
 
+/// The playlist with this id, if any.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PlaylistRow>, sqlx::Error> {
     sqlx::query_as::<_, PlaylistRow>("SELECT * FROM playlists WHERE id = $1")
         .bind(id)
@@ -51,6 +56,7 @@ pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PlaylistRow>, 
         .await
 }
 
+/// Rename a playlist.
 pub async fn update_name(pool: &PgPool, id: Uuid, name: &str) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE playlists SET name = $1, updated_at = NOW() WHERE id = $2")
         .bind(name)
@@ -60,6 +66,7 @@ pub async fn update_name(pool: &PgPool, id: Uuid, name: &str) -> Result<(), sqlx
     Ok(())
 }
 
+/// Delete a playlist.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM playlists WHERE id = $1")
         .bind(id)
@@ -68,6 +75,7 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// A playlist's entries in order, a page at a time.
 pub async fn list_items(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -84,6 +92,7 @@ pub async fn list_items(
     .await
 }
 
+/// Append items to the end of a playlist.
 pub async fn add_items(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -109,6 +118,7 @@ pub async fn add_items(
     Ok(())
 }
 
+/// Remove playlist entries by their entry ids (not item ids).
 pub async fn remove_items(pool: &PgPool, entry_ids: &[Uuid]) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM playlist_items WHERE id = ANY($1)")
         .bind(entry_ids)
@@ -117,6 +127,7 @@ pub async fn remove_items(pool: &PgPool, entry_ids: &[Uuid]) -> Result<(), sqlx:
     Ok(())
 }
 
+/// Move an item to a position in a playlist, shifting the entries after it.
 pub async fn move_item(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -141,6 +152,7 @@ pub async fn move_item(
     Ok(())
 }
 
+/// The users a playlist is shared with.
 pub async fn get_shares(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -151,6 +163,7 @@ pub async fn get_shares(
         .await
 }
 
+/// Share a playlist with a user, or change whether they may edit it.
 pub async fn set_share(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -168,6 +181,7 @@ pub async fn set_share(
     Ok(())
 }
 
+/// Stop sharing a playlist with a user.
 pub async fn remove_share(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -181,6 +195,7 @@ pub async fn remove_share(
     Ok(())
 }
 
+/// Whether a user may see a playlist: the owner, anyone when it is open, or a user it is shared with.
 pub async fn can_access(
     pool: &PgPool,
     playlist_id: Uuid,
@@ -202,6 +217,7 @@ pub async fn can_access(
     Ok(row.0)
 }
 
+/// Whether a user may change a playlist: the owner, or a user it is shared with for editing.
 pub async fn can_edit(
     pool: &PgPool,
     playlist_id: Uuid,

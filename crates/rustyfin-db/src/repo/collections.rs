@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// Add items to a collection; items already in it are skipped.
 pub async fn add_items(
     pool: &PgPool,
     collection_id: Uuid,
@@ -18,6 +19,7 @@ pub async fn add_items(
     Ok(())
 }
 
+/// Take items out of a collection.
 pub async fn remove_items(
     pool: &PgPool,
     collection_id: Uuid,
@@ -31,6 +33,7 @@ pub async fn remove_items(
     Ok(())
 }
 
+/// The ids of a collection's items.
 pub async fn list_item_ids(pool: &PgPool, collection_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
     let rows: Vec<(Uuid,)> =
         sqlx::query_as("SELECT item_id FROM collection_items WHERE collection_id = $1")

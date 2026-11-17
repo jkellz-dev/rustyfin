@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// A library: its name, type, folders' options and scan state.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct LibraryRow {
     pub id: Uuid,

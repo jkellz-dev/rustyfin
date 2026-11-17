@@ -1312,7 +1312,8 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] README overhaul (align with design book, badges, quick start)
 - [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
 - [x] Crate-level `//!` doc comments for each crate in the workspace (and the admin)
-- [ ] Inline doc comments for public API surfaces (models, repos, auth extractors)
+- [x] Inline doc comments for public API surfaces (models, repos, auth extractors): every top-level public item in
+      `rustyfin-models`, `rustyfin-db/src/repo` and `rustyfin-auth`
 
 ---
 

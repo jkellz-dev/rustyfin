@@ -2,6 +2,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// An app's saved display preferences for a user, if any.
 pub async fn get(
     pool: &PgPool,
     user_id: Uuid,
@@ -19,6 +20,7 @@ pub async fn get(
     Ok(row.map(|(data,)| data))
 }
 
+/// Save an app's display preferences for a user, replacing earlier ones.
 pub async fn upsert(
     pool: &PgPool,
     user_id: Uuid,

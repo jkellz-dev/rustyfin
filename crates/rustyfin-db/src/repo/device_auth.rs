@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// A pending device sign-in: the code shown on the device and the one the user enters.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DeviceAuthRow {
     pub id: Uuid,

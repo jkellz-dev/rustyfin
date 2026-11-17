@@ -134,6 +134,7 @@ pub async fn stats(pool: &PgPool, user_id: Uuid) -> Result<Vec<(String, i64, i64
     .await
 }
 
+/// One play in a user's history, with the item's name and kind as they were.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PlayRow {
     pub id: Uuid,

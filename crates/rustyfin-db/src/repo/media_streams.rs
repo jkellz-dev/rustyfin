@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// One stream of a file (video, audio, subtitle), or a subtitle file beside it (`is_external`).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MediaStreamRow {
     pub id: Uuid,
@@ -36,6 +37,7 @@ pub struct MediaStreamRow {
     pub is_interlaced: bool,
 }
 
+/// A stream for the scanner to insert.
 #[derive(Debug, Clone, Default)]
 pub struct NewMediaStream {
     pub item_id: Uuid,
@@ -167,6 +169,7 @@ pub async fn list_by_items(
     .await
 }
 
+/// An item's streams in stream order.
 pub async fn list_by_item(
     pool: &PgPool,
     item_id: Uuid,

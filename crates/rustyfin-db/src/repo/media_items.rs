@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{PgPool, QueryBuilder};
 use uuid::Uuid;
 
+/// A `media_items` row: a film, show, season, episode, artist, album, track, folder or extra.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MediaItemRow {
     pub id: Uuid,
@@ -216,6 +217,7 @@ pub async fn list_by_parents(
         .collect())
 }
 
+/// Items under a parent (top-level items when `None`), of the given types, a page at a time.
 pub async fn list_by_parent(
     pool: &PgPool,
     parent_id: Option<Uuid>,
@@ -543,6 +545,7 @@ pub async fn find_by_name_and_parent(
     }
 }
 
+/// An item for the scanner to insert.
 pub struct NewMediaItem {
     pub item_type: String,
     pub library_id: Option<Uuid>,
@@ -721,6 +724,7 @@ pub async fn delete_empty_pathless_folders(
     Ok(total)
 }
 
+/// Delete the item for this file; `false` when there was none.
 pub async fn delete_by_path(pool: &PgPool, path: &str) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM media_items WHERE path = $1")
         .bind(path)
@@ -836,6 +840,7 @@ pub async fn count_by_type(
     .await
 }
 
+/// How many items there are, of every kind.
 pub async fn count_all(pool: &PgPool) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM media_items")
         .fetch_one(pool)
@@ -917,6 +922,7 @@ pub async fn count_items_by_years(
     Ok(by_year)
 }
 
+/// How many items of each type were made in a year, within one library when given.
 pub async fn count_items_by_year(
     pool: &PgPool,
     year: i32,
@@ -1088,6 +1094,7 @@ pub async fn album_of(pool: &PgPool, folder_id: Uuid) -> Result<Option<Uuid>, sq
     Ok(row.and_then(|r| r.0))
 }
 
+/// Replace an item's artist names.
 pub async fn set_artists(pool: &PgPool, id: Uuid, artists: &[String]) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE media_items SET artists = $2 WHERE id = $1")
         .bind(id)
@@ -1559,6 +1566,7 @@ fn push_artist_where(qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, f: &Artist
     );
 }
 
+/// Artists matching the filter, by sort name, a page at a time, with the total.
 pub async fn list_artists(
     pool: &PgPool,
     filter: &ArtistFilter<'_>,

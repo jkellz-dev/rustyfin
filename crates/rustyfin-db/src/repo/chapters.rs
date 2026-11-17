@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// One chapter of a video: its start and name.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ChapterRow {
     pub id: Uuid,

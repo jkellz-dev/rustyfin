@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// A person (actor, director, writer, ...).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PersonRow {
     pub id: Uuid,
@@ -13,6 +14,7 @@ pub struct PersonRow {
     pub provider_person_id: Option<String>,
 }
 
+/// A person in an item's cast or crew: their role and billing order.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct MediaItemPersonRow {
     pub item_id: Uuid,
@@ -30,6 +32,7 @@ pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PersonRow>, sq
         .await
 }
 
+/// The person with this name, ignoring case.
 pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<PersonRow>, sqlx::Error> {
     sqlx::query_as::<_, PersonRow>("SELECT * FROM people WHERE LOWER(name) = LOWER($1) LIMIT 1")
         .bind(name)

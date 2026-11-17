@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// A signed-in device: its access token, user, app and device.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SessionRow {
     pub id: Uuid,

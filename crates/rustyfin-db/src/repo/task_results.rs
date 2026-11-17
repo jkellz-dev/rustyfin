@@ -1,5 +1,6 @@
 use sqlx::PgPool;
 
+/// One run of a scheduled task and how it ended.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct TaskResultRow {
     pub id: i64,
@@ -11,6 +12,7 @@ pub struct TaskResultRow {
     pub error_message: Option<String>,
 }
 
+/// Record that a task started; returns the run's id.
 pub async fn insert_running(
     pool: &PgPool,
     task_key: &str,
@@ -26,6 +28,7 @@ pub async fn insert_running(
     Ok(row.0)
 }
 
+/// Record that a run finished.
 pub async fn mark_completed(pool: &PgPool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE task_results SET status = 'Completed', ended_at = now() WHERE id = $1")
         .bind(id)
@@ -34,6 +37,7 @@ pub async fn mark_completed(pool: &PgPool, id: i64) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// Record that a run failed, with the error.
 pub async fn mark_error(pool: &PgPool, id: i64, error: &str) -> Result<(), sqlx::Error> {
     sqlx::query(
         "UPDATE task_results SET status = 'Error', ended_at = now(), error_message = $2 WHERE id = $1",
@@ -45,6 +49,7 @@ pub async fn mark_error(pool: &PgPool, id: i64, error: &str) -> Result<(), sqlx:
     Ok(())
 }
 
+/// Record that a run was cancelled.
 pub async fn mark_cancelled(pool: &PgPool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE task_results SET status = 'Cancelled', ended_at = now() WHERE id = $1")
         .bind(id)
@@ -53,6 +58,7 @@ pub async fn mark_cancelled(pool: &PgPool, id: i64) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// A task's most recent run, if it ever ran.
 pub async fn latest_by_task_key(
     pool: &PgPool,
     task_key: &str,
@@ -65,6 +71,7 @@ pub async fn latest_by_task_key(
     .await
 }
 
+/// Mark runs left `Running` by a server that stopped as failed; returns how many.
 pub async fn cleanup_stale_running(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
         "UPDATE task_results SET status = 'Error', ended_at = now(), error_message = 'Server shutdown during execution' WHERE status = 'Running'",

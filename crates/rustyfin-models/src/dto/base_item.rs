@@ -575,6 +575,7 @@ pub struct SystemHealth {
     pub caches: Vec<CacheHealth>,
 }
 
+/// The database part of the dashboard's system health.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct DatabaseHealth {
@@ -586,6 +587,7 @@ pub struct DatabaseHealth {
     pub error: Option<String>,
 }
 
+/// The search part of the dashboard's system health.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct SearchHealth {
@@ -605,6 +607,7 @@ pub struct LibraryHealth {
     pub folders: Vec<FolderHealth>,
 }
 
+/// One library folder's state in the dashboard's system health.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct FolderHealth {

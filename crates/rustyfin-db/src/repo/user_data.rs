@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// What a user did with an item: position, played, favourite, play count, rating.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserDataRow {
     pub user_id: Uuid,
@@ -89,6 +90,7 @@ pub async fn folder_progress(
         .collect())
 }
 
+/// Set a user's position, played state, favourite and play count for an item, now as the last played time.
 pub async fn upsert(
     pool: &PgPool,
     user_id: Uuid,

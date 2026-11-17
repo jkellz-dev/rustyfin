@@ -75,6 +75,7 @@ pub struct TaskInfoDto {
     pub triggers: Vec<TaskTriggerDto>,
 }
 
+/// The last run of a scheduled task, as Jellyfin reports it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TaskResultDto {
@@ -89,6 +90,7 @@ pub struct TaskResultDto {
     pub error_message: Option<String>,
 }
 
+/// When a scheduled task runs (interval, daily, on startup).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct TaskTriggerDto {

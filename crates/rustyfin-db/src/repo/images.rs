@@ -1,6 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// An image of an item, person or user: its type, file and size.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ImageRow {
     pub id: Uuid,
@@ -17,6 +18,7 @@ pub struct ImageRow {
     pub file_mtime: Option<i64>,
 }
 
+/// An image to record for an item or person.
 pub struct NewImage {
     pub entity_id: Uuid,
     pub image_type: String,
