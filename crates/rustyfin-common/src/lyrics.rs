@@ -48,7 +48,7 @@ fn embedded_lyrics(track: &Path) -> Option<String> {
     use lofty::tag::ItemKey;
     let file = lofty::read_from_path(track).ok()?;
     let tag = file.primary_tag().or_else(|| file.first_tag())?;
-    let text = tag.get_string(&ItemKey::Lyrics)?.trim();
+    let text = tag.get_string(ItemKey::Lyrics)?.trim();
     (!text.is_empty()).then(|| text.to_string())
 }
 

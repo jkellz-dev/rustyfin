@@ -26,7 +26,6 @@ pub struct AudioTags {
     pub total_discs: Option<u32>,
     pub barcode: Option<String>,
     pub catalog_number: Option<String>,
-    pub release_status: Option<String>,
     pub release_country: Option<String>,
     /// Lyrics in the tags (USLT/SYLT, Vorbis LYRICS, ...).
     pub has_lyrics: bool,
@@ -39,91 +38,38 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
     let tagged = lofty::read_from_path(path).ok()?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag())?;
 
-    // Helper: try a built-in ItemKey first, then fall back to raw Vorbis comment key names
-    let get = |keys: &[ItemKey]| -> Option<String> {
-        for key in keys {
-            if let Some(val) = tag.get_string(key) {
-                return Some(val.to_string());
-            }
-        }
-        None
-    };
-
-    let get_u32 =
-        |keys: &[ItemKey]| -> Option<u32> { get(keys).and_then(|s| s.parse::<u32>().ok()) };
+    // lofty maps each format's own names onto these keys (Vorbis
+    // `MUSICBRAINZ_ALBUMID`, `ORGANIZATION`, `TOTALTRACKS`, ID3v2 TXXX, MP4
+    // freeform atoms, ...).
+    let get = |key: ItemKey| tag.get_string(key).map(str::to_string);
 
     Some(AudioTags {
         has_lyrics: tag
-            .get_string(&ItemKey::Lyrics)
+            .get_string(ItemKey::Lyrics)
             .is_some_and(|l| !l.trim().is_empty()),
         title: tag.title().map(|s| s.to_string()),
         artist: tag.artist().map(|s| s.to_string()),
-        album_artist: tag.get_string(&ItemKey::AlbumArtist).map(|s| s.to_string()),
+        album_artist: get(ItemKey::AlbumArtist),
         album: tag.album().map(|s| s.to_string()),
         track_number: tag.track(),
         disc_number: tag.disk(),
-        year: tag.year().map(|y| y as i32),
+        year: tag.date().map(|d| i32::from(d.year)),
         genre: tag.genre().map(|s| s.to_string()),
         has_embedded_art: !tag.pictures().is_empty(),
 
-        musicbrainz_artist_id: get(&[
-            ItemKey::MusicBrainzArtistId,
-            ItemKey::Unknown("MUSICBRAINZ_ARTISTID".to_string()),
-        ]),
-        musicbrainz_album_id: get(&[
-            ItemKey::MusicBrainzReleaseId,
-            ItemKey::Unknown("MUSICBRAINZ_ALBUMID".to_string()),
-        ]),
-        musicbrainz_release_group_id: get(&[
-            ItemKey::MusicBrainzReleaseGroupId,
-            ItemKey::Unknown("MUSICBRAINZ_RELEASEGROUPID".to_string()),
-        ]),
-        musicbrainz_album_artist_id: get(&[
-            ItemKey::MusicBrainzReleaseArtistId,
-            ItemKey::Unknown("MUSICBRAINZ_ALBUMARTISTID".to_string()),
-        ]),
-        musicbrainz_track_id: get(&[
-            ItemKey::MusicBrainzTrackId,
-            ItemKey::Unknown("MUSICBRAINZ_RELEASETRACKID".to_string()),
-        ]),
-        label: get(&[
-            ItemKey::Label,
-            ItemKey::Unknown("LABEL".to_string()),
-            ItemKey::Unknown("ORGANIZATION".to_string()),
-        ]),
-        album_type: get(&[
-            ItemKey::Unknown("RELEASETYPE".to_string()),
-            ItemKey::Unknown("MUSICBRAINZ_ALBUMTYPE".to_string()),
-        ]),
-        original_date: get(&[
-            ItemKey::OriginalReleaseDate,
-            ItemKey::Unknown("ORIGINALDATE".to_string()),
-            ItemKey::Unknown("ORIGINALYEAR".to_string()),
-        ]),
-        total_tracks: tag.track_total().or_else(|| {
-            get_u32(&[
-                ItemKey::TrackTotal,
-                ItemKey::Unknown("TOTALTRACKS".to_string()),
-                ItemKey::Unknown("TRACKTOTAL".to_string()),
-            ])
-        }),
-        total_discs: tag.disk_total().or_else(|| {
-            get_u32(&[
-                ItemKey::DiscTotal,
-                ItemKey::Unknown("TOTALDISCS".to_string()),
-                ItemKey::Unknown("DISCTOTAL".to_string()),
-            ])
-        }),
-        barcode: get(&[ItemKey::Barcode, ItemKey::Unknown("BARCODE".to_string())]),
-        catalog_number: get(&[
-            ItemKey::CatalogNumber,
-            ItemKey::Unknown("CATALOGNUMBER".to_string()),
-        ]),
-        release_status: get(&[
-            ItemKey::Unknown("RELEASESTATUS".to_string()),
-            ItemKey::Unknown("MUSICBRAINZ_ALBUMSTATUS".to_string()),
-        ]),
-        release_country: get(&[ItemKey::Unknown("RELEASECOUNTRY".to_string())]),
+        musicbrainz_artist_id: get(ItemKey::MusicBrainzArtistId),
+        musicbrainz_album_id: get(ItemKey::MusicBrainzReleaseId),
+        musicbrainz_release_group_id: get(ItemKey::MusicBrainzReleaseGroupId),
+        musicbrainz_album_artist_id: get(ItemKey::MusicBrainzReleaseArtistId),
+        musicbrainz_track_id: get(ItemKey::MusicBrainzTrackId),
+        label: get(ItemKey::Label),
+        album_type: get(ItemKey::MusicBrainzReleaseType),
+        original_date: get(ItemKey::OriginalReleaseDate),
+        total_tracks: tag.track_total(),
+        total_discs: tag.disk_total(),
+        barcode: get(ItemKey::Barcode),
+        catalog_number: get(ItemKey::CatalogNumber),
+        release_country: get(ItemKey::ReleaseCountry),
     })
 }
 
@@ -266,14 +212,14 @@ pub fn read_track_query(path: &Path) -> Option<TrackQuery> {
         v.map(|x| x.trim().to_string()).filter(|x| !x.is_empty())
     };
     let artist =
-        s(tag.artist()).or_else(|| s(tag.get_string(&ItemKey::AlbumArtist).map(Into::into)))?;
+        s(tag.artist()).or_else(|| s(tag.get_string(ItemKey::AlbumArtist).map(Into::into)))?;
     Some(TrackQuery {
         artist,
         title: s(tag.title())?,
         album: s(tag.album())?,
         duration_secs: (duration_secs > 0).then_some(duration_secs)?,
         has_lyrics: tag
-            .get_string(&ItemKey::Lyrics)
+            .get_string(ItemKey::Lyrics)
             .is_some_and(|l| !l.trim().is_empty()),
     })
 }
