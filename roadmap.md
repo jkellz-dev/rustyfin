@@ -1148,8 +1148,8 @@ validation, and polish needed for daily use.
 
 - [x] Cast & crew portrait cards with headshot images (initials fallback)
 - [x] Sorting controls (by name, date added, year, rating)
-- [x] Filtering by genre, year, rating, item type: genre, year and minimum rating on a library (kept in the address);
-      the library sets the item type
+- [x] Filtering by genre, year, rating, item type: genre, year and minimum rating on film and show libraries (kept in
+      the address); the library sets the item type
 - [x] Grid/list view toggle (remembered in the browser)
 - [x] Watched/unwatched badges on posters
 - [x] Playback progress bars on in-progress items

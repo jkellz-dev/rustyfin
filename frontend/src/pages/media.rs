@@ -624,8 +624,12 @@ pub fn Media(path: String) -> View {
                         } else {
                             view! {}
                         };
-                        // Filters by genre, year and rating (library level only).
-                        let filters = if sortable {
+                        // Filters by genre, year and rating: films and shows at a
+                        // library's top level (artists have no year or rating).
+                        let filterable = sortable
+                            && matches!(current_query.get().item_types, Some("Movie") | Some("Series"));
+                        let filtered = here.with(|r| matches!(r, MediaRoute::Library { filter, .. } if !filter.is_empty()));
+                        let filters = if filterable {
                             let current = here.with(|r| match r {
                                 MediaRoute::Library { filter, .. } => filter.clone(),
                                 _ => Default::default(),
@@ -728,7 +732,18 @@ pub fn Media(path: String) -> View {
                             })
                         };
                         if item_list.is_empty() {
-                            view! { div(class="empty-state") { "No items found." } }
+                            // The toolbar stays, so a filter that matches nothing can be cleared.
+                            let message = if filtered {
+                                "Nothing matches these filters."
+                            } else {
+                                "No items found."
+                            };
+                            view! {
+                                div {
+                                    (sort_bar)
+                                    div(class="empty-state") { (message) }
+                                }
+                            }
                         } else {
                             view! {
                                 div {
