@@ -59,13 +59,13 @@ fn main() {
                             Sidebar {}
                             main(class="main-content", id="main", tabindex="-1") {
                                 // Only this dynamic block rebuilds on route changes
-                                (match {
+                                ({
                                     let path = web_sys::window()
                                         .and_then(|w| w.location().pathname().ok())
                                         .unwrap_or_default();
                                     a11y::announce_page(&path);
-                                    route.get_clone()
-                                } {
+                                    let current = route.get_clone();
+                                    match current {
                                     AppRoutes::Setup => view! { Setup {} },
                                     AppRoutes::Libraries => view! { Libraries {} },
                                     AppRoutes::Media { path } => view! { Media(path=format!("/web/media/{}", path.join("/"))) },
@@ -73,6 +73,7 @@ fn main() {
                                     AppRoutes::UserDetail { id } => view! { UserDetail(user_id=id) },
                                     AppRoutes::Tasks => view! { Tasks {} },
                                     _ => view! { Dashboard {} },
+                                    }
                                 })
                             }
                         }
