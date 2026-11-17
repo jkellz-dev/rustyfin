@@ -1878,7 +1878,7 @@ impl ItemQuery {
         Ok(count)
     }
 
-    fn apply_filters<'a>(&'a self, qb: &mut QueryBuilder<sqlx::Postgres>) {
+    fn apply_filters(&self, qb: &mut QueryBuilder<sqlx::Postgres>) {
         // Scoping. Extras belong to their title and are never listed on
         // their own, unless asked for by id.
         if self.ids.is_empty() {
@@ -2050,7 +2050,7 @@ impl ItemQuery {
         }
     }
 
-    fn apply_sorting<'a>(&'a self, qb: &mut QueryBuilder<sqlx::Postgres>) {
+    fn apply_sorting(&self, qb: &mut QueryBuilder<sqlx::Postgres>) {
         // Numbered items (seasons, episodes, tracks) go by their numbers before
         // their names: an episode's name is its title, not its place, so
         // "by name" means by season and episode number first, as in Jellyfin
