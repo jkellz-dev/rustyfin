@@ -479,4 +479,70 @@ mod tests {
         assert_eq!(decision.target_audio_codec.as_deref(), Some("aac"));
         assert_eq!(decision.target_container.as_deref(), Some("ts"));
     }
+
+    fn make_browser_profile() -> DeviceProfile {
+        DeviceProfile {
+            name: Some("Browser".to_string()),
+            max_streaming_bitrate: Some(120_000_000),
+            max_static_bitrate: None,
+            direct_play_profiles: vec![
+                DirectPlayProfile {
+                    container: Some("mp4".to_string()),
+                    video_codec: Some("h264".to_string()),
+                    audio_codec: Some("aac".to_string()),
+                    profile_type: Some("Video".to_string()),
+                },
+                DirectPlayProfile {
+                    container: Some("mp3,flac".to_string()),
+                    video_codec: None,
+                    audio_codec: None,
+                    profile_type: Some("Audio".to_string()),
+                },
+            ],
+            transcoding_profiles: vec![TranscodingProfile {
+                container: Some("ts".to_string()),
+                video_codec: None,
+                audio_codec: Some("aac".to_string()),
+                protocol: Some("hls".to_string()),
+                profile_type: Some("Audio".to_string()),
+                context: Some("Streaming".to_string()),
+            }],
+            subtitle_profiles: vec![],
+        }
+    }
+
+    /// Jellyfin matches a music file against the profile's Audio entries
+    /// (a track has no video stream): an MP3 the client lists plays as it is.
+    #[test]
+    fn a_track_matches_the_audio_profiles() {
+        let source = make_source("mp3", Some(320_000));
+        let streams = vec![make_audio_stream("mp3")];
+        let decision =
+            decide_play_method(&source, &streams, &make_browser_profile(), None, None, None);
+        assert_eq!(
+            decision.play_method,
+            PlayMethod::DirectPlay,
+            "{:?}",
+            decision.reasons
+        );
+    }
+
+    #[test]
+    fn a_track_the_client_cannot_play_is_transcoded() {
+        let source = make_source("wma", Some(320_000));
+        let streams = vec![make_audio_stream("wmav2")];
+        let decision =
+            decide_play_method(&source, &streams, &make_browser_profile(), None, None, None);
+        assert_ne!(decision.play_method, PlayMethod::DirectPlay);
+    }
+
+    /// Video files still only match Video entries.
+    #[test]
+    fn a_film_does_not_match_the_audio_profiles() {
+        let source = make_source("mp3", Some(1_000_000));
+        let streams = vec![make_video_stream("h264"), make_audio_stream("mp3")];
+        let decision =
+            decide_play_method(&source, &streams, &make_browser_profile(), None, None, None);
+        assert_ne!(decision.play_method, PlayMethod::DirectPlay);
+    }
 }
