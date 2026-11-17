@@ -38,6 +38,8 @@ fn ids(body: &Value) -> Vec<String> {
         .unwrap_or_else(|| panic!("{body}"))
         .iter()
         .map(|d| d["Id"].as_str().unwrap_or_default().to_string())
+        // The test helper's own sign-in when it made the user.
+        .filter(|id| !id.starts_with("test-device-"))
         .collect()
 }
 
@@ -56,7 +58,10 @@ async fn an_admin_lists_a_users_devices_and_signs_one_out() {
     let mut found = ids(&body);
     found.sort();
     assert_eq!(found, vec!["phone-1", "tv-1"], "{body}");
-    assert_eq!(body["TotalRecordCount"], 2);
+    assert_eq!(
+        body["TotalRecordCount"], 3,
+        "two devices and the helper's own: {body}"
+    );
     let tv_entry = body["Items"]
         .as_array()
         .unwrap()
