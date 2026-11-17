@@ -94,7 +94,8 @@ pub fn parse_mediabrowser_header(value: &str) -> MediaBrowserAuth {
             match key {
                 "Client" => auth.client = Some(unescape(val)),
                 "Device" => auth.device = Some(unescape(val)),
-                "DeviceId" => auth.device_id = Some(unescape(val)),
+                // A key: kept as sent so known devices keep their sessions.
+                "DeviceId" => auth.device_id = Some(val.to_string()),
                 "Version" => auth.version = Some(unescape(val)),
                 "Token" => auth.token = Some(val.to_string()),
                 _ => {}
@@ -241,7 +242,7 @@ mod tests {
         let auth = parse_mediabrowser_header(header);
         assert_eq!(auth.client.as_deref(), Some("Plezy tvOS"));
         assert_eq!(auth.device.as_deref(), Some("Apple TV"));
-        assert_eq!(auth.device_id.as_deref(), Some("a/b"));
+        assert_eq!(auth.device_id.as_deref(), Some("a%2Fb"));
         // Not an escape: kept as sent.
         let auth =
             parse_mediabrowser_header(r#"MediaBrowser Client="100%", Device="J%C3%BCrgen%zz""#);
@@ -335,12 +336,12 @@ mod tests {
 
     #[test]
     fn auth_url_encoded_values() {
-        // Known limitation: the parser does NOT URL-decode values. Percent-
-        // encoded characters are returned as-is.
+        // Names are decoded for display; the device id is a key and stays
+        // as sent, so devices already known keep their sessions.
         let header = r#"MediaBrowser Client="App%20Name", DeviceId="abc%2F123", Token="tok""#;
         let auth = parse_mediabrowser_header(header);
 
-        assert_eq!(auth.client.as_deref(), Some("App%20Name"));
+        assert_eq!(auth.client.as_deref(), Some("App Name"));
         assert_eq!(auth.device_id.as_deref(), Some("abc%2F123"));
         assert_eq!(auth.token.as_deref(), Some("tok"));
     }
