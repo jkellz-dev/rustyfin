@@ -1,0 +1,68 @@
+# Dependabot version updates: one grouped pull request per ecosystem per week
+# for minor and patch releases; a major release gets its own pull request.
+# Security updates (from the Dependabot alerts) are switched on in the repository
+# settings and are not held back by the cooldown below.
+#
+# Merge them with "Rebase and merge" (main stays linear); each pull request runs
+# ci.yml, so a red one shows before it lands.
+version: 2
+updates:
+  # The server workspace.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      cargo:
+        update-types: [minor, patch]
+
+  # The admin UI is its own workspace with its own lockfile.
+  - package-ecosystem: cargo
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build(admin)
+    groups:
+      admin:
+        update-types: [minor, patch]
+
+  # Workflow actions (pinned by SHA; Dependabot keeps the version comments).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
+      include: scope
+    ignore:
+      # Its tags name Rust releases: the toolchain is pinned on purpose
+      # (rust-toolchain.toml) and moved by hand with mbx.
+      - dependency-name: dtolnay/rust-toolchain
+    groups:
+      actions:
+        update-types: [minor, patch]
+        exclude-patterns:
+          # mbx changes are reviewed on their own (cache behaviour).
+          - jdx/mr-boxington-action
