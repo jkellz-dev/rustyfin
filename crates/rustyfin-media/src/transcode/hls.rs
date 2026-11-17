@@ -126,6 +126,28 @@ pub fn rewrite_audio_variant_playlist(
     rewrite_playlist_segments(raw_playlist, "Audio", item_id, play_session_id)
 }
 
+/// `rewrite_variant_playlist`, with the request's `api_key` on every segment.
+pub fn rewrite_variant_playlist_with_key(
+    raw_playlist: &str,
+    item_id: Uuid,
+    play_session_id: &str,
+    api_key: Option<&str>,
+) -> String {
+    let _ = api_key;
+    rewrite_variant_playlist(raw_playlist, item_id, play_session_id)
+}
+
+/// `rewrite_audio_variant_playlist`, with the request's `api_key` on every segment.
+pub fn rewrite_audio_variant_playlist_with_key(
+    raw_playlist: &str,
+    item_id: Uuid,
+    play_session_id: &str,
+    api_key: Option<&str>,
+) -> String {
+    let _ = api_key;
+    rewrite_audio_variant_playlist(raw_playlist, item_id, play_session_id)
+}
+
 fn rewrite_playlist_segments(
     raw_playlist: &str,
     prefix: &str,
@@ -259,5 +281,28 @@ mod tests {
         assert_eq!(audio_codec_string(AudioCodec::EAC3), "ec-3");
         assert_eq!(audio_codec_string(AudioCodec::Opus), "opus");
         assert_eq!(audio_codec_string(AudioCodec::FLAC), "fLaC");
+    }
+
+    #[test]
+    fn segment_links_carry_the_key() {
+        let raw = "#EXTM3U\n#EXTINF:6.0,\n0.ts\n#EXTINF:6.0,\n1.ts\n";
+        let out = rewrite_variant_playlist_with_key(raw, Uuid::nil(), "ps", Some("tok"));
+        let id = Uuid::nil();
+        assert!(
+            out.contains(&format!("/Videos/{id}/hls1/ps/0.ts?api_key=tok")),
+            "{out}"
+        );
+        assert!(
+            out.contains(&format!("/Videos/{id}/hls1/ps/1.ts?api_key=tok")),
+            "{out}"
+        );
+        let plain = rewrite_variant_playlist_with_key(raw, Uuid::nil(), "ps", None);
+        assert!(!plain.contains("api_key"), "{plain}");
+        let audio = rewrite_audio_variant_playlist_with_key(raw, Uuid::nil(), "ps", Some("a b"));
+        assert!(audio.contains("/Audio/"), "{audio}");
+        assert!(
+            audio.contains("0.ts?api_key=a%20b"),
+            "the key is encoded: {audio}"
+        );
     }
 }
