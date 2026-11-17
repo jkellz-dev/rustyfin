@@ -13,7 +13,11 @@ server_name = "Rustyfin"                       # Display name in API responses
 
 # ── Database ──────────────────────────────────────────────
 [database]
-url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
+host = "localhost"
+port = 5432
+user = "rustyfin"
+password = "rustyfin"
+name = "rustyfin"
 
 # ── Metadata ──────────────────────────────────────────────
 [metadata]
@@ -24,6 +28,10 @@ url = "postgres://rustyfin:rustyfin@localhost/rustyfin"
 # [search]
 # meilisearch_url = "http://localhost:7700"
 # meilisearch_key = "your-master-key"
+
+# ── Metrics (optional) ────────────────────────────────────
+# [metrics]
+# listen = "0.0.0.0:9090"                      # Prometheus GET /metrics on its own port (unset: off)
 
 # ── Transcoding ───────────────────────────────────────────
 # [transcode]

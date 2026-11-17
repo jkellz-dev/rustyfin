@@ -1286,7 +1286,8 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 ### 14b. Project Documentation
 
 - [ ] Getting started guide (install, configure `rustyfin.toml`, connect a client)
-- [ ] Configuration reference (all `rustyfin.toml` options, env vars, defaults)
+- [x] Configuration reference (all `rustyfin.toml` options, env vars, defaults): `docs/configuration.md`, checked
+      against `config.rs`
 - [ ] Architecture overview (crate map, request lifecycle, auth flow)
 - [ ] API compatibility guide (which Jellyfin endpoints are supported, stubs vs real)
 - [ ] Deployment guide (Docker, systemd, reverse proxy setup with Caddy/nginx/Traefik)

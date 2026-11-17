@@ -21,8 +21,9 @@ user = "rustyfin"
 password = "rustyfin"
 name = "rustyfin"
 
-[media]
-paths = ["/data/media"]
+[auth.forward_auth]
+trusted_proxies = ["10.0.0.0/8"]
+admin_group = "admin"
 
 [search]
 meilisearch_url = "http://localhost:7700"
@@ -33,6 +34,9 @@ tmdb_api_key = "your-tmdb-api-key"
 ```
 
 ## Environment Variables
+
+At least one way of signing in, `[auth.forward_auth]` or `[auth.ldap]`, must be configured: the server will not start
+without one. Every setting, with its default, is in [`rustyfin.example.toml`](../rustyfin.example.toml).
 
 Environment variables use double-underscore `__` as a separator to map to nested TOML keys. For example,
 `RUSTYFIN__DATABASE__HOST` maps to `database.host`.
@@ -59,6 +63,8 @@ Environment variables use double-underscore `__` as a separator to map to nested
 | `port` | `u16` | `8096` | Port the HTTP server binds to |
 | `base_url` | `String` | `http://localhost:8096` | External URL clients use to reach the server |
 | `server_name` | `String` | `Rustyfin` | Human-readable server name shown in clients |
+| `image_cache_dir` | `String` | system temp dir + `rustyfin-image-cache` | Where resized artwork is kept |
+| `user_image_url_template` | `String` | --- | Address of user pictures, e.g. `https://gravatar.com/avatar/{email_hash}?s=256` |
 | `cors_allowed_origins` | `[String]` | `[]` | Web origins (`https://host[:port]`) that may call the API from another site. Empty: same-origin only. `["*"]`: any origin. Native apps are unaffected |
 
 ### `[database]`
@@ -83,12 +89,6 @@ CREATE DATABASE rustyfin OWNER rustyfin;
 ```
 
 The server creates all tables automatically via migrations at startup — no manual schema setup is needed.
-
-### `[media]`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `paths` | `Vec<String>` | `[]` | Default media paths (libraries configured via API take precedence) |
 
 ### `[search]` (optional)
 
@@ -122,6 +122,75 @@ Metrics get their own listener and are never served on the public port. Unset, t
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `tmdb_api_key` | `String` | --- | TMDB API v3 key for metadata enrichment |
+| `people_cache_dir` | `String` | --- | Headshots fetched by the `rustyfin` tool (`~/` allowed); must match the tool's setting |
+
+### `[transcode]` (optional)
+
+Without the section, the defaults below apply.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `ffmpeg_path` | `String` | `ffmpeg` | The ffmpeg binary (from `PATH` by default) |
+| `temp_dir` | `String` | system temp dir | Where HLS segments are written |
+| `hardware_acceleration` | `String` | `none` | `none`, `qsv`, `vaapi` or `nvenc` |
+| `max_concurrent` | integer | `4` | Transcodes at once (`0`: no limit) |
+| `segment_duration` | integer | `6` | HLS segment length in seconds |
+| `threads_per_job` | integer | `0` | ffmpeg threads per transcode (`0`: ffmpeg decides) |
+
+### `[auth.forward_auth]`
+
+Sign-in by a reverse proxy (Tailscale, Authelia, Authentik, ...) that puts the user's identity in request headers.
+Rustyfin creates the user on first sign-in. Headers are only believed from the proxies listed.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `trusted_proxies` | `[String]` | (required) | CIDR ranges the proxy connects from, e.g. `["10.0.0.0/8"]`; checked at startup |
+| `admin_group` | `String` | --- | Users whose groups header contains this value are administrators |
+
+`[auth.forward_auth.headers]` names the headers:
+
+| Field | Default | Holds |
+|-------|---------|-------|
+| `user` | `Remote-User` | The username (required on each request) |
+| `name` | `Remote-Name` | Display name |
+| `email` | `Remote-Email` | Email |
+| `groups` | `Remote-Groups` | Comma-separated groups |
+
+### `[auth.ldap]` (optional)
+
+Password sign-in for apps that ask for one, checked by binding to an LDAPS server. Rustyfin stores no passwords.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `url` | `String` | (required) | Must start with `ldaps://` (STARTTLS is not supported) |
+| `bind_dn` | `String` | (required) | Service account used to find users |
+| `bind_password` | `String` | (required) | Its password |
+| `search_base` | `String` | (required) | Where users are searched |
+| `user_filter` | `String` | `(uid={})` | `{}` becomes the username |
+| `mail_attr` | `String` | `mail` | Attribute holding the email |
+| `display_name_attr` | `String` | `cn` | Attribute holding the display name |
+| `admin_group_dn` | `String` | --- | Members of this group are administrators |
+
+### `[tasks]`
+
+Scheduled maintenance. Schedules are named in `[tasks.schedules.<name>]` (a 7-field cron: seconds first, then minute,
+hour, day, month, weekday, year) and each task refers to one by name.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Run scheduled tasks at all |
+| `run_on_startup` | bool | `true` | Run every task once when the server starts |
+| `jitter_seconds` | integer | `300` | Random delay added to each scheduled run |
+| `schedules.daily.cron` | `String` | `0 0 3 * * * *` | 03:00 every day |
+| `schedules.weekly.cron` | `String` | `0 0 4 * * 7 *` | 04:00 on Sundays |
+| `library_scan.default_schedule` | `String` | `daily` | When libraries are scanned |
+| `library_scan.library_schedules` | table | `{}` | Per-library overrides, library name to schedule name |
+| `search_reindex.schedule` | `String` | `daily` | Rebuild the search index |
+| `activity_log_prune.schedule`, `.retention_days` | `String`, integer | `daily`, `90` | Drop older activity entries |
+| `session_cleanup.schedule`, `.inactive_days` | `String`, integer | `daily`, `30` | End sessions idle this long |
+| `transcode_temp_cleanup.schedule` | `String` | `daily` | Remove leftover transcode segments |
+| `db_optimize.schedule` | `String` | `weekly` | Postgres maintenance |
+| `image_cache_prune.schedule`, `.max_age_days` | `String`, integer | `weekly`, `30` | Drop resized images not used this long |
 
 Obtain a free key from [themoviedb.org](https://www.themoviedb.org/settings/api). Without it, metadata enrichment relies
 solely on local NFO files.
