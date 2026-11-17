@@ -634,6 +634,28 @@ Same with explicit media source ID.
 
 Get a subtitle stream in the specified format (`vtt`, `srt`, `ass`).
 
+### `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}`
+
+### `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/{startPositionTicks}/Stream.{format}`
+
+The same for one media source (a film's version). The second form is the address `DeliveryUrl` gives, with a start of
+0; a later start is not applied (the whole file is sent).
+
+### How PlaybackInfo offers subtitles
+
+With a device profile, every subtitle stream in `PlaybackInfo` gets a `DeliveryMethod` from the profile's
+`SubtitleProfiles`, in Jellyfin's order:
+
+1. `Embed`: the stream is inside the file, the file is played as it is (direct play), and the profile lists the format
+   with `Method: Embed`.
+2. `External`: the profile lists the stream's format with `Method: External`, or, for a text subtitle, any text format
+   (`vtt`, `srt`, `ass`, `ssa`) it can be converted to. `DeliveryUrl` is
+   `/Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/0/Stream.{format}?ApiKey={token}` and `IsExternalUrl` is
+   `false` (relative to the server).
+3. `Encode`: otherwise; the subtitle is burnt into a transcode.
+
+Without a device profile (sent or stored for the session) no `DeliveryMethod` is set.
+
 ---
 
 ## Sessions

@@ -358,8 +358,13 @@ threads_per_job = 0           # 0 = auto
 GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt
 GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt
 GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}
+GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}
+GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/{startPositionTicks}/Stream.{format}
 ```
 
+- PlaybackInfo tells each app how to get each subtitle (`DeliveryMethod`: Embed, External with a `DeliveryUrl`, or
+  Encode) from its `SubtitleProfiles`; the rules are in the
+  [API Reference](api-reference.md#how-playbackinfo-offers-subtitles)
 - External subtitle files (beside the video, found by the scan; see [Library Scanning](library-scanning.md)) are sent as
   they are when asked for in their own format; SubRip asked for as WebVTT is converted (browsers read only WebVTT);
   other pairs go through ffmpeg and are cached
