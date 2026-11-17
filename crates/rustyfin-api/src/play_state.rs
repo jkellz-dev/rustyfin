@@ -71,11 +71,11 @@ pub fn on_position(state: State, kind: Kind, position: i64, runtime: Option<i64>
         let pct = position as f64 * 100.0 / runtime as f64;
         if pct < MIN_RESUME_PCT {
             position = 0;
-        } else if pct > MAX_RESUME_PCT || position >= runtime {
-            position = 0;
-            next.played = true;
-            completed = true;
-        } else if (runtime as f64 / TICKS_PER_SECOND) < MIN_RESUME_DURATION_SECS {
+        } else if pct > MAX_RESUME_PCT
+            || position >= runtime
+            || (runtime as f64 / TICKS_PER_SECOND) < MIN_RESUME_DURATION_SECS
+        {
+            // Past the credits, or too short to resume.
             position = 0;
             next.played = true;
             completed = true;
