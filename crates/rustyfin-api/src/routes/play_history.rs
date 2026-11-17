@@ -166,6 +166,57 @@ pub struct PlayEntry {
     pub device_name: Option<String>,
     pub play_method: Option<String>,
     pub in_progress: bool,
+    /// The picture to show: the episode's show poster, the track's album
+    /// cover, else the item's own primary image (`/Items/{ImageItemId}/
+    /// Images/Primary?tag={ImageTag}`). None once the item is gone.
+    pub image_item_id: Option<Uuid>,
+    pub image_tag: Option<String>,
+}
+
+/// The picture of each item still in the library: (item to ask, tag).
+async fn pictures(
+    state: &AppState,
+    item_ids: &[Uuid],
+) -> std::collections::HashMap<Uuid, (Uuid, String)> {
+    use super::items;
+    let rows = media_items::find_by_ids(&state.pool, item_ids)
+        .await
+        .unwrap_or_default();
+    let mut dtos: Vec<_> = rows
+        .iter()
+        .map(|row| items::media_item_to_dto(row, &state.server_id))
+        .collect();
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let images = rustyfin_db::repo::images::list_by_items(&state.pool, &ids)
+        .await
+        .unwrap_or_default();
+    let by_item = items::group_images_by_item(images);
+    for dto in &mut dtos {
+        match by_item.get(&dto.id) {
+            Some(own) => items::apply_images_to_dto(dto, own),
+            None => items::ensure_primary_placeholder(dto),
+        }
+    }
+    items::attach_series_art(&state.pool, &mut dtos).await;
+    items::attach_music_fields(&state.pool, &rows, &mut dtos).await;
+    dtos.into_iter()
+        .filter_map(|dto| {
+            let show = dto
+                .series_id
+                .zip(dto.series_primary_image_tag.clone())
+                .filter(|_| dto.item_type == "Episode");
+            let album = dto
+                .album_id
+                .zip(dto.album_primary_image_tag.clone())
+                .filter(|_| dto.item_type == "Audio");
+            let own = dto
+                .image_tags
+                .as_ref()
+                .and_then(|t| t.get("Primary").cloned())
+                .map(|tag| (dto.id, tag));
+            show.or(album).or(own).map(|picture| (dto.id, picture))
+        })
+        .collect()
 }
 
 /// `GET /Users/{userId}/PlayHistory`: plays, newest first, filterable by
@@ -196,21 +247,30 @@ pub async fn get_play_history(
     let (rows, total) = play_history::list(&state.pool, user_id, &filter, start, limit)
         .await
         .map_err(ApiError::Database)?;
+    let mut ids: Vec<Uuid> = rows.iter().filter_map(|r| r.item_id).collect();
+    ids.sort();
+    ids.dedup();
+    let pictures = pictures(&state, &ids).await;
     let items = rows
         .into_iter()
-        .map(|r| PlayEntry {
-            id: r.id,
-            item_id: r.item_id,
-            name: r.item_name,
-            parent_name: r.parent_name,
-            kind: r.item_type,
-            started_at: r.started_at,
-            last_seen_at: r.last_seen_at,
-            minutes: minutes(r.played_ms),
-            client: r.client,
-            device_name: r.device_name,
-            play_method: r.play_method,
-            in_progress: !r.ended,
+        .map(|r| {
+            let picture = r.item_id.and_then(|id| pictures.get(&id).cloned());
+            PlayEntry {
+                id: r.id,
+                item_id: r.item_id,
+                name: r.item_name,
+                parent_name: r.parent_name,
+                kind: r.item_type,
+                started_at: r.started_at,
+                last_seen_at: r.last_seen_at,
+                minutes: minutes(r.played_ms),
+                client: r.client,
+                device_name: r.device_name,
+                play_method: r.play_method,
+                in_progress: !r.ended,
+                image_item_id: picture.as_ref().map(|p| p.0),
+                image_tag: picture.map(|p| p.1),
+            }
         })
         .collect();
     Ok(Json(QueryResult {

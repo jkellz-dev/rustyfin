@@ -1516,7 +1516,23 @@ select:focus {
   border-bottom: none;
 }
 .history-main {
+  flex: 1;
   min-width: 0;
+}
+.history-thumb {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.history-thumb.square {
+  height: 48px;
+}
+.history-thumb.landscape {
+  width: 72px;
+  height: 40px;
 }
 .history-title {
   display: flex;
@@ -1537,10 +1553,11 @@ select:focus {
 }
 @media (max-width: 768px) {
   .history-row {
-    flex-direction: column;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 4px 12px;
   }
   .history-side {
+    flex-basis: 100%;
     text-align: left;
   }
 }

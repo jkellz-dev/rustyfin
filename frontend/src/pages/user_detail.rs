@@ -224,8 +224,32 @@ pub fn UserDetail(user_id: String) -> View {
                                     None => view! { span { (name) } },
                                 };
                                 let live = p.in_progress;
+                                let shape = user_view::picture_shape(
+                                    &p.kind,
+                                    p.item_id.as_deref(),
+                                    p.image_item_id.as_deref(),
+                                );
+                                let picture = match p.image_item_id.clone() {
+                                    Some(id) => {
+                                        let token = api::get_token().unwrap_or_default();
+                                        let src = crate::browse::image_url(
+                                            &api::base_url(),
+                                            &id,
+                                            p.image_tag.as_deref(),
+                                            crate::browse::THUMB_IMAGE_WIDTH,
+                                            &token,
+                                        );
+                                        let class = format!("history-thumb {shape}");
+                                        view! { img(class=class, src=src, alt="", loading="lazy") }
+                                    }
+                                    None => {
+                                        let class = format!("history-thumb {shape} history-thumb-empty");
+                                        view! { div(class=class) }
+                                    }
+                                };
                                 view! {
                                     div(class="history-row") {
+                                        (picture)
                                         div(class="history-main") {
                                             div(class="history-title") {
                                                 (title)
