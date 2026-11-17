@@ -359,6 +359,9 @@ fn apply_transcode_urls(
         if let Some(ticks) = req.start_time_ticks {
             url.push_str(&format!("&StartTimeTicks={ticks}"));
         }
+        if req.allow_video_stream_copy == Some(false) {
+            url.push_str("&AllowVideoStreamCopy=false");
+        }
     }
 
     source.transcoding_url = Some(url);

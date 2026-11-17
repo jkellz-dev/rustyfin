@@ -63,6 +63,10 @@ fn build_global_args() -> Vec<String> {
 }
 
 fn build_hw_accel_input_args(params: &StreamParams) -> Vec<String> {
+    // Copied video is never decoded.
+    if params.video_codec == VideoCodec::Copy {
+        return vec![];
+    }
     match params.hardware_accel {
         HardwareAccel::Qsv => vec![
             "-hwaccel".to_string(),
@@ -468,6 +472,21 @@ mod tests {
 
         let args = build_video_args(&params);
         assert_eq!(args, vec!["-c:v", "copy"]);
+    }
+
+    /// Copied video is never decoded, so no hardware decoder is set up for
+    /// it, and nothing touches the picture (no scaling, no keyframe forcing).
+    #[test]
+    fn copied_video_is_not_decoded() {
+        let mut params = default_params();
+        params.video_codec = VideoCodec::Copy;
+        params.hardware_accel = HardwareAccel::Qsv;
+        let args = build_ffmpeg_args(&params);
+        assert!(!args.contains(&"-hwaccel".to_string()), "{args:?}");
+        assert!(!args.contains(&"-vf".to_string()), "{args:?}");
+        assert!(!args.contains(&"-g".to_string()), "{args:?}");
+        let at = args.iter().position(|a| a == "-c:v").unwrap();
+        assert_eq!(args[at + 1], "copy");
     }
 
     #[test]

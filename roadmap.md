@@ -178,6 +178,21 @@ ffmpeg HLS output, device profiles, subtitle delivery, throttling, seek support.
 - [x] Accurate `SupportsDirectPlay` / `SupportsTranscoding` based on device profile
 - [x] Transcode reasons in response (why direct play isn't possible)
 
+### 8f. Video Stream Copy (owner, 2026-11-17)
+
+A file that fails direct play only for its audio (EAC3, DTS, TrueHD) or its container (MKV) used to have its picture
+encoded again with libx264 (2–4 cores per 1080p stream). Now its H.264 is copied into the HLS segments and only the
+audio is converted, as Jellyfin does.
+
+- [x] Copy when the client asks for H.264 and the source is H.264, 8-bit 4:2:0, progressive, within
+      `MaxStreamingBitrate` and the client's size limits, with nothing drawn into the picture; otherwise encode
+- [x] `AllowVideoStreamCopy=false` (PlaybackInfo and the stream address) forces an encode
+- [x] The master playlist names the source's own profile and level (`avc1.4d401f`, …)
+- [x] Copied segments end on the source's keyframes, so they are uneven: the player's position, restart points and
+      throttling read the segment lengths from ffmpeg's playlist instead of assuming 6 s each
+- [ ] H.265 copy for clients that take it (the admin web player asks for H.264 only)
+- [ ] A third `mise run bench -- --streams` mode for a copied stream (audio-only conversion)
+
 ---
 
 ## Phase 9 — Client UX Improvements [DONE]

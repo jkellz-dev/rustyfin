@@ -1,3 +1,113 @@
+//! Whether a transcode copies the source's video or encodes it again.
+//!
+//! A file often fails direct play only for its audio (EAC3, DTS, TrueHD) or
+//! its container (MKV). Its H.264 is then copied into the HLS segments as it
+//! is, and only the audio is converted, as Jellyfin does: the picture keeps
+//! its quality and the encode costs a few percent of a core instead of
+//! several cores. Segments then end on the source's keyframes, so they are
+//! not all the same length; the manager places them by the playlist.
+
+use super::params::VideoCodec;
+
+/// The source's video stream, as the scan recorded it.
+#[derive(Debug, Clone, Default)]
+pub struct SourceVideo {
+    pub codec: Option<String>,
+    pub profile: Option<String>,
+    pub level: Option<i32>,
+    pub bit_depth: Option<i32>,
+    pub pixel_format: Option<String>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub bit_rate: Option<i64>,
+    pub is_interlaced: bool,
+}
+
+/// What the client asked for.
+#[derive(Debug, Clone)]
+pub struct CopyLimits {
+    /// The codec the client takes (`VideoCodec=` in the stream address).
+    pub wanted: VideoCodec,
+    /// `AllowVideoStreamCopy` (default true).
+    pub allowed: bool,
+    /// Subtitles drawn into the picture need the picture encoded.
+    pub burn_subtitles: bool,
+    pub max_bitrate: Option<i64>,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
+}
+
+/// Copy the video when the client takes it as it is; otherwise encode it to
+/// the codec it asked for. Only H.264 is copied: 8-bit 4:2:0, progressive,
+/// within the client's bitrate and size (what every browser decodes).
+pub fn plan_video(source: Option<&SourceVideo>, limits: &CopyLimits) -> VideoCodec {
+    let wanted = match limits.wanted {
+        VideoCodec::Copy => VideoCodec::H264,
+        other => other,
+    };
+    let Some(src) = source else {
+        return wanted;
+    };
+    let copy = limits.allowed
+        && !limits.burn_subtitles
+        && wanted == VideoCodec::H264
+        && src.is_h264()
+        && src.is_8bit_420()
+        && !src.is_interlaced
+        && fits(src.bit_rate, limits.max_bitrate)
+        && fits(src.width.map(i64::from), limits.max_width.map(i64::from))
+        && fits(src.height.map(i64::from), limits.max_height.map(i64::from));
+    if copy { VideoCodec::Copy } else { wanted }
+}
+
+/// Within the limit, or either side unknown.
+fn fits(value: Option<i64>, limit: Option<i64>) -> bool {
+    match (value, limit) {
+        (Some(v), Some(l)) => v <= l,
+        _ => true,
+    }
+}
+
+impl SourceVideo {
+    fn is_h264(&self) -> bool {
+        matches!(
+            self.codec
+                .as_deref()
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
+            Some("h264" | "avc" | "avc1")
+        )
+    }
+
+    fn is_8bit_420(&self) -> bool {
+        if self.bit_depth.is_some_and(|d| d > 8) {
+            return false;
+        }
+        match self.pixel_format.as_deref() {
+            Some(f) => matches!(f, "yuv420p" | "yuvj420p" | "nv12"),
+            None => self.bit_depth.is_some(),
+        }
+    }
+
+    /// The RFC 6381 name of this H.264 for the master playlist (players set
+    /// up their decoder from it), as Jellyfin writes it: High, Main and
+    /// Baseline profiles; High at level 4.1 when unknown.
+    pub fn codec_string(&self) -> String {
+        let profile = match self
+            .profile
+            .as_deref()
+            .map(str::to_ascii_lowercase)
+            .as_deref()
+        {
+            Some("main") => "4d40",
+            Some("baseline" | "constrained baseline") => "42e0",
+            _ => "6400",
+        };
+        let level = self.level.filter(|l| (9..=62).contains(l)).unwrap_or(41);
+        format!("avc1.{profile}{level:02x}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

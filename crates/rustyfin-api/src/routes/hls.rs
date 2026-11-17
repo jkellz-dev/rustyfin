@@ -21,6 +21,7 @@ use rustyfin_media::transcode::{
     manager::TranscodeRequest,
     names::{encode_query_value, is_valid_segment_name, is_valid_session_id},
     params::*,
+    video_copy::{CopyLimits, SourceVideo, plan_video},
 };
 
 use crate::error::ApiError;
@@ -41,6 +42,9 @@ pub struct HlsQueryParams {
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
     pub max_framerate: Option<f64>,
+    /// `false` when the client wants the video encoded even if it could take
+    /// the source's own (Jellyfin's `allowVideoStreamCopy`).
+    pub allow_video_stream_copy: Option<bool>,
     /// The token, when the player signs with the address; passed on to the
     /// playlist's links, which players follow without headers.
     #[serde(rename = "api_key")]
@@ -85,7 +89,12 @@ pub async fn get_master_playlist(
     let stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
     let video_stream = stream_dtos.iter().find(|s| s.stream_type == "Video");
 
-    let video_codec = parse_video_codec(params.video_codec.as_deref());
+    let source = source_video(&streams);
+    let video_codec = plan_video(source.as_ref(), &copy_limits(&params));
+    let copied = source
+        .as_ref()
+        .filter(|_| video_codec == VideoCodec::Copy)
+        .map(SourceVideo::codec_string);
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
     let item_id_string = item_id.to_string();
     // Request values that are echoed into the playlist are encoded: a newline would
@@ -113,6 +122,9 @@ pub async fn get_master_playlist(
     if let Some(ticks) = params.start_time_ticks {
         extra_qs.push_str(&format!("&StartTimeTicks={ticks}"));
     }
+    if params.allow_video_stream_copy == Some(false) {
+        extra_qs.push_str("&AllowVideoStreamCopy=false");
+    }
     if let Some(ref key) = params.api_key {
         extra_qs.push_str(&format!("&api_key={}", encode_query_value(key)));
     }
@@ -129,6 +141,7 @@ pub async fn get_master_playlist(
         play_session_id,
         media_source_id: &media_source_id,
         query_string: &extra_qs,
+        video_codec_string: copied.as_deref(),
     });
 
     Ok(Response::builder()
@@ -171,7 +184,10 @@ pub async fn get_variant_playlist(
 
         let input_path = item.path.ok_or(ApiError::NotFound)?;
 
-        let video_codec = parse_video_codec(params.video_codec.as_deref());
+        let streams = media_streams::list_by_item(&state.pool, file)
+            .await
+            .map_err(ApiError::Database)?;
+        let video_codec = plan_video(source_video(&streams).as_ref(), &copy_limits(&params));
         let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
         let segment_format = match params.transcoding_container.as_deref() {
             Some("mp4" | "m4s" | "fmp4") => SegmentFormat::Fmp4,
@@ -551,6 +567,38 @@ pub async fn get_audio_segment(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+/// The file's first video stream, for the copy-or-encode decision.
+fn source_video(streams: &[media_streams::MediaStreamRow]) -> Option<SourceVideo> {
+    streams
+        .iter()
+        .find(|s| s.stream_type == "Video")
+        .map(|s| SourceVideo {
+            codec: s.codec.clone(),
+            profile: s.profile.clone(),
+            level: s.level,
+            bit_depth: s.bit_depth,
+            pixel_format: s.pixel_format.clone(),
+            width: s.width,
+            height: s.height,
+            bit_rate: s.bit_rate.map(i64::from),
+            is_interlaced: s.is_interlaced,
+        })
+}
+
+/// What the stream address allows. The master and the variant playlist
+/// decide alike, so the codec the master names is the one that is sent.
+/// Subtitles are not drawn into HLS video yet, so none force an encode.
+fn copy_limits(params: &HlsQueryParams) -> CopyLimits {
+    CopyLimits {
+        wanted: parse_video_codec(params.video_codec.as_deref()),
+        allowed: params.allow_video_stream_copy != Some(false),
+        burn_subtitles: false,
+        max_bitrate: params.max_streaming_bitrate,
+        max_width: params.max_width,
+        max_height: params.max_height,
+    }
+}
 
 fn parse_video_codec(s: Option<&str>) -> VideoCodec {
     match s.map(|s| s.to_lowercase()).as_deref() {

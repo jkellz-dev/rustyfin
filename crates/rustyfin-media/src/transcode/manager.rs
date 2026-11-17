@@ -248,18 +248,52 @@ impl TranscodeManager {
         play_session_id: &str,
         segment_id: u32,
     ) -> anyhow::Result<()> {
-        let Some((session_start, duration)) = self
+        let Some(session_start) = self
             .jobs
             .read()
             .await
             .get(play_session_id)
-            .map(|j| (j.session_start_ticks, j.segment_duration))
+            .map(|j| j.session_start_ticks)
         else {
             return Ok(());
         };
-        let start_ticks = session_start + segment_start_ticks(segment_id, duration);
-        self.restart_at(play_session_id, start_ticks, segment_id)
+        let Some(at) = self.segment_ticks(play_session_id, segment_id).await else {
+            return Ok(());
+        };
+        self.restart_at(play_session_id, session_start + at, segment_id)
+            .await?;
+        // The new encoder's first segment sits where the playlist placed it,
+        // which for copied video is not `segment_id` × the segment length.
+        if let Some(job) = self.jobs.write().await.get_mut(play_session_id) {
+            job.offset_ticks = at;
+            job.session_start_ticks = session_start;
+            job.player_ticks = at;
+            job.transcoding_position_ticks = job.transcoding_position_ticks.max(at);
+        }
+        Ok(())
+    }
+
+    /// Where segment `n` starts on the session clock: from the playlist when
+    /// it lists the segment (copied video ends segments on the source's
+    /// keyframes, so they are uneven), else `n` × the segment length.
+    async fn segment_ticks(&self, play_session_id: &str, segment_id: u32) -> Option<i64> {
+        let (dir, offset, duration) = {
+            let jobs = self.jobs.read().await;
+            let job = jobs.get(play_session_id)?;
+            (
+                job.output_dir.clone(),
+                job.offset_ticks,
+                job.segment_duration,
+            )
+        };
+        let listed = tokio::fs::read_to_string(dir.join("playlist.m3u8"))
             .await
+            .ok()
+            .and_then(|p| listed_segment_start(&p, segment_id));
+        Some(match listed {
+            Some(secs) => offset + (secs * TICKS as f64).round() as i64,
+            None => segment_start_ticks(segment_id, duration),
+        })
     }
 
     /// Whether a missing segment needs the encoder restarted at it, rather than
@@ -267,22 +301,25 @@ impl TranscodeManager {
     /// encoder's first segment (nothing will write it), or more than two
     /// minutes past what it has encoded.
     pub async fn needs_restart(&self, play_session_id: &str, segment_id: u32) -> bool {
+        let Some(start) = self.segment_ticks(play_session_id, segment_id).await else {
+            return false;
+        };
         let jobs = self.jobs.read().await;
         let Some(job) = jobs.get(play_session_id) else {
             return false;
         };
-        let start = segment_start_ticks(segment_id, job.segment_duration);
         start < job.offset_ticks || start > job.transcoding_position_ticks + SEEK_AHEAD_TICKS
     }
 
     /// Record a segment request: the player is at that segment. Resumes a
     /// throttled encoder.
     pub async fn touch_segment(&self, play_session_id: &str, segment_id: u32) {
-        let mut jobs = self.jobs.write().await;
-        if let Some(job) = jobs.get_mut(play_session_id) {
-            job.player_ticks = segment_start_ticks(segment_id, job.segment_duration);
+        if let Some(at) = self.segment_ticks(play_session_id, segment_id).await {
+            let mut jobs = self.jobs.write().await;
+            if let Some(job) = jobs.get_mut(play_session_id) {
+                job.player_ticks = at;
+            }
         }
-        drop(jobs);
         self.touch_job(play_session_id).await;
     }
 
@@ -531,6 +568,32 @@ fn segment_start_ticks(segment_id: u32, segment_duration: u32) -> i64 {
     segment_id as i64 * segment_duration as i64 * TICKS
 }
 
+/// Seconds from the first segment a playlist lists to the start of segment
+/// `n` (segments are named `<n>.ts` / `<n>.m4s`), or `None` when the playlist
+/// does not reach it yet or starts after it. The segment just past the last
+/// listed one starts where that one ends.
+fn listed_segment_start(playlist: &str, n: u32) -> Option<f64> {
+    let mut at = 0.0;
+    let mut length = None;
+    let mut first = None;
+    let mut next = None;
+    for line in playlist.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("#EXTINF:") {
+            length = rest.split(',').next()?.trim().parse::<f64>().ok();
+        } else if !line.is_empty() && !line.starts_with('#') {
+            let name = line.rsplit('/').next()?;
+            let number: u32 = name.split('.').next()?.parse().ok()?;
+            first.get_or_insert(number);
+            if number == n {
+                return Some(at);
+            }
+            at += length.take()?;
+            next = Some(number + 1);
+        }
+    }
+    (next == Some(n) && first.is_some_and(|f| f <= n)).then_some(at)
+}
+
 /// Parse ffmpeg timestamp "HH:MM:SS.ms" to 100ns ticks.
 fn parse_ffmpeg_time(timestamp: &str) -> Option<i64> {
     let parts: Vec<&str> = timestamp.split(':').collect();
@@ -769,11 +832,19 @@ mod tests {
         fn listed_segments_start_where_the_playlist_says() {
             assert_eq!(listed_segment_start(UNEVEN, 0), Some(0.0));
             assert_eq!(listed_segment_start(UNEVEN, 3), Some(22.0));
-            assert_eq!(listed_segment_start(UNEVEN, 4), Some(31.0), "just past the last");
+            assert_eq!(
+                listed_segment_start(UNEVEN, 4),
+                Some(31.0),
+                "just past the last"
+            );
             assert_eq!(listed_segment_start(UNEVEN, 9), None, "not written yet");
             let restarted = "#EXTM3U\n#EXTINF:7.0,\n40.ts\n#EXTINF:5.0,\n41.ts\n";
             assert_eq!(listed_segment_start(restarted, 41), Some(7.0));
-            assert_eq!(listed_segment_start(restarted, 12), None, "before this playlist");
+            assert_eq!(
+                listed_segment_start(restarted, 12),
+                None,
+                "before this playlist"
+            );
         }
 
         // A copied stream's segments are uneven: the player's position and a
@@ -783,7 +854,9 @@ mod tests {
         async fn uneven_segments_are_placed_by_the_playlist() {
             let root = root("uneven");
             let tm = manager(&root, fake("runs"));
-            tm.start_transcode(request(&root, "s6", 2470)).await.unwrap();
+            tm.start_transcode(request(&root, "s6", 2470))
+                .await
+                .unwrap();
             let dir = tm.get_job_output_dir("s6").await.unwrap();
             std::fs::write(dir.join("playlist.m3u8"), UNEVEN).unwrap();
 

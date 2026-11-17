@@ -13,6 +13,9 @@ pub struct MasterPlaylistParams<'a> {
     pub play_session_id: &'a str,
     pub media_source_id: &'a str,
     pub query_string: &'a str,
+    /// The video's RFC 6381 name when it is copied (the source's own profile
+    /// and level); `None` uses the encoder's.
+    pub video_codec_string: Option<&'a str>,
 }
 
 /// Generate an HLS master playlist pointing to our variant playlist endpoint.
@@ -20,7 +23,10 @@ pub fn generate_master_playlist(params: &MasterPlaylistParams<'_>) -> String {
     let mut playlist = String::from("#EXTM3U\n");
 
     // Build codec string
-    let codecs = build_codec_string(params.video_codec, params.audio_codec);
+    let codecs = match params.video_codec_string {
+        Some(v) => format!("{v},{}", audio_codec_string(params.audio_codec)),
+        None => build_codec_string(params.video_codec, params.audio_codec),
+    };
 
     // Build STREAM-INF line
     let bw = params.bitrate.unwrap_or(8_000_000);
@@ -189,6 +195,7 @@ mod tests {
             play_session_id: "session1",
             media_source_id: "source1",
             query_string: "",
+            video_codec_string: None,
         });
 
         assert!(playlist.starts_with("#EXTM3U"));
@@ -213,6 +220,7 @@ mod tests {
             play_session_id: "s1",
             media_source_id: "m1",
             query_string: "",
+            video_codec_string: None,
         });
 
         assert!(playlist.contains("hvc1.1.6.L120.B0"));
@@ -230,6 +238,7 @@ mod tests {
             play_session_id: "s1",
             media_source_id: "m1",
             query_string: "&SubtitleStreamIndex=2",
+            video_codec_string: None,
         });
 
         assert!(playlist.contains("SubtitleStreamIndex=2"));
