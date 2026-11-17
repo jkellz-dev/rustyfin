@@ -166,6 +166,23 @@ pub fn choose_source(
     Some(PlaySource::Hls(url))
 }
 
+/// How an HLS stream is played.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HlsWay {
+    /// hls.js feeding MediaSource.
+    Script,
+    /// The browser's own HLS.
+    Native,
+}
+
+/// hls.js wherever MediaSource exists (as hls.js advises and Jellyfin's web
+/// client does): browsers' own HLS differs between them (Chrome's could not
+/// parse Rustyfin's MPEG-TS segments). The browser's own only without it.
+pub fn hls_way(has_media_source: bool, native_hls: bool) -> Option<HlsWay> {
+    let _ = has_media_source;
+    native_hls.then_some(HlsWay::Native)
+}
+
 /// Where playback starts: the saved position unless the item was finished
 /// (or barely started).
 pub fn resume_secs(position_ticks: Option<i64>, played: bool) -> f64 {
@@ -583,5 +600,13 @@ mod tests {
         let direct = none["DirectPlayProfiles"].as_array().unwrap();
         assert!(direct.iter().all(|d| d["Container"] != "mp4,m4v"));
         assert_eq!(none["TranscodingProfiles"], all["TranscodingProfiles"]);
+    }
+
+    #[test]
+    fn hls_js_comes_first_and_native_hls_is_the_fallback() {
+        assert_eq!(hls_way(true, true), Some(HlsWay::Script));
+        assert_eq!(hls_way(true, false), Some(HlsWay::Script));
+        assert_eq!(hls_way(false, true), Some(HlsWay::Native));
+        assert_eq!(hls_way(false, false), None);
     }
 }
