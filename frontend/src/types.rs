@@ -499,3 +499,13 @@ pub struct DeviceInfo {
     #[serde(default)]
     pub date_last_activated: Option<String>,
 }
+
+/// A library's filter values (`/Items/Filters`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ItemFilters {
+    #[serde(default)]
+    pub genres: Vec<String>,
+    #[serde(default)]
+    pub years: Vec<i32>,
+}

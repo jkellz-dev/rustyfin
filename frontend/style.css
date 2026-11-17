@@ -1620,3 +1620,68 @@ select:focus {
 .folder-error p {
   margin: 0 0 8px;
 }
+
+/* ── Library filters, list view, selection (12d) ────────── */
+.grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.grid-toolbar-end {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.media-card.selected {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.media-grid.list {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.media-grid.list .media-card {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.media-grid.list .media-card-art {
+  width: 48px;
+}
+.media-grid.list .media-card-art img,
+.media-grid.list .media-card-art > div {
+  width: 48px;
+  height: auto;
+  max-height: 72px;
+  font-size: 1em;
+}
+.media-grid.list .media-card-title {
+  margin: 0;
+  white-space: normal;
+}
+.media-grid.list .media-card-year {
+  margin: 0;
+}
+@media (max-width: 768px) {
+  .media-grid.list {
+    grid-template-columns: 1fr;
+  }
+  .grid-toolbar-end {
+    margin-left: 0;
+  }
+}

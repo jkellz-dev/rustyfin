@@ -26,7 +26,32 @@ impl LibraryFilter {
 
     /// The `/Items` query parameters for this filter (leading `&`).
     pub fn query(&self) -> String {
-        String::new()
+        let mut q = String::new();
+        if let Some(g) = &self.genre {
+            q.push_str(&format!("&Genres={}", encode(g)));
+        }
+        if let Some(y) = self.year {
+            q.push_str(&format!("&Years={y}"));
+        }
+        if let Some(r) = self.min_rating {
+            q.push_str(&format!("&MinCommunityRating={r}"));
+        }
+        q
+    }
+
+    /// The address segments for this filter.
+    fn path(&self) -> String {
+        let mut p = String::new();
+        if let Some(g) = &self.genre {
+            p.push_str(&format!("/genre/{}", encode(g)));
+        }
+        if let Some(y) = self.year {
+            p.push_str(&format!("/year/{y}"));
+        }
+        if let Some(r) = self.min_rating {
+            p.push_str(&format!("/rating/{r}"));
+        }
+        p
     }
 }
 
@@ -73,10 +98,12 @@ impl MediaRoute {
             .filter(|s| !s.is_empty())
             .map(decode)
             .collect();
+        // After the kind and id come key/value pairs.
         let opt = |key: &str| {
-            segs.windows(2)
-                .skip(2)
-                .find(|w| w[0] == key)
+            segs.get(2..)
+                .unwrap_or_default()
+                .chunks(2)
+                .find(|w| w.len() == 2 && w[0] == key)
                 .map(|w| w[1].clone())
         };
         let start = || {
@@ -89,7 +116,15 @@ impl MediaRoute {
             Some("library") if segs.len() >= 2 => MediaRoute::Library {
                 id: segs[1].clone(),
                 sort: opt("sort"),
-                filter: LibraryFilter::default(),
+                filter: LibraryFilter {
+                    genre: opt("genre").filter(|g| !g.is_empty()),
+                    year: opt("year")
+                        .and_then(|y| y.parse().ok())
+                        .filter(|y| (1800..=2200).contains(y)),
+                    min_rating: opt("rating")
+                        .and_then(|r| r.parse().ok())
+                        .filter(|r| *r <= 10),
+                },
                 start: start(),
             },
             Some("folder") if segs.len() >= 2 => MediaRoute::Folder {
@@ -113,7 +148,7 @@ impl MediaRoute {
             Some("search") if segs.len() >= 2 => MediaRoute::Search {
                 words: segs[1].clone(),
                 library: opt("in"),
-                kind: None,
+                kind: opt("type").filter(|k| !k.is_empty()),
             },
             _ => MediaRoute::Libraries,
         }
@@ -131,13 +166,21 @@ impl MediaRoute {
         match self {
             MediaRoute::Libraries => BASE.to_string(),
             MediaRoute::Library {
-                id, sort, start: s, ..
+                id,
+                sort,
+                filter,
+                start: s,
             } => {
                 let sort = sort
                     .as_deref()
                     .map(|o| format!("/sort/{}", encode(o)))
                     .unwrap_or_default();
-                format!("{BASE}/library/{}{sort}{}", encode(id), start(*s))
+                format!(
+                    "{BASE}/library/{}{sort}{}{}",
+                    encode(id),
+                    filter.path(),
+                    start(*s)
+                )
             }
             MediaRoute::Folder { id, start: s } => {
                 format!("{BASE}/folder/{}{}", encode(id), start(*s))
@@ -146,12 +189,20 @@ impl MediaRoute {
             MediaRoute::Person { id, name, start: s } => {
                 format!("{BASE}/person/{}/{}{}", encode(id), encode(name), start(*s))
             }
-            MediaRoute::Search { words, library, .. } => {
+            MediaRoute::Search {
+                words,
+                library,
+                kind,
+            } => {
                 let scope = library
                     .as_deref()
                     .map(|l| format!("/in/{}", encode(l)))
                     .unwrap_or_default();
-                format!("{BASE}/search/{}{scope}", encode(words))
+                let kind = kind
+                    .as_deref()
+                    .map(|k| format!("/type/{}", encode(k)))
+                    .unwrap_or_default();
+                format!("{BASE}/search/{}{scope}{kind}", encode(words))
             }
         }
     }

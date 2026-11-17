@@ -1148,15 +1148,18 @@ validation, and polish needed for daily use.
 
 - [x] Cast & crew portrait cards with headshot images (initials fallback)
 - [x] Sorting controls (by name, date added, year, rating)
-- [ ] Filtering by genre, year, rating, item type
-- [ ] Grid/list view toggle
+- [x] Filtering by genre, year, rating, item type: genre, year and minimum rating on a library (kept in the address);
+      the library sets the item type
+- [x] Grid/list view toggle (remembered in the browser)
 - [x] Watched/unwatched badges on posters
 - [x] Playback progress bars on in-progress items
-- [ ] Bulk operations (select multiple items for refresh, mark played/unplayed)
+- [x] Bulk operations (select multiple items for refresh, mark played/unplayed): Select, then Mark played/unplayed or
+      Refresh metadata
 - [x] Cast member links (click person → filtered view of their items)
 - [x] Back button (owner, 2026-11-17): every place in the media browser has its own address under `/web/media`
       (`media_route.rs`), so back/forward, reload and bookmarks work; breadcrumbs come from the item's ancestors
-- [ ] Search filters (scope by type: movies, series, music, episodes)
+- [x] Search filters (scope by type: movies, series, music, episodes): films, shows, episodes, albums, artists, tracks;
+      in the address
 - [ ] TV and music collections (deferred, owner 2026-11-16): only Radarr's movie `<set>` creates collections today.
       Add `collections = ["..."]` to a title's `.rustyfin.toml` (scan creates and fills them), then a media-browser
       action to create a collection and add shows or albums. Plezy lists collections server-wide, as Jellyfin does.
@@ -1198,12 +1201,12 @@ The admin must be usable from a phone.
 
 - [x] Responsive layout: the sidebar collapses to a menu button below tablet width; no horizontal scrolling at 360 px
       (below 768 px: top bar with a menu button; checked at 390, 768 and 1280 px, nothing wider than the screen)
-- [ ] Tables (users, libraries, tasks, sessions) become stacked cards on narrow screens (for now they scroll sideways
-      inside themselves)
+- [x] Tables (users, libraries, tasks, sessions) become stacked cards on narrow screens (each cell names its
+      column)
 - [x] Touch targets at least 44 px; no hover-only controls
-- [ ] Forms and dialogs fit the screen (full-screen dialogs on phones, the right input types and keyboards)
-- [ ] Media grids and title pages reflow to two columns; posters lazy-load (two columns done; lazy-loading not yet)
-- [ ] Dashboard charts and stats readable at phone width
+- [x] Forms and dialogs fit the screen (full-screen dialogs on phones, the right input types and keyboards)
+- [x] Media grids and title pages reflow to two columns; posters lazy-load
+- [x] Dashboard charts and stats readable at phone width
 - [ ] Tested at 360, 390 and 768 px widths (browser device emulation) and on a real phone
 
 ---

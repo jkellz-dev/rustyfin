@@ -314,8 +314,10 @@ pub const VIEW_MODE_KEY: &str = "rustyfin_view_mode";
 impl ViewMode {
     /// From the stored value; anything else is the grid.
     pub fn from_stored(value: Option<&str>) -> ViewMode {
-        let _ = value;
-        ViewMode::Grid
+        match value {
+            Some("list") => ViewMode::List,
+            _ => ViewMode::Grid,
+        }
     }
 
     pub fn stored(self) -> &'static str {
@@ -328,7 +330,11 @@ impl ViewMode {
 
 /// Add `id` to the selection, or take it out when it is there.
 pub fn toggle_selected(selected: &mut Vec<String>, id: &str) {
-    let _ = (selected, id);
+    if let Some(i) = selected.iter().position(|s| s == id) {
+        selected.remove(i);
+    } else {
+        selected.push(id.to_string());
+    }
 }
 
 /// The kinds a search can be narrowed to: (IncludeItemTypes value, label).

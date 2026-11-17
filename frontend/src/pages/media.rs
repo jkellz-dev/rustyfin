@@ -88,6 +88,14 @@ fn icon_for_item_type(item_type: &str) -> &'static str {
 
 const PAGE_SIZE: i32 = 50;
 
+/// The chosen value of a `<select>` from its change event.
+fn select_value(e: web_sys::Event) -> String {
+    e.target()
+        .and_then(|t| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlSelectElement>(t).ok())
+        .map(|s| s.value())
+        .unwrap_or_default()
+}
+
 // ── Component ───────────────────────────────────────────
 
 /// The media browser at `path` (an address under `/web/media`, see
@@ -127,35 +135,49 @@ pub fn Media(path: String) -> View {
         _ => String::new(),
     });
 
+    // Library filters, view mode and selection (roadmap 12d).
+    let filter_genres: Signal<Vec<String>> = create_signal(Vec::new());
+    let filter_years: Signal<Vec<i32>> = create_signal(Vec::new());
+    let view_mode = create_signal(browse::ViewMode::from_stored(
+        api::stored(browse::VIEW_MODE_KEY).as_deref(),
+    ));
+    let selecting = create_signal(false);
+    let selected: Signal<Vec<String>> = create_signal(Vec::new());
+    let bulk_busy = create_signal(false);
+
     let go = |r: MediaRoute| navigate(&r.path());
 
     // A page of a folder's, library's or person's titles.
-    let load_items =
-        move |parent_id: String, query: ChildQuery, start: i32, person: Option<String>| {
-            loading.set(true);
-            spawn_local(async move {
-                match api::get_items(
-                    &parent_id,
-                    query.item_types,
-                    start,
-                    PAGE_SIZE,
-                    query.sort_by,
-                    query.sort_order,
-                    query.recursive,
-                    person.as_deref(),
-                )
-                .await
-                {
-                    Ok(result) => {
-                        total_count.set(result.total_record_count);
-                        start_index.set(result.start_index);
-                        items.set(result.items);
-                    }
-                    Err(e) => error.set(Some(e.to_string())),
+    let load_items = move |parent_id: String,
+                           query: ChildQuery,
+                           start: i32,
+                           person: Option<String>,
+                           extra: String| {
+        loading.set(true);
+        spawn_local(async move {
+            match api::get_items(
+                &parent_id,
+                query.item_types,
+                start,
+                PAGE_SIZE,
+                query.sort_by,
+                query.sort_order,
+                query.recursive,
+                person.as_deref(),
+                &extra,
+            )
+            .await
+            {
+                Ok(result) => {
+                    total_count.set(result.total_record_count);
+                    start_index.set(result.start_index);
+                    items.set(result.items);
                 }
-                loading.set(false);
-            });
-        };
+                Err(e) => error.set(Some(e.to_string())),
+            }
+            loading.set(false);
+        });
+    };
 
     // The trail to an item, from its ancestors; the library (if any) is the
     // search scope.
@@ -192,7 +214,10 @@ pub fn Media(path: String) -> View {
         match route_for_load {
             MediaRoute::Libraries => loading.set(false),
             MediaRoute::Library {
-                id, sort, start, ..
+                id,
+                sort,
+                filter,
+                start,
             } => {
                 let Some(lib) = libs.iter().find(|l| l.id == id) else {
                     error.set(Some("That library is not available.".to_string()));
@@ -209,7 +234,13 @@ pub fn Media(path: String) -> View {
                     label: lib.name.clone(),
                     path: None,
                 }]);
-                load_items(id, query, start, None);
+                if let Ok(f) = api::get_filters(&id).await {
+                    filter_genres.set(f.genres);
+                    let mut years = f.years;
+                    years.sort_unstable_by(|a, b| b.cmp(a));
+                    filter_years.set(years);
+                }
+                load_items(id, query, start, None, filter.query());
             }
             MediaRoute::Folder { id, start } => match api::get_item(&id).await {
                 Ok(item) => {
@@ -217,7 +248,7 @@ pub fn Media(path: String) -> View {
                     current_query.set(query);
                     let ancestors = api::get_ancestors(&id).await.unwrap_or_default();
                     set_trail(ancestors, item.name.clone());
-                    load_items(id, query, start, None);
+                    load_items(id, query, start, None, String::new());
                 }
                 Err(e) => {
                     error.set(Some(e.to_string()));
@@ -231,7 +262,7 @@ pub fn Media(path: String) -> View {
                     label: name,
                     path: None,
                 }]);
-                load_items(String::new(), query, start, Some(id));
+                load_items(String::new(), query, start, Some(id), String::new());
             }
             MediaRoute::Item { id } => {
                 loading.set(false);
@@ -248,6 +279,7 @@ pub fn Media(path: String) -> View {
                                 "Ascending",
                                 false,
                                 None,
+                                "",
                             )
                             .await
                         {
@@ -273,7 +305,11 @@ pub fn Media(path: String) -> View {
                 }
                 detail_loading.set(false);
             }
-            MediaRoute::Search { words, library, .. } => {
+            MediaRoute::Search {
+                words,
+                library,
+                kind,
+            } => {
                 loading.set(false);
                 let mut crumbs = Vec::new();
                 if let Some(lib) = library
@@ -299,7 +335,7 @@ pub fn Media(path: String) -> View {
                 });
                 breadcrumbs.set(crumbs);
                 scope_library.set(library.clone());
-                match api::search_hints(&words, library.as_deref()).await {
+                match api::search_hints(&words, library.as_deref(), kind.as_deref()).await {
                     Ok(result) => search_results.set(result.search_hints),
                     Err(e) => error.set(Some(e.to_string())),
                 }
@@ -328,16 +364,82 @@ pub fn Media(path: String) -> View {
     let view_person = move |id: String, name: String| go(MediaRoute::Person { id, name, start: 0 });
     let here = create_signal(route.clone());
     let change_sort = move |label: String| {
-        if let MediaRoute::Library { id, .. } = here.get_clone() {
+        if let MediaRoute::Library { id, filter, .. } = here.get_clone() {
             go(MediaRoute::Library {
                 id,
                 sort: Some(label),
-                filter: Default::default(),
+                filter,
                 start: 0,
             });
         }
     };
     let go_to_start = move |n: i32| go(here.with(|r| r.with_start(n)));
+    // A new filter: back to the first page, same order.
+    let change_filter = move |edit: &dyn Fn(&mut media_route::LibraryFilter)| {
+        if let MediaRoute::Library {
+            id,
+            sort,
+            mut filter,
+            ..
+        } = here.get_clone()
+        {
+            edit(&mut filter);
+            go(MediaRoute::Library {
+                id,
+                sort,
+                filter,
+                start: 0,
+            });
+        }
+    };
+    let set_view_mode = move |mode: browse::ViewMode| {
+        api::store(browse::VIEW_MODE_KEY, mode.stored());
+        view_mode.set(mode);
+    };
+    // Mark the selected titles played/unplayed, or refresh their metadata.
+    let bulk = move |action: &'static str| {
+        let ids = selected.get_clone();
+        if ids.is_empty() || bulk_busy.get() {
+            return;
+        }
+        bulk_busy.set(true);
+        spawn_local(async move {
+            let mut failed = 0;
+            for id in &ids {
+                let r = match action {
+                    "played" => api::set_played(id, true).await,
+                    "unplayed" => api::set_played(id, false).await,
+                    _ => api::refresh_item(id).await,
+                };
+                if r.is_err() {
+                    failed += 1;
+                }
+            }
+            if action != "refresh" {
+                let played = action == "played";
+                items.update(|list| {
+                    for item in list.iter_mut().filter(|i| ids.contains(&i.id)) {
+                        let ud = item.user_data.get_or_insert_with(Default::default);
+                        ud.played = played;
+                    }
+                });
+            }
+            let done = ids.len() - failed;
+            let what = match action {
+                "played" => "marked played",
+                "unplayed" => "marked unplayed",
+                _ => "queued for a metadata refresh",
+            };
+            toast.set(Some(if failed == 0 {
+                format!("{done} {what}")
+            } else {
+                format!("{done} {what}; {failed} failed")
+            }));
+            selected.set(Vec::new());
+            selecting.set(false);
+            bulk_busy.set(false);
+        });
+    };
     let back_to_libraries = move |_| go(MediaRoute::Libraries);
     let go_back = move |_| {
         if let Some(history) = web_sys::window().and_then(|w| w.history().ok()) {
@@ -353,7 +455,10 @@ pub fn Media(path: String) -> View {
         go(MediaRoute::Search {
             words: words.trim().to_string(),
             library: scope_library.get_clone(),
-            kind: None,
+            kind: here.with(|r| match r {
+                MediaRoute::Search { kind, .. } => kind.clone(),
+                _ => None,
+            }),
         });
     };
 
@@ -493,33 +598,134 @@ pub fn Media(path: String) -> View {
                         let start = start_index.get();
                         // A library's top level can be re-ordered.
                         let sortable = sortable && current_query.get().recursive;
-                        let sort_bar = if sortable {
-                            let selected = browse::sort_label(current_query.get());
+                        let sort_select = if sortable {
+                            let selected_sort = browse::sort_label(current_query.get());
                             view! {
-                                div(class="grid-toolbar") {
-                                    label(class="grid-sort") {
-                                        "Sort by "
-                                        select(on:change=move |e: web_sys::Event| {
-                                            let value = e
-                                                .target()
-                                                .and_then(|t| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlSelectElement>(t).ok())
-                                                .map(|s| s.value())
-                                                .unwrap_or_default();
-                                            change_sort(value);
-                                        }) {
-                                            Indexed(
-                                                list=move || browse::SORT_OPTIONS.to_vec(),
-                                                view=move |o: browse::SortOption| {
-                                                    let is_selected = o.label == selected;
-                                                    view! { option(value=o.label, selected=is_selected) { (o.label) } }
-                                                }
-                                            )
-                                        }
+                                label(class="grid-sort") {
+                                    "Sort by "
+                                    select(on:change=move |e: web_sys::Event| {
+                                        let value = e
+                                            .target()
+                                            .and_then(|t| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlSelectElement>(t).ok())
+                                            .map(|s| s.value())
+                                            .unwrap_or_default();
+                                        change_sort(value);
+                                    }) {
+                                        Indexed(
+                                            list=move || browse::SORT_OPTIONS.to_vec(),
+                                            view=move |o: browse::SortOption| {
+                                                let is_selected = o.label == selected_sort;
+                                                view! { option(value=o.label, selected=is_selected) { (o.label) } }
+                                            }
+                                        )
                                     }
                                 }
                             }
                         } else {
                             view! {}
+                        };
+                        // Filters by genre, year and rating (library level only).
+                        let filters = if sortable {
+                            let current = here.with(|r| match r {
+                                MediaRoute::Library { filter, .. } => filter.clone(),
+                                _ => Default::default(),
+                            });
+                            let genres = filter_genres.get_clone();
+                            let years = filter_years.get_clone();
+                            let cur_genre = current.genre.clone().unwrap_or_default();
+                            let cur_year = current.year.map(|y| y.to_string()).unwrap_or_default();
+                            let cur_rating = current.min_rating.map(|r| r.to_string()).unwrap_or_default();
+                            let any_filter = !current.is_empty();
+                            view! {
+                                select(aria-label="Genre", on:change=move |e: web_sys::Event| {
+                                    let v = select_value(e);
+                                    change_filter(&|f| f.genre = Some(v.clone()).filter(|g| !g.is_empty()));
+                                }) {
+                                    option(value="") { "All genres" }
+                                    Indexed(
+                                        list=move || genres.clone(),
+                                        view=move |g: String| {
+                                            let is_selected = g == cur_genre;
+                                            let label = g.clone();
+                                            view! { option(value=g, selected=is_selected) { (label) } }
+                                        }
+                                    )
+                                }
+                                select(aria-label="Year", on:change=move |e: web_sys::Event| {
+                                    let v = select_value(e);
+                                    change_filter(&|f| f.year = v.parse().ok());
+                                }) {
+                                    option(value="") { "Any year" }
+                                    Indexed(
+                                        list=move || years.clone(),
+                                        view=move |y: i32| {
+                                            let value = y.to_string();
+                                            let is_selected = value == cur_year;
+                                            view! { option(value=value, selected=is_selected) { (y) } }
+                                        }
+                                    )
+                                }
+                                select(aria-label="Rating", on:change=move |e: web_sys::Event| {
+                                    let v = select_value(e);
+                                    change_filter(&|f| f.min_rating = v.parse().ok());
+                                }) {
+                                    option(value="") { "Any rating" }
+                                    Indexed(
+                                        list=move || vec![5u8, 6, 7, 8, 9],
+                                        view=move |r: u8| {
+                                            let value = r.to_string();
+                                            let is_selected = value == cur_rating;
+                                            view! { option(value=value, selected=is_selected) { (r) "+" } }
+                                        }
+                                    )
+                                }
+                                (if any_filter {
+                                    view! {
+                                        button(class="btn btn-secondary btn-sm", on:click=move |_| change_filter(&|f| *f = Default::default())) { "Clear filters" }
+                                    }
+                                } else {
+                                    view! {}
+                                })
+                            }
+                        } else {
+                            view! {}
+                        };
+                        let is_list = view_mode.get() == browse::ViewMode::List;
+                        let sort_bar = view! {
+                            div(class="grid-toolbar") {
+                                (sort_select)
+                                (filters)
+                                div(class="grid-toolbar-end") {
+                                    button(
+                                        class=if is_list { "btn btn-secondary btn-sm" } else { "btn btn-primary btn-sm" },
+                                        aria-pressed=(!is_list).to_string(),
+                                        on:click=move |_| set_view_mode(browse::ViewMode::Grid)
+                                    ) { "Grid" }
+                                    button(
+                                        class=if is_list { "btn btn-primary btn-sm" } else { "btn btn-secondary btn-sm" },
+                                        aria-pressed=is_list.to_string(),
+                                        on:click=move |_| set_view_mode(browse::ViewMode::List)
+                                    ) { "List" }
+                                    button(class="btn btn-secondary btn-sm", on:click=move |_| {
+                                        selecting.set(!selecting.get());
+                                        selected.set(Vec::new());
+                                    }) { (if selecting.get() { "Cancel" } else { "Select" }) }
+                                }
+                            }
+                            (if selecting.get() {
+                                let count = selected.with(Vec::len);
+                                let none = count == 0 || bulk_busy.get();
+                                view! {
+                                    div(class="bulk-bar", aria-live="polite") {
+                                        span { (count) " selected" }
+                                        button(class="btn btn-secondary btn-sm", disabled=none, on:click=move |_| bulk("played")) { "Mark played" }
+                                        button(class="btn btn-secondary btn-sm", disabled=none, on:click=move |_| bulk("unplayed")) { "Mark unplayed" }
+                                        button(class="btn btn-secondary btn-sm", disabled=none, on:click=move |_| bulk("refresh")) { "Refresh metadata" }
+                                    }
+                                }
+                            } else {
+                                view! {}
+                            })
                         };
                         if item_list.is_empty() {
                             view! { div(class="empty-state") { "No items found." } }
@@ -527,7 +733,7 @@ pub fn Media(path: String) -> View {
                             view! {
                                 div {
                                     (sort_bar)
-                                    div(class="media-grid") {
+                                    div(class=if is_list { "media-grid list" } else { "media-grid" }) {
                                         Indexed(
                                             list=move || item_list.clone(),
                                             view=move |item: BaseItemDto| {
@@ -554,8 +760,19 @@ pub fn Media(path: String) -> View {
                                                 let (poster_class, placeholder_class) = browse::grid_classes(&item_type);
 
                                                 let opens_detail = browse::opens_detail(&item_type, is_folder);
+                                                let select_id = item.id.clone();
+                                                let check_id = item.id.clone();
+                                                let card_class = move || {
+                                                    if selecting.get() && selected.with(|s| s.contains(&check_id)) {
+                                                        "media-card selected"
+                                                    } else {
+                                                        "media-card"
+                                                    }
+                                                };
                                                 let on_click = move |_| {
-                                                    if opens_detail {
+                                                    if selecting.get() {
+                                                        selected.update(|s| browse::toggle_selected(s, &select_id));
+                                                    } else if opens_detail {
                                                         view_detail(item_id.clone());
                                                     } else {
                                                         browse_into(item_for_click.clone());
@@ -563,7 +780,7 @@ pub fn Media(path: String) -> View {
                                                 };
 
                                                 view! {
-                                                    div(class="media-card", on:click=on_click) {
+                                                    div(class=card_class, on:click=on_click) {
                                                         div(class="media-card-art") {
                                                         (if has_image {
                                                             let url = img_url.clone();
@@ -1125,7 +1342,36 @@ pub fn Media(path: String) -> View {
                     }
                 },
                 MediaView::Search => {
-                    if search_loading.get() {
+                    let current_kind = here.with(|r| match r {
+                        MediaRoute::Search { kind, .. } => kind.clone().unwrap_or_default(),
+                        _ => String::new(),
+                    });
+                    let kind_bar = view! {
+                        div(class="grid-toolbar") {
+                            label(class="grid-sort") {
+                                "Show "
+                                select(on:change=move |e: web_sys::Event| {
+                                    let value = select_value(e);
+                                    if let MediaRoute::Search { words, library, .. } = here.get_clone() {
+                                        go(MediaRoute::Search {
+                                            words,
+                                            library,
+                                            kind: Some(value).filter(|k| !k.is_empty()),
+                                        });
+                                    }
+                                }) {
+                                    Indexed(
+                                        list=move || browse::SEARCH_KINDS.to_vec(),
+                                        view=move |(value, label): (&'static str, &'static str)| {
+                                            let is_selected = value == current_kind;
+                                            view! { option(value=value, selected=is_selected) { (label) } }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    };
+                    let body = if search_loading.get() {
                         view! { div(class="loading-container") { span(class="spinner") {} " Searching..." } }
                     } else {
                         let results = search_results.get_clone();
@@ -1184,7 +1430,8 @@ pub fn Media(path: String) -> View {
                                 }
                             }
                         }
-                    }
+                    };
+                    view! { div { (kind_bar) (body) } }
                 },
             })
         }

@@ -321,6 +321,7 @@ pub async fn get_items(
     sort_order: &str,
     recursive: bool,
     person_id: Option<&str>,
+    extra_query: &str,
 ) -> Result<QueryResult<BaseItemDto>, ApiError> {
     let mut path = format!(
         "/Items?StartIndex={start_index}&Limit={limit}\
@@ -336,6 +337,7 @@ pub async fn get_items(
     if let Some(person) = person_id {
         path.push_str(&format!("&PersonIds={person}"));
     }
+    path.push_str(extra_query);
     get_json(&path).await
 }
 
@@ -369,13 +371,45 @@ pub async fn stop_scheduled_task(task_id: &str) -> Result<(), ApiError> {
 pub async fn search_hints(
     term: &str,
     parent_id: Option<&str>,
+    kind: Option<&str>,
 ) -> Result<SearchHintResult, ApiError> {
     let encoded = url_encode(term);
     let scope = parent_id
         .map(|p| format!("&ParentId={p}"))
         .unwrap_or_default();
+    let kind = kind
+        .map(|k| format!("&IncludeItemTypes={}", url_encode(k)))
+        .unwrap_or_default();
     get_json(&format!(
-        "/Search/Hints?SearchTerm={encoded}&Limit=40{scope}"
+        "/Search/Hints?SearchTerm={encoded}&Limit=40{scope}{kind}"
     ))
     .await
+}
+
+/// The genres and years a library's titles have (for its filters).
+pub async fn get_filters(parent_id: &str) -> Result<ItemFilters, ApiError> {
+    get_json(&format!("/Items/Filters?ParentId={parent_id}")).await
+}
+
+/// Mark an item played (or unplayed) for the signed-in user.
+pub async fn set_played(item_id: &str, played: bool) -> Result<(), ApiError> {
+    let path = format!("/UserPlayedItems/{item_id}");
+    if played {
+        post_empty(&path).await
+    } else {
+        delete_path(&path).await
+    }
+}
+
+/// A value kept in the browser (view choices).
+pub fn stored(key: &str) -> Option<String> {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|s| s.get_item(key).ok().flatten())
+}
+
+pub fn store(key: &str, value: &str) {
+    if let Some(s) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
+        let _ = s.set_item(key, value);
+    }
 }
