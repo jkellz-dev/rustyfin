@@ -1,6 +1,7 @@
 use axum::{
     Json,
     extract::{Path, State},
+    http::{HeaderMap, Uri},
 };
 use uuid::Uuid;
 
@@ -16,6 +17,8 @@ use crate::router::AppState;
 pub async fn get_playback_info(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
+    headers: HeaderMap,
+    uri: Uri,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
@@ -50,6 +53,13 @@ pub async fn get_playback_info(
         auth.is_administrator,
     )
     .await?;
+    let token = rustyfin_auth::middleware::request_token(&headers, uri.query());
+    playback_info::apply_subtitle_delivery(
+        &mut info,
+        item_id,
+        stored_profile.as_ref(),
+        token.as_deref(),
+    );
     Ok(Json(info))
 }
 
@@ -57,6 +67,8 @@ pub async fn get_playback_info(
 pub async fn post_playback_info(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
+    headers: HeaderMap,
+    uri: Uri,
     Path(item_id): Path<Uuid>,
     Json(body): Json<PlaybackInfoRequest>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
@@ -96,5 +108,8 @@ pub async fn post_playback_info(
         auth.is_administrator,
     )
     .await?;
+    let token = rustyfin_auth::middleware::request_token(&headers, uri.query());
+    let profile = body.device_profile.as_ref().or(stored_profile.as_ref());
+    playback_info::apply_subtitle_delivery(&mut info, item_id, profile, token.as_deref());
     Ok(Json(info))
 }

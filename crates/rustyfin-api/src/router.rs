@@ -317,6 +317,14 @@ pub fn build_router(state: AppState) -> Router {
             "/Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}",
             get(subtitles::get_subtitle_stream_format),
         )
+        .route(
+            "/Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}",
+            get(subtitles::get_subtitle_stream_source_format),
+        )
+        .route(
+            "/Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/{startPositionTicks}/Stream.{format}",
+            get(subtitles::get_subtitle_stream_at),
+        )
         // ── Sessions ──────────────────────────────────────────────
         .route("/Sessions", get(sessions::get_sessions))
         .route(

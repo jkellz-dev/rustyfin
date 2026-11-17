@@ -230,8 +230,51 @@ pub fn subtitle_delivery(
     profiles: &[SubtitleProfile],
     transcoding: bool,
 ) -> (&'static str, Option<String>) {
-    let _ = (stream, profiles, transcoding);
+    let format = subtitle_format(stream.codec.as_deref().unwrap_or_default());
+    let is = |p: &SubtitleProfile, method: &str| {
+        p.method
+            .as_deref()
+            .is_some_and(|m| m.eq_ignore_ascii_case(method))
+    };
+    let format_of = |p: &SubtitleProfile| p.format.as_deref().map(subtitle_format);
+    if !stream.is_external
+        && !transcoding
+        && profiles
+            .iter()
+            .any(|p| is(p, "Embed") && format_of(p).as_deref() == Some(format.as_str()))
+    {
+        return ("Embed", None);
+    }
+    if let Some(p) = profiles
+        .iter()
+        .find(|p| is(p, "External") && format_of(p).as_deref() == Some(format.as_str()))
+    {
+        return ("External", p.format.clone());
+    }
+    if stream.is_text_subtitle_stream
+        && let Some(p) = profiles.iter().find(|p| {
+            is(p, "External") && format_of(p).is_some_and(|f| TEXT_FORMATS.contains(&f.as_str()))
+        })
+    {
+        return ("External", p.format.clone());
+    }
     ("Encode", None)
+}
+
+/// Text formats a text subtitle can be turned into.
+const TEXT_FORMATS: [&str; 4] = ["vtt", "srt", "ass", "ssa"];
+
+/// One name per subtitle format, whether it comes from ffprobe's codec name
+/// or from an app's profile.
+fn subtitle_format(name: &str) -> String {
+    let name = name.to_ascii_lowercase();
+    match name.as_str() {
+        "subrip" => "srt".to_string(),
+        "webvtt" => "vtt".to_string(),
+        "hdmv_pgs_subtitle" | "pgs" => "pgssub".to_string(),
+        "dvd_subtitle" => "dvdsub".to_string(),
+        _ => name,
+    }
 }
 
 /// Set `DeliveryMethod` and, for files, `DeliveryUrl` on every subtitle of
@@ -242,7 +285,33 @@ pub fn apply_subtitle_delivery(
     profile: Option<&DeviceProfile>,
     api_key: Option<&str>,
 ) {
-    let _ = (info, item_id, profile, api_key);
+    let Some(profile) = profile else {
+        return;
+    };
+    for source in &mut info.media_sources {
+        let transcoding = !source.supports_direct_play;
+        let source_id = source.id.clone();
+        let Some(streams) = source.media_streams.as_mut() else {
+            continue;
+        };
+        for stream in streams.iter_mut().filter(|s| s.stream_type == "Subtitle") {
+            let (method, format) =
+                subtitle_delivery(stream, &profile.subtitle_profiles, transcoding);
+            stream.delivery_method = Some(method.to_string());
+            if let Some(format) = format {
+                let mut url = format!(
+                    "/Videos/{item_id}/{source_id}/Subtitles/{}/0/Stream.{format}",
+                    stream.index
+                );
+                if let Some(key) = api_key {
+                    url.push_str("?ApiKey=");
+                    url.push_str(&crate::transcode::names::encode_query_value(key));
+                }
+                stream.delivery_url = Some(url);
+                stream.is_external_url = Some(false);
+            }
+        }
+    }
 }
 
 /// Build and set the transcoding URL and related fields on a MediaSourceInfo.

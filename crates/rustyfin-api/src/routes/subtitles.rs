@@ -45,6 +45,38 @@ pub async fn get_subtitle_stream_format(
     serve_subtitle(&state, item_id, stream_index, fmt).await
 }
 
+/// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}`
+pub async fn get_subtitle_stream_source_format(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path((item_id, media_source_id, stream_index, format)): Path<(Uuid, String, i32, String)>,
+) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
+    let file = super::versions::source_item(&state, item_id, Some(&media_source_id)).await?;
+    let fmt = subtitles::format_from_extension(&format);
+    serve_subtitle(&state, file, stream_index, fmt).await
+}
+
+/// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/{startPositionTicks}/Stream.{format}`:
+/// the address PlaybackInfo's `DeliveryUrl` gives (as Jellyfin's does, with a
+/// start of 0). A later start is not applied: the whole file is sent.
+pub async fn get_subtitle_stream_at(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path((item_id, media_source_id, stream_index, _start, format)): Path<(
+        Uuid,
+        String,
+        i32,
+        i64,
+        String,
+    )>,
+) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
+    let file = super::versions::source_item(&state, item_id, Some(&media_source_id)).await?;
+    let fmt = subtitles::format_from_extension(&format);
+    serve_subtitle(&state, file, stream_index, fmt).await
+}
+
 async fn serve_subtitle(
     state: &AppState,
     item_id: Uuid,

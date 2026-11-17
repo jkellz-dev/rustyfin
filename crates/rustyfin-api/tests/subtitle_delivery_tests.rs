@@ -28,6 +28,12 @@ async fn subtitles_say_how_to_get_them_and_the_address_works() {
     .execute(&app.pool)
     .await
     .unwrap();
+    // A file the profile plays as it is, so embedded subtitles can stay inside.
+    sqlx::query("UPDATE media_items SET container = 'mkv' WHERE id = $1")
+        .bind(film)
+        .execute(&app.pool)
+        .await
+        .unwrap();
 
     let body = json!({"DeviceProfile": {
         "DirectPlayProfiles": [{"Type": "Video", "Container": "mkv,mp4", "VideoCodec": "h264", "AudioCodec": "aac"}],
