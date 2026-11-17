@@ -4,8 +4,8 @@ A media server in Rust that speaks Jellyfin's API, so Jellyfin's apps (Infuse, S
 work with it unchanged. The aim is a fast, light Jellyfin replacement for people who run their own servers: one binary,
 Postgres for state, media folders mounted read-only.
 
-**Status**: pre-release. It serves a real library of over 70,000 films, episodes and tracks day to day; testing each app
-on real devices is still under way. What is done and what is next: [`roadmap.md`](roadmap.md).
+**Status**: pre-release. Testing each Jellyfin app on real devices is still under way. What is done and what is next:
+[`roadmap.md`](roadmap.md).
 
 ## What it does
 
