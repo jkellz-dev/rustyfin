@@ -312,8 +312,7 @@ mod tests {
         assert_eq!(finished.data["Errors"], 3);
         let done = events
             .iter()
-            .filter(|e| e.message_type == "RefreshProgress")
-            .next_back()
+            .rfind(|e| e.message_type == "RefreshProgress")
             .unwrap();
         assert_eq!(done.data["Progress"], "100");
     }
