@@ -1135,7 +1135,8 @@ validation, and polish needed for daily use.
 - [x] Admin notification when scan errors occur (e.g. unreadable files, failed probes): the finished-scan toast counts
       them; a warning goes to the activity log
 - [x] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request): shared `timer::sleep_ms`, 3 s
-- [ ] Toast for error states, not just success (network errors, 403s, validation failures)
+- [x] Toast for error states, not just success (network errors, 403s, validation failures): errors use the `ErrorNotice`
+      banner (12c), announced to screen readers, with Retry; it stays until dismissed rather than vanishing like a toast
 
 ### 12c. Form Validation & Error Handling
 
