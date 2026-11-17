@@ -710,15 +710,18 @@ mod tests {
             assert!(second.contains("-start_number 10"), "{second}");
         }
 
-        // After a restart at segment 10, ffmpeg's clock starts at 0 again: its
-        // 5 s are the session's 65 s.
+        // ffmpeg runs with -copyts, so it reports progress in file time. In a
+        // session resumed at 41:10 and restarted at segment 10 (41:10 + 60 s),
+        // 41:10 + 65 s of file time is the session's 65 s.
         #[tokio::test]
         async fn restart_decisions_use_the_session_clock() {
             let root = root("clock");
             let tm = manager(&root, fake("runs"));
-            tm.start_transcode(request(&root, "s4", 0)).await.unwrap();
+            tm.start_transcode(request(&root, "s4", 2470))
+                .await
+                .unwrap();
             tm.restart_at_segment("s4", 10).await.unwrap();
-            tm.update_position("s4", 5 * SEC).await;
+            tm.update_position("s4", (2470 + 65) * SEC).await;
 
             assert!(
                 !tm.needs_restart("s4", 30).await,
@@ -760,9 +763,12 @@ mod tests {
         async fn throttling_measures_from_the_player() {
             let root = root("throttle");
             let tm = manager(&root, fake("runs"));
-            tm.start_transcode(request(&root, "s5", 0)).await.unwrap();
+            // Resumed at 41:10: ffmpeg reports file time (-copyts).
+            tm.start_transcode(request(&root, "s5", 2470))
+                .await
+                .unwrap();
             tm.touch_segment("s5", 20).await; // the player is at 120 s
-            tm.update_position("s5", 150 * SEC).await; // 30 s ahead of it
+            tm.update_position("s5", (2470 + 150) * SEC).await; // 30 s ahead of it
 
             tm.throttle_jobs().await;
             assert!(
@@ -770,9 +776,17 @@ mod tests {
                 "30 s ahead is not far ahead"
             );
 
-            tm.update_position("s5", 250 * SEC).await; // 130 s ahead
+            tm.update_position("s5", (2470 + 250) * SEC).await; // 130 s ahead
             tm.throttle_jobs().await;
             assert!(tm.jobs.read().await["s5"].is_paused, "130 s ahead is");
+
+            // The player asks for a segment the paused encoder has not written:
+            // the request must resume it, or the segment never comes.
+            tm.touch_segment("s5", 45).await;
+            assert!(
+                !tm.jobs.read().await["s5"].is_paused,
+                "a segment request resumes a paused encoder"
+            );
             tm.kill_all().await;
         }
     }
