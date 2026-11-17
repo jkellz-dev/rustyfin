@@ -176,9 +176,14 @@ pub fn Dashboard() -> View {
                                     list=move || sessions.get_clone(),
                                     view=move |s: SessionInfo| {
                                         let state = s.play_state.clone().unwrap_or_default();
-                                        let title = s.now_playing_item.as_ref().map(|i| match &i.series_name {
-                                            Some(series) => format!("{series}: {}", i.name),
-                                            None => i.name.clone(),
+                                        let title = s.now_playing_item.as_ref().map(|i| {
+                                            dashboard_view::playing_title(
+                                                &i.item_type,
+                                                &i.name,
+                                                i.series_name.as_deref(),
+                                                i.parent_index_number,
+                                                i.index_number,
+                                            )
                                         });
                                         let line = dashboard_view::session_label(
                                             s.user_name.as_deref(),
