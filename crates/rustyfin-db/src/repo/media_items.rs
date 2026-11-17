@@ -1309,6 +1309,24 @@ pub async fn search_by_name(
     .await
 }
 
+/// One page of the shared items (no owner) for the search index, in id order
+/// after `after`. Pass the last id of a page to get the next; an empty page
+/// is the end.
+pub async fn search_index_page(
+    pool: &PgPool,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM media_items WHERE owner_id IS NULL AND ($1::uuid IS NULL OR id > $1) \
+         ORDER BY id LIMIT $2",
+    )
+    .bind(after)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
 /// Find similar items based on shared genres, studios, and tags.
 pub async fn find_similar(
     pool: &PgPool,

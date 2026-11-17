@@ -11,6 +11,10 @@ use rustyfin_db::repo::media_items;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// Items per Meilisearch batch when reindexing.
+#[cfg(feature = "meilisearch")]
+const REINDEX_PAGE: i64 = 10_000;
+
 /// A search hit with the fields needed to build a `SearchHint`.
 #[derive(Debug, Clone)]
 pub struct SearchHit {
@@ -168,14 +172,20 @@ impl SearchService {
                 .await
                 .map_err(SearchError::Engine)?;
 
-            // Load all items from DB and index them
-            let items = media_items::search_by_name(&self.pool, "", 100_000).await?;
-            if !items.is_empty() {
+            // Every shared item, a page at a time: one Meilisearch batch per
+            // page, and never the whole library in memory at once.
+            let mut after = None;
+            let mut total = 0;
+            loop {
+                let items = media_items::search_index_page(&self.pool, after, REINDEX_PAGE).await?;
+                let Some(last) = items.last() else { break };
+                after = Some(last.id);
                 indexer::index_documents(client, &items)
                     .await
                     .map_err(SearchError::Engine)?;
+                total += items.len();
             }
-            tracing::info!("Reindexed {} items into Meilisearch", items.len());
+            tracing::info!("Reindexed {total} items into Meilisearch");
         }
         Ok(())
     }
