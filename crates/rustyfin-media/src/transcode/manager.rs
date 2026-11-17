@@ -488,7 +488,11 @@ impl TranscodeManager {
         }
         // Count running encoders only: a finished session holds no ffmpeg.
         let mut jobs = self.jobs.write().await;
-        jobs.values_mut().filter(|j| j.is_alive()).count() >= self.max_concurrent
+        jobs.values_mut()
+            .map(TranscodeJob::is_alive)
+            .filter(|alive| *alive)
+            .count()
+            >= self.max_concurrent
     }
 
     /// Update the transcoding position for a job.
