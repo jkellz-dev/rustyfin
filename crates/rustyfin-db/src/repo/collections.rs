@@ -225,10 +225,10 @@ pub async fn hidden_among(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<Uuid>, sqlx
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT t.id FROM media_items t WHERE t.id = ANY($1) AND {}",
         hidden_single_sql("t")
-    ))
+    )))
     .bind(ids)
     .fetch_all(pool)
     .await
@@ -237,12 +237,12 @@ pub async fn hidden_among(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<Uuid>, sqlx
 /// How many collections (BoxSets) there are in `libraries` (all when `None`).
 /// A collection made by hand outside any library counts for everyone.
 pub async fn count_visible(pool: &PgPool, libraries: Option<&[Uuid]>) -> Result<i64, sqlx::Error> {
-    let (n,): (i64,) = sqlx::query_as(&format!(
+    let (n,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT COUNT(*) FROM media_items t WHERE t.item_type = 'BoxSet' \
              AND ($1::uuid[] IS NULL OR t.library_id IS NULL OR t.library_id = ANY($1)) \
              AND NOT {}",
         hidden_single_sql("t")
-    ))
+    )))
     .bind(libraries)
     .fetch_one(pool)
     .await?;
@@ -251,12 +251,12 @@ pub async fn count_visible(pool: &PgPool, libraries: Option<&[Uuid]>) -> Result<
 
 /// The collections `item_id` is in.
 pub async fn list_containing(pool: &PgPool, item_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
-    let rows: Vec<(Uuid,)> = sqlx::query_as(&format!(
+    let rows: Vec<(Uuid,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT ci0.collection_id FROM collection_items ci0 \
              JOIN media_items t ON t.id = ci0.collection_id \
              WHERE ci0.item_id = $1 AND NOT {}",
         hidden_single_sql("t")
-    ))
+    )))
     .bind(item_id)
     .fetch_all(pool)
     .await?;

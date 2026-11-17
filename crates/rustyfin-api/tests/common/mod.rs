@@ -71,7 +71,10 @@ impl TestApp {
             .expect("failed to connect to test database");
 
         setup_pool
-            .execute(format!("CREATE SCHEMA \"{}\"", schema).as_str())
+            .execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "CREATE SCHEMA \"{}\"",
+                schema
+            ))))
             .await
             .expect("failed to create test schema");
 
@@ -85,8 +88,11 @@ impl TestApp {
             .after_connect(move |conn, _meta| {
                 let schema = schema_clone.clone();
                 Box::pin(async move {
-                    conn.execute(format!("SET search_path TO \"{}\"", schema).as_str())
-                        .await?;
+                    conn.execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                        "SET search_path TO \"{}\"",
+                        schema
+                    ))))
+                    .await?;
                     Ok(())
                 })
             })
@@ -438,7 +444,10 @@ impl TestApp {
     pub async fn cleanup(&self) {
         let _ = self
             .pool
-            .execute(format!("DROP SCHEMA \"{}\" CASCADE", self.schema).as_str())
+            .execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "DROP SCHEMA \"{}\" CASCADE",
+                self.schema
+            ))))
             .await;
     }
 }

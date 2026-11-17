@@ -252,7 +252,7 @@ pub async fn list_by_parent(
         param_index + 1
     ));
 
-    let mut q = sqlx::query_as::<_, MediaItemRow>(&query);
+    let mut q = sqlx::query_as::<_, MediaItemRow>(sqlx::AssertSqlSafe(query));
 
     if let Some(pid) = parent_id {
         q = q.bind(pid);
@@ -828,13 +828,13 @@ pub async fn count_by_type(
     pool: &PgPool,
     libraries: Option<&[Uuid]>,
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT t.item_type, COUNT(*) FROM media_items t \
              WHERE ($1::uuid[] IS NULL OR t.library_id IS NULL OR t.library_id = ANY($1)) \
              AND t.owner_id IS NULL AND NOT {} \
              GROUP BY t.item_type",
         super::collections::hidden_single_sql("t")
-    ))
+    )))
     .bind(libraries.map(<[Uuid]>::to_vec))
     .fetch_all(pool)
     .await
@@ -1515,7 +1515,7 @@ pub struct ArtistFilter<'a> {
 /// The alphabet-bar filters on an item's sort name (case-insensitive, by
 /// code point so "#" (`NameLessThan=A`) catches digits and punctuation).
 fn push_name_filters(
-    qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
+    qb: &mut sqlx::QueryBuilder<sqlx::Postgres>,
     alias: &str,
     starts_with: Option<&str>,
     less_than: Option<&str>,
@@ -1541,7 +1541,7 @@ fn push_name_filters(
     }
 }
 
-fn push_artist_where(qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>, f: &ArtistFilter<'_>) {
+fn push_artist_where(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, f: &ArtistFilter<'_>) {
     qb.push(" WHERE mi.item_type = 'MusicArtist'");
     if f.album_artists_only {
         qb.push(
@@ -1834,7 +1834,7 @@ impl ItemQuery {
 
     /// Execute the query and return matching items.
     pub async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-        let mut qb: QueryBuilder<'_, sqlx::Postgres> =
+        let mut qb: QueryBuilder<sqlx::Postgres> =
             QueryBuilder::new("SELECT mi.* FROM media_items mi");
 
         // JOINs
@@ -1860,7 +1860,7 @@ impl ItemQuery {
 
     /// Count matching items (for TotalRecordCount).
     pub async fn count(&self, pool: &PgPool) -> Result<i64, sqlx::Error> {
-        let mut qb: QueryBuilder<'_, sqlx::Postgres> =
+        let mut qb: QueryBuilder<sqlx::Postgres> =
             QueryBuilder::new("SELECT COUNT(*) FROM media_items mi");
 
         if self.needs_user_data_join()
@@ -1878,7 +1878,7 @@ impl ItemQuery {
         Ok(count)
     }
 
-    fn apply_filters<'a>(&'a self, qb: &mut QueryBuilder<'a, sqlx::Postgres>) {
+    fn apply_filters<'a>(&'a self, qb: &mut QueryBuilder<sqlx::Postgres>) {
         // Scoping. Extras belong to their title and are never listed on
         // their own, unless asked for by id.
         if self.ids.is_empty() {
@@ -2050,7 +2050,7 @@ impl ItemQuery {
         }
     }
 
-    fn apply_sorting<'a>(&'a self, qb: &mut QueryBuilder<'a, sqlx::Postgres>) {
+    fn apply_sorting<'a>(&'a self, qb: &mut QueryBuilder<sqlx::Postgres>) {
         // Numbered items (seasons, episodes, tracks) go by their numbers before
         // their names: an episode's name is its title, not its place, so
         // "by name" means by season and episode number first, as in Jellyfin

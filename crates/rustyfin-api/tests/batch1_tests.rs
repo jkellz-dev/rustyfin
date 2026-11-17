@@ -191,9 +191,9 @@ async fn next_up_follows_the_episode_watched_most_recently() {
         user_data::upsert(&app.pool, user, id_of(ep), 0, true, false, 1)
             .await
             .unwrap();
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE user_data SET last_played_date = NOW() - INTERVAL '{ago}' WHERE item_id = $1"
-        ))
+        )))
         .bind(id_of(ep))
         .execute(&app.pool)
         .await

@@ -242,7 +242,10 @@ impl ScheduledTask for DatabaseOptimizeTask {
 
         for table in TABLES {
             let sql = format!("ANALYZE {table}");
-            sqlx::query(&sql).execute(&self.pool).await?;
+            // Table names come from the constant list above.
+            sqlx::query(sqlx::AssertSqlSafe(sql))
+                .execute(&self.pool)
+                .await?;
         }
 
         tracing::info!(tables = ?TABLES, "database ANALYZE completed");

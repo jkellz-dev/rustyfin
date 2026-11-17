@@ -35,23 +35,23 @@ const CREDIT: &str = "CASE WHEN paused THEN 0 ELSE LEAST(\
 /// different item under the same key ends the old one), else open a new one.
 pub async fn report(pool: &PgPool, r: &Report<'_>) -> Result<(), sqlx::Error> {
     // The key moved on to another item: the old play is over.
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "UPDATE play_history SET played_ms = played_ms + {CREDIT}, last_seen_at = now(), \
          ended = true WHERE user_id = $1 AND play_key = $2 AND NOT ended \
          AND item_id IS DISTINCT FROM $4"
-    ))
+    )))
     .bind(r.user_id)
     .bind(r.play_key)
     .bind(MAX_GAP_MS)
     .bind(r.item_id)
     .execute(pool)
     .await?;
-    let updated = sqlx::query(&format!(
+    let updated = sqlx::query(sqlx::AssertSqlSafe(format!(
         "UPDATE play_history SET played_ms = played_ms + {CREDIT}, last_seen_at = now(), \
          paused = $5, position_ticks = COALESCE($6, position_ticks), \
          play_method = COALESCE($7, play_method) \
          WHERE user_id = $1 AND play_key = $2 AND NOT ended AND item_id = $4"
-    ))
+    )))
     .bind(r.user_id)
     .bind(r.play_key)
     .bind(MAX_GAP_MS)
@@ -94,11 +94,11 @@ pub async fn stop(
     play_key: &str,
     position_ticks: Option<i64>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "UPDATE play_history SET played_ms = played_ms + {CREDIT}, last_seen_at = now(), \
          ended = true, position_ticks = COALESCE($4, position_ticks) \
          WHERE user_id = $1 AND play_key = $2 AND NOT ended"
-    ))
+    )))
     .bind(user_id)
     .bind(play_key)
     .bind(MAX_GAP_MS)
@@ -190,11 +190,11 @@ pub async fn list(
 ) -> Result<(Vec<PlayRow>, i64), sqlx::Error> {
     let kinds = KINDS.map(String::from).to_vec();
     let pattern = like(filter.search.as_deref());
-    let rows = sqlx::query_as::<_, PlayRow>(&format!(
+    let rows = sqlx::query_as::<_, PlayRow>(sqlx::AssertSqlSafe(format!(
         "SELECT id, item_id, item_type, item_name, parent_name, client, device_name, \
          play_method, started_at, last_seen_at, played_ms, ended FROM play_history \
          WHERE {WHERE} ORDER BY started_at DESC, id LIMIT $7 OFFSET $8"
-    ))
+    )))
     .bind(user_id)
     .bind(&filter.kinds)
     .bind(&kinds)
@@ -205,15 +205,16 @@ pub async fn list(
     .bind(start)
     .fetch_all(pool)
     .await?;
-    let (total,): (i64,) =
-        sqlx::query_as(&format!("SELECT COUNT(*) FROM play_history WHERE {WHERE}"))
-            .bind(user_id)
-            .bind(&filter.kinds)
-            .bind(&kinds)
-            .bind(&pattern)
-            .bind(filter.min_date)
-            .bind(filter.max_date)
-            .fetch_one(pool)
-            .await?;
+    let (total,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT COUNT(*) FROM play_history WHERE {WHERE}"
+    )))
+    .bind(user_id)
+    .bind(&filter.kinds)
+    .bind(&kinds)
+    .bind(&pattern)
+    .bind(filter.min_date)
+    .bind(filter.max_date)
+    .fetch_one(pool)
+    .await?;
     Ok((rows, total))
 }

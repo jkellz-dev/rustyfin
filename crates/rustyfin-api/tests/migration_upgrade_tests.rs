@@ -36,7 +36,9 @@ impl UpgradeDb {
             .await
             .expect("connect");
         admin
-            .execute(format!("CREATE SCHEMA \"{schema}\"").as_str())
+            .execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "CREATE SCHEMA \"{schema}\""
+            ))))
             .await
             .expect("create schema");
 
@@ -46,8 +48,10 @@ impl UpgradeDb {
             .after_connect(move |conn, _meta| {
                 let schema = schema_for_conn.clone();
                 Box::pin(async move {
-                    conn.execute(format!("SET search_path TO \"{schema}\"").as_str())
-                        .await?;
+                    conn.execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                        "SET search_path TO \"{schema}\""
+                    ))))
+                    .await?;
                     Ok(())
                 })
             })
@@ -66,7 +70,10 @@ impl UpgradeDb {
         self.pool.close().await;
         let _ = self
             .admin
-            .execute(format!("DROP SCHEMA \"{}\" CASCADE", self.schema).as_str())
+            .execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "DROP SCHEMA \"{}\" CASCADE",
+                self.schema
+            ))))
             .await;
     }
 }
@@ -84,7 +91,7 @@ fn migration_files() -> Vec<PathBuf> {
 
 async fn apply(pool: &PgPool, file: &PathBuf) {
     let sql = std::fs::read_to_string(file).expect("read migration");
-    sqlx::raw_sql(&sql)
+    sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
         .execute(pool)
         .await
         .unwrap_or_else(|e| panic!("applying {} failed: {e}", file.display()));

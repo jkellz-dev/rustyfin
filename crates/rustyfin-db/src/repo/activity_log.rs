@@ -81,7 +81,7 @@ pub async fn list_paginated(
         param_index + 1
     ));
 
-    let mut q = sqlx::query_as::<_, ActivityLogRow>(&query);
+    let mut q = sqlx::query_as::<_, ActivityLogRow>(sqlx::AssertSqlSafe(query));
 
     if let Some(date) = min_date {
         q = q.bind(date);
@@ -126,7 +126,7 @@ pub async fn count(
         }
     }
 
-    let mut q = sqlx::query_as::<_, (i64,)>(&query);
+    let mut q = sqlx::query_as::<_, (i64,)>(sqlx::AssertSqlSafe(query));
 
     if let Some(date) = min_date {
         q = q.bind(date);

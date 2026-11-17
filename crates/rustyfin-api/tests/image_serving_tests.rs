@@ -212,10 +212,10 @@ async fn requests_write_the_session_at_most_once_a_minute() {
         let pool = app.pool.clone();
         let token = token.clone();
         async move {
-            sqlx::query(&format!(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
                 "UPDATE sessions SET last_activity = date_trunc('second', NOW()) - INTERVAL '{age}' \
                  WHERE access_token = $1"
-            ))
+            )))
             .bind(&token)
             .execute(&pool)
             .await
