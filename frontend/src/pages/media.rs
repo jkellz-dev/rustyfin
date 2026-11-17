@@ -433,13 +433,16 @@ pub fn Media() -> View {
                                         span(class="breadcrumb-sep") { " / " }
                                         span(class="breadcrumb-current") { (label) }
                                     },
-                                    Some(path) => view! {
+                                    Some(path) => {
+                                        let href = path.clone();
+                                        view! {
                                         span(class="breadcrumb-sep") { " / " }
-                                        a(class="breadcrumb-link", href=path.clone(), on:click=move |e: web_sys::MouseEvent| {
+                                        a(class="breadcrumb-link", href=href, on:click=move |e: web_sys::MouseEvent| {
                                             e.prevent_default();
                                             navigate(&path);
                                         }) { (label) }
-                                    },
+                                        }
+                                    }
                                 }
                             }
                         )

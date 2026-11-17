@@ -35,14 +35,14 @@ pub fn UserDetail(user_id: String) -> View {
     let loading = create_signal(true);
     let error: Signal<Option<String>> = create_signal(None);
 
-    let uid = user_id.clone();
+    let uid = create_signal(user_id.clone());
     let load_page = move || {
         let since = match span_days.get() {
             0 => None,
             d => Some(js_sys::Date::now() - f64::from(d) * 86_400_000.0),
         };
         let query = user_view::history_query(
-            &uid,
+            &uid.get_clone(),
             start.get(),
             PAGE_SIZE,
             &kind.get_clone(),
@@ -61,15 +61,13 @@ pub fn UserDetail(user_id: String) -> View {
             loading.set(false);
         });
     };
-    let load_page2 = load_page.clone();
     let refilter = move || {
         start.set(0);
-        load_page2();
+        load_page();
     };
 
     {
         let uid = user_id.clone();
-        let load_page = load_page.clone();
         spawn_local(async move {
             if let Err(e) = api::ensure_authenticated().await {
                 error.set(Some(e));
@@ -85,12 +83,6 @@ pub fn UserDetail(user_id: String) -> View {
             load_page();
         });
     }
-
-    let refilter_kind = refilter.clone();
-    let refilter_span = refilter.clone();
-    let refilter_search = refilter.clone();
-    let page_prev = load_page.clone();
-    let page_next = load_page.clone();
 
     view! {
         div {
@@ -157,7 +149,7 @@ pub fn UserDetail(user_id: String) -> View {
                         .map(|s| s.value())
                         .unwrap_or_default();
                     kind.set(value);
-                    refilter_kind();
+                    refilter();
                 }) {
                     Indexed(
                         list=move || user_view::KINDS.to_vec(),
@@ -173,7 +165,7 @@ pub fn UserDetail(user_id: String) -> View {
                         .and_then(|s| s.value().parse().ok())
                         .unwrap_or(0);
                     span_days.set(value);
-                    refilter_span();
+                    refilter();
                 }) {
                     Indexed(
                         list=move || user_view::SPANS.to_vec(),
@@ -189,7 +181,7 @@ pub fn UserDetail(user_id: String) -> View {
                     bind:value=search,
                     on:keydown=move |e: web_sys::KeyboardEvent| {
                         if e.key() == "Enter" {
-                            refilter_search();
+                            refilter();
                         }
                     },
                 )
@@ -256,18 +248,16 @@ pub fn UserDetail(user_id: String) -> View {
                         let s = start.get();
                         let t = total.get();
                         let shown_to = (s + PAGE_SIZE).min(t);
-                        let page_prev = page_prev.clone();
-                        let page_next = page_next.clone();
                         view! {
                             div(class="pagination") {
                                 button(class="btn btn-secondary btn-sm", disabled=s == 0, on:click=move |_| {
                                     start.set((s - PAGE_SIZE).max(0));
-                                    page_prev();
+                                    load_page();
                                 }) { "Previous" }
                                 span(class="pagination-info") { (s + 1) " - " (shown_to) " of " (t) }
                                 button(class="btn btn-secondary btn-sm", disabled=s + PAGE_SIZE >= t, on:click=move |_| {
                                     start.set(s + PAGE_SIZE);
-                                    page_next();
+                                    load_page();
                                 }) { "Next" }
                             }
                         }

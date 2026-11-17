@@ -304,21 +304,22 @@ pub fn Dashboard() -> View {
                                             .now_playing_item
                                             .as_ref()
                                             .map(|i| MediaRoute::Item { id: i.id.clone() }.path());
+                                        let title_view = match item_path {
+                                            Some(path) => {
+                                                let href = path.clone();
+                                                view! {
+                                                    a(href=href, on:click=move |e: web_sys::MouseEvent| {
+                                                        e.prevent_default();
+                                                        navigate(&path);
+                                                    }) { (line) }
+                                                }
+                                            }
+                                            None => view! { span { (line) } },
+                                        };
                                         view! {
                                             div(class="session-row") {
                                                 div(class="session-line") {
-                                                    (match item_path.clone() {
-                                                        Some(path) => {
-                                                            let href = path.clone();
-                                                            view! {
-                                                                a(href=href, on:click=move |e: web_sys::MouseEvent| {
-                                                                    e.prevent_default();
-                                                                    navigate(&path);
-                                                                }) { (line) }
-                                                            }
-                                                        }
-                                                        None => view! { span { (line) } },
-                                                    })
+                                                    (title_view)
                                                     span(class="badge badge-type") { (how) }
                                                 }
                                                 (match pct {
