@@ -32,7 +32,7 @@ license = "GPL-3.0-or-later"
 [workspace.dependencies]
 # Prometheus metrics
 metrics = "0.24"
-metrics-exporter-prometheus = { version = "0.17", default-features = false }
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
 # Internal crates
 rustyfin-api = { path = "crates/rustyfin-api" }
 rustyfin-auth = { path = "crates/rustyfin-auth" }
@@ -48,43 +48,43 @@ rustyfin-common = { path = "crates/rustyfin-common" }
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.7", features = ["cors", "trace", "fs"] }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 
 # Utilities
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rand = "0.9"
-cron = "0.15"
+rand = "0.10"
+cron = "0.17"
 async-trait = "0.1"
 thiserror = "2"
-sha2 = "0.10"
+sha2 = "0.11"
 anyhow = "1"
 walkdir = "2"
 regex = "1"
 futures-util = "0.3"
-quick-xml = { version = "0.37", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 rust-embed = { version = "8", features = ["axum"] }
 mime_guess = "2"
 flate2 = "1"
-brotli = "8"
+brotli = "9"
 ldap3 = { version = "0.12", default-features = false, features = ["tls-rustls-ring"] }
 ipnet = "2"
-lofty = "0.22"
+lofty = "0.25"
 clap = { version = "4", features = ["derive"] }
 config = { version = "0.15", features = ["toml"] }
 governor = "0.10"
-dialoguer = "0.11"
+dialoguer = "0.12"
 open = "5"
 serde_urlencoded = "0.7"
