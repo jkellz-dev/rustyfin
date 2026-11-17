@@ -50,6 +50,14 @@ fn document() -> Option<web_sys::Document> {
 /// Name the page in the tab and say it to screen readers.
 pub fn announce_page(path: &str) {
     let title = page_title(path);
+    // After the page is drawn: on the first draw the live region is not in
+    // the document yet.
+    wasm_bindgen_futures::spawn_local(async move {
+        say_page(title);
+    });
+}
+
+fn say_page(title: &str) {
     if let Some(doc) = document() {
         doc.set_title(&format!("{title} · Rustyfin Admin"));
         if let Some(region) = doc.get_element_by_id("sr-announcer") {
