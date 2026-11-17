@@ -153,8 +153,34 @@ pub fn stream_method_label(method: &str) -> &'static str {
 /// "5 weeks ago", "3 months ago", "2 years ago": how long before `now_ms`
 /// (both milliseconds since 1970) `then_ms` was.
 pub fn ago_label(now_ms: f64, then_ms: f64) -> String {
-    let _ = (now_ms, then_ms);
-    String::new()
+    let secs = ((now_ms - then_ms) / 1000.0).max(0.0);
+    let mins = (secs / 60.0).floor() as i64;
+    let hours = (secs / 3600.0).floor() as i64;
+    let days = (secs / 86_400.0).floor() as i64;
+    let plural = |n: i64, unit: &str| {
+        if n == 1 {
+            format!("1 {unit} ago")
+        } else {
+            format!("{n} {unit}s ago")
+        }
+    };
+    if secs < 60.0 {
+        "just now".to_string()
+    } else if mins < 60 {
+        format!("{mins} min ago")
+    } else if hours < 24 {
+        plural(hours, "hour")
+    } else if days < 2 {
+        "yesterday".to_string()
+    } else if days < 14 {
+        plural(days, "day")
+    } else if days < 60 {
+        plural(days / 7, "week")
+    } else if days < 365 {
+        plural(days / 30, "month")
+    } else {
+        plural(days / 365, "year")
+    }
 }
 
 /// How the user list is ordered.
@@ -205,8 +231,33 @@ pub fn sort_and_filter(
     role: RoleFilter,
     sort: UserSort,
 ) -> Vec<usize> {
-    let _ = (words, role, sort);
-    (0..rows.len()).collect()
+    let words = words.trim().to_lowercase();
+    let mut picked: Vec<usize> = (0..rows.len())
+        .filter(|&i| {
+            let r = &rows[i];
+            let role_ok = match role {
+                RoleFilter::All => true,
+                RoleFilter::Admins => r.admin,
+                RoleFilter::Users => !r.admin,
+            };
+            role_ok && (words.is_empty() || r.name.to_lowercase().contains(&words))
+        })
+        .collect();
+    let by_name = |a: usize, b: usize| {
+        rows[a]
+            .name
+            .to_lowercase()
+            .cmp(&rows[b].name.to_lowercase())
+    };
+    picked.sort_by(|&a, &b| match sort {
+        UserSort::Name => by_name(a, b),
+        UserSort::Role => rows[b].admin.cmp(&rows[a].admin).then(by_name(a, b)),
+        UserSort::LastActive => {
+            let key = |i: usize| rows[i].last_active_ms.unwrap_or(f64::NEG_INFINITY);
+            key(b).total_cmp(&key(a)).then(by_name(a, b))
+        }
+    });
+    picked
 }
 
 #[cfg(test)]

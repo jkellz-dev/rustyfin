@@ -4,22 +4,13 @@ use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::dashboard_view;
 use crate::media_route::MediaRoute;
+use crate::timer::sleep_ms;
 use crate::types::{
     ActivityLogEntry, BaseItemDto, CacheHealth, DashboardStats, LibraryHealth, LibraryStats,
     SessionInfo, SystemInfo,
 };
 use crate::user_view;
 use sycamore_router::navigate;
-
-/// Wait `ms` milliseconds (the browser's timer).
-async fn sleep_ms(ms: i32) {
-    let promise = js_sys::Promise::new(&mut |resolve, _| {
-        if let Some(w) = web_sys::window() {
-            let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
-        }
-    });
-    let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
-}
 
 /// Seconds since an ISO date, by the browser's clock (None if unparsable).
 fn age_seconds(iso: &str) -> Option<i64> {

@@ -128,3 +128,42 @@ pub async fn deactivate_by_token(pool: &PgPool, token: &str) -> Result<(), sqlx:
         .await?;
     Ok(())
 }
+
+/// A device signed in: its latest active session and the user's name.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DeviceRow {
+    pub device_id: String,
+    pub device_name: String,
+    pub app_name: String,
+    pub app_version: Option<String>,
+    pub user_id: Uuid,
+    pub user_name: String,
+    pub last_activity: DateTime<Utc>,
+}
+
+/// Devices with an active session (of `user_id`, when given), most recently
+/// active first; one entry per device and user.
+pub async fn devices(pool: &PgPool, user_id: Option<Uuid>) -> Result<Vec<DeviceRow>, sqlx::Error> {
+    sqlx::query_as::<_, DeviceRow>(
+        "SELECT * FROM ( \
+           SELECT DISTINCT ON (s.device_id, s.user_id) s.device_id, s.device_name, s.app_name, \
+                  s.app_version, s.user_id, u.username AS user_name, s.last_activity \
+           FROM sessions s JOIN users u ON u.id = s.user_id \
+           WHERE s.is_active AND ($1::uuid IS NULL OR s.user_id = $1) \
+           ORDER BY s.device_id, s.user_id, s.last_activity DESC \
+         ) d ORDER BY last_activity DESC",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+}
+
+/// Sign a device out: end its active sessions. Returns their ids.
+pub async fn deactivate_device(pool: &PgPool, device_id: &str) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "UPDATE sessions SET is_active = false WHERE device_id = $1 AND is_active RETURNING id",
+    )
+    .bind(device_id)
+    .fetch_all(pool)
+    .await
+}

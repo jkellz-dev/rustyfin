@@ -4,6 +4,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::types::{UpdateUserPolicyRequest, UserDto, VirtualFolderInfo};
+use crate::user_view;
 
 #[component]
 pub fn Users() -> View {
@@ -21,6 +22,11 @@ pub fn Users() -> View {
     let lib_access_enable_all = create_signal(true);
     let lib_access_selected: Signal<Vec<String>> = create_signal(Vec::new());
     let lib_access_saving = create_signal(false);
+
+    // The list's order and filters (roadmap 12e).
+    let sort_label = create_signal("Name".to_string());
+    let role_filter = create_signal("all".to_string());
+    let name_filter = create_signal(String::new());
 
     let load_users = move || {
         spawn_local({
@@ -151,11 +157,13 @@ pub fn Users() -> View {
         div {
             // Toast
             (if let Some(msg) = toast.get_clone() {
+                let msg_shown = msg.clone();
                 spawn_local({
                     async move {
-                        gloo_net::http::Request::get("data:,")
-                            .send().await.ok();
-                        toast.set(None);
+                        crate::timer::sleep_ms(crate::timer::TOAST_MS).await;
+                        if toast.get_clone().as_deref() == Some(msg_shown.as_str()) {
+                            toast.set(None);
+                        }
                     }
                 });
                 view! {
@@ -278,8 +286,72 @@ pub fn Users() -> View {
             } else if users.get_clone().is_empty() {
                 view! { div(class="empty-state") { "No users yet." } }
             } else {
-                let items = users.get_clone();
+                let all = users.get_clone();
+                let now = js_sys::Date::now();
+                let last_ms = |u: &UserDto| {
+                    u.last_activity_date.as_deref().map(|d| {
+                        js_sys::Date::new(&wasm_bindgen::JsValue::from_str(d)).get_time()
+                    }).filter(|t| !t.is_nan())
+                };
+                let rows: Vec<user_view::UserRow> = all
+                    .iter()
+                    .map(|u| user_view::UserRow {
+                        name: &u.name,
+                        admin: u.policy.is_administrator,
+                        last_active_ms: last_ms(u),
+                    })
+                    .collect();
+                let role = match role_filter.get_clone().as_str() {
+                    "admins" => user_view::RoleFilter::Admins,
+                    "users" => user_view::RoleFilter::Users,
+                    _ => user_view::RoleFilter::All,
+                };
+                let order = user_view::sort_and_filter(
+                    &rows,
+                    &name_filter.get_clone(),
+                    role,
+                    user_view::UserSort::from_label(&sort_label.get_clone()),
+                );
+                let items: Vec<(UserDto, String)> = order
+                    .into_iter()
+                    .map(|i| {
+                        let u = all[i].clone();
+                        let ago = last_ms(&u)
+                            .map(|t| user_view::ago_label(now, t))
+                            .unwrap_or_else(|| "Never".to_string());
+                        (u, ago)
+                    })
+                    .collect();
                 view! {
+                    div(class="history-filters") {
+                        input(
+                            class="search-input",
+                            r#type="search",
+                            placeholder="Find a user",
+                            bind:value=name_filter,
+                        )
+                        select(on:change=move |e: web_sys::Event| {
+                            if let Some(s) = e.target().and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok()) {
+                                role_filter.set(s.value());
+                            }
+                        }) {
+                            option(value="all") { "Everyone" }
+                            option(value="admins") { "Administrators" }
+                            option(value="users") { "Users" }
+                        }
+                        select(on:change=move |e: web_sys::Event| {
+                            if let Some(s) = e.target().and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok()) {
+                                sort_label.set(s.value());
+                            }
+                        }) {
+                            Indexed(
+                                list=move || user_view::UserSort::ALL.to_vec(),
+                                view=move |(_, label): (user_view::UserSort, &'static str)| view! {
+                                    option(value=label) { "Sort: " (label) }
+                                }
+                            )
+                        }
+                    }
                     div(class="card") {
                         table {
                             thead {
@@ -294,11 +366,11 @@ pub fn Users() -> View {
                             tbody {
                                 Indexed(
                                     list=move || items.clone(),
-                                    view=move |user| {
+                                    view=move |(user, ago): (UserDto, String)| {
                                         let name = user.name.clone();
                                         let toggle_id = user.id.clone();
                                         let is_admin = user.policy.is_administrator;
-                                        let last_activity = user.last_activity_date.clone().unwrap_or_else(|| "Never".to_string());
+                                        let last_activity = ago;
                                         let del_user = user.clone();
                                         let lib_user = user.clone();
                                         let lib_access_label = if user.policy.enable_all_folders {

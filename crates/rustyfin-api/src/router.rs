@@ -319,6 +319,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         // ── Sessions ──────────────────────────────────────────────
         .route("/Sessions", get(sessions::get_sessions))
+        .route(
+            "/Devices",
+            get(devices::get_devices).delete(devices::delete_device),
+        )
         .route("/Sessions/Logout", post(sessions::logout))
         .route("/Sessions/Capabilities", post(sessions::post_capabilities))
         .route(

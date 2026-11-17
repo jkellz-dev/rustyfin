@@ -6,6 +6,7 @@ pub mod auth;
 pub mod branding;
 pub mod collections;
 pub mod configuration;
+pub mod devices;
 pub mod display_preferences;
 pub mod environment;
 pub mod extras;

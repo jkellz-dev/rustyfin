@@ -265,6 +265,20 @@ pub async fn get_user(user_id: &str) -> Result<UserDto, String> {
     get_json(&format!("/Users/{user_id}")).await
 }
 
+/// A user's signed-in devices.
+pub async fn get_devices(user_id: &str) -> Result<QueryResult<DeviceInfo>, String> {
+    get_json(&format!("/Devices?UserId={user_id}")).await
+}
+
+/// Sign a device out (its tokens stop working).
+pub async fn delete_device(device_id: &str) -> Result<(), String> {
+    delete_path(&format!(
+        "/Devices?Id={}",
+        crate::media_route::encode(device_id)
+    ))
+    .await
+}
+
 /// Minutes and plays per kind of media.
 pub async fn get_play_stats(user_id: &str) -> Result<PlayStats, String> {
     get_json(&format!("/Users/{user_id}/PlayStats")).await

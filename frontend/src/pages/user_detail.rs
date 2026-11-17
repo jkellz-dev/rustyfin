@@ -8,7 +8,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::media_route::MediaRoute;
-use crate::types::{PlayEntry, PlayStats, UserDto};
+use crate::types::{DeviceInfo, PlayEntry, PlayStats, UserDto};
 use crate::user_view;
 
 const PAGE_SIZE: i32 = 50;
@@ -33,6 +33,10 @@ pub fn UserDetail(user_id: String) -> View {
     let span_days = create_signal(0u32);
     let search = create_signal(String::new());
     let loading = create_signal(true);
+    let devices: Signal<Vec<DeviceInfo>> = create_signal(Vec::new());
+    // The device waiting for "Sign out" to be confirmed.
+    let sign_out_target: Signal<Option<DeviceInfo>> = create_signal(None);
+    let toast: Signal<Option<String>> = create_signal(None);
     let error: Signal<Option<String>> = create_signal(None);
 
     let uid = create_signal(user_id.clone());
@@ -80,12 +84,59 @@ pub fn UserDetail(user_id: String) -> View {
             if let Ok(s) = api::get_play_stats(&uid).await {
                 stats.set(Some(s));
             }
+            if let Ok(d) = api::get_devices(&uid).await {
+                devices.set(d.items);
+            }
             load_page();
         });
     }
 
+    let confirm_sign_out = move |_| {
+        if let Some(device) = sign_out_target.get_clone() {
+            spawn_local(async move {
+                match api::delete_device(&device.id).await {
+                    Ok(()) => {
+                        devices.update(|list| list.retain(|d| d.id != device.id));
+                        toast.set(Some(format!("Signed out {}", device.name)));
+                    }
+                    Err(e) => error.set(Some(e)),
+                }
+                sign_out_target.set(None);
+            });
+        }
+    };
+
     view! {
         div {
+            (if let Some(msg) = toast.get_clone() {
+                let shown = msg.clone();
+                spawn_local(async move {
+                    crate::timer::sleep_ms(crate::timer::TOAST_MS).await;
+                    if toast.get_clone().as_deref() == Some(shown.as_str()) {
+                        toast.set(None);
+                    }
+                });
+                view! { div(class="toast-container") { div(class="toast toast-success") { (msg) } } }
+            } else {
+                view! {}
+            })
+            (if let Some(target) = sign_out_target.get_clone() {
+                let label = format!("{} ({})", target.name, target.app_name);
+                view! {
+                    div(class="modal-overlay") {
+                        div(class="modal") {
+                            h3 { "Sign out device" }
+                            p { "Sign out " (label) "? The app will have to sign in again; anything playing on it stops reporting." }
+                            div(class="modal-actions") {
+                                button(class="btn btn-secondary", on:click=move |_| sign_out_target.set(None)) { "Cancel" }
+                                button(class="btn btn-danger", on:click=confirm_sign_out) { "Sign out" }
+                            }
+                        }
+                    }
+                }
+            } else {
+                view! {}
+            })
             div(class="page-header") {
                 h1 { (user.with(|u| u.as_ref().map(|u| u.name.clone()).unwrap_or_else(|| "User".to_string()))) }
                 a(class="btn btn-secondary btn-sm", href="/web/users", on:click=move |e: web_sys::MouseEvent| {
@@ -139,6 +190,48 @@ pub fn UserDetail(user_id: String) -> View {
                 }
             } else {
                 view! {}
+            })
+
+            // Devices signed in (roadmap 12e)
+            h3(class="dashboard-heading") { "Devices" }
+            (if devices.with(Vec::is_empty) {
+                view! { div(class="card text-muted") { "No devices signed in." } }
+            } else {
+                let now = js_sys::Date::now();
+                let list = devices.get_clone();
+                view! {
+                    div(class="card history-list") {
+                        Indexed(
+                            list=move || list.clone(),
+                            view=move |d: DeviceInfo| {
+                                let when = d
+                                    .date_last_activated
+                                    .as_deref()
+                                    .map(|s| js_sys::Date::new(&JsValue::from_str(s)).get_time())
+                                    .filter(|t| !t.is_nan())
+                                    .map(|t| user_view::ago_label(now, t))
+                                    .unwrap_or_default();
+                                let app = match d.app_version.as_deref() {
+                                    Some(v) if !v.is_empty() => format!("{} {v}", d.app_name),
+                                    _ => d.app_name.clone(),
+                                };
+                                let name = d.name.clone();
+                                let target = d.clone();
+                                view! {
+                                    div(class="history-row") {
+                                        div(class="history-main") {
+                                            div(class="history-title") { (name) }
+                                            div(class="text-muted history-detail") { (app) " · active " (when) }
+                                        }
+                                        div(class="history-side") {
+                                            button(class="btn btn-secondary btn-sm", on:click=move |_| sign_out_target.set(Some(target.clone()))) { "Sign out" }
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
             })
 
             // History, with filters

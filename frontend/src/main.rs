@@ -4,6 +4,7 @@ mod components;
 mod dashboard_view;
 mod media_route;
 mod pages;
+mod timer;
 mod types;
 mod user_view;
 

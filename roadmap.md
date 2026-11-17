@@ -1131,7 +1131,7 @@ validation, and polish needed for daily use.
 - [ ] WebSocket broadcasts for scan started/completed/failed events
 - [ ] WebSocket broadcasts for new items added during scan
 - [ ] Admin notification when scan errors occur (e.g. unreadable files, failed probes)
-- [ ] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request)
+- [x] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request): shared `timer::sleep_ms`, 3 s
 - [ ] Toast for error states, not just success (network errors, 403s, validation failures)
 
 ### 12c. Form Validation & Error Handling
@@ -1163,10 +1163,10 @@ validation, and polish needed for daily use.
 
 ### 12e. User Management Polish
 
-- [ ] Humanized timestamps ("2 hours ago" instead of raw ISO dates)
-- [ ] Sorting and filtering user list
-- [ ] Per-user device list and session history
-- [ ] "Kick session" button (terminate an active session)
+- [x] Humanized timestamps ("2 hours ago" instead of raw ISO dates): users list and devices
+- [x] Sorting and filtering user list (name, last active, role; find by name; administrators or users)
+- [x] Per-user device list and session history: devices on the user page (`GET /Devices?UserId=`), plays in its history
+- [x] "Kick session" button: "Sign out" per device (`DELETE /Devices?Id=`, Jellyfin's route); its tokens stop working
 - [x] Per-user playback history view (owner, 2026-11-17): `/web/users/<id>` shows minutes and plays per kind
       (films, episodes, music, other) and every play, filtered by kind, time span and words. Recorded server-side
       in `play_history` from the playback reports (time while not paused, at most 5 min per gap, plays under 10 s

@@ -376,11 +376,13 @@ pub fn Media(path: String) -> View {
         div {
             // Toast
             (if let Some(msg) = toast.get_clone() {
+                let msg_shown = msg.clone();
                 spawn_local({
                     async move {
-                        gloo_net::http::Request::get("data:,")
-                            .send().await.ok();
-                        toast.set(None);
+                        crate::timer::sleep_ms(crate::timer::TOAST_MS).await;
+                        if toast.get_clone().as_deref() == Some(msg_shown.as_str()) {
+                            toast.set(None);
+                        }
                     }
                 });
                 view! {

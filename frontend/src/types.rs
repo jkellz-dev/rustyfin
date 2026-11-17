@@ -484,3 +484,18 @@ pub struct PlayEntry {
     #[serde(default)]
     pub image_tag: Option<String>,
 }
+
+/// A signed-in device (`/Devices`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeviceInfo {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub app_name: String,
+    #[serde(default)]
+    pub app_version: Option<String>,
+    #[serde(default)]
+    pub date_last_activated: Option<String>,
+}
