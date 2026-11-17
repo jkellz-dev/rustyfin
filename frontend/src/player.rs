@@ -830,14 +830,17 @@ pub fn PlayerHost() -> View {
                         )
                         Indexed(
                             list=chapters,
-                            view=move |(pct, name, at)| view! {
+                            view=move |(pct, name, at)| {
+                                let label = format!("Chapter: {name}");
+                                view! {
                                 button(
                                     class="player-chapter",
                                     style=format!("left: {pct:.2}%"),
-                                    title=name.clone(),
-                                    aria-label=format!("Chapter: {name}"),
+                                    title=name,
+                                    aria-label=label,
                                     on:click=move |_| p.seek(at)
                                 ) {}
+                                }
                             }
                         )
                     }

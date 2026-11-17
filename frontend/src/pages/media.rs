@@ -900,6 +900,12 @@ pub fn Media(path: String) -> View {
                         let detail_item_type = item.item_type.clone();
                         let is_album = detail_item_type == "MusicAlbum";
                         let is_collection = detail_item_type == "BoxSet";
+                        let play_label = player_logic::play_label(
+                            &detail_item_type,
+                            item.user_data.as_ref().and_then(|u| u.playback_position_ticks),
+                            item.user_data.as_ref().is_some_and(|u| u.played),
+                        );
+                        let play_id = item.id.clone();
                         let (detail_poster_class, detail_placeholder_class) =
                             browse::detail_classes(&detail_item_type);
 
@@ -972,13 +978,9 @@ pub fn Media(path: String) -> View {
 
                                         // Actions
                                         div(class="detail-actions") {
-                                            (match player_logic::play_label(
-                                                &item.item_type,
-                                                item.user_data.as_ref().and_then(|u| u.playback_position_ticks),
-                                                item.user_data.as_ref().is_some_and(|u| u.played),
-                                            ) {
+                                            (match play_label.clone() {
                                                 Some(label) => {
-                                                    let id = item.id.clone();
+                                                    let id = play_id.clone();
                                                     view! {
                                                         button(
                                                             class="btn btn-primary btn-sm btn-play",
