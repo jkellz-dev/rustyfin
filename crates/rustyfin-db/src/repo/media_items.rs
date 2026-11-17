@@ -2130,3 +2130,20 @@ mod sort_key_index_tests {
         assert_eq!(squash(migration).matches(&key).count(), 2, "{key}");
     }
 }
+
+/// Ids of the titles and tracks a library gained since `since` (a scan's
+/// new items, for clients' `LibraryChanged`), at most 500.
+pub async fn added_since(
+    pool: &PgPool,
+    library_id: Uuid,
+    since: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM media_items WHERE library_id = $1 AND date_created >= $2 \
+         AND owner_id IS NULL AND NOT is_folder ORDER BY date_created LIMIT 500",
+    )
+    .bind(library_id)
+    .bind(since)
+    .fetch_all(pool)
+    .await
+}

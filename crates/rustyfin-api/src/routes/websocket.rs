@@ -59,6 +59,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, tok
 
     // Subscribe to remote control commands for this session
     let mut cmd_rx = state.session_manager.subscribe(session_id).await;
+    // Scan progress, finished scans and new items, for every client.
+    let mut events = rustyfin_core::library::progress::ScanBoard::global().subscribe();
 
     // Send initial ForceKeepAlive
     let msg = OutboundWebSocketMessage::new("ForceKeepAlive", 60);
@@ -86,6 +88,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, tok
                 }
 
                 let msg = OutboundWebSocketMessage::new("ForceKeepAlive", 60);
+                if let Ok(json) = serde_json::to_string(&msg)
+                    && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
+                {
+                    break;
+                }
+            }
+
+            Ok(event) = events.recv() => {
+                let msg = OutboundWebSocketMessage::new(&event.message_type, event.data);
                 if let Ok(json) = serde_json::to_string(&msg)
                     && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
                 {

@@ -67,7 +67,15 @@ impl Default for ScanBoard {
     }
 }
 
+static GLOBAL: std::sync::LazyLock<ScanBoard> = std::sync::LazyLock::new(ScanBoard::new);
+
 impl ScanBoard {
+    /// The server's board: every scanner reports to it, the routes and the
+    /// WebSocket read it.
+    pub fn global() -> &'static ScanBoard {
+        &GLOBAL
+    }
+
     pub fn new() -> Self {
         ScanBoard {
             running: Default::default(),
@@ -83,34 +91,138 @@ impl ScanBoard {
 
     /// A scan of `library` began.
     pub fn start(&self, library: Uuid) {
-        let _ = library;
+        self.running
+            .lock()
+            .expect("scan board")
+            .insert(library, ScanState::default());
+        self.send_progress(library, 0);
     }
 
     /// The scan found `n` more units to go through.
     pub fn add_total(&self, library: Uuid, n: u64) {
-        let _ = (library, n);
+        if let Some(s) = self.running.lock().expect("scan board").get_mut(&library) {
+            s.total += n;
+        }
     }
 
     /// One unit done.
     pub fn step(&self, library: Uuid) {
-        let _ = library;
+        let send = {
+            let mut running = self.running.lock().expect("scan board");
+            let Some(s) = running.get_mut(&library) else {
+                return;
+            };
+            s.done += 1;
+            let whole = percent_of(s).floor() as u32;
+            if s.sent_percent.is_none_or(|sent| whole > sent) {
+                s.sent_percent = Some(whole);
+                Some(whole)
+            } else {
+                None
+            }
+        };
+        if let Some(p) = send {
+            self.send_progress(library, p);
+        }
+    }
+
+    fn send_progress(&self, library: Uuid, percent: u32) {
+        if percent == 0
+            && let Some(s) = self.running.lock().expect("scan board").get_mut(&library)
+        {
+            s.sent_percent = Some(0);
+        }
+        // Jellyfin sends the progress as a string.
+        self.send(
+            "RefreshProgress",
+            serde_json::json!({
+                "ItemId": library.simple().to_string(),
+                "Progress": percent.to_string(),
+            }),
+        );
+    }
+
+    fn send(&self, message_type: &str, data: serde_json::Value) {
+        // No listener is fine: nobody is connected.
+        let _ = self.events.send(ServerEvent {
+            message_type: message_type.to_string(),
+            data,
+        });
     }
 
     /// Percent done (0-100), while the library is being scanned.
     pub fn percent(&self, library: Uuid) -> Option<f64> {
-        let _ = library;
-        None
+        self.running
+            .lock()
+            .expect("scan board")
+            .get(&library)
+            .map(percent_of)
     }
 
     /// The scan ended (or failed).
     pub fn finish(&self, library: Uuid, summary: ScanSummary) {
-        let _ = (library, summary);
+        self.running.lock().expect("scan board").remove(&library);
+        self.last.lock().expect("scan board").insert(
+            library,
+            LastScan {
+                finished: Utc::now(),
+                added: summary.added,
+                updated: summary.updated,
+                removed: summary.removed,
+                errors: summary.errors,
+                failure: summary.failure.clone(),
+            },
+        );
+        self.send(
+            "RefreshProgress",
+            serde_json::json!({
+                "ItemId": library.simple().to_string(),
+                "Progress": "100",
+            }),
+        );
+        let id = |u: &Uuid| u.simple().to_string();
+        if !summary.added_ids.is_empty() {
+            // Jellyfin's LibraryUpdateInfo.
+            self.send(
+                "LibraryChanged",
+                serde_json::json!({
+                    "CollectionFolders": [id(&library)],
+                    "FoldersAddedTo": [],
+                    "FoldersRemovedFrom": [],
+                    "ItemsAdded": summary.added_ids.iter().map(id).collect::<Vec<_>>(),
+                    "ItemsRemoved": [],
+                    "ItemsUpdated": [],
+                    "IsEmpty": false,
+                }),
+            );
+        }
+        // Rustyfin's own: how the scan ended (the admin says so).
+        self.send(
+            "ScanFinished",
+            serde_json::json!({
+                "LibraryId": id(&library),
+                "LibraryName": summary.library_name,
+                "Added": summary.added,
+                "Updated": summary.updated,
+                "Removed": summary.removed,
+                "Errors": summary.errors,
+                "Failure": summary.failure,
+            }),
+        );
     }
 
     /// How the library's last scan (since the server started) ended.
     pub fn last(&self, library: Uuid) -> Option<LastScan> {
-        let _ = library;
-        None
+        self.last.lock().expect("scan board").get(&library).cloned()
+    }
+}
+
+/// Percent done, never past 100 (more units can be found as a scan goes).
+fn percent_of(s: &ScanState) -> f64 {
+    if s.total == 0 {
+        0.0
+    } else {
+        (s.done as f64 * 100.0 / s.total as f64).min(100.0)
     }
 }
 

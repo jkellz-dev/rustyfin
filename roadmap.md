@@ -1127,10 +1127,13 @@ validation, and polish needed for daily use.
 
 ### 12b. Real-Time Feedback
 
-- [ ] Scan progress tracking (backend: track scan progress per library, expose via API or WebSocket)
-- [ ] WebSocket broadcasts for scan started/completed/failed events
-- [ ] WebSocket broadcasts for new items added during scan
-- [ ] Admin notification when scan errors occur (e.g. unreadable files, failed probes)
+- [x] Scan progress tracking (backend: track scan progress per library, expose via API or WebSocket): `RefreshProgress`
+      on `/Library/VirtualFolders` and over the WebSocket; the Scan button shows the percent
+- [x] WebSocket broadcasts for scan started/completed/failed events (`RefreshProgress` 0 and 100 as Jellyfin sends them,
+      plus Rustyfin's `ScanFinished`)
+- [x] WebSocket broadcasts for new items added during scan (Jellyfin's `LibraryChanged`, sent when the scan ends)
+- [x] Admin notification when scan errors occur (e.g. unreadable files, failed probes): the finished-scan toast counts
+      them; a warning goes to the activity log
 - [x] Toast auto-dismiss fix (use proper `setTimeout`, not dummy HTTP request): shared `timer::sleep_ms`, 3 s
 - [ ] Toast for error states, not just success (network errors, 403s, validation failures)
 

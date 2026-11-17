@@ -117,7 +117,7 @@ impl TestApp {
         let transcodes = transcode_manager.clone();
 
         let scan_in_flight = Arc::new(RwLock::new(HashSet::new()));
-        let scan_board = rustyfin_core::library::progress::ScanBoard::new();
+        let scan_board = rustyfin_core::library::progress::ScanBoard::global().clone();
         let state = AppState {
             pool: pool.clone(),
             server_id: "test-server-id".to_string(),

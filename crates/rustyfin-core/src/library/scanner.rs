@@ -5,11 +5,13 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use rustyfin_db::repo::{
-    chapters, collections, images as images_repo, libraries, media_items, media_streams,
+    activity_log, chapters, collections, images as images_repo, libraries, media_items,
+    media_streams,
 };
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
+use crate::library::progress::{ScanBoard, ScanSummary};
 use rustyfin_common::images::{
     DiscoveredImage, discover_episode_images, discover_images, discover_season_images,
 };
@@ -113,6 +115,9 @@ impl LibraryScanner {
     /// Scan a library and ingest media items.
     pub async fn scan(&self, library_id: Uuid, paths: &[String]) -> anyhow::Result<ScanResult> {
         let started = Instant::now();
+        let started_at = chrono::Utc::now();
+        let board = ScanBoard::global();
+        board.start(library_id);
         let outcome = self.scan_library(library_id, paths).await;
         // Prometheus: scans by library and result, how long they took, and
         // what they changed.
@@ -141,6 +146,49 @@ impl LibraryScanner {
                 .increment(n);
             }
         }
+        // Progress, the outcome and the new items for connected clients; a
+        // scan with errors leaves a warning in the activity log (roadmap 12b).
+        let added_ids = media_items::added_since(&self.pool, library_id, started_at)
+            .await
+            .unwrap_or_default();
+        let summary = match &outcome {
+            Ok(r) => ScanSummary {
+                library_name: library.clone(),
+                added: r.items_added,
+                updated: r.items_updated,
+                removed: r.items_removed,
+                errors: r.errors,
+                failure: None,
+                added_ids,
+            },
+            Err(e) => ScanSummary {
+                library_name: library.clone(),
+                failure: Some(e.to_string()),
+                added_ids,
+                ..Default::default()
+            },
+        };
+        let problem = match (&summary.failure, summary.errors) {
+            (Some(why), _) => Some(format!("Scan of {library} failed: {why}")),
+            (None, 0) => None,
+            (None, n) => Some(format!(
+                "Scan of {library} could not read {n} file{} (see the server log)",
+                if n == 1 { "" } else { "s" }
+            )),
+        };
+        if let Some(text) = problem {
+            let _ = activity_log::insert(
+                &self.pool,
+                &text,
+                None,
+                "LibraryScanErrors",
+                "Warning",
+                None,
+                Some(library_id),
+            )
+            .await;
+        }
+        board.finish(library_id, summary);
         outcome
     }
 
@@ -244,7 +292,9 @@ impl LibraryScanner {
         let mut owners: std::collections::HashMap<PathBuf, Vec<(String, Uuid)>> =
             std::collections::HashMap::new();
 
+        ScanBoard::global().add_total(library_id, films.len() as u64);
         for (i, file_path) in films.iter().enumerate() {
+            ScanBoard::global().step(library_id);
             if i % PROBE_BATCH == 0 {
                 let end = (i + PROBE_BATCH).min(films.len());
                 self.prefetch_probes(&films[i..end]).await;
@@ -548,8 +598,12 @@ impl LibraryScanner {
         let Ok(entries) = std::fs::read_dir(lib_path) else {
             return;
         };
+        // Progress counts the folders at the top (shows or artists).
+        let entries: Vec<_> = entries.flatten().collect();
+        ScanBoard::global().add_total(library_id, entries.len() as u64);
 
-        for entry in entries.flatten() {
+        for entry in entries {
+            ScanBoard::global().step(library_id);
             let path = entry.path();
             if has_ignored_file_name(&path) {
                 continue;
@@ -761,8 +815,12 @@ impl LibraryScanner {
         let Ok(entries) = std::fs::read_dir(lib_path) else {
             return;
         };
+        // Progress counts the folders at the top (shows or artists).
+        let entries: Vec<_> = entries.flatten().collect();
+        ScanBoard::global().add_total(library_id, entries.len() as u64);
 
-        for entry in entries.flatten() {
+        for entry in entries {
+            ScanBoard::global().step(library_id);
             let path = entry.path();
             if has_ignored_file_name(&path) {
                 continue;

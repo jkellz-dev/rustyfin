@@ -485,6 +485,20 @@ pub struct VirtualFolderInfo {
     /// When its last scan finished.
     #[serde(default)]
     pub last_scanned: Option<chrono::DateTime<chrono::Utc>>,
+    /// Jellyfin's `RefreshProgress`: percent done while a scan runs.
+    #[serde(default)]
+    pub refresh_progress: Option<f64>,
+    /// How the last scan since the server started ended (Rustyfin's own).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_scan_added: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_scan_updated: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_scan_removed: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_scan_errors: Option<u64>,
+    #[serde(default)]
+    pub last_scan_failure: Option<String>,
 }
 
 /// Request to create a new library.

@@ -278,8 +278,26 @@ pub async fn get_virtual_folders(
         .into_iter()
         .map(|lib| {
             let active = scanning.contains(&lib.id);
+            let board = rustyfin_core::library::progress::ScanBoard::global();
+            let progress = board.percent(lib.id);
+            let last = board.last(lib.id);
             let mut info = folder_info(lib);
-            info.refresh_status = Some(if active { "Active" } else { "Idle" }.to_string());
+            info.refresh_status = Some(
+                if active || progress.is_some() {
+                    "Active"
+                } else {
+                    "Idle"
+                }
+                .to_string(),
+            );
+            info.refresh_progress = progress;
+            if let Some(last) = last {
+                info.last_scan_added = Some(last.added);
+                info.last_scan_updated = Some(last.updated);
+                info.last_scan_removed = Some(last.removed);
+                info.last_scan_errors = Some(last.errors);
+                info.last_scan_failure = last.failure;
+            }
             info
         })
         .collect();
@@ -552,6 +570,12 @@ fn folder_info(lib: libraries::LibraryRow) -> VirtualFolderInfo {
         scan_schedule: lib.scan_schedule,
         refresh_status: None,
         last_scanned: lib.last_scanned_at,
+        refresh_progress: None,
+        last_scan_added: None,
+        last_scan_updated: None,
+        last_scan_removed: None,
+        last_scan_errors: None,
+        last_scan_failure: None,
     }
 }
 
