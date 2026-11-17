@@ -1294,7 +1294,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] API compatibility guide (which Jellyfin endpoints are supported, stubs vs real)
 - [ ] Deployment guide (Docker, systemd, reverse proxy setup with Caddy/nginx/Traefik)
 - [ ] Client compatibility matrix (tested clients, known issues per client)
-- [ ] Migration guide from Jellyfin (what transfers, what doesn't)
+- [x] Migration guide from Jellyfin (what transfers, what doesn't): `docs/migrating-from-jellyfin.md`
 - [x] Contributing guide (dev setup, project structure, PR conventions): `docs/contributing.md`
 
 ### 14c. Website
