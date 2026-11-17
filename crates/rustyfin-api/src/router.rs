@@ -114,7 +114,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/Users/{userId}/Password", post(stubs::no_content_auth))
         .route(
             "/Users/{userId}/Configuration",
-            post(stubs::no_content_auth),
+            post(users::update_user_configuration),
         )
         .route("/Users/New", post(stubs::create_user_disabled))
         // ── User images ──────────────────────────────────────

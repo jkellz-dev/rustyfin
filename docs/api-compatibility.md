@@ -10,8 +10,9 @@ Around 200 routes (method and path), grouped by area in `crates/rustyfin-api/src
 
 - **Sign-in and sessions**: `AuthenticateByName` (forward auth or LDAPS), API keys, sessions, devices,
   remote control commands, the WebSocket (`/socket`).
-- **Users**: listing, policy, library access, display preferences, user data (played, favourite, rating, resume
-  position), user views.
+- **Users**: listing, policy, library access, app settings (`/Users/{userId}/Configuration`: kept and returned;
+  ordered views and excludes are not yet applied to the home lists), display preferences, user data (played, favourite,
+  rating, resume position), user views.
 - **Browsing**: `/Items` with Jellyfin's filters, sorting and paging; latest, resume and next-up lists; shows, seasons
   and episodes; artists, albums and genres; studios, persons, years; filters; similar items; suggestions; collections
   and playlists; extras and theme media.
@@ -34,7 +35,6 @@ These exist so that apps which call them do not fail. They do nothing, and say s
 | `POST /Users/{userId}/Password` | `204`, nothing changes | Rustyfin stores no passwords |
 | `POST /Users/New` | `403` | Users are created by the sign-in proxy on first sign-in |
 | `POST`, `DELETE /Users/{userId}/Images/{imageType}` | `204`, nothing changes | User pictures come from `server.user_image_url_template` |
-| `POST /Users/{userId}/Configuration` | `204`, nothing is saved | Per-user client settings are not stored yet |
 | `GET /MusicGenres/{name}/Images/...` | `404` | Music genres have no artwork yet |
 | `POST /Sessions/Viewing` | `204` | Rustyfin does not track which page an app shows |
 | `GET /Plugins`, `GET /Packages`, `GET /Repositories` | `[]` | No plugins, by design |

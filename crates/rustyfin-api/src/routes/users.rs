@@ -29,17 +29,7 @@ fn user_row_to_dto(row: &users::UserRow, server_id: &str, ldap_enabled: bool) ->
                 .or(row.last_login_date)
                 .unwrap_or(row.created_at),
         ),
-        configuration: UserConfiguration {
-            audio_language_preference: row.audio_language_preference.clone(),
-            play_default_audio_track: row.play_default_audio_track,
-            subtitle_language_preference: row
-                .subtitle_language_preference
-                .clone()
-                .or_else(|| Some(String::new())),
-            subtitle_mode: "Default".to_string(),
-            enable_next_episode_auto_play: row.enable_next_episode_auto_play,
-            ..Default::default()
-        },
+        configuration: user_configuration(row),
         policy: UserPolicy {
             is_administrator: row.is_administrator,
             is_disabled: row.is_disabled,
@@ -48,6 +38,75 @@ fn user_row_to_dto(row: &users::UserRow, server_id: &str, ldap_enabled: bool) ->
         },
         primary_image_tag: None,
     }
+}
+
+/// Jellyfin's `SubtitlePlaybackMode` names, by their number.
+const SUBTITLE_MODES: [&str; 5] = ["Default", "Always", "OnlyForced", "None", "Smart"];
+
+/// The user's `UserConfiguration`: what the app last saved, with the settings
+/// that have their own columns read from them.
+fn user_configuration(row: &users::UserRow) -> UserConfiguration {
+    let mut config = row
+        .configuration
+        .clone()
+        .and_then(|v| serde_json::from_value::<UserConfiguration>(v).ok())
+        .unwrap_or_default();
+    config.audio_language_preference = row.audio_language_preference.clone();
+    config.play_default_audio_track = row.play_default_audio_track;
+    config.subtitle_language_preference = row
+        .subtitle_language_preference
+        .clone()
+        .or_else(|| Some(String::new()));
+    config.subtitle_mode = usize::try_from(row.subtitle_mode)
+        .ok()
+        .and_then(|i| SUBTITLE_MODES.get(i))
+        .unwrap_or(&SUBTITLE_MODES[0])
+        .to_string();
+    config.enable_next_episode_auto_play = row.enable_next_episode_auto_play;
+    if config.cast_receiver_id.is_empty() {
+        config.cast_receiver_id = UserConfiguration::default().cast_receiver_id;
+    }
+    config
+}
+
+/// `POST /Users/{userId}/Configuration`: save the app's settings for a user
+/// (the user themself, or an administrator).
+pub async fn update_user_configuration(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(user_id): Path<Uuid>,
+    Json(config): Json<UserConfiguration>,
+) -> Result<StatusCode, ApiError> {
+    if auth.user_id != user_id && !auth.is_administrator {
+        return Err(ApiError::Forbidden);
+    }
+    let blob = serde_json::to_value(&config)
+        .map_err(|e| ApiError::Internal(format!("user configuration: {e}")))?;
+    let mode = SUBTITLE_MODES
+        .iter()
+        .position(|m| m.eq_ignore_ascii_case(&config.subtitle_mode))
+        .unwrap_or(0) as i32;
+    let settings = users::UserSettings {
+        audio_language_preference: config
+            .audio_language_preference
+            .as_deref()
+            .filter(|s| !s.is_empty()),
+        subtitle_language_preference: config
+            .subtitle_language_preference
+            .as_deref()
+            .filter(|s| !s.is_empty()),
+        subtitle_mode: mode,
+        play_default_audio_track: config.play_default_audio_track,
+        enable_next_episode_auto_play: config.enable_next_episode_auto_play,
+        configuration: &blob,
+    };
+    if !users::update_settings(&state.pool, user_id, &settings)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Populate the `enabled_folders` field on a user DTO if the user is restricted.

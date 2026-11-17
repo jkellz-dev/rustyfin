@@ -23,6 +23,44 @@ pub struct UserRow {
     pub last_activity_date: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// The rest of the app's `UserConfiguration`, as it was sent.
+    pub configuration: Option<serde_json::Value>,
+}
+
+/// The settings `POST /Users/{userId}/Configuration` saves.
+#[derive(Debug, Clone)]
+pub struct UserSettings<'a> {
+    pub audio_language_preference: Option<&'a str>,
+    pub subtitle_language_preference: Option<&'a str>,
+    /// Jellyfin's `SubtitlePlaybackMode` as a number (`Default` is 0).
+    pub subtitle_mode: i32,
+    pub play_default_audio_track: bool,
+    pub enable_next_episode_auto_play: bool,
+    /// Everything else the app sent.
+    pub configuration: &'a serde_json::Value,
+}
+
+/// Save a user's app settings; `false` when there is no such user.
+pub async fn update_settings(
+    pool: &PgPool,
+    id: Uuid,
+    settings: &UserSettings<'_>,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE users SET audio_language_preference = $2, subtitle_language_preference = $3, \
+         subtitle_mode = $4, play_default_audio_track = $5, enable_next_episode_auto_play = $6, \
+         configuration = $7, updated_at = NOW() WHERE id = $1",
+    )
+    .bind(id)
+    .bind(settings.audio_language_preference)
+    .bind(settings.subtitle_language_preference)
+    .bind(settings.subtitle_mode)
+    .bind(settings.play_default_audio_track)
+    .bind(settings.enable_next_episode_auto_play)
+    .bind(settings.configuration)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() > 0)
 }
 
 /// Find a user by ID.
