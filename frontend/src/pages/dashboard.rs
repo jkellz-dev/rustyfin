@@ -373,10 +373,12 @@ pub fn Dashboard() -> View {
                                             }
                                         };
                                         let path = MediaRoute::Item { id: item.id.clone() }.path();
+                                        // The full name on hover; the tile shows it cut short.
+                                        let full = label.clone();
                                         view! {
                                             div(class="recent-card", on:click=move |_| navigate(&path)) {
                                                 (art)
-                                                div(class="recent-title") { (label) }
+                                                div(class="recent-title", title=full) { (label) }
                                             }
                                         }
                                     }

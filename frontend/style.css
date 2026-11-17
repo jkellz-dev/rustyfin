@@ -1213,6 +1213,10 @@ select:focus {
 
 .recent-card {
   flex: 0 0 110px;
+  /* A flex item is never narrower than its content by default, so a long
+     unbroken title widened the tile; keep it to the art's width. */
+  width: 110px;
+  min-width: 0;
 }
 
 .recent-art {
