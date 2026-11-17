@@ -7,7 +7,7 @@ mod dashboard_view;
 mod form_rules;
 mod media_route;
 mod pages;
-#[allow(dead_code)]
+mod player;
 mod player_logic;
 mod request_state;
 mod timer;
@@ -49,6 +49,8 @@ enum AppRoutes {
 fn main() {
     a11y::install();
     sycamore::render(|| {
+        // The player sits outside the routes, so music plays on across pages.
+        provide_context(player::Player::new());
         view! {
             Router(
                 integration=HistoryIntegration::new(),
@@ -59,6 +61,7 @@ fn main() {
                             a(class="skip-link", href="#main") { "Skip to content" }
                             div(id="sr-announcer", class="sr-only", aria-live="polite") {}
                             Sidebar {}
+                            player::PlayerHost {}
                             main(class="main-content", id="main", tabindex="-1") {
                                 // Only this dynamic block rebuilds on route changes
                                 ({

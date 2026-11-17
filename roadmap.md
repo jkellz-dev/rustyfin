@@ -1223,46 +1223,49 @@ those capabilities.
 
 ### 13a. Video Player
 
-- [ ] HTML5 `<video>` element component with Sycamore bindings (`web-sys` interop)
-- [ ] HLS.js integration via `wasm-bindgen` / inline JS — attach to `<video>` for transcoded streams
-- [ ] Direct play path: set `<video src>` to `/Videos/{itemId}/stream` when container is natively supported (MP4/WebM)
-- [ ] Transcode path: feed `/Videos/{itemId}/master.m3u8` to HLS.js when direct play isn't possible
-- [ ] `POST /Items/{itemId}/PlaybackInfo` call to determine play method (DirectPlay vs Transcode)
-- [ ] Player controls: play/pause, seek bar, volume, fullscreen
-- [ ] Time display (current position / total duration, converted from 100ns ticks)
-- [ ] Resume support: start playback from `user_data.playback_position_ticks` if present
+- [x] HTML5 `<video>` element component with Sycamore bindings (`web-sys` interop)
+- [x] HLS.js integration via `wasm-bindgen` / inline JS — attach to `<video>` for transcoded streams (hls.js 1.7.4 light
+      build vendored in `frontend/vendor/`, fetched only for a transcode; native HLS where the browser has it)
+- [x] Direct play path: set `<video src>` to `/Videos/{itemId}/stream` when container is natively supported (MP4/WebM)
+- [x] Transcode path: feed `/Videos/{itemId}/master.m3u8` to HLS.js when direct play isn't possible
+- [x] `POST /Items/{itemId}/PlaybackInfo` call to determine play method (DirectPlay vs Transcode)
+- [x] Player controls: play/pause, seek bar, volume, fullscreen
+- [x] Time display (current position / total duration, converted from 100ns ticks)
+- [x] Resume support: start playback from `user_data.playback_position_ticks` if present
 
 ### 13b. Audio Player
 
-- [ ] Persistent audio player bar (stays visible during navigation, doesn't interrupt on page change)
-- [ ] HTML5 `<audio>` element with direct play (`/Audio/{itemId}/stream`)
-- [ ] HLS fallback for transcoded audio (`/Audio/{itemId}/master.m3u8`)
-- [ ] Album/playlist queue: play full album tracklist, next/previous track
-- [ ] Track info display (title, artist, album art thumbnail)
-- [ ] Progress bar with seek
+- [x] Persistent audio player bar (stays visible during navigation, doesn't interrupt on page change)
+- [x] HTML5 `<audio>` element with direct play (`/Audio/{itemId}/stream`) (one media element serves music and video;
+      hidden for music)
+- [x] HLS fallback for transcoded audio (`/Audio/{itemId}/master.m3u8`)
+- [x] Album/playlist queue: play full album tracklist, next/previous track
+- [x] Track info display (title, artist, album art thumbnail)
+- [x] Progress bar with seek
 
 ### 13c. Subtitle & Audio Track Selection
 
-- [ ] Subtitle track picker (from `MediaStreams` where `stream_type == "Subtitle"`)
-- [ ] Audio track picker (from `MediaStreams` where `stream_type == "Audio"`)
-- [ ] External subtitle rendering (WebVTT via `<track>` element)
-- [ ] Restart transcode with different audio/subtitle indices when selection changes
+- [x] Subtitle track picker (from `MediaStreams` where `stream_type == "Subtitle"`)
+- [x] Audio track picker (from `MediaStreams` where `stream_type == "Audio"`)
+- [x] External subtitle rendering (WebVTT via `<track>` element)
+- [x] Restart transcode with different audio/subtitle indices when selection changes
 
 ### 13d. Playback Session Reporting
 
-- [ ] `POST /Sessions/Playing` on playback start (item_id, play_session_id, play_method)
-- [ ] `POST /Sessions/Playing/Progress` on periodic interval (~10s) with position_ticks, is_paused
-- [ ] `POST /Sessions/Playing/Stopped` on playback end or navigation away
-- [ ] Mark item as played when playback reaches ~90% of runtime
-- [ ] Update resume position in user_data for partial playback
+- [x] `POST /Sessions/Playing` on playback start (item_id, play_session_id, play_method)
+- [x] `POST /Sessions/Playing/Progress` on periodic interval (~10s) with position_ticks, is_paused
+- [x] `POST /Sessions/Playing/Stopped` on playback end or navigation away
+- [x] Mark item as played when playback reaches ~90% of runtime (the server decides from the reports, Jellyfin's rules:
+      see `play_state.rs`)
+- [x] Update resume position in user_data for partial playback (server-side, from the Progress and Stopped reports)
 
 ### 13e. Media Page Integration
 
-- [ ] Play button on media items (grid view and detail view)
-- [ ] Player opens in-page (not a separate route) — overlay or dedicated player area
-- [ ] Chapter markers on video seek bar (clickable to jump)
+- [x] Play button on media items (grid view and detail view)
+- [x] Player opens in-page (not a separate route) — overlay or dedicated player area
+- [x] Chapter markers on video seek bar (clickable to jump)
 - [ ] "Continue Watching" section on dashboard (items with resume position)
-- [ ] Keyboard shortcuts: space (play/pause), left/right arrows (seek ±10s), M (mute), F (fullscreen)
+- [x] Keyboard shortcuts: space (play/pause), left/right arrows (seek ±10s), M (mute), F (fullscreen)
 
 ---
 
