@@ -1,3 +1,11 @@
+//! The server's long-running parts.
+//!
+//! [`library`]: the scanner that turns folders into titles, episodes and
+//! tracks, its enrichment pass, scan schedules and tasks, and the scan
+//! progress board clients hear about over the WebSocket. [`session`]: who
+//! is connected and what they are playing, and the commands sent to them.
+//! [`image`]: resizing and caching of artwork.
+
 pub mod image;
 pub mod library;
 pub mod session;

@@ -1292,7 +1292,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Deployment guide (Docker, systemd, reverse proxy setup with Caddy/nginx/Traefik)
 - [ ] Client compatibility matrix (tested clients, known issues per client)
 - [ ] Migration guide from Jellyfin (what transfers, what doesn't)
-- [ ] Contributing guide (dev setup, project structure, PR conventions)
+- [x] Contributing guide (dev setup, project structure, PR conventions): `docs/contributing.md`
 
 ### 14c. Website
 
@@ -1307,7 +1307,7 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 
 - [ ] README overhaul (align with design book, badges, quick start)
 - [ ] CHANGELOG.md (retroactive for major milestones, ongoing for releases)
-- [ ] Crate-level `//!` doc comments for each crate in the workspace
+- [x] Crate-level `//!` doc comments for each crate in the workspace (and the admin)
 - [ ] Inline doc comments for public API surfaces (models, repos, auth extractors)
 
 ---

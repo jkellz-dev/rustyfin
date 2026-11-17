@@ -1,3 +1,9 @@
+//! Search through Meilisearch.
+//!
+//! [`indexer`] keeps the index in step with the library (every media item:
+//! films, shows, episodes, albums, tracks); [`query`] answers searches. When
+//! Meilisearch is down or slow, searches fall back to Postgres.
+
 pub mod indexer;
 pub mod query;
 

@@ -1,3 +1,7 @@
+//! The admin UI (Sycamore, compiled to WebAssembly and embedded in the
+//! server under `/web`): dashboard, libraries, the media browser, users,
+//! tasks and setup, plus the player that plays video and music in the page.
+
 mod a11y;
 mod api;
 mod api_error;

@@ -21,6 +21,7 @@ Jellyfin Media Player) connect to it seamlessly.
 | [Streaming & Media](streaming.md) | Media probing, direct play, HTTP Range, HLS transcoding |
 | [Admin Frontend](frontend.md) | Sycamore WASM UI, building, asset embedding |
 | [Development Guide](development.md) | Dev setup, building, testing, project conventions |
+| [Contributing](contributing.md) | Tests first, checks, commits, linear history, what CI runs |
 
 ## Quick Start
 

@@ -1,3 +1,8 @@
+//! The `rustyfin-server` binary: reads the configuration ([`config`]),
+//! connects to Postgres and Meilisearch, starts the scanner, scheduler and
+//! transcode manager, and serves the API, the admin UI and the metrics
+//! listener.
+
 mod config;
 
 use std::collections::HashSet;

@@ -1,7 +1,8 @@
 # Admin Frontend
 
-The admin frontend is a single-page application built with **Sycamore** (Rust WASM framework). It provides library
-management, user administration, and a setup wizard.
+The admin frontend is a single-page application built with **Sycamore** (Rust compiled to WebAssembly), embedded in
+the server and served under `/web`. It manages libraries, users and scheduled tasks, browses the media, and plays
+video and music in the page.
 
 ## Architecture
 
@@ -10,36 +11,51 @@ frontend/                          # Sycamore app (NOT a workspace member)
 ├── Cargo.toml                     # Separate package targeting wasm32
 ├── Trunk.toml                     # Trunk build configuration
 ├── index.html                     # Entry point
-├── style.css                      # Dark theme CSS
+├── style.css                      # Dark theme CSS (phone layout at ≤768 px)
+├── vendor/
+│   ├── hls.light.min.js           # hls.js 1.7.4 (Apache-2.0), for transcoded streams
+│   └── hls.js-LICENSE
 ├── dist/                          # Build output (embedded into binary)
-│   └── .gitkeep
 └── src/
-    ├── main.rs                    # App entry + router
+    ├── main.rs                    # App entry, routes, the player host
+    ├── api.rs                     # HTTP client: one transport, page-tied requests, cache
+    ├── api_error.rs               # Errors as sentences
+    ├── request_state.rs           # Which page a request belongs to; the browsing cache
     ├── types.rs                   # Frontend DTOs
-    ├── api.rs                     # HTTP client
+    ├── a11y.rs                    # Page names, keyboard and focus rules
+    ├── browse.rs                  # Media browser rules (queries, sorting, image sizes)
+    ├── media_route.rs             # Media browser addresses (/web/media/...)
+    ├── dashboard_view.rs          # Dashboard wording (streams, scans, activity)
+    ├── user_view.rs               # Play history wording
+    ├── form_rules.rs              # Library form checks
+    ├── player.rs                  # The player (browser side)
+    ├── player_logic.rs            # The player's decisions (unit tested)
+    ├── timer.rs                   # Timers and toasts
     ├── components/
-    │   ├── mod.rs
-    │   └── nav.rs                 # Sidebar layout
+    │   ├── nav.rs                 # Sidebar (a menu on phones)
+    │   ├── error_notice.rs        # Error banner with Retry and Dismiss
+    │   └── loading.rs             # Placeholder shapes while a page loads
     └── pages/
-        ├── mod.rs
-        ├── dashboard.rs           # Stats + scan all
-        ├── libraries.rs           # Library CRUD
-        ├── users.rs               # User management
+        ├── dashboard.rs           # Counters, streams, libraries, health, continue watching, recent, activity
+        ├── libraries.rs           # Library add/edit/delete, folder picker, scans with progress
+        ├── media.rs               # Media browser, title pages, search
+        ├── users.rs               # Users, roles, library access
+        ├── user_detail.rs         # One user's devices and play history
+        ├── tasks.rs               # Scheduled tasks
         └── setup.rs               # Setup wizard
 
 crates/rustyfin-frontend/          # Workspace member (embedding crate)
-├── Cargo.toml                     # Depends on rust-embed, mime_guess
-└── src/lib.rs                     # Embeds dist/ + serves via Axum
+└── src/lib.rs                     # Embeds dist/ + serves it with caching and compression
 ```
 
 The frontend is intentionally **not** a workspace member because it targets `wasm32-unknown-unknown`, while the rest of
-the project targets the host architecture.
+the project targets the host architecture. Logic that can be tested without a browser lives in plain modules
+(`browse.rs`, `media_route.rs`, `player_logic.rs`, ...) with unit tests; `cargo test` in `frontend/` runs them on the
+host.
 
 ## Building
 
 ### Prerequisites
-
-Install Trunk (WASM build tool):
 
 ```bash
 cargo install trunk
@@ -53,15 +69,8 @@ cd frontend
 trunk build --release
 ```
 
-This compiles the Sycamore app to WASM and outputs to `frontend/dist/`:
-
-```text
-frontend/dist/
-├── index.html
-├── style.css
-├── rustyfin-admin-*.wasm
-└── rustyfin-admin-*.js
-```
+This compiles the Sycamore app to WASM and writes `frontend/dist/`: `index.html`, the fingerprinted
+`rustyfin-admin-*.js`, `*.wasm` and CSS, `favicon.svg` and `hls.light.min.js`.
 
 ### Embed into Server
 
@@ -75,8 +84,6 @@ The `rust-embed` crate compiles the contents of `frontend/dist/` into the binary
 
 ### Development
 
-For development with live reload:
-
 ```bash
 cd frontend
 trunk serve --proxy-backend=http://localhost:8096
@@ -84,108 +91,140 @@ trunk serve --proxy-backend=http://localhost:8096
 
 ## Serving
 
-The frontend is served under the `/web` prefix:
+Everything is served under `/web`. Files trunk names with a content hash are cached for a year; `index.html` is always
+revalidated; text and WASM go out Brotli- or gzip-compressed (compressed once per file and kept in memory). Any path
+that is not a file gets `index.html`, so every admin address can be reloaded or bookmarked.
 
-| URL | Content |
-|-----|---------|
-| `/web` | SPA entry point (`index.html`) |
-| `/web/` | SPA entry point |
-| `/web/libraries` | SPA (client-side routed) |
-| `/web/users` | SPA (client-side routed) |
-| `/web/setup` | SPA (client-side routed) |
-| `/web/style.css` | CSS file (exact match) |
-| `/web/*.wasm` | WASM bundle (exact match) |
-| `/web/anything-else` | SPA fallback to `index.html` |
-
-### Fallback Behavior
-
-If the frontend hasn't been built (empty `frontend/dist/`), the server shows a placeholder page:
-
-> **Rustyfin**
-> Media server is running. The admin frontend has not been built yet.
-> Build it with: `cd frontend && trunk build --release`
+If the frontend hasn't been built (empty `frontend/dist/`), the server shows a placeholder page.
 
 ## Routes
 
-The SPA uses `sycamore-router` with `HistoryIntegration`:
+| Path | Page |
+|------|------|
+| `/web`, `/web/index.html` | Dashboard |
+| `/web/libraries` | Libraries |
+| `/web/media/...` | Media browser (see below) |
+| `/web/users` | Users |
+| `/web/users/<id>` | One user: devices and play history |
+| `/web/tasks` | Scheduled tasks |
+| `/web/setup` | Setup wizard |
 
-| Path | Page | Auth Required |
-|------|------|---------------|
-| `/web` | Dashboard | Yes (for stats) |
-| `/web/index.html` | Dashboard | Yes (for stats) |
-| `/web/libraries` | Libraries | Yes (admin) |
-| `/web/users` | Users | Yes (admin) |
-| `/web/setup` | Setup Wizard | No |
+Every place in the media browser has its own address, so back, forward and reload work:
+
+| Address | Shows |
+|---------|-------|
+| `/web/media` | The libraries |
+| `/web/media/library/<id>[/sort/<s>][/genre/<g>][/year/<y>][/rating/<r>][/start/<n>]` | A library, sorted, filtered and paged |
+| `/web/media/folder/<id>` | A folder, show, season or album |
+| `/web/media/item/<id>` | A title page |
+| `/web/media/person/<id>/<name>` | A person's films and episodes |
+| `/web/media/search/<words>[/in/<lib>][/type/<kind>]` | Search results |
 
 ## Pages
 
 ### Dashboard
 
-Displays:
-
-- Server name and version
-- Statistics cards: library count, user count, media item count
-- "Scan All Libraries" button
-
-API calls: `GET /System/Info/Public`, `GET /System/Stats`
+Counters (libraries, users, media items), **Streams** (who is playing what, refreshed every 10 seconds), the
+libraries, system health, **Continue watching** (a tile resumes it in the player), **Recently added** (grouped, so a
+new album or season is one tile) and the activity log.
 
 ### Libraries
 
-Features:
+Add, edit and delete libraries, with a folder picker (keyboard: arrow keys, Home, End). The form checks names and
+folders before sending. **Scan** shows the scan's percent while it runs; when it ends, a message says how many files
+could not be read, or why the scan failed (also written to the activity log).
 
-- **Add Library** form: name, type (movies/tvshows/music/mixed), filesystem path
-- **Libraries table**: name, type badge, paths, Scan/Delete buttons
-- **Delete confirmation** modal
-- **Scan** triggers a background library scan
+### Media browser
 
-API calls: `GET /Library/VirtualFolders`, `POST /Library/VirtualFolders`, `DELETE /Library/VirtualFolders?Id=`,
-`POST /Library/Refresh?Id=`
+Libraries as poster grids or lists (the choice is kept per browser), with sorting, filters (genre, year, rating; film
+and show libraries) and paging. Title pages show the overview, cast, chapters, streams, extras, collections and file
+details, with **Play** (or **Resume 12:34**) and **Refresh metadata**. Several titles can be selected to mark them
+played or unplayed or to refresh them. Search can be limited to a library and to a kind (films, shows, episodes,
+albums, artists, tracks).
 
 ### Users
 
-Features:
+Users are created by the forward-auth proxy on first sign-in; there is no create button. The list can be sorted (name,
+last active, role) and filtered; each user's role and library access can be changed. A user's page lists their
+devices (each can be signed out, which ends that device's tokens) and their play history with time watched and
+listened.
 
-- **Users table**: username, admin badge, last activity date
-- **Toggle Admin** button per user
-- **Delete** button with confirmation modal
-- Note: "Users are auto-created via reverse proxy" (no create button)
+### Scheduled tasks
 
-API calls: `GET /Users`, `POST /Users/{id}/Policy`, `DELETE /Users/{id}`
+Runs or stops each task and shows its last result.
 
-### Setup Wizard
+### Setup wizard
 
-Three-step wizard:
+Welcome, add the first library, done. It redirects to `/web` once `GET /Startup/Configuration` says setup is complete,
+and starts a scan of the new library.
 
-1. **Welcome** --- introduction message
-2. **Add Library** --- form to create first library (name, type, path)
-3. **Done** --- confirmation with link to dashboard
+## The player
 
-Behavior:
+One media element at the root of the app plays both video and music, so music keeps playing while you move between
+pages. Video opens over the page with play/pause, a seek bar with chapter marks, time, volume, audio and subtitle
+menus, full screen and close; music is a bar at the bottom with the cover, title, artist, previous/next and a seek bar.
 
-- Checks `GET /Startup/Configuration` on load
-- If `StartupWizardCompleted = true`, redirects to `/web`
-- On library creation, auto-triggers a scan
+How a play starts:
+
+1. `POST /Items/{id}/PlaybackInfo` with a device profile built from the browser's own `canPlayType` answers (so a
+   browser without H.264 or AAC is not sent files it cannot decode). The saved position is the start point unless the
+   title was finished.
+2. If the server allows direct play, the element gets `/Videos/{id}/stream?static=true` (or `/Audio/...`) with the
+   token in the address (`api_key`), since media elements cannot send headers. If direct play then fails, the player
+   asks once more for a transcode.
+3. Otherwise it plays the server's HLS playlist: natively where the browser can, else through hls.js, which is
+   fetched the first time a transcode plays. A fatal stream error is shown, not left as a player that never starts.
+
+A transcode only reaches as far as ffmpeg has encoded, so a seek past that point, a resume, or a change of audio track
+restarts the transcode at the new position. Text subtitles on a direct play are shown by the browser
+(`/Videos/{id}/{source}/Subtitles/{index}/Stream.vtt`); an image subtitle or another audio track asks the server for a
+transcode with that track.
+
+The player reports to the server like any client: `POST /Sessions/Playing` at the start, `/Sessions/Playing/Progress`
+every 10 seconds and on pause and play, and `/Sessions/Playing/Stopped` when it is closed, the title ends, another
+title starts, or the page is left. The server decides from these reports when a title counts as played and keeps the
+resume point (Jellyfin's rules). An album plays as a queue from the chosen track.
+
+Keyboard, while a video is open: space or K play/pause, ← and → seek 10 seconds, M mute, F full screen, Escape close.
 
 ## API Client (`api.rs`)
 
-All API calls use `gloo-net` for HTTP requests.
+All requests go through one function (`send`) using `gloo-net`.
+
+- **Requests belong to a page.** Opening a page cancels the reads the previous page still had in flight (an
+  `AbortController`), and an answer meant for a page that was left is never handed back. Changes (POST, DELETE) are
+  never cancelled. The player's requests are not tied to a page.
+- **Browsing cache.** Reads of browsing data (`/Items...`, `/UserViews`) are kept 30 seconds, so going back shows the
+  page at once; any change made in the admin empties the cache. Live state (sessions, scans, tasks, users) is always
+  fetched.
+- **Errors** become sentences (`api_error.rs`), keeping the server's own reason for bad requests and conflicts, and
+  are shown in a banner with Retry.
 
 ### Authentication
 
-The frontend reads the auth token from `localStorage("rustyfin_token")` and includes it in every request:
+The token lives in `localStorage("rustyfin_token")` and is sent with every request:
 
 ```text
 Authorization: MediaBrowser Client="Rustyfin Admin", Device="Browser", DeviceId="admin-ui", Version="0.1.0", Token="{token}"
 ```
 
+Behind the forward-auth proxy, the dashboard, media and user pages sign in on load (`POST /Users/AuthenticateByName`
+with the proxy's identity) when there is no valid token.
+
 ### Base URL
 
-The API base URL is derived from `window.location.origin`, so the frontend naturally points to the same server it was
-loaded from.
+The API base URL is derived from `window.location.origin`, so the frontend points to the server it was loaded from.
+
+## Accessibility
+
+A skip link; the page's name in the tab title and announced to screen readers on each navigation; live regions for
+toasts and errors; dialogs marked as dialogs, focused when they open and giving focus back when they close; Escape
+closes a dialog; every image has alt text (empty beside a written title); motion is turned off for
+`prefers-reduced-motion`.
 
 ## Styling
 
-The frontend uses plain CSS with a dark theme. No CSS framework.
+Plain CSS with a dark theme; no CSS framework.
 
 ### Design Tokens
 
@@ -204,31 +243,22 @@ The frontend uses plain CSS with a dark theme. No CSS framework.
 
 ### Layout
 
-- **App layout**: Fixed 240px sidebar + fluid main content
-- **Setup layout**: Centered card (no sidebar)
-- **Responsive**: Not currently responsive (admin tool, desktop-focused)
-
-### Components
-
-- **Cards**: Bordered containers with padding
-- **Stat cards**: Centered value + label
-- **Tables**: Full-width with hover states
-- **Buttons**: Primary (blue), danger (red), secondary (gray), small variant
-- **Forms**: Labeled inputs with dark backgrounds
-- **Badges**: Pill-shaped status indicators
-- **Modals**: Overlay + centered dialog
-- **Toasts**: Fixed top-right notifications
-- **Spinner**: CSS-animated loading indicator
+- **Desktop**: fixed 240 px sidebar and fluid main content.
+- **Phones (≤768 px)**: the sidebar becomes a menu, tables become stacked cards, dialogs fill the screen, search
+  inputs use 16 px text (no zoom on focus), and the music bar wraps onto two rows.
+- **Setup**: a centered card without the sidebar.
+- **Loading**: grey placeholders shaped like the content (poster grid, title page, rows) instead of spinners.
 
 ## Dependencies
 
 ```toml
-sycamore = "0.9"           # Reactive UI framework
-sycamore-router = "0.9"    # Client-side routing
-gloo-net = "0.6"           # HTTP requests (WASM)
-serde = "1"                # Serialization
-serde_json = "1"           # JSON parsing
-wasm-bindgen = "0.2"       # JS interop
+sycamore = "0.9"             # Reactive UI framework
+sycamore-router = "0.9"      # Client-side routing
+gloo-net = "0.6"             # HTTP requests (WASM)
+serde = "1"                  # Serialization
+serde_json = "1"             # JSON parsing
+wasm-bindgen = "0.2"         # JS interop
 wasm-bindgen-futures = "0.4" # Async in WASM
-web-sys = "0.3"            # Web API bindings (Window, Storage)
+js-sys = "0.3"               # JS built-ins (Date, Promise, Reflect)
+web-sys = "0.3"              # Web APIs (DOM, media elements, storage, fetch abort, observers)
 ```

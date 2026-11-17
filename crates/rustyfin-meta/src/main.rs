@@ -1,3 +1,11 @@
+//! `rustyfin`: the metadata tool, the one writer to the media folders.
+//!
+//! Runs as a sidecar or a Job with a writable mount (the server only reads
+//! media). Subcommands fetch artwork ([`artwork`], [`album_art`]) and
+//! lyrics ([`lyrics`]) for what the server scanned, write them next to the
+//! files, and remember what was not found ([`fetch`], [`scan`],
+//! [`config`]).
+
 mod album_art;
 mod artwork;
 mod config;

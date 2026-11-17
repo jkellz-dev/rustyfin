@@ -361,19 +361,21 @@ The project uses Rust edition 2024, which supports:
 ## Testing
 
 ```bash
-cargo test                   # All tests
-cargo test naming            # Tests with "naming" in the name
-cargo test -- --nocapture    # Show println output
+cargo test --lib                       # Unit tests (no database)
+cargo test -p rustyfin-api --test '*'  # Route tests against Postgres (DATABASE_URL)
+cargo test naming                      # Tests with "naming" in the name
+cd frontend && cargo test              # The admin's logic, on the host
 ```
 
-Current test coverage focuses on filename parsing in `rustyfin-core`:
+- **Route tests** (`crates/rustyfin-api/tests/`) start the real router against a Postgres database named by
+  `DATABASE_URL` (`docker compose up -d` provides one); each test makes its own users and libraries through
+  `tests/common/mod.rs`.
+- **Unit tests** sit next to the code: file and folder naming, NFO parsing, play-method decisions, the scan board, ...
+- **Admin tests** cover what the admin decides (addresses, sorting, wording, the player's choices); what needs a
+  browser is checked by hand or with Playwright.
+- **Parity** (`tests/parity`): Hurl cases holding Jellyfin's recorded answers, run nightly against the published image.
 
-- `test_is_video_file` --- video extension detection
-- `test_make_sort_name` --- sort name generation
-- `test_parse_season_folder` --- season folder parsing
-- `test_resolve_episode_*` --- episode filename patterns
-- `test_resolve_movie_*` --- movie filename patterns
-- `test_clean_title` --- title cleaning
+How changes are tested and landed: [Contributing](contributing.md).
 
 ## Debugging
 

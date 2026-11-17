@@ -267,6 +267,19 @@ List all libraries with their paths. Requires authentication.
 ]
 ```
 
+Each library also carries its scan state:
+
+| Field | Meaning |
+|-------|---------|
+| `RefreshStatus` | Jellyfin's: `Active` while a scan is queued or running, else `Idle` |
+| `RefreshProgress` | Jellyfin's: percent done (0-100) while scanning, else `null` |
+| `LastScanned` | When the last scan finished |
+| `LastScanAdded`, `LastScanUpdated`, `LastScanRemoved`, `LastScanErrors` | Rustyfin's: how the last scan since the server started ended (absent before one has run) |
+| `LastScanFailure` | Rustyfin's: why the last scan failed, else `null` |
+
+Progress counts a scan's top-level units: films in a film library, show folders in a TV library, artist folders in a
+music library. A scan that could not read some files, or failed, also leaves a `Warning` in the activity log.
+
 ### `POST /Library/VirtualFolders`
 
 Create a new library. Requires admin.
@@ -477,6 +490,14 @@ When transcoding is needed, the response includes:
 
 ---
 
+### How the play method is chosen
+
+With a `DeviceProfile` in the request (or one the client registered for its session), the server matches the file
+against the profile's `DirectPlayProfiles` **of the file's kind**, as Jellyfin does: a file with a video stream against
+the `Video` entries, music against the `Audio` entries. A match is played as it is (`SupportsDirectPlay`); a match on
+codecs but not the container is remuxed (`SupportsDirectStream`); anything else gets a `TranscodingUrl` to an HLS
+playlist built from the first `TranscodingProfiles` entry of the same kind. `TranscodeReasons` says why.
+
 ## Streaming
 
 ### `GET /Videos/{itemId}/stream`
@@ -501,6 +522,8 @@ Direct play a video file. Supports HTTP Range requests for seeking.
 - `Content-Length`: byte count
 - `Content-Range`: `bytes START-END/TOTAL` (for 206)
 - `Accept-Ranges`: `bytes`
+
+A title whose file has gone since the last scan answers `404 Not Found`.
 
 ### `GET /Videos/{itemId}/stream.{container}`
 
@@ -624,6 +647,47 @@ List active sessions. Requires authentication. Includes transcode status for act
 End the current session.
 
 **Response**: `204 No Content`
+
+---
+
+## Devices
+
+### `GET /Devices?UserId={uuid}`
+
+The devices signed in, newest first; with `UserId`, one user's. Administrators only. Each entry is the device's latest
+session: `Id` (the client's device id), `Name`, `AppName`, `AppVersion`, `LastUserId`, `LastUserName`,
+`DateLastActivated`. The answer is a query result (`Items`, `TotalRecordCount`).
+
+### `DELETE /Devices?Id={deviceId}`
+
+Sign the device out: every token it holds stops working. Administrators only. `404` for an unknown device.
+
+---
+
+## Play History
+
+Rustyfin records plays itself (no plugin). A play counts the minutes actually played (paused time and gaps over 5
+minutes are not counted); plays shorter than 10 seconds are dropped. Each entry keeps the title's name and kind, so it
+survives the title being removed. Users see their own history; administrators see everyone's.
+
+### `GET /Users/{userId}/PlayStats`
+
+Totals for the user: `TotalMinutes`, `Plays`, and `ByType` (one `{ "Type", "Minutes", "Plays" }` per kind of media).
+
+### `GET /Users/{userId}/PlayHistory`
+
+Plays, newest first.
+
+| Parameter | Description |
+|-----------|-------------|
+| `StartIndex`, `Limit` | Paging |
+| `Type` | Comma-separated kinds (`Movie`, `Episode`, `Audio`, ...) |
+| `SearchTerm` | Words in the title or its show/album |
+| `MinDate`, `MaxDate` | ISO 8601 date-time range |
+
+Each entry: `Id`, `ItemId` (`null` once the title is gone), `Name`, `ParentName` (show or album), `Type`,
+`StartedAt`, `LastSeenAt`, `Minutes`, `Client`, `DeviceName`, `PlayMethod`, `InProgress`, and `ImageItemId` with
+`ImageTag` for its picture (an episode shows its show's poster, a track its album cover).
 
 ---
 
@@ -759,6 +823,14 @@ WebSocket connection for real-time updates.
 ```
 
 Sent every 45 seconds. Client must respond within 60 seconds.
+
+Every connected client also hears about scans:
+
+| `MessageType` | `Data` |
+|---------------|--------|
+| `RefreshProgress` | Jellyfin's: `{ "ItemId": "<library>", "Progress": "42" }` (a string), sent at 0, at each whole percent and at 100 |
+| `LibraryChanged` | Jellyfin's `LibraryUpdateInfo` when a scan added items: `ItemsAdded` (at most 500 ids), `CollectionFolders` (the library) and empty `ItemsRemoved`, `ItemsUpdated`, `FoldersAddedTo`, `FoldersRemovedFrom` |
+| `ScanFinished` | Rustyfin's: `LibraryId`, `LibraryName`, `Added`, `Updated`, `Removed`, `Errors`, `Failure` |
 
 **Client Messages**:
 
