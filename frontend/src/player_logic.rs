@@ -66,6 +66,30 @@ pub fn browser_profile() -> Value {
     })
 }
 
+/// What the browser is asked about (`canPlayType`), by codec name.
+pub const PROBES: &[(&str, &str)] = &[
+    ("h264", "video/mp4; codecs=\"avc1.42E01E\""),
+    ("hevc", "video/mp4; codecs=\"hvc1.1.6.L93.B0\""),
+    ("av1", "video/mp4; codecs=\"av01.0.05M.08\""),
+    ("vp9", "video/webm; codecs=\"vp9\""),
+    ("vp8", "video/webm; codecs=\"vp8\""),
+    ("aac", "audio/mp4; codecs=\"mp4a.40.2\""),
+    ("mp3", "audio/mpeg"),
+    ("flac", "audio/flac"),
+    ("opus", "audio/webm; codecs=\"opus\""),
+    ("vorbis", "audio/ogg; codecs=\"vorbis\""),
+    ("ac3", "audio/mp4; codecs=\"ac-3\""),
+    ("eac3", "audio/mp4; codecs=\"ec-3\""),
+    ("wav", "audio/wav"),
+];
+
+/// The profile for a browser that plays the codecs `can` says yes to
+/// (names from `PROBES`), as Jellyfin web builds it from `canPlayType`.
+pub fn profile_for(can: &dyn Fn(&str) -> bool) -> Value {
+    let _ = can;
+    browser_profile()
+}
+
 /// What to load into the media element.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaySource {
@@ -486,5 +510,38 @@ mod tests {
         );
         assert_eq!(play_label("Series", None, false), None);
         assert_eq!(play_label("Folder", None, false), None);
+    }
+
+    #[test]
+    fn the_profile_lists_only_what_the_browser_plays() {
+        let all = profile_for(&|_| true);
+        let direct = all["DirectPlayProfiles"].as_array().unwrap();
+        let mp4 = direct.iter().find(|d| d["Container"] == "mp4,m4v").unwrap();
+        assert!(mp4["VideoCodec"].as_str().unwrap().contains("h264"));
+        assert!(mp4["VideoCodec"].as_str().unwrap().contains("hevc"));
+        assert!(mp4["AudioCodec"].as_str().unwrap().contains("ac3"));
+
+        // A Chromium without the licensed codecs: no H.264, AAC or AC-3.
+        let free = ["vp9", "vp8", "av1", "mp3", "flac", "opus", "vorbis", "wav"];
+        let open = profile_for(&|c| free.contains(&c));
+        let direct = open["DirectPlayProfiles"].as_array().unwrap();
+        let mp4 = direct.iter().find(|d| d["Container"] == "mp4,m4v").unwrap();
+        assert_eq!(mp4["VideoCodec"], "av1", "{mp4}");
+        assert!(!mp4["AudioCodec"].as_str().unwrap().contains("aac"));
+        let webm = direct.iter().find(|d| d["Container"] == "webm").unwrap();
+        assert_eq!(webm["VideoCodec"], "vp8,vp9,av1");
+        let audio = direct.iter().find(|d| d["Type"] == "Audio").unwrap();
+        let containers = audio["Container"].as_str().unwrap();
+        assert!(containers.contains("mp3") && containers.contains("flac"));
+        assert!(
+            !containers.contains("m4a"),
+            "no AAC, so no m4a: {containers}"
+        );
+
+        // Nothing to play an mp4 with: no mp4 entry at all.
+        let none = profile_for(&|c| c == "mp3");
+        let direct = none["DirectPlayProfiles"].as_array().unwrap();
+        assert!(direct.iter().all(|d| d["Container"] != "mp4,m4v"));
+        assert_eq!(none["TranscodingProfiles"], all["TranscodingProfiles"]);
     }
 }
