@@ -3032,6 +3032,7 @@ dependencies = [
  "metrics-exporter-prometheus",
  "rand 0.9.2",
  "rustyfin-auth",
+ "rustyfin-common",
  "rustyfin-core",
  "rustyfin-db",
  "rustyfin-media",

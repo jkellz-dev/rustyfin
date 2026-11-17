@@ -18,8 +18,55 @@ pub struct SubtitleFile {
 /// The subtitle files among `names` (the video's folder) that belong to
 /// `video`, sorted by file name.
 pub fn subtitle_files(video: &Path, names: &[String]) -> Vec<SubtitleFile> {
-    let _ = (video, names);
-    Vec::new()
+    let (Some(stem), Some(dir)) = (video.file_stem().and_then(|s| s.to_str()), video.parent())
+    else {
+        return Vec::new();
+    };
+    let stem = stem.to_lowercase();
+    let mut found: Vec<SubtitleFile> = names
+        .iter()
+        .filter_map(|name| {
+            let lower = name.to_lowercase();
+            let (rest, ext) = lower.rsplit_once('.')?;
+            let codec = match ext {
+                "srt" => "subrip",
+                "vtt" => "webvtt",
+                "ass" => "ass",
+                "ssa" => "ssa",
+                _ => return None,
+            };
+            let tags = if rest == stem {
+                ""
+            } else {
+                rest.strip_prefix(&stem)?.strip_prefix('.')?
+            };
+            let mut file = SubtitleFile {
+                path: dir.join(name),
+                codec,
+                language: None,
+                forced: false,
+                default: false,
+                hearing_impaired: false,
+            };
+            for tag in tags.split('.').filter(|t| !t.is_empty()) {
+                match tag {
+                    "forced" | "foreign" => file.forced = true,
+                    "default" => file.default = true,
+                    "sdh" | "cc" | "hi" => file.hearing_impaired = true,
+                    lang if file.language.is_none()
+                        && lang.len() <= 3
+                        && lang.chars().all(|c| c.is_ascii_alphabetic()) =>
+                    {
+                        file.language = Some(lang.to_string());
+                    }
+                    _ => {}
+                }
+            }
+            Some(file)
+        })
+        .collect();
+    found.sort_by(|a, b| a.path.cmp(&b.path));
+    found
 }
 
 /// Subtitle files beside `video`, read from its folder.
@@ -40,8 +87,21 @@ pub fn find_subtitle_files(video: &Path) -> Vec<SubtitleFile> {
 /// SubRip text as WebVTT (what browsers read): a header, and `.` instead of
 /// `,` before the milliseconds in cue times.
 pub fn srt_to_vtt(srt: &str) -> String {
-    let _ = srt;
-    String::new()
+    let text = srt
+        .trim_start_matches('\u{feff}')
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+    let mut out = String::from("WEBVTT\n\n");
+    for line in text.lines() {
+        if line.contains("-->") {
+            // 00:00:01,000 --> 00:00:02,500: only the times change.
+            out.push_str(&line.replace(',', "."));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
 }
 
 #[cfg(test)]

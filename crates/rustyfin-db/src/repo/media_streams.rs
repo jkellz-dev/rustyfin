@@ -36,6 +36,7 @@ pub struct MediaStreamRow {
     pub is_interlaced: bool,
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct NewMediaStream {
     pub item_id: Uuid,
     pub stream_index: i32,
@@ -66,6 +67,8 @@ pub struct NewMediaStream {
     pub ref_frames: Option<i32>,
     pub nal_length_size: Option<String>,
     pub is_interlaced: bool,
+    /// The file of an external stream (a subtitle file beside the video).
+    pub path: Option<String>,
 }
 
 /// Insert a media stream.
@@ -78,14 +81,16 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
             width, height, bit_rate, bit_depth, pixel_format, aspect_ratio,
             real_frame_rate, color_space, color_primaries, color_transfer,
             channels, channel_layout, sample_rate,
-            profile, level, codec_tag, time_base, ref_frames, nal_length_size, is_interlaced
+            profile, level, codec_tag, time_base, ref_frames, nal_length_size, is_interlaced,
+            path
         ) VALUES (
             $1, $2, $3, $4, $5, $6,
             $7, $8, $9,
             $10, $11, $12, $13, $14, $15,
             $16, $17, $18, $19,
             $20, $21, $22,
-            $23, $24, $25, $26, $27, $28, $29
+            $23, $24, $25, $26, $27, $28, $29,
+            $30
         )
         RETURNING *
         "#,
@@ -119,6 +124,7 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
     .bind(stream.ref_frames)
     .bind(&stream.nal_length_size)
     .bind(stream.is_interlaced)
+    .bind(&stream.path)
     .fetch_one(pool)
     .await
 }

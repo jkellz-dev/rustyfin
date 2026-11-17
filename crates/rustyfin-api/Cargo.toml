@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 rustyfin-auth.workspace = true
+rustyfin-common.workspace = true
 rustyfin-core.workspace = true
 rustyfin-db.workspace = true
 rustyfin-models.workspace = true

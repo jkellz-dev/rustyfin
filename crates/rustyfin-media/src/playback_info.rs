@@ -113,7 +113,7 @@ pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
             ),
         average_frame_rate: if is_video { s.real_frame_rate } else { None },
         reference_frame_rate: if is_video { s.real_frame_rate } else { None },
-        // Plain files: nothing anamorphic or external here.
+        // Plain files: nothing anamorphic here.
         ..Default::default()
     }
 }

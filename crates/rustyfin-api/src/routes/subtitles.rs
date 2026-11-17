@@ -66,13 +66,55 @@ async fn serve_subtitle(
         .find(|s| s.stream_type == "Subtitle" && s.stream_index == stream_index)
         .ok_or(ApiError::NotFound)?;
 
-    // If external subtitle file, serve directly
+    // A subtitle file beside the video: sent as it is when the client asks
+    // for its own format, SubRip converted to WebVTT, anything else through
+    // ffmpeg (its only stream is index 0).
     if sub_stream.is_external
         && let Some(ref path) = sub_stream.path
     {
-        let content = tokio::fs::read_to_string(path)
-            .await
-            .map_err(|_| ApiError::NotFound)?;
+        let source_format = match sub_stream.codec.as_deref() {
+            Some("subrip") => "srt",
+            Some("webvtt") => "vtt",
+            Some(other) => other,
+            None => "",
+        };
+        let wanted = if output_format == "subrip" {
+            "srt"
+        } else {
+            output_format
+        };
+        let content = if source_format == wanted {
+            tokio::fs::read_to_string(path)
+                .await
+                .map_err(|_| ApiError::NotFound)?
+        } else if source_format == "srt" && wanted == "vtt" {
+            let srt = tokio::fs::read_to_string(path)
+                .await
+                .map_err(|_| ApiError::NotFound)?;
+            rustyfin_common::subtitle_files::srt_to_vtt(&srt)
+        } else {
+            let tm = &state.transcode_manager;
+            let cache_path = subtitles::subtitle_cache_path(
+                &tm.temp_base,
+                &item_id.to_string(),
+                stream_index,
+                output_format,
+            );
+            if !cache_path.exists() {
+                subtitles::extract_subtitle(
+                    &tm.ffmpeg_path,
+                    std::path::Path::new(path),
+                    0,
+                    &cache_path,
+                    output_format,
+                )
+                .await
+                .map_err(|e| ApiError::Internal(format!("subtitle conversion failed: {e}")))?;
+            }
+            tokio::fs::read_to_string(&cache_path)
+                .await
+                .map_err(|_| ApiError::Internal("failed to read converted subtitle".to_string()))?
+        };
 
         let content_type = subtitles::subtitle_content_type(output_format);
         return Ok(Response::builder()

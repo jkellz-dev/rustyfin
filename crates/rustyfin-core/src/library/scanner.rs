@@ -420,7 +420,7 @@ impl LibraryScanner {
         item_type: &str,
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
-        let etag = compute_etag(file_path, &[])?;
+        let etag = compute_etag(file_path, &subtitle_sidecars(file_path))?;
         let existing = media_items::find_by_path(&self.pool, &path_str).await?;
         if let Some(e) = &existing
             && e.etag.as_deref() == Some(etag.as_str())
@@ -477,7 +477,7 @@ impl LibraryScanner {
             ),
         };
         media_items::set_extra(&self.pool, id, Some(owner), Some(extra_type)).await?;
-        self.replace_streams(id, &probe_result).await;
+        self.replace_streams(id, file_path, &probe_result).await;
         Ok(outcome)
     }
 
@@ -492,7 +492,9 @@ impl LibraryScanner {
         let settings_path = file_path
             .parent()
             .and_then(rustyfin_common::title_settings::existing);
-        let etag = compute_etag(file_path, &[nfo_path, settings_path])?;
+        let mut sidecars = vec![nfo_path, settings_path];
+        sidecars.extend(subtitle_sidecars(file_path));
+        let etag = compute_etag(file_path, &sidecars)?;
 
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
@@ -533,7 +535,8 @@ impl LibraryScanner {
             };
 
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
-            self.replace_streams(updated.id, &probe_result).await;
+            self.replace_streams(updated.id, file_path, &probe_result)
+                .await;
             self.replace_chapters(updated.id, &probe_result).await;
             self.replace_images(updated.id, file_path).await;
             self.enrichment
@@ -580,7 +583,8 @@ impl LibraryScanner {
         };
 
         let inserted = media_items::insert(&self.pool, &item).await?;
-        self.replace_streams(inserted.id, &probe_result).await;
+        self.replace_streams(inserted.id, file_path, &probe_result)
+            .await;
         self.replace_chapters(inserted.id, &probe_result).await;
         self.replace_images(inserted.id, file_path).await;
         self.enrichment
@@ -1125,7 +1129,8 @@ impl LibraryScanner {
             };
 
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
-            self.replace_streams(updated.id, &probe_result).await;
+            self.replace_streams(updated.id, file_path, &probe_result)
+                .await;
             self.replace_images(updated.id, file_path).await;
             self.store_track_tags(updated.id, album_id, artist_id, file_path)
                 .await;
@@ -1160,7 +1165,8 @@ impl LibraryScanner {
         };
 
         let inserted = media_items::insert(&self.pool, &item).await?;
-        self.replace_streams(inserted.id, &probe_result).await;
+        self.replace_streams(inserted.id, file_path, &probe_result)
+            .await;
         self.replace_images(inserted.id, file_path).await;
         self.store_track_tags(inserted.id, album_id, artist_id, file_path)
             .await;
@@ -1256,7 +1262,9 @@ impl LibraryScanner {
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
         let nfo_path = find_episode_nfo(file_path);
-        let etag = compute_etag(file_path, &[nfo_path])?;
+        let mut sidecars = vec![nfo_path];
+        sidecars.extend(subtitle_sidecars(file_path));
+        let etag = compute_etag(file_path, &sidecars)?;
 
         // Check if already exists and unchanged
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
@@ -1318,7 +1326,8 @@ impl LibraryScanner {
             };
 
             let updated = media_items::update(&self.pool, existing.id, &item).await?;
-            self.replace_streams(updated.id, &probe_result).await;
+            self.replace_streams(updated.id, file_path, &probe_result)
+                .await;
             self.replace_chapters(updated.id, &probe_result).await;
             self.replace_episode_images(updated.id, file_path).await;
             self.enrichment.enrich_episode(updated.id, file_path).await;
@@ -1379,7 +1388,8 @@ impl LibraryScanner {
         };
 
         let inserted = media_items::insert(&self.pool, &item).await?;
-        self.replace_streams(inserted.id, &probe_result).await;
+        self.replace_streams(inserted.id, file_path, &probe_result)
+            .await;
         self.replace_chapters(inserted.id, &probe_result).await;
         self.replace_episode_images(inserted.id, file_path).await;
         self.enrichment.enrich_episode(inserted.id, file_path).await;
@@ -1609,14 +1619,20 @@ impl LibraryScanner {
         match media_streams::lacks_details(&self.pool, item_id).await {
             Ok(true) => {
                 let probe_result = self.probe(file_path).await;
-                self.replace_streams(item_id, &probe_result).await;
+                self.replace_streams(item_id, file_path, &probe_result)
+                    .await;
             }
             Ok(false) => {}
             Err(e) => tracing::warn!("Could not check the streams of {item_id}: {e}"),
         }
     }
 
-    async fn replace_streams(&self, item_id: Uuid, probe_result: &Option<probe::ProbeResult>) {
+    async fn replace_streams(
+        &self,
+        item_id: Uuid,
+        file_path: &Path,
+        probe_result: &Option<probe::ProbeResult>,
+    ) {
         // Delete existing streams
         if let Err(e) = media_streams::delete_by_item(&self.pool, item_id).await {
             tracing::error!("Failed to delete streams for {item_id}: {e}");
@@ -1656,11 +1672,44 @@ impl LibraryScanner {
                 ref_frames: stream.ref_frames,
                 nal_length_size: stream.nal_length_size.clone(),
                 is_interlaced: stream.is_interlaced,
+                path: None,
             };
 
             if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
                 tracing::error!("Failed to insert stream for {item_id}: {e}");
             }
+        }
+
+        // Subtitle files beside a video, after its own streams (Jellyfin lists
+        // them the same way); music has none.
+        if !pr.streams.iter().any(|s| s.stream_type == "Video") {
+            return;
+        }
+        let mut next = pr
+            .streams
+            .iter()
+            .map(|s| s.stream_index)
+            .max()
+            .unwrap_or(-1)
+            + 1;
+        for file in rustyfin_common::subtitle_files::find_subtitle_files(file_path) {
+            let new_stream = media_streams::NewMediaStream {
+                item_id,
+                stream_index: next,
+                stream_type: "Subtitle".to_string(),
+                codec: Some(file.codec.to_string()),
+                language: file.language.clone(),
+                title: file.hearing_impaired.then(|| "SDH".to_string()),
+                is_default: file.default,
+                is_forced: file.forced,
+                is_external: true,
+                path: Some(file.path.to_string_lossy().to_string()),
+                ..Default::default()
+            };
+            if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
+                tracing::error!("Failed to insert subtitle file for {item_id}: {e}");
+            }
+            next += 1;
         }
     }
 
@@ -1797,6 +1846,15 @@ enum IngestOutcome {
 /// Compute an etag from the media file's mtime+size, plus the mtime of any
 /// sidecar files (e.g. NFO).  If a sidecar changes, the etag changes and the
 /// item will be re-enriched on the next scan.
+/// Subtitle files beside a video count as sidecars: adding or removing one
+/// is a change to the title.
+fn subtitle_sidecars(file_path: &Path) -> Vec<Option<PathBuf>> {
+    rustyfin_common::subtitle_files::find_subtitle_files(file_path)
+        .into_iter()
+        .map(|f| Some(f.path))
+        .collect()
+}
+
 fn compute_etag(path: &Path, sidecars: &[Option<PathBuf>]) -> anyhow::Result<String> {
     let metadata = std::fs::metadata(path)?;
     let mtime = metadata

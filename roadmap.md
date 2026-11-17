@@ -1249,6 +1249,8 @@ those capabilities.
 - [x] Subtitle track picker (from `MediaStreams` where `stream_type == "Subtitle"`)
 - [x] Audio track picker (from `MediaStreams` where `stream_type == "Audio"`)
 - [x] External subtitle rendering (WebVTT via `<track>` element)
+- [x] Subtitle files beside the video (`<name>[.lang][.forced|.default|.sdh].srt|vtt|ass|ssa`, as Jellyfin names them)
+      are found by the scan and offered with the embedded ones; SubRip is served as WebVTT
 - [x] Restart transcode with different audio/subtitle indices when selection changes
 
 ### 13d. Playback Session Reporting
