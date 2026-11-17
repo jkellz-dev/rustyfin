@@ -758,6 +758,54 @@ mod tests {
             assert!(tm.get_job_output_dir("s6").await.is_none());
         }
 
+        /// ffmpeg's playlist after copying video: segments end on the source's
+        /// keyframes, so they are not 6 s each.
+        const UNEVEN: &str = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:9\n\
+            #EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n\
+            #EXTINF:7.500000,\n0.ts\n#EXTINF:8.000000,\n1.ts\n\
+            #EXTINF:6.500000,\n2.ts\n#EXTINF:9.000000,\n3.ts\n";
+
+        #[test]
+        fn listed_segments_start_where_the_playlist_says() {
+            assert_eq!(listed_segment_start(UNEVEN, 0), Some(0.0));
+            assert_eq!(listed_segment_start(UNEVEN, 3), Some(22.0));
+            assert_eq!(listed_segment_start(UNEVEN, 4), Some(31.0), "just past the last");
+            assert_eq!(listed_segment_start(UNEVEN, 9), None, "not written yet");
+            let restarted = "#EXTM3U\n#EXTINF:7.0,\n40.ts\n#EXTINF:5.0,\n41.ts\n";
+            assert_eq!(listed_segment_start(restarted, 41), Some(7.0));
+            assert_eq!(listed_segment_start(restarted, 12), None, "before this playlist");
+        }
+
+        // A copied stream's segments are uneven: the player's position and a
+        // restart point come from the playlist's real lengths, not n × 6 s.
+        // Resumed at 41:10, so a mix-up with the file clock would show too.
+        #[tokio::test]
+        async fn uneven_segments_are_placed_by_the_playlist() {
+            let root = root("uneven");
+            let tm = manager(&root, fake("runs"));
+            tm.start_transcode(request(&root, "s6", 2470)).await.unwrap();
+            let dir = tm.get_job_output_dir("s6").await.unwrap();
+            std::fs::write(dir.join("playlist.m3u8"), UNEVEN).unwrap();
+
+            tm.touch_segment("s6", 3).await;
+            assert_eq!(tm.jobs.read().await["s6"].player_ticks, 22 * SEC);
+
+            tm.restart_at_segment("s6", 3).await.unwrap();
+            let log = root.join("calls.log");
+            let mut calls = String::new();
+            for _ in 0..50 {
+                calls = std::fs::read_to_string(&log).unwrap_or_default();
+                if calls.lines().count() >= 2 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            let restart = calls.lines().nth(1).expect("a second ffmpeg");
+            assert!(restart.contains("-ss 2492.000"), "{restart}");
+            assert!(restart.contains("-start_number 3"), "{restart}");
+            tm.kill_all().await;
+        }
+
         // Throttling pauses an encoder that is far ahead of the player, measured
         // from the segment the player last asked for.
         #[tokio::test]
