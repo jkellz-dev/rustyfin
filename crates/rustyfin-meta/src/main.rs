@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+mod album_art;
 mod artwork;
 mod config;
 mod fetch;
