@@ -181,16 +181,28 @@ pub fn decide_play_method(
             .all(|r| matches!(r, TranscodeReason::ContainerNotSupported))
             && !reasons.is_empty();
 
-        if only_container_issue {
-            let target_container = profile
-                .transcoding_profiles
-                .iter()
-                .find(|tp| {
-                    tp.profile_type
-                        .as_deref()
-                        .is_none_or(|t| t.eq_ignore_ascii_case(wanted_type))
-                })
-                .and_then(|tp| tp.container.clone());
+        // A remux copies the streams into the transcoding profile's container,
+        // so (as in Jellyfin) it needs that profile to take the source codecs:
+        // copying WMA audio into an HLS stream for a browser plays nothing.
+        let remux_profile = profile.transcoding_profiles.iter().find(|tp| {
+            tp.profile_type
+                .as_deref()
+                .is_none_or(|t| t.eq_ignore_ascii_case(wanted_type))
+        });
+        let copy_ok = remux_profile.is_none_or(|tp| {
+            let audio_ok = tp.audio_codec.as_deref().is_none_or(|c| {
+                source_audio_codec.is_empty() || csv_contains(c, &source_audio_codec)
+            });
+            let video_ok = video_stream.is_none()
+                || tp
+                    .video_codec
+                    .as_deref()
+                    .is_none_or(|c| csv_contains(c, &source_video_codec));
+            audio_ok && video_ok
+        });
+
+        if only_container_issue && copy_ok {
+            let target_container = remux_profile.and_then(|tp| tp.container.clone());
 
             return TranscodeDecision {
                 play_method: PlayMethod::DirectStream,
@@ -552,5 +564,24 @@ mod tests {
         let decision =
             decide_play_method(&source, &streams, &make_browser_profile(), None, None, None);
         assert_ne!(decision.play_method, PlayMethod::DirectPlay);
+    }
+
+    /// A remux copies the streams; when the transcoding profile does not take
+    /// the source's audio codec (AC-3 into an AAC-only HLS stream), it must
+    /// be a transcode.
+    #[test]
+    fn a_remux_needs_codecs_the_transcoding_profile_takes() {
+        let source = make_source("mkv", Some(10_000_000));
+        let streams = vec![make_video_stream("h264"), make_audio_stream("ac3")];
+        let decision = decide_play_method(
+            &source,
+            &streams,
+            &make_profile_h264_aac_mp4(),
+            None,
+            None,
+            None,
+        );
+        assert_eq!(decision.play_method, PlayMethod::Transcode);
+        assert_eq!(decision.target_audio_codec.as_deref(), Some("aac"));
     }
 }
