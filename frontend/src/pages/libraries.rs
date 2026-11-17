@@ -212,16 +212,7 @@ pub fn Libraries() -> View {
             div {
                 // Toast
                 (if let Some(msg) = toast.get_clone() {
-                    let msg_for_clear = msg.clone();
-                    // Clear toast after display
-                    spawn_local({
-                        async move {
-                            sleep_ms(3000).await;
-                            if toast.get_clone().as_deref() == Some(msg_for_clear.as_str()) {
-                                toast.set(None);
-                            }
-                        }
-                    });
+                    crate::timer::clear_toast_later(toast, msg.clone());
                     view! {
                         div(class="toast-container") {
                             div(class="toast toast-success") { (msg) }
