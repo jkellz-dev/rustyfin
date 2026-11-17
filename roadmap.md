@@ -1264,7 +1264,7 @@ those capabilities.
 - [x] Play button on media items (grid view and detail view)
 - [x] Player opens in-page (not a separate route) — overlay or dedicated player area
 - [x] Chapter markers on video seek bar (clickable to jump)
-- [ ] "Continue Watching" section on dashboard (items with resume position)
+- [x] "Continue Watching" section on dashboard (items with resume position): a tile resumes in the player
 - [x] Keyboard shortcuts: space (play/pause), left/right arrows (seek ±10s), M (mute), F (fullscreen)
 
 ---

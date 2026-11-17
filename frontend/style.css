@@ -1975,3 +1975,16 @@ body:has(.player-audio) .main-content {
     flex: 1 1 100%;
   }
 }
+
+.resume-card {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.resume-art {
+  position: relative;
+}
