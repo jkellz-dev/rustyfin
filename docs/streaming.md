@@ -282,13 +282,17 @@ unsupported container), the server transcodes via ffmpeg into HLS segments.
 
 1. Client sends `POST /Items/{itemId}/PlaybackInfo` with a `DeviceProfile` (lists supported containers, video/audio
    codecs, max bitrate)
-2. Server compares source media streams against the profile
+2. Server compares source media streams against the profile entries **of the file's kind** (as Jellyfin does): a file
+   with a video stream against the `Video` entries, music against the `Audio` entries
 3. Result is one of:
    - **DirectPlay** — client plays the file as-is
-   - **DirectStream** — remux (copy codecs, change container)
+   - **DirectStream** — remux (copy codecs, change container): only when the codecs are playable but the container is
+     not, **and** the transcoding profile of the same kind accepts the source codecs (copying WMA audio into an
+     AAC-only HLS stream would play nothing)
    - **Transcode** — re-encode video/audio to compatible codecs
 
-The response includes `TranscodingUrl` (pointing to the HLS master playlist) when transcoding is needed.
+The response includes `TranscodingUrl` when a remux or transcode is needed: `/Videos/{id}/master.m3u8` for video, and
+`/Audio/{id}/master.m3u8` (audio codec only) for music, whose files have no video stream to map.
 
 ### HLS Endpoints
 
@@ -356,6 +360,8 @@ GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt
 GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}
 ```
 
-- External subtitle files are served directly
+- External subtitle files (beside the video, found by the scan; see [Library Scanning](library-scanning.md)) are sent as
+  they are when asked for in their own format; SubRip asked for as WebVTT is converted (browsers read only WebVTT);
+  other pairs go through ffmpeg and are cached
 - Embedded subtitles are extracted via ffmpeg and cached on disk
 - Image-based subtitles (PGS, VOBSUB) can be burned in during transcoding

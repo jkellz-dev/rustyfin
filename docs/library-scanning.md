@@ -175,6 +175,23 @@ Sidecar images are discovered in the same directory as the media file:
 
 Multiple backdrops are supported (e.g., `fanart1.jpg`, `fanart2.jpg`).
 
+## Subtitle Files
+
+Subtitle files beside a video are added to its streams as external subtitles, after the file's own streams. They are
+named as Jellyfin names them (case does not matter):
+
+```text
+Film (2020).mkv
+Film (2020).srt                 # no language
+Film (2020).en.srt              # English
+Film (2020).fr.forced.srt       # French, forced (also: .foreign)
+Film (2020).de.default.vtt      # German, the default
+Film (2020).eng.sdh.ass         # English for the deaf and hard of hearing (also: .cc, .hi)
+```
+
+Formats: `.srt`, `.vtt`, `.ass`, `.ssa`. Their names and modification times are part of the title's change tag, so
+adding or removing a subtitle file rescans that title on the next scan.
+
 ## NFO Parsing (`nfo.rs`)
 
 Kodi-standard NFO XML files are parsed for metadata. NFO files are checked **before** TMDB.
@@ -306,6 +323,13 @@ POST /Items/{itemId}/Refresh
 
 This re-runs the full enrichment pipeline (NFO → TMDB) for the specified item, updating metadata, ratings, genres, and
 people associations.
+
+## Scan Progress
+
+While a library is scanned, `/Library/VirtualFolders` reports `RefreshProgress` (percent) and every WebSocket client
+hears `RefreshProgress`, then `LibraryChanged` with the new items and `ScanFinished` with the outcome. Progress counts
+the scan's top-level units: films, show folders, or artist folders. A scan that could not read some files, or failed,
+leaves a `Warning` in the activity log. See [API Reference](api-reference.md).
 
 ## Scan Results
 
