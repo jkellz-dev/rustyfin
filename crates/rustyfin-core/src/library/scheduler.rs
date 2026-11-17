@@ -6,7 +6,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::Utc;
 use cron::Schedule;
-use rand::Rng;
+use rand::RngExt;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;

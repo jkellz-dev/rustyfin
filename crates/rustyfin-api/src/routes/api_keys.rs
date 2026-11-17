@@ -1,5 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

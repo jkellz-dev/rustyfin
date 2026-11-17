@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rand::Rng;
+use rand::RngExt;
 use sqlx::PgPool;
 
 use rustyfin_db::repo::device_auth;
