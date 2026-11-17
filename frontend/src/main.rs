@@ -2,8 +2,10 @@ mod api;
 mod browse;
 mod components;
 mod dashboard_view;
+mod media_route;
 mod pages;
 mod types;
+mod user_view;
 
 use sycamore::prelude::*;
 use sycamore_router::{HistoryIntegration, Route, Router};
@@ -11,7 +13,7 @@ use sycamore_router::{HistoryIntegration, Route, Router};
 use components::nav::Sidebar;
 use pages::{
     dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, tasks::Tasks,
-    users::Users,
+    user_detail::UserDetail, users::Users,
 };
 
 #[derive(Route, Clone)]
@@ -22,10 +24,13 @@ enum AppRoutes {
     DashboardIndex,
     #[to("/web/libraries")]
     Libraries,
-    #[to("/web/media")]
-    Media,
+    /// Every place in the media browser has an address (media_route).
+    #[to("/web/media/<path..>")]
+    Media { path: Vec<String> },
     #[to("/web/users")]
     Users,
+    #[to("/web/users/<id>")]
+    UserDetail { id: String },
     #[to("/web/tasks")]
     Tasks,
     #[to("/web/setup")]
@@ -49,8 +54,9 @@ fn main() {
                                 (match route.get_clone() {
                                     AppRoutes::Setup => view! { Setup {} },
                                     AppRoutes::Libraries => view! { Libraries {} },
-                                    AppRoutes::Media => view! { Media {} },
+                                    AppRoutes::Media { path } => view! { Media(path=format!("/web/media/{}", path.join("/"))) },
                                     AppRoutes::Users => view! { Users {} },
+                                    AppRoutes::UserDetail { id } => view! { UserDetail(user_id=id) },
                                     AppRoutes::Tasks => view! { Tasks {} },
                                     _ => view! { Dashboard {} },
                                 })

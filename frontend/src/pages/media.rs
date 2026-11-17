@@ -1,8 +1,11 @@
 use sycamore::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
+use sycamore_router::navigate;
+
 use crate::api;
 use crate::browse::{self, ChildQuery};
+use crate::media_route::{self, Crumb, MediaRoute};
 use crate::types::*;
 
 // ── View state machine ──────────────────────────────────
@@ -13,19 +16,6 @@ enum MediaView {
     Grid,
     Detail(String),
     Search,
-}
-
-#[derive(Clone, PartialEq)]
-struct Breadcrumb {
-    label: String,
-    parent_id: Option<String>,
-    /// What this level lists when it is opened again.
-    query: ChildQuery,
-    /// The item open in the detail view (always the last crumb). It lets the
-    /// level above it, e.g. the episode's season, be clicked.
-    is_detail: bool,
-    /// A person's page: their titles rather than a folder's children.
-    person_id: Option<String>,
 }
 
 // ── Helpers ─────────────────────────────────────────────
@@ -99,57 +89,50 @@ const PAGE_SIZE: i32 = 50;
 
 // ── Component ───────────────────────────────────────────
 
-#[component]
-pub fn Media() -> View {
-    let current_view: Signal<MediaView> = create_signal(MediaView::Libraries);
+/// The media browser at `path` (an address under `/web/media`, see
+/// `media_route`): the router builds a fresh page for each address, so the
+/// back and forward buttons move through the browser's places.
+#[component(inline_props)]
+pub fn Media(path: String) -> View {
+    let route = MediaRoute::parse(&path);
+    let current_view: Signal<MediaView> = create_signal(match &route {
+        MediaRoute::Libraries => MediaView::Libraries,
+        MediaRoute::Item { id } => MediaView::Detail(id.clone()),
+        MediaRoute::Search { .. } => MediaView::Search,
+        _ => MediaView::Grid,
+    });
     let libraries: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let items: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let total_count = create_signal(0i32);
     let start_index = create_signal(0i32);
     let detail_item: Signal<Option<BaseItemDto>> = create_signal(None);
     let detail_tracks: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
-    // The collections the item in the detail view is in.
+    // The collections a film belongs to (links on its page).
     let detail_collections: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let detail_extras: Signal<Vec<BaseItemDto>> = create_signal(Vec::new());
     let search_results: Signal<Vec<SearchHint>> = create_signal(Vec::new());
-    let breadcrumbs: Signal<Vec<Breadcrumb>> = create_signal(Vec::new());
-    let current_parent_id: Signal<Option<String>> = create_signal(None);
+    let breadcrumbs: Signal<Vec<Crumb>> = create_signal(Vec::new());
+    // The library the page is in, which the search box searches.
+    let scope_library: Signal<Option<String>> = create_signal(None);
     let current_query: Signal<ChildQuery> = create_signal(browse::library_query(None));
-    // The person whose titles the grid lists (None: a folder's children).
-    let current_person: Signal<Option<String>> = create_signal(None);
     let loading = create_signal(true);
-    let detail_loading = create_signal(false);
-    let search_loading = create_signal(false);
+    let detail_loading = create_signal(matches!(route, MediaRoute::Item { .. }));
+    let search_loading = create_signal(matches!(route, MediaRoute::Search { .. }));
     let refreshing = create_signal(false);
     let error: Signal<Option<String>> = create_signal(None);
     let toast: Signal<Option<String>> = create_signal(None);
-    let search_term = create_signal(String::new());
-
-    // Authenticate then load library views
-    spawn_local({
-        async move {
-            if let Err(e) = api::ensure_authenticated().await {
-                error.set(Some(e));
-                loading.set(false);
-                return;
-            }
-
-            match api::get_user_views().await {
-                Ok(result) => libraries.set(result.items),
-                Err(e) => error.set(Some(e)),
-            }
-            loading.set(false);
-        }
+    let search_term = create_signal(match &route {
+        MediaRoute::Search { words, .. } => words.clone(),
+        _ => String::new(),
     });
 
-    // ── Actions ─────────────────────────────────────────
+    let go = |r: MediaRoute| navigate(&r.path());
 
-    let load_items = move |parent_id: String, query: ChildQuery, start: i32| {
-        loading.set(true);
-        let person = current_person.get_clone();
-        spawn_local({
-            let parent_id = parent_id.clone();
-            async move {
+    // A page of a folder's, library's or person's titles.
+    let load_items =
+        move |parent_id: String, query: ChildQuery, start: i32, person: Option<String>| {
+            loading.set(true);
+            spawn_local(async move {
                 match api::get_items(
                     &parent_id,
                     query.item_types,
@@ -170,61 +153,86 @@ pub fn Media() -> View {
                     Err(e) => error.set(Some(e)),
                 }
                 loading.set(false);
-            }
-        });
-    };
-
-    let select_library = move |lib: BaseItemDto| {
-        let lib_id = lib.id.clone();
-        let lib_name = lib.name.clone();
-        let query = browse::library_query(lib.collection_type.as_deref());
-        current_person.set(None);
-        current_parent_id.set(Some(lib_id.clone()));
-        current_query.set(query);
-        breadcrumbs.set(vec![Breadcrumb {
-            label: lib_name,
-            parent_id: Some(lib_id.clone()),
-            query,
-            is_detail: false,
-            person_id: None,
-        }]);
-        start_index.set(0);
-        load_items(lib_id, query, 0);
-        current_view.set(MediaView::Grid);
-    };
-
-    let browse_into = move |item: BaseItemDto| {
-        let item_id = item.id.clone();
-        let item_name = item.name.clone();
-        // Only the folder's direct children: a show's seasons, a season's episodes.
-        let query = browse::children_query(&item.item_type);
-        current_person.set(None);
-        current_parent_id.set(Some(item_id.clone()));
-        current_query.set(query);
-        breadcrumbs.update(|bc| {
-            bc.retain(|c| !c.is_detail);
-            bc.push(Breadcrumb {
-                label: item_name,
-                parent_id: Some(item_id.clone()),
-                query,
-                is_detail: false,
-                person_id: None,
             });
-        });
-        start_index.set(0);
-        load_items(item_id, query, 0);
+        };
+
+    // The trail to an item, from its ancestors; the library (if any) is the
+    // search scope.
+    let set_trail = move |ancestors: Vec<BaseItemDto>, current: String| {
+        scope_library.set(
+            ancestors
+                .iter()
+                .find(|a| a.item_type == "CollectionFolder")
+                .map(|a| a.id.clone()),
+        );
+        let steps: Vec<(String, String, String)> = ancestors
+            .into_iter()
+            .map(|a| (a.id, a.item_type, a.name))
+            .collect();
+        breadcrumbs.set(media_route::trail(&steps, &current));
     };
 
-    let view_detail = move |item_id: String| {
-        detail_loading.set(true);
-        detail_tracks.set(Vec::new());
-        detail_collections.set(Vec::new());
-        detail_extras.set(Vec::new());
-        current_view.set(MediaView::Detail(item_id.clone()));
-        spawn_local({
-            let item_id = item_id.clone();
-            async move {
-                match api::get_item(&item_id).await {
+    // Load what the address names.
+    let route_for_load = route.clone();
+    spawn_local(async move {
+        if let Err(e) = api::ensure_authenticated().await {
+            error.set(Some(e));
+            loading.set(false);
+            return;
+        }
+        let libs = match api::get_user_views().await {
+            Ok(result) => result.items,
+            Err(e) => {
+                error.set(Some(e));
+                Vec::new()
+            }
+        };
+        libraries.set(libs.clone());
+        match route_for_load {
+            MediaRoute::Libraries => loading.set(false),
+            MediaRoute::Library { id, sort, start } => {
+                let Some(lib) = libs.iter().find(|l| l.id == id) else {
+                    error.set(Some("That library is not available.".to_string()));
+                    loading.set(false);
+                    return;
+                };
+                let mut query = browse::library_query(lib.collection_type.as_deref());
+                if let Some(label) = sort.as_deref() {
+                    query = browse::with_sort(query, label);
+                }
+                current_query.set(query);
+                scope_library.set(Some(id.clone()));
+                breadcrumbs.set(vec![Crumb {
+                    label: lib.name.clone(),
+                    path: None,
+                }]);
+                load_items(id, query, start, None);
+            }
+            MediaRoute::Folder { id, start } => match api::get_item(&id).await {
+                Ok(item) => {
+                    let query = browse::children_query(&item.item_type);
+                    current_query.set(query);
+                    let ancestors = api::get_ancestors(&id).await.unwrap_or_default();
+                    set_trail(ancestors, item.name.clone());
+                    load_items(id, query, start, None);
+                }
+                Err(e) => {
+                    error.set(Some(e));
+                    loading.set(false);
+                }
+            },
+            MediaRoute::Person { id, name, start } => {
+                let query = browse::person_query();
+                current_query.set(query);
+                breadcrumbs.set(vec![Crumb {
+                    label: name,
+                    path: None,
+                }]);
+                load_items(String::new(), query, start, Some(id));
+            }
+            MediaRoute::Item { id } => {
+                loading.set(false);
+                match api::get_item(&id).await {
                     Ok(item) => {
                         // Albums list their tracks, collections their films.
                         if let Some(sort) = browse::detail_children_sort(&item.item_type)
@@ -254,130 +262,91 @@ pub fn Media() -> View {
                         }
                         let label =
                             browse::card_label(&item.item_type, &item.name, item.index_number);
-                        let query = current_query.get();
-                        breadcrumbs.update(|bc| {
-                            bc.retain(|c| !c.is_detail);
-                            bc.push(Breadcrumb {
-                                label,
-                                parent_id: None,
-                                query,
-                                is_detail: true,
-                                person_id: None,
-                            });
-                        });
+                        let ancestors = api::get_ancestors(&id).await.unwrap_or_default();
+                        set_trail(ancestors, label);
                         detail_item.set(Some(item));
                     }
                     Err(e) => error.set(Some(e)),
                 }
                 detail_loading.set(false);
             }
-        });
-    };
-
-    let navigate_breadcrumb = move |index: usize| {
-        if index == 0 && breadcrumbs.get_clone().len() > 1 {
-            // Back to first breadcrumb level (library root)
-            let crumbs = breadcrumbs.get_clone();
-            let crumb = &crumbs[0];
-            let parent_id = crumb.parent_id.clone().unwrap_or_default();
-            let query = crumb.query;
-            current_person.set(crumb.person_id.clone());
-            current_parent_id.set(Some(parent_id.clone()));
-            current_query.set(query);
-            breadcrumbs.update(|bc| bc.truncate(1));
-            start_index.set(0);
-            load_items(parent_id, query, 0);
-            current_view.set(MediaView::Grid);
-        } else if index < breadcrumbs.get_clone().len() - 1 {
-            let crumbs = breadcrumbs.get_clone();
-            let crumb = &crumbs[index];
-            let parent_id = crumb.parent_id.clone().unwrap_or_default();
-            let query = crumb.query;
-            current_person.set(crumb.person_id.clone());
-            current_parent_id.set(Some(parent_id.clone()));
-            current_query.set(query);
-            breadcrumbs.update(|bc| bc.truncate(index + 1));
-            start_index.set(0);
-            load_items(parent_id, query, 0);
-            current_view.set(MediaView::Grid);
-        }
-    };
-
-    // A person's page: the titles they are in.
-    let view_person = move |person_id: String, name: String| {
-        let query = browse::person_query();
-        current_person.set(Some(person_id.clone()));
-        current_parent_id.set(None);
-        current_query.set(query);
-        breadcrumbs.update(|bc| {
-            bc.retain(|c| !c.is_detail);
-            bc.push(Breadcrumb {
-                label: name,
-                parent_id: None,
-                query,
-                is_detail: false,
-                person_id: Some(person_id),
-            });
-        });
-        start_index.set(0);
-        load_items(String::new(), query, 0);
-        current_view.set(MediaView::Grid);
-    };
-
-    // A library listed in another order.
-    let change_sort = move |label: String| {
-        let query = browse::with_sort(current_query.get(), &label);
-        current_query.set(query);
-        breadcrumbs.update(|bc| {
-            if let Some(first) = bc.first_mut() {
-                first.query = query;
-            }
-        });
-        start_index.set(0);
-        load_items(current_parent_id.get_clone().unwrap_or_default(), query, 0);
-    };
-
-    let back_to_libraries = move |_| {
-        current_person.set(None);
-        breadcrumbs.set(Vec::new());
-        current_parent_id.set(None);
-        current_query.set(browse::library_query(None));
-        search_term.set(String::new());
-        search_results.set(Vec::new());
-        current_view.set(MediaView::Libraries);
-    };
-
-    let do_search = move || {
-        let term = search_term.get_clone();
-        if term.trim().is_empty() {
-            return;
-        }
-        search_loading.set(true);
-        // Inside a library, search that library; from Libraries, everything.
-        let crumbs = breadcrumbs.get_clone();
-        let scope = browse::search_scope(crumbs.first().and_then(|c| c.parent_id.as_deref()));
-        if scope.is_some() {
-            let query = current_query.get();
-            breadcrumbs.update(|bc| {
-                bc.retain(|c| !c.is_detail);
-                bc.push(Breadcrumb {
-                    label: browse::search_crumb_label(&term),
-                    parent_id: None,
-                    query,
-                    is_detail: true,
-                    person_id: None,
+            MediaRoute::Search { words, library } => {
+                loading.set(false);
+                let mut crumbs = Vec::new();
+                if let Some(lib) = library
+                    .as_deref()
+                    .and_then(|id| libs.iter().find(|l| l.id == id))
+                {
+                    crumbs.push(Crumb {
+                        label: lib.name.clone(),
+                        path: Some(
+                            MediaRoute::Library {
+                                id: lib.id.clone(),
+                                sort: None,
+                                start: 0,
+                            }
+                            .path(),
+                        ),
+                    });
+                }
+                crumbs.push(Crumb {
+                    label: browse::search_crumb_label(&words),
+                    path: None,
                 });
-            });
-        }
-        current_view.set(MediaView::Search);
-        spawn_local({
-            async move {
-                match api::search_hints(&term, scope.as_deref()).await {
+                breadcrumbs.set(crumbs);
+                scope_library.set(library.clone());
+                match api::search_hints(&words, library.as_deref()).await {
                     Ok(result) => search_results.set(result.search_hints),
                     Err(e) => error.set(Some(e)),
                 }
                 search_loading.set(false);
             }
+        }
+    });
+
+    // ── Actions: each goes to an address ────────────────
+
+    let select_library = move |lib: BaseItemDto| {
+        go(MediaRoute::Library {
+            id: lib.id,
+            sort: None,
+            start: 0,
+        })
+    };
+    let browse_into = move |item: BaseItemDto| {
+        go(MediaRoute::Folder {
+            id: item.id,
+            start: 0,
+        })
+    };
+    let view_detail = move |item_id: String| go(MediaRoute::Item { id: item_id });
+    let view_person = move |id: String, name: String| go(MediaRoute::Person { id, name, start: 0 });
+    let here = create_signal(route.clone());
+    let change_sort = move |label: String| {
+        if let MediaRoute::Library { id, .. } = here.get_clone() {
+            go(MediaRoute::Library {
+                id,
+                sort: Some(label),
+                start: 0,
+            });
+        }
+    };
+    let go_to_start = move |n: i32| go(here.with(|r| r.with_start(n)));
+    let back_to_libraries = move |_| go(MediaRoute::Libraries);
+    let go_back = move |_| {
+        if let Some(history) = web_sys::window().and_then(|w| w.history().ok()) {
+            let _ = history.back();
+        }
+    };
+
+    let do_search = move || {
+        let words = search_term.get_clone();
+        if words.trim().is_empty() {
+            return;
+        }
+        go(MediaRoute::Search {
+            words: words.trim().to_string(),
+            library: scope_library.get_clone(),
         });
     };
 
@@ -399,6 +368,7 @@ pub fn Media() -> View {
             }
         });
     };
+    let sortable = matches!(route, MediaRoute::Library { .. });
 
     // ── Render ──────────────────────────────────────────
 
@@ -453,20 +423,22 @@ pub fn Media() -> View {
                     div(class="breadcrumbs") {
                         button(class="breadcrumb-link", on:click=back_to_libraries) { "Libraries" }
                         Indexed(
-                            list=move || browse::crumb_trail(&breadcrumbs.get_clone()),
-                            view=move |entry: (usize, Breadcrumb, bool)| {
-                                let (idx, crumb, is_last) = entry;
+                            list=move || breadcrumbs.get_clone(),
+                            view=move |crumb: Crumb| {
                                 let label = crumb.label.clone();
-                                if is_last {
-                                    view! {
+                                match crumb.path.clone() {
+                                    None => view! {
                                         span(class="breadcrumb-sep") { " / " }
                                         span(class="breadcrumb-current") { (label) }
-                                    }
-                                } else {
-                                    view! {
+                                    },
+                                    Some(path) => {
+                                        let href = path.clone();
+                                        view! {
                                         span(class="breadcrumb-sep") { " / " }
-                                        button(class="breadcrumb-link", on:click=move |_| navigate_breadcrumb(idx)) {
-                                            (label)
+                                        a(class="breadcrumb-link", href=href, on:click=move |e: web_sys::MouseEvent| {
+                                            e.prevent_default();
+                                            navigate(&path);
+                                        }) { (label) }
                                         }
                                     }
                                 }
@@ -519,8 +491,7 @@ pub fn Media() -> View {
                         let total = total_count.get();
                         let start = start_index.get();
                         // A library's top level can be re-ordered.
-                        let sortable = breadcrumbs.with(|bc| bc.len() == 1)
-                            && current_query.get().recursive;
+                        let sortable = sortable && current_query.get().recursive;
                         let sort_bar = if sortable {
                             let selected = browse::sort_label(current_query.get());
                             view! {
@@ -634,19 +605,12 @@ pub fn Media() -> View {
                                         let has_prev = start > 0;
                                         let has_next = start + PAGE_SIZE < total;
                                         let showing_end = std::cmp::min(start + PAGE_SIZE, total);
-                                        let pid = current_parent_id.get_clone().unwrap_or_default();
-                                        let query = current_query.get();
-                                        let pid2 = pid.clone();
                                         view! {
                                             div(class="pagination") {
                                                 button(
                                                     class="btn btn-secondary btn-sm",
                                                     disabled=!has_prev,
-                                                    on:click=move |_| {
-                                                        let new_start = (start - PAGE_SIZE).max(0);
-                                                        start_index.set(new_start);
-                                                        load_items(pid.clone(), query, new_start);
-                                                    }
+                                                    on:click=move |_| go_to_start((start - PAGE_SIZE).max(0))
                                                 ) { "Previous" }
                                                 span(class="pagination-info") {
                                                     (start + 1) " - " (showing_end) " of " (total)
@@ -654,11 +618,7 @@ pub fn Media() -> View {
                                                 button(
                                                     class="btn btn-secondary btn-sm",
                                                     disabled=!has_next,
-                                                    on:click=move |_| {
-                                                        let new_start = start + PAGE_SIZE;
-                                                        start_index.set(new_start);
-                                                        load_items(pid2.clone(), query, new_start);
-                                                    }
+                                                    on:click=move |_| go_to_start(start + PAGE_SIZE)
                                                 ) { "Next" }
                                             }
                                         }
@@ -765,11 +725,7 @@ pub fn Media() -> View {
                                             }
                                             button(
                                                 class="btn btn-secondary btn-sm",
-                                                on:click=move |_| {
-                                                    // Back to the level the item was opened from
-                                                    breadcrumbs.update(|bc| bc.retain(|c| !c.is_detail));
-                                                    current_view.set(MediaView::Grid);
-                                                }
+                                                on:click=go_back
                                             ) { "Back" }
                                         }
 

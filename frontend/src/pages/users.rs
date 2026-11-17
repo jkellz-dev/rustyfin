@@ -306,9 +306,16 @@ pub fn Users() -> View {
                                         } else {
                                             format!("{} selected", user.policy.enabled_folders.len())
                                         };
+                                        let page = format!("/web/users/{}", user.id);
+                                        let href = page.clone();
                                         view! {
                                             tr {
-                                                td { (name) }
+                                                td {
+                                                    a(href=href, on:click=move |e: web_sys::MouseEvent| {
+                                                        e.prevent_default();
+                                                        sycamore_router::navigate(&page);
+                                                    }) { (name) }
+                                                }
                                                 td {
                                                     (if is_admin {
                                                         view! { span(class="badge badge-admin") { "Admin" } }

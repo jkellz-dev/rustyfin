@@ -9,6 +9,7 @@ pub mod libraries;
 pub mod media_items;
 pub mod media_streams;
 pub mod people;
+pub mod play_history;
 pub mod playlists;
 pub mod sessions;
 pub mod task_results;

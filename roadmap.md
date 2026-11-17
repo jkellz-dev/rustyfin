@@ -1117,6 +1117,8 @@ validation, and polish needed for daily use.
 
 - [x] Activity log viewer (backend at `/System/ActivityLog/Entries` already exists, wire to UI)
 - [x] Active sessions / "now playing" widget (backend at `/Sessions` exists)
+- [x] Streams section near the top (owner, 2026-11-17): who, what, client and device, direct play or transcoding,
+      progress; refreshed every 10 s; the title opens the item
 - [x] Library cards show item counts and last scan time
 - [x] Recent additions widget (latest items added across libraries)
 - [x] System health indicators (DB connection, Meilisearch status, library folders, cache sizes; free space dropped: the
@@ -1152,6 +1154,8 @@ validation, and polish needed for daily use.
 - [x] Playback progress bars on in-progress items
 - [ ] Bulk operations (select multiple items for refresh, mark played/unplayed)
 - [x] Cast member links (click person → filtered view of their items)
+- [x] Back button (owner, 2026-11-17): every place in the media browser has its own address under `/web/media`
+      (`media_route.rs`), so back/forward, reload and bookmarks work; breadcrumbs come from the item's ancestors
 - [ ] Search filters (scope by type: movies, series, music, episodes)
 - [ ] TV and music collections (deferred, owner 2026-11-16): only Radarr's movie `<set>` creates collections today.
       Add `collections = ["..."]` to a title's `.rustyfin.toml` (scan creates and fills them), then a media-browser
@@ -1163,7 +1167,10 @@ validation, and polish needed for daily use.
 - [ ] Sorting and filtering user list
 - [ ] Per-user device list and session history
 - [ ] "Kick session" button (terminate an active session)
-- [ ] Per-user playback history view
+- [x] Per-user playback history view (owner, 2026-11-17): `/web/users/<id>` shows minutes and plays per kind
+      (films, episodes, music, other) and every play, filtered by kind, time span and words. Recorded server-side
+      in `play_history` from the playback reports (time while not paused, at most 5 min per gap, plays under 10 s
+      dropped); `/Users/{id}/PlayStats` and `/Users/{id}/PlayHistory`
 
 ### 12f. Accessibility
 

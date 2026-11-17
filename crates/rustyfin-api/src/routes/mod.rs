@@ -20,6 +20,7 @@ pub mod lyrics;
 pub mod media_info;
 pub mod music_genres;
 pub mod persons;
+pub mod play_history;
 pub mod playback;
 pub mod playlists;
 pub mod quick_connect;
