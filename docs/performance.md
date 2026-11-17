@@ -10,6 +10,7 @@ mise run bench                         # the full library: 81,390 files
 mise run bench -- --scale 0.1          # a tenth of it
 mise run bench -- --clients 20 --seconds 60
 mise run bench -- --meilisearch        # with a Meilisearch for the server
+mise run bench -- --scale 0.01 --streams 1,4,8   # concurrent playback
 ```
 
 It needs a Postgres role that may create databases (`DATABASE_URL`) and `ffprobe` on `PATH`; `--meilisearch` also
@@ -25,12 +26,18 @@ needs `meilisearch` on `PATH`. Without it, the server searches with Postgres onl
    machine;
 5. with `--meilisearch`, also times how long the search index takes to catch up after each scan (the server sends
    every item to Meilisearch once the libraries are idle) and counts the documents it holds;
-6. prints the report and writes the same numbers, with the machine, Postgres, ffprobe and Meilisearch versions, to
+6. with `--streams`, makes a 1080p H.264 film with `ffmpeg` (also needed on `PATH`; `--stream-seconds` long,
+   default 120) and plays it to that many clients at once: first by direct play, each client downloading the whole
+   file as fast as the server sends it, then transcoded to HLS, each client playing in real time with at most 30 s
+   buffered. It reports the time to the first byte or segment, how many clients kept up (never stalled, or
+   downloaded at least as fast as real time), the stalls, and the CPU and memory of the server and its ffmpeg
+   processes together;
+7. prints the report and writes the same numbers, with the machine, Postgres, ffprobe and Meilisearch versions, to
    `bench-results.toml`.
 
 The library's files are empty. A scan therefore measures walking the folders, naming, ffprobe on every new file (it
 fails fast on an empty file, but the process still starts) and the database, not reading real media. Browsing
-measures the API and the database. Streaming and transcoding are not measured.
+measures the API and the database. Playback is measured only with `--streams`, on its own real film.
 
 ## Results
 

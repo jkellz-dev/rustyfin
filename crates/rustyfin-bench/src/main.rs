@@ -15,7 +15,9 @@
 //! PATH (the scan probes every new file) and a release build of the server.
 //! With `--meilisearch` it also starts `meilisearch` (on PATH) for the server,
 //! times how long the index takes to catch up after each scan and counts
-//! what it holds.
+//! what it holds. With `--streams 1,4,8` it plays a generated 1080p film to
+//! that many clients at once, by direct play and transcoded (needs `ffmpeg`
+//! on PATH).
 
 mod machine;
 mod report;
@@ -75,6 +77,14 @@ struct Args {
     /// Without it the server searches with Postgres only.
     #[arg(long)]
     meilisearch: bool,
+    /// Concurrent playback: play a generated film to this many clients at
+    /// once, by direct play and then transcoded; a list runs each in turn.
+    #[arg(long, value_delimiter = ',')]
+    streams: Vec<usize>,
+    /// The generated film's length, and how much of it each transcoding
+    /// client plays (seconds).
+    #[arg(long, default_value_t = 120)]
+    stream_seconds: u64,
 }
 
 /// The repository root (this crate sits in `crates/rustyfin-bench`).
@@ -107,6 +117,17 @@ async fn main() -> anyhow::Result<()> {
         .output();
     if !ffprobe.is_ok_and(|o| o.status.success()) {
         bail!("ffprobe is not on PATH; the scan probes every new file with it");
+    }
+    if args.streams.contains(&0) {
+        bail!("--streams counts clients: each must be at least 1");
+    }
+    if !args.streams.is_empty() {
+        let ffmpeg = std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .output();
+        if !ffmpeg.is_ok_and(|o| o.status.success()) {
+            bail!("--streams needs `ffmpeg` on PATH to make the film it plays");
+        }
     }
     if args.meilisearch {
         let meili = std::process::Command::new("meilisearch")
@@ -251,6 +272,11 @@ impl Run<'_> {
         }
         let browse_memory_mib = machine::memory_mib(pid);
         let peak_memory_mib = machine::peak_memory_mib(pid);
+        let streams = if self.args.streams.is_empty() {
+            Vec::new()
+        } else {
+            self.streams(&api, pid).await?
+        };
         let _ = server.kill().await;
         let search = match (meili, first_index, rescan_index) {
             (Some(mut m), Some(first_scan), Some(rescan)) => {
@@ -276,10 +302,92 @@ impl Run<'_> {
             rescan,
             search,
             browse,
+            streams,
             idle_memory_mib,
             browse_memory_mib,
             peak_memory_mib,
         })
+    }
+
+    /// Concurrent playback: the film, its library, then each `--streams`
+    /// count by direct play and transcoded.
+    async fn streams(&self, api: &Api, pid: u32) -> anyhow::Result<Vec<report::StreamRun>> {
+        let folder = self.work.join("streams");
+        let path = folder.join("Stream Film (2024)/Stream Film (2024).mp4");
+        eprintln!(
+            "streams: making a {} s 1080p film ...",
+            self.args.stream_seconds
+        );
+        streams::make_film(&path, self.args.stream_seconds)?;
+        api.add_library("Stream test", "movies", &folder).await?;
+        api.scan().await?;
+        let item_id = api.find_movie("Stream Film").await?;
+        let film = streams::Film {
+            item_id,
+            seconds: self.args.stream_seconds as f64,
+            bytes: std::fs::metadata(&path)?.len(),
+        };
+        let client = api.stream_client()?;
+        let length = Duration::from_secs(self.args.stream_seconds);
+
+        let mut rows = Vec::new();
+        for &n in &self.args.streams {
+            for mode in ["direct play", "transcode"] {
+                eprintln!("streams: {n} x {mode} ...");
+                // Let the last run's ffmpeg processes exit first.
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                let cpu0 = machine::tree_cpu_seconds(pid);
+                let started = Instant::now();
+                let peak = std::sync::Arc::new(std::sync::Mutex::new(None::<f64>));
+                let sampler = {
+                    let peak = peak.clone();
+                    tokio::spawn(async move {
+                        loop {
+                            if let Some(m) = machine::tree_memory_mib(pid)
+                                && let Ok(mut p) = peak.lock()
+                            {
+                                *p = Some(p.map_or(m, |x: f64| x.max(m)));
+                            }
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                        }
+                    })
+                };
+                let mut tasks = Vec::new();
+                for _ in 0..n {
+                    let c = client.clone();
+                    let f = film.clone();
+                    let transcode = mode == "transcode";
+                    tasks.push(tokio::spawn(async move {
+                        if transcode {
+                            c.transcode(&f, length).await
+                        } else {
+                            c.direct_play(&f).await
+                        }
+                    }));
+                }
+                let mut results = Vec::new();
+                for t in tasks {
+                    results.push(t.await.unwrap_or_else(|e| streams::ClientResult {
+                        error: Some(e.to_string()),
+                        ..streams::ClientResult::default()
+                    }));
+                }
+                let elapsed = started.elapsed();
+                let cpu1 = machine::tree_cpu_seconds(pid);
+                sampler.abort();
+                let peak_mib = peak.lock().ok().and_then(|p| *p);
+                for e in results.iter().filter_map(|r| r.error.as_deref()).take(3) {
+                    eprintln!("  stream error: {e}");
+                }
+                rows.push(streams::summarize(
+                    mode,
+                    &results,
+                    cores(cpu0, cpu1, elapsed),
+                    peak_mib,
+                ));
+            }
+        }
+        Ok(rows)
     }
 
     /// The server in its own folder (a stray `rustyfin.toml` in the current
@@ -598,6 +706,7 @@ struct Api {
     http: reqwest::Client,
     base: String,
     auth: String,
+    user_id: String,
 }
 
 struct Load {
@@ -626,11 +735,48 @@ impl Api {
             .json()
             .await?;
         let token = r["AccessToken"].as_str().context("no AccessToken")?;
+        let user_id = r["User"]["Id"].as_str().context("no User.Id")?.to_string();
         Ok(Self {
             http,
             base,
             auth: format!(r#"{client}, Token="{token}""#),
+            user_id,
         })
+    }
+
+    /// The same signed-in session for the playback clients.
+    fn stream_client(&self) -> anyhow::Result<streams::Client> {
+        Ok(streams::Client {
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(300))
+                .build()?,
+            base: Url::parse(&self.base)?,
+            auth: self.auth.clone(),
+            user_id: self.user_id.clone(),
+        })
+    }
+
+    /// The id of the first film whose name contains `name`.
+    async fn find_movie(&self, name: &str) -> anyhow::Result<String> {
+        let r: Value = self
+            .http
+            .get(format!("{}/Items", self.base))
+            .header("Authorization", &self.auth)
+            .query(&[
+                ("Recursive", "true"),
+                ("IncludeItemTypes", "Movie"),
+                ("SearchTerm", name),
+                ("Limit", "1"),
+            ])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        Ok(r["Items"][0]["Id"]
+            .as_str()
+            .with_context(|| format!("no film named {name} after the scan"))?
+            .to_string())
     }
 
     fn get(&self, path: &str) -> reqwest::RequestBuilder {

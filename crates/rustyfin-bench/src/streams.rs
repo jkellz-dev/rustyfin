@@ -20,6 +20,7 @@ use crate::stats;
 pub const BUFFER_AHEAD: f64 = 30.0;
 
 /// The film every stream plays: H.264 1080p24, generated with ffmpeg.
+#[derive(Debug, Clone)]
 pub struct Film {
     pub item_id: String,
     pub seconds: f64,

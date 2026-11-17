@@ -93,6 +93,56 @@ pub fn peak_memory_mib(pid: u32) -> Option<f64> {
 
 /// CPU time the process and its finished children (the ffprobe runs of a
 /// scan) have used, user plus system, in seconds.
+/// Every process below `pid` (its ffmpeg processes, say), from `/proc`.
+fn descendants(pid: u32) -> Vec<u32> {
+    let Ok(dir) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let parents: Vec<(u32, u32)> = dir
+        .filter_map(Result::ok)
+        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+        .filter_map(|p| {
+            let stat = std::fs::read_to_string(format!("/proc/{p}/stat")).ok()?;
+            let rest = &stat[stat.rfind(')')? + 2..];
+            let ppid = rest.split_whitespace().nth(1)?.parse().ok()?;
+            Some((p, ppid))
+        })
+        .collect();
+    let mut out = Vec::new();
+    let mut todo = vec![pid];
+    while let Some(parent) = todo.pop() {
+        for &(p, pp) in &parents {
+            if pp == parent {
+                out.push(p);
+                todo.push(p);
+            }
+        }
+    }
+    out
+}
+
+/// CPU seconds of `pid` and every process below it, running or finished.
+pub fn tree_cpu_seconds(pid: u32) -> Option<f64> {
+    let own = cpu_seconds(pid)?;
+    Some(
+        own + descendants(pid)
+            .into_iter()
+            .filter_map(cpu_seconds)
+            .sum::<f64>(),
+    )
+}
+
+/// Resident memory of `pid` and every process below it, together.
+pub fn tree_memory_mib(pid: u32) -> Option<f64> {
+    let own = memory_mib(pid)?;
+    let total = own
+        + descendants(pid)
+            .into_iter()
+            .filter_map(memory_mib)
+            .sum::<f64>();
+    Some(round1(total))
+}
+
 pub fn cpu_seconds(pid: u32) -> Option<f64> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     // Fields after the command name, which is in parentheses and may hold spaces.

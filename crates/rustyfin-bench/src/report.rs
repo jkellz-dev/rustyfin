@@ -21,6 +21,31 @@ pub struct Results {
     /// `None`: the server ran without Meilisearch (search is Postgres only).
     pub search: Option<Search>,
     pub browse: Vec<Browse>,
+    /// Concurrent playback (`--streams`); empty when not asked for.
+    pub streams: Vec<StreamRun>,
+}
+
+/// One concurrent-playback run: `streams` clients playing at once.
+#[derive(Debug, Serialize)]
+pub struct StreamRun {
+    /// "direct play" or "transcode".
+    pub mode: String,
+    pub streams: usize,
+    /// Time to the first segment (transcode) or first byte (direct play).
+    pub start_p50_ms: Option<f64>,
+    pub start_max_ms: Option<f64>,
+    /// Clients that never stalled (transcode) or downloaded at least as fast
+    /// as real time (direct play), without an error.
+    pub kept_up: usize,
+    pub stalls: usize,
+    pub stalled_seconds: f64,
+    /// Direct play: the slowest client's speed, in multiples of real time.
+    pub slowest_speed: Option<f64>,
+    /// The server's CPU, its ffmpeg processes included.
+    pub server_cores: Option<f64>,
+    /// The server's and its ffmpeg processes' memory together, at most.
+    pub peak_memory_mib: Option<f64>,
+    pub errors: usize,
 }
 
 /// Meilisearch, when the run started one (`--meilisearch`).
@@ -166,6 +191,40 @@ impl Results {
             opt(self.browse_memory_mib, "MiB"),
             opt(self.peak_memory_mib, "MiB")
         );
+        if !self.streams.is_empty() {
+            let _ = writeln!(
+                s,
+                "\nConcurrent playback of a 1080p H.264 film (transcoding clients play in real time):\n"
+            );
+            let _ = writeln!(
+                s,
+                "| Streams | Mode | Start p50 | Start max | Kept up | Stalls | Stalled | Slowest | Server CPU | Memory | Errors |"
+            );
+            let _ = writeln!(
+                s,
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+            );
+            for r in &self.streams {
+                let slowest = r
+                    .slowest_speed
+                    .map_or_else(|| "n/a".to_string(), |x| format!("{x}x"));
+                let _ = writeln!(
+                    s,
+                    "| {} | {} | {} | {} | {} of {} | {} | {:.1} s | {slowest} | {} | {} | {} |",
+                    r.streams,
+                    r.mode,
+                    opt(r.start_p50_ms, "ms"),
+                    opt(r.start_max_ms, "ms"),
+                    r.kept_up,
+                    r.streams,
+                    r.stalls,
+                    r.stalled_seconds,
+                    opt(r.server_cores, "cores"),
+                    opt(r.peak_memory_mib, "MiB"),
+                    r.errors
+                );
+            }
+        }
         if let Some(search) = &self.search {
             let _ = writeln!(
                 s,
