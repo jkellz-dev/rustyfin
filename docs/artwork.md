@@ -35,6 +35,25 @@ The server attaches collection art to automatic collections at scan time, so sca
 Fetches only the art of the TMDB collections the films' NFOs name (`<set tmdbcolid="...">`), skipping posters,
 fanart and headshots. Useful after Radarr adds films to new collections.
 
+## Music (`-t music`)
+
+```bash
+rustyfin artwork /data/media/music -t music
+```
+
+For every album folder (a folder holding tracks) with no cover file, fetches the front cover from the
+[Cover Art Archive](https://coverartarchive.org) and saves it as `cover.jpg` beside the tracks; the server uses it at
+the next scan. Albums are matched by MusicBrainz id, never by name: `album.nfo` (Lidarr's `musicbrainzalbumid`,
+`musicbrainzreleasegroupid`), else the first track's tags (Picard, Lidarr). The exact release is tried first, then any
+release of the release group. The 1200 px JPEG is saved, not the original scan.
+
+Albums with a cover file are skipped (`--force` replaces them), and so are albums with no MusicBrainz id
+(`no_id=` in the summary). When the archive has no cover, `missing_checked` is recorded in the album folder's
+`.rustyfin.toml` and the album is not asked about again for 30 days. Pace: `[coverart] rate_limit` requests per
+`rate_window_secs` (20 per 10 s); `[coverart] url` may point at a mirror.
+
+Albums whose tracks carry an embedded cover already show it without this; a cover file wins over it.
+
 ## `--check-collections` (off by default)
 
 Collections come from the films' NFOs. An NFO written before TMDB renamed a collection, or by a tool that writes only
