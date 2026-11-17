@@ -1,71 +1,31 @@
-# release-plz: versions, CHANGELOG.md and GitHub releases (docs/contributing.md,
-# "Releases"). Rustyfin is one product: every crate shares the workspace
-# version, there is one tag (vX.Y.Z) and one changelog at the root. Nothing is
-# published to a cargo registry: versions come from the git tags.
+# release-plz: versions and tags (docs/contributing.md, "Releases").
+#
+# Rustyfin is one product: every crate shares the workspace version and there
+# is one tag, vX.Y.Z. Nothing goes to a cargo registry (git_only: versions come
+# from the tags). The release-pr job in .github/workflows/ci.yml opens the
+# release PR; merging it makes the release job tag that commit and publish the
+# GitHub release, its binaries and versioned images.
+#
+# CHANGELOG.md is written by git-cliff from cliff.toml, not by release-plz:
+# release-plz's changelog lists only commits that touch a crate, and would miss
+# the admin (frontend/), the docs and CI. ci.yml regenerates it on the release
+# PR branch.
 [workspace]
 git_only = true
-# Release only when the release PR is merged, not on every push to main.
+# Release only when a release PR is merged, not on every push to main.
 release_always = false
 semver_check = false
-# Dependabot keeps the lockfile current; the release PR does not update it.
+# Dependabot keeps the lockfile current; the release PR changes versions only.
 dependencies_update = false
-git_tag_name = "v{{ version }}"
-# Only rustyfin-server (below) writes the changelog, tags and releases; the
-# other crates find their version through the same vX.Y.Z tag.
 changelog_update = false
+git_tag_name = "v{{ version }}"
+# One tag for the product, made by rustyfin-server below.
 git_tag_enable = false
+# The release job in ci.yml creates the release, with git-cliff's notes and the
+# binaries.
 git_release_enable = false
-changelog_path = "./CHANGELOG.md"
 pr_labels = ["release"]
 
 [[package]]
 name = "rustyfin-server"
-changelog_update = true
-changelog_include = [
-  "rustyfin-api",
-  "rustyfin-auth",
-  "rustyfin-common",
-  "rustyfin-core",
-  "rustyfin-db",
-  "rustyfin-frontend",
-  "rustyfin-media",
-  "rustyfin-meta",
-  "rustyfin-models",
-  "rustyfin-search",
-]
 git_tag_enable = true
-git_release_enable = true
-git_release_name = "v{{ version }}"
-
-[changelog]
-header = """# Changelog
-
-All notable changes to Rustyfin. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
-versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated from the
-conventional commit subjects by release-plz.
-"""
-body = """
-## [{{ version }}]{%- if release_link -%}({{ release_link }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
-{% for group, commits in commits | group_by(attribute="group") %}
-### {{ group | striptags | trim | upper_first }}
-{% for commit in commits %}
-- {% if commit.scope %}*({{ commit.scope }})* {% endif %}{% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}
-{%- endfor %}
-{% endfor %}
-"""
-trim = true
-protect_breaking_commits = true
-sort_commits = "oldest"
-commit_parsers = [
-  { message = "^feat", group = "<!-- 0 -->Features" },
-  { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
-  { message = "^perf", group = "<!-- 2 -->Performance" },
-  { message = "^refactor", group = "<!-- 3 -->Refactoring" },
-  { message = "^doc", group = "<!-- 4 -->Documentation" },
-  { message = "^build", group = "<!-- 5 -->Build" },
-  { message = "^ci", group = "<!-- 6 -->CI" },
-  # Tests, style and chores (release commits included) stay out of the notes.
-  { message = "^test", skip = true },
-  { message = "^style", skip = true },
-  { message = "^chore", skip = true },
-]

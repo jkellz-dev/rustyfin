@@ -33,6 +33,8 @@ commit_parsers = [
     { message = "^perf", group = "Performance" },
     { message = "^style", group = "Styling" },
     { message = "^ci", group = "CI/CD" },
+    # The release PR's own commits (release-plz bump, changelog).
+    { message = "^chore: (release|changelog for)", skip = true },
     { message = "^chore", group = "Miscellaneous" },
 ]
 filter_commits = false
