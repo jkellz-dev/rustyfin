@@ -1,6 +1,7 @@
 //! A title whose file has gone (moved or deleted since the last scan) is
 //! "not found", not a server error: clients then fall back or say so.
 
+#[allow(dead_code)]
 mod common;
 
 use axum::http::StatusCode;
