@@ -107,7 +107,7 @@ impl TranscodeManager {
         // Spawn ffmpeg process
         let mut child = Command::new(&self.ffmpeg_path)
             .args(&args)
-            .stdin(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true)
@@ -191,16 +191,8 @@ impl TranscodeManager {
     ) -> anyhow::Result<()> {
         let old_job = self.remove_job(play_session_id).await;
         if let Some(mut job) = old_job {
-            // Kill old process but keep the output dir for existing segments
-            if let Some(ref mut process) = job.process {
-                if let Some(ref mut stdin) = process.stdin {
-                    use tokio::io::AsyncWriteExt;
-                    let _ = stdin.write_all(b"q").await;
-                }
-                let _ =
-                    tokio::time::timeout(std::time::Duration::from_secs(3), process.wait()).await;
-                let _ = process.kill().await;
-            }
+            // Stop the old encoder but keep the output dir for existing segments
+            job.stop_process().await;
             if let Some(timer) = job.kill_timer.take() {
                 timer.abort();
             }
@@ -337,45 +329,46 @@ impl TranscodeManager {
 
     /// Kill a specific job by play session ID.
     pub async fn kill_job(&self, play_session_id: &str) {
-        let mut jobs = self.jobs.write().await;
-        if let Some(mut job) = jobs.remove(play_session_id) {
+        // Out of the map first: stopping ffmpeg can take a moment, and holding
+        // the lock meanwhile would stall every other transcode request.
+        let removed = self.jobs.write().await.remove(play_session_id);
+        if let Some(mut job) = removed {
             info!(play_session_id, "killing transcode job");
+            job.kill().await;
+        }
+    }
+
+    /// Remove the matching jobs under the lock, then stop them outside it.
+    async fn kill_where(&self, why: &str, matches: impl Fn(&TranscodeJob) -> bool) {
+        let removed: Vec<(String, TranscodeJob)> = {
+            let mut jobs = self.jobs.write().await;
+            let keys: Vec<String> = jobs
+                .iter()
+                .filter(|(_, j)| matches(j))
+                .map(|(k, _)| k.clone())
+                .collect();
+            keys.into_iter()
+                .filter_map(|k| jobs.remove(&k).map(|j| (k, j)))
+                .collect()
+        };
+        for (key, mut job) in removed {
+            info!(play_session_id = %key, "killing transcode job ({why})");
             job.kill().await;
         }
     }
 
     /// Kill all jobs for a given device ID.
     pub async fn kill_jobs_for_device(&self, device_id: &str) {
-        let mut jobs = self.jobs.write().await;
-        let matching: Vec<String> = jobs
-            .iter()
-            .filter(|(_, j)| j.device_id == device_id)
-            .map(|(k, _)| k.clone())
-            .collect();
-
-        for key in matching {
-            if let Some(mut job) = jobs.remove(&key) {
-                info!(play_session_id = %key, device_id, "killing transcode job for device");
-                job.kill().await;
-            }
-        }
+        self.kill_where("device", |j| j.device_id == device_id)
+            .await;
     }
 
     /// Kill the jobs on a device that belong to `user_id`.
     pub async fn kill_jobs_for_user_device(&self, device_id: &str, user_id: Uuid) {
-        let mut jobs = self.jobs.write().await;
-        let matching: Vec<String> = jobs
-            .iter()
-            .filter(|(_, j)| j.device_id == device_id && j.user_id == user_id)
-            .map(|(k, _)| k.clone())
-            .collect();
-
-        for key in matching {
-            if let Some(mut job) = jobs.remove(&key) {
-                info!(play_session_id = %key, device_id, "killing transcode job for device");
-                job.kill().await;
-            }
-        }
+        self.kill_where("device", |j| {
+            j.device_id == device_id && j.user_id == user_id
+        })
+        .await;
     }
 
     /// Throttle ffmpeg processes that are too far ahead of playback.
@@ -404,36 +397,28 @@ impl TranscodeManager {
         }
     }
 
-    /// Kill stale jobs that haven't had a segment request in the given duration.
+    /// Kill stale jobs that haven't had a segment request in the given duration,
+    /// and jobs whose encoder failed or was killed. One that finished the file
+    /// stays until the player stops asking for its segments.
     pub async fn cleanup_stale_jobs(&self) {
         let stale_threshold = chrono::Duration::seconds(60);
         let now = chrono::Utc::now();
-        let mut jobs = self.jobs.write().await;
-
-        let stale: Vec<String> = jobs
-            .iter()
-            .filter(|(_, j)| now - j.last_segment_request > stale_threshold)
-            .map(|(k, _)| k.clone())
-            .collect();
-
-        // Also find jobs whose encoder failed or was killed. One that finished
-        // the file stays until the player stops asking for its segments.
-        let mut dead: Vec<String> = Vec::new();
-        for (k, j) in jobs.iter_mut() {
-            if !j.is_usable() && !stale.contains(k) {
-                dead.push(k.clone());
-            }
-        }
-        let stale: Vec<String> = stale.into_iter().chain(dead).collect();
-
-        for key in stale {
-            if let Some(mut job) = jobs.remove(&key) {
-                warn!(
-                    play_session_id = %key,
-                    "cleaning up stale transcode job"
-                );
-                job.kill().await;
-            }
+        let removed: Vec<(String, TranscodeJob)> = {
+            let mut jobs = self.jobs.write().await;
+            let keys: Vec<String> = jobs
+                .iter_mut()
+                .filter_map(|(k, j)| {
+                    (now - j.last_segment_request > stale_threshold || !j.is_usable())
+                        .then(|| k.clone())
+                })
+                .collect();
+            keys.into_iter()
+                .filter_map(|k| jobs.remove(&k).map(|j| (k, j)))
+                .collect()
+        };
+        for (key, mut job) in removed {
+            warn!(play_session_id = %key, "cleaning up stale transcode job");
+            job.kill().await;
         }
     }
 
@@ -449,14 +434,7 @@ impl TranscodeManager {
 
     /// Kill all active jobs (used during shutdown).
     pub async fn kill_all(&self) {
-        let mut jobs = self.jobs.write().await;
-        let all_keys: Vec<String> = jobs.keys().cloned().collect();
-        for key in all_keys {
-            if let Some(mut job) = jobs.remove(&key) {
-                info!(play_session_id = %key, "killing transcode job (shutdown)");
-                job.kill().await;
-            }
-        }
+        self.kill_where("server stopping", |_| true).await;
     }
 
     /// The user who started the job for this play session, if there is one.

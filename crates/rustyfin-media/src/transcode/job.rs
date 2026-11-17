@@ -40,38 +40,9 @@ pub struct TranscodeJob {
 }
 
 impl TranscodeJob {
-    /// Gracefully stop the ffmpeg process: send 'q' to stdin, wait up to 5s, then force kill.
+    /// Stop ffmpeg and remove the session's output.
     pub async fn kill(&mut self) {
-        if let Some(ref mut process) = self.process {
-            // Try graceful shutdown via stdin 'q'
-            if let Some(ref mut stdin) = process.stdin {
-                use tokio::io::AsyncWriteExt;
-                let _ = stdin.write_all(b"q").await;
-            }
-
-            // Wait up to 5 seconds for graceful exit
-            match tokio::time::timeout(std::time::Duration::from_secs(5), process.wait()).await {
-                Ok(Ok(status)) => {
-                    info!(
-                        play_session_id = %self.play_session_id,
-                        "ffmpeg exited gracefully: {status}"
-                    );
-                }
-                Ok(Err(e)) => {
-                    warn!(
-                        play_session_id = %self.play_session_id,
-                        "ffmpeg wait error: {e}"
-                    );
-                }
-                Err(_) => {
-                    warn!(
-                        play_session_id = %self.play_session_id,
-                        "ffmpeg did not exit in 5s, force killing"
-                    );
-                    let _ = process.kill().await;
-                }
-            }
-        }
+        self.stop_process().await;
 
         // Cancel any pending kill timer
         if let Some(timer) = self.kill_timer.take() {
@@ -79,6 +50,41 @@ impl TranscodeJob {
         }
 
         self.cleanup().await;
+    }
+
+    /// Stop the ffmpeg process: SIGTERM (ffmpeg then ends its output cleanly)
+    /// after a SIGCONT in case throttling paused it, wait up to 5 s, then
+    /// force kill. ffmpeg runs with `-nostdin`, so a `q` on stdin is never read.
+    pub async fn stop_process(&mut self) {
+        let Some(process) = self.process.as_mut() else {
+            return;
+        };
+        if let Ok(Some(_)) = process.try_wait() {
+            return; // already exited
+        }
+        #[cfg(unix)]
+        if let Some(pid) = process.id() {
+            // SAFETY: plain signal sends to the child we spawned.
+            unsafe {
+                libc::kill(pid as i32, libc::SIGCONT);
+                libc::kill(pid as i32, libc::SIGTERM);
+            }
+        }
+        match tokio::time::timeout(std::time::Duration::from_secs(5), process.wait()).await {
+            Ok(Ok(status)) => {
+                info!(play_session_id = %self.play_session_id, "ffmpeg stopped: {status}");
+            }
+            Ok(Err(e)) => {
+                warn!(play_session_id = %self.play_session_id, "ffmpeg wait error: {e}");
+            }
+            Err(_) => {
+                warn!(
+                    play_session_id = %self.play_session_id,
+                    "ffmpeg did not exit in 5s, force killing"
+                );
+                let _ = process.kill().await;
+            }
+        }
     }
 
     /// Whether the session can still serve the player: ffmpeg is running, or it
