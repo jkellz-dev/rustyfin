@@ -132,7 +132,6 @@ impl TestApp {
             transcode_manager,
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
             scan_in_flight: scan_in_flight.clone(),
-            scan_board: scan_board.clone(),
             scan_schedules: serde_json::json!({}),
             people_cache_dir,
             user_image_url_template: None,
