@@ -9,7 +9,7 @@
 pub mod audio_probe;
 pub mod image_processing;
 pub mod playback_info;
-pub mod quality;
 pub mod probe;
+pub mod quality;
 pub mod streaming;
 pub mod transcode;

@@ -4,7 +4,8 @@
 
 These are **not** on the roadmap — they are intentional exclusions:
 
-- Local password authentication / OIDC — forward auth only
+- Local password authentication / OIDC — forward auth only. One exception, for linked servers (16b, owner OK
+  2026-11-18): a Rustyfin accepts a read-only link key, scoped to the libraries it shares, on the `/Link/*` routes only
 - Plugin/extension system
 - Runtime server config mutation — config files are read-only
 - Server writing to the media filesystem — the server is a read-only consumer of media; a separate CLI tool
@@ -1421,8 +1422,9 @@ into Rustyfin, and only the merged browsing and playback are taken from it. Jell
 creating users on the other servers, storing each user's passwords and tokens for every server, proxying the web client,
 SyncPlay and Quick Connect.
 
-**Needs the owner's OK first (design boundary):** the link between servers is a second way in besides forward auth.
-Nothing below 16b.1 starts until the Design Boundaries section is changed.
+**Design boundary:** the Rustyfin link key is a second way in besides forward auth. The owner approved it on
+2026-11-18, and the Design Boundaries section records the exception. Jellyfin links need no exception: the home server
+is only a client of the friend's Jellyfin.
 
 Design, settled before any code:
 
@@ -1474,10 +1476,10 @@ Design, settled before any code:
 
 #### 16b.1 Quality ranking and the default version (no boundary change; useful now)
 
-- [ ] `media/quality.rs`: a score from the stored streams (resolution, range, codec-adjusted bitrate, audio), with unit
+- [x] `media/quality.rs`: a score from the stored streams (resolution, range, codec-adjusted bitrate, audio), with unit
       tests over real-world stream pairs (4K HDR HEVC remux vs 1080p H.264, DV vs HDR10, 5.1 vs stereo, TrueHD vs EAC3)
-- [ ] Local films with several versions list their best one first in `MediaSources` and the item DTO. Today the
-      film's own file comes first whatever its quality.
+- [x] Local films with several versions list their best one first in `MediaSources` (item and `PlaybackInfo`),
+      and the best one plays when no `MediaSourceId` is named; on a tie the film's own file stays first
 - [ ] Optional per-user preference "prefer a copy that plays without transcoding" (open question: default off)
 - [ ] Admin player and version menu labels show the ranking inputs ("2160p HDR10 · TrueHD 7.1")
 
