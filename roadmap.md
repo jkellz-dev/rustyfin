@@ -1410,21 +1410,129 @@ clients support several servers). Browsing, playback, transcoding and watched st
       creates the account on their first `AuthenticateByName`; decide which libraries a new remote user sees by default
 - [ ] Operator guide in `docs/`: sharing the node, ACLs, what the friend's admin controls, adding the server in Plezy
 
-### 16b. Linked libraries (needs a design-boundary decision first)
+### 16b. Merged libraries across servers (owner, 2026-11-18)
 
-Your server shows a friend's libraries inside its own, e.g. "Alex's Movies". Jellyfin has no equivalent, so there is
-no parity to follow. It adds a second way in besides forward auth (a server-to-server key), so the Design Boundaries
-section must be changed, with the maintainer's OK, before work starts.
+One library view over several Rustyfin servers: your Movies and a friend's Movies show as one Movies. The same film or
+episode held on both servers is one item, with each copy as a version, and the best copy plays by default. This is what
+[Jellyswarrm](https://github.com/LLukas22/Jellyswarrm) does as a proxy in front of Jellyfin servers. Here it is built
+into Rustyfin, and only the merged browsing and playback are taken from it. Jellyswarrm's proxy machinery is not:
+creating users on the other servers, storing each user's passwords and tokens for every server, proxying the web client,
+SyncPlay and Quick Connect.
 
-- [ ] Design: link config in the TOML config file (friend's URL plus a scoped, read-only key the friend issues);
-      what the link may see; behaviour when the friend's server is down (libraries hidden or marked offline)
-- [ ] Remote catalogue fetched live and cached briefly, not mirrored into the local database; remote item ids
-      namespaced so they never collide with local ones
-- [ ] Browse, search, images and `PlaybackInfo` passed through; streams relayed, or the client sent to the friend's
-      server; transcoding stays on the friend's server
-- [ ] Watched state and resume points kept locally per user for remote items
-- [ ] Admin: link status (reachable, latency, item counts) on the dashboard; metrics per link
-- [ ] Parity and tests: a second sandbox Rustyfin as the "friend", Hurl cases through the link
+**Needs the owner's OK first (design boundary):** the link between servers is a second way in besides forward auth.
+Nothing below 16b.1 starts until the Design Boundaries section is changed.
+
+Design, settled before any code:
+
+- **Which server is which.** The *home* server is the one your clients talk to. A *linked* server is a friend's Rustyfin
+  that shares some of its libraries with your home server. Clients only ever talk to the home server; they never need
+  to reach or sign in to the linked one.
+- **How the servers authenticate.** The friend's admin issues a link key scoped to the libraries they choose to share.
+  It is read-only, revocable, and listed in their admin, and the home server keeps it in its TOML config. A Tailscale
+  app-capabilities grant could later replace the key. That would mean no secret in Rustyfin, but it needs checking
+  across tailnets and through the Kubernetes operator's ingress first. Users stay per server: the friend sees one
+  session per link, never your users' identities.
+- **The catalogue is mirrored, not fetched live.** This replaces the earlier "fetched live and cached briefly" plan.
+  Both ends are Rustyfin, so the linked server can offer a change feed, and the home server can keep the shared items
+  (ids, provider ids, names, sort fields, a summary of each stream) in Postgres. Merging, filters, sorting, search,
+  paging, counts, Latest, Next Up and Resume then use the same queries as local items. Jellyswarrm has to fetch every
+  server live for every page and merge the results in memory, which is most of its complexity
+  (`library_pagination.rs`, `media/grouping.rs`). The media itself is never mirrored.
+- **Same film or not.** Copies are matched only by provider id: TMDB, IMDb or TVDB for films and series, and the
+  series' provider id plus season and episode numbers for episodes. Titles and years are never used, because a wrong
+  merge hides a film. Jellyswarrm uses the same conservative rule (`media/identity.rs`). A copy that does not match
+  stays a separate item. Copies on the same server stay as they are today (`Version` rows).
+- **Best copy by default.** All copies, local and linked, are ranked by quality. In order:
+  - resolution;
+  - dynamic range (Dolby Vision, then HDR10+, then HDR10/HLG, then SDR);
+  - bitrate, adjusted for codec (AV1 > HEVC > H.264 at the same bitrate);
+  - audio channels, then lossless audio over lossy;
+  - on a tie, the local copy, since it has no network hop.
+
+  The best copy is listed first in `MediaSources`, so every client plays it unless the user picks another. Copies
+  whose server is unreachable are left out. (Jellyswarrm picks by a fixed server priority instead.)
+- **Playback goes through the home server.** For direct play, the home server relays the linked server's byte ranges
+  (the client only knows the home server). For a transcode, the home server passes `PlaybackInfo` and the HLS
+  playlist/segments through to the linked server, which transcodes where the file is. A later option is to send
+  clients that can reach the linked server straight to it (Jellyswarrm's "redirect" mode).
+- **Your watched state stays on your server.** A merged item has one home id, so watched state, resume position and
+  favourites are the user's own whichever copy played. Nothing is written back to the friend's server.
+
+#### 16b.1 Quality ranking and the default version (no boundary change; useful now)
+
+- [ ] `media/quality.rs`: a score from the stored streams (resolution, range, codec-adjusted bitrate, audio), with unit
+      tests over real-world stream pairs (4K HDR HEVC remux vs 1080p H.264, DV vs HDR10, 5.1 vs stereo, TrueHD vs EAC3)
+- [ ] Local films with several versions list their best one first in `MediaSources` and the item DTO. Today the
+      film's own file comes first whatever its quality.
+- [ ] Optional per-user preference "prefer a copy that plays without transcoding" (open question: default off)
+- [ ] Admin player and version menu labels show the ranking inputs ("2160p HDR10 · TrueHD 7.1")
+
+#### 16b.2 The link: what a linked server offers
+
+- [ ] Link keys: create, scope to libraries, revoke and list in the admin; stored hashed; usable only on `/Link/*`
+- [ ] `GET /Link/Catalog?since=<cursor>`: shared items changed since a cursor (adds, updates, removals as tombstones),
+      with provider ids, parent links, sort fields, user-independent metadata and a stream summary; paged; benchmarked
+      at 250k items
+- [ ] Images, item details, chapters and subtitles for shared items through the link
+- [ ] Streams for shared items through the link: byte ranges (direct play) and `PlaybackInfo` plus HLS (transcodes on
+      this server); only items in shared libraries, read-only
+- [ ] Sessions from a link show in the friend's dashboard as one "link" user and count against their transcode limit
+
+#### 16b.3 The home side: following a linked server
+
+- [ ] Link config in the TOML file (name, URL, key, which of the friend's libraries map to which local library),
+      checked at startup
+- [ ] Tables for linked items and streams, keyed by (link, remote id), never mixed with local `media_items`. Remote
+      ids are namespaced, so they never collide with local ones.
+- [ ] Sync job: first full pull, then the change feed on a schedule and on demand; tombstones remove items; progress
+      and errors on the dashboard; metrics per link (items, lag, failures, latency)
+- [ ] Health: a link that is down marks its copies unavailable. An item with no reachable copy is hidden, or shown
+      as offline (open question).
+
+#### 16b.4 Merging
+
+- [ ] Match by provider id (films and series), and by series id plus season and episode (episodes and seasons). A
+      persistent merge table gives each merged group a stable home id, so ids survive re-syncs and links being added
+      or removed.
+- [ ] An item matched to several items on one server, or carrying conflicting provider ids, is never merged; it is
+      listed in an admin "conflicts" view
+- [ ] Series and seasons merge too, so one show lists episodes from both servers, each episode with its copies
+- [ ] Libraries merge by explicit mapping in the link config (e.g. the friend's "Films" into local "Movies"), or by
+      matching type and name when unmapped; per-user library access applies to merged libraries
+
+#### 16b.5 One interface
+
+- [ ] Every browse route returns merged items: lists, counts, filters, sorting, genres, studios, people,
+      Latest/Recently Added, Resume, Next Up, collections, similar items. They are tested with a linked fixture, so no
+      route forgets the linked rows (the rule already used for `owner_id` rows).
+- [ ] Search (Postgres and Meilisearch) indexes merged items once
+- [ ] Item details show which servers hold a copy; version names say where each copy is ("2160p HDR · Alex")
+- [ ] Admin: a Links page (status, last sync, item counts, conflicts)
+
+#### 16b.6 Playback
+
+- [ ] `PlaybackInfo` for a merged item lists all reachable copies best first, each with its own `MediaSourceId`
+- [ ] Direct play of a linked copy: the home server relays byte ranges from the linked server (Range, ETag, If-Range
+      passed through)
+- [ ] Transcode of a linked copy: `PlaybackInfo`, the HLS playlist and segments relayed from the linked server, which
+      runs ffmpeg; addresses rewritten to the home server's
+- [ ] Progress and stop reports update the home user's state; the linked server only sees the link's session
+- [ ] If a linked server drops mid-play, the client gets an error it can retry with another copy (no silent switch)
+
+#### 16b.7 Tests and measurement
+
+- [ ] A second sandbox Rustyfin as the friend, with overlapping and distinct films/shows (same TMDB id at different
+      qualities)
+- [ ] API tests through a link: merged lists, counts, paging, search, best-copy order, playback of both copies,
+      unreachable link
+- [ ] `mise run bench`: a sync of the full fixture, browse timings with a linked library, a relayed stream's start time
+
+#### Not taken from Jellyswarrm
+
+Creating and syncing users on other servers, a per-user credential vault, proxying the jellyfin-web client, theme
+priority between servers, SyncPlay and WebSocket fan-out, Quick Connect between servers, and plain Jellyfin servers as
+links. Jellyfin has no change feed, so a Jellyfin link would have to fetch live, which is what the mirrored design
+avoids. Open question for the owner.
 
 ---
 
