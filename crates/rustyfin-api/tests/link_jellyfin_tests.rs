@@ -87,7 +87,7 @@ fn authorised(headers: &HeaderMap) -> bool {
             .unwrap_or_default()
             .to_string()
     };
-    token("authorization").contains("Token=\"tok\"") || token("x-emby-token") == "tok"
+    token("authorization").contains("Token=\"linksecret\"") || token("x-emby-token") == "linksecret"
 }
 
 async fn authenticate(State(remote): State<Shared>, body: axum::Json<Value>) -> Response {
@@ -97,7 +97,7 @@ async fn authenticate(State(remote): State<Shared>, body: axum::Json<Value>) -> 
         .seen
         .push("POST /Users/AuthenticateByName".into());
     if body["Username"] == "link" && body["Pw"] == "secret" {
-        axum::Json(json!({"AccessToken": "tok", "User": {"Id": "u1", "Name": "link"}}))
+        axum::Json(json!({"AccessToken": "linksecret", "User": {"Id": "u1", "Name": "link"}}))
             .into_response()
     } else {
         StatusCode::UNAUTHORIZED.into_response()
@@ -251,7 +251,7 @@ async fn playback_info(
             "SupportsDirectPlay": false,
             "SupportsTranscoding": true,
             "TranscodingUrl": format!(
-                "/videos/{id}/master.m3u8?MediaSourceId={source}&PlaySessionId=p1&VideoCodec=h264&api_key=tok"
+                "/videos/{id}/master.m3u8?MediaSourceId={source}&PlaySessionId=p1&VideoCodec=h264&api_key=linksecret"
             ),
             "TranscodingSubProtocol": "hls",
             "TranscodingContainer": "ts"
@@ -265,7 +265,7 @@ async fn playback_info(
 fn hls_allowed(headers: &HeaderMap, q: &HashMap<String, String>) -> bool {
     authorised(headers)
         && q.iter()
-            .all(|(k, v)| !k.eq_ignore_ascii_case("api_key") || v == "tok")
+            .all(|(k, v)| !k.eq_ignore_ascii_case("api_key") || v == "linksecret")
 }
 
 async fn master(headers: HeaderMap, Query(q): Query<HashMap<String, String>>) -> Response {
@@ -274,7 +274,7 @@ async fn master(headers: HeaderMap, Query(q): Query<HashMap<String, String>>) ->
     }
     (
         [("content-type", "application/vnd.apple.mpegurl")],
-        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nmain.m3u8?MediaSourceId=r200&PlaySessionId=p1&api_key=tok\n",
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nmain.m3u8?MediaSourceId=r200&PlaySessionId=p1&api_key=linksecret\n",
     )
         .into_response()
 }
@@ -285,7 +285,7 @@ async fn variant(headers: HeaderMap, Query(q): Query<HashMap<String, String>>) -
     }
     (
         [("content-type", "application/vnd.apple.mpegurl")],
-        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MAP:URI=\"hls1/main/-1.mp4?runtimeTicks=0&api_key=tok\"\n#EXTINF:6.0,\nhls1/main/0.mp4?runtimeTicks=0\n#EXT-X-ENDLIST\n",
+        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MAP:URI=\"hls1/main/-1.mp4?runtimeTicks=0&api_key=linksecret\"\n#EXTINF:6.0,\nhls1/main/0.mp4?runtimeTicks=0\n#EXT-X-ENDLIST\n",
     )
         .into_response()
 }
@@ -1174,7 +1174,7 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
         "{tc}"
     );
     assert!(
-        !tc.contains("tok"),
+        !tc.contains("linksecret"),
         "the link's token never reaches a client: {tc}"
     );
     assert_eq!(source["TranscodingSubProtocol"], "hls", "{info}");
@@ -1194,7 +1194,7 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
     // The playlists come through here, with the client's token, never the link's.
     let (status, _, master) = app.get_raw(&format!("{tc}&api_key={token}"), &token).await;
     assert_eq!(status, StatusCode::OK, "{master}");
-    assert!(!master.contains("tok"), "{master}");
+    assert!(!master.contains("linksecret"), "{master}");
     let variant_line = master
         .lines()
         .find(|l| l.starts_with("main.m3u8"))
@@ -1206,7 +1206,7 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
     let variant_url = format!("/LinkRelay/{link}/videos/r200/{variant_line}");
     let (status, _, variant) = app.get_raw(&variant_url, &token).await;
     assert_eq!(status, StatusCode::OK, "{variant}");
-    assert!(!variant.contains("tok"), "{variant}");
+    assert!(!variant.contains("linksecret"), "{variant}");
     assert!(
         variant.contains(&format!(
             "URI=\"hls1/main/-1.mp4?runtimeTicks=0&api_key={token}\""
