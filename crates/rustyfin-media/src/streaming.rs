@@ -109,3 +109,107 @@ pub async fn serve_file(path: &str, headers: &HeaderMap) -> Result<Response, Sta
         .body(body)
         .unwrap())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ranges_are_read_as_rfc_9110_says() {
+        assert_eq!(parse_range("bytes=0-1", 1000), Ranged::Part(0, 1));
+        assert_eq!(parse_range("bytes=990-", 1000), Ranged::Part(990, 999));
+        assert_eq!(parse_range("bytes=990-5000", 1000), Ranged::Part(990, 999));
+        // A suffix range is the last N bytes (players jump to an MP4's
+        // index at the end of the file with it).
+        assert_eq!(parse_range("bytes=-500", 1000), Ranged::Part(500, 999));
+        assert_eq!(parse_range("bytes=-5000", 1000), Ranged::Part(0, 999));
+        // Past the end, or nothing at all: 416.
+        assert_eq!(parse_range("bytes=1000-", 1000), Ranged::Unsatisfiable);
+        assert_eq!(parse_range("bytes=-0", 1000), Ranged::Unsatisfiable);
+        // Not understood (other units, several ranges, junk): the whole file.
+        assert_eq!(parse_range("items=0-1", 1000), Ranged::Whole);
+        assert_eq!(parse_range("bytes=0-1,5-6", 1000), Ranged::Whole);
+        assert_eq!(parse_range("bytes=5-1", 1000), Ranged::Whole);
+        assert_eq!(parse_range("bytes=x-1", 1000), Ranged::Whole);
+    }
+
+    fn film(name: &str) -> String {
+        let dir = std::env::temp_dir().join(format!("rf-range-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("film.mp4");
+        let bytes: Vec<u8> = (0..1000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&path, bytes).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn with(pairs: &[(header::HeaderName, &str)]) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        for (k, v) in pairs {
+            h.insert(k.clone(), v.parse().unwrap());
+        }
+        h
+    }
+
+    async fn body(r: Response) -> Vec<u8> {
+        axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec()
+    }
+
+    #[tokio::test]
+    async fn the_last_bytes_come_back_alone() {
+        let path = film("suffix");
+        let r = serve_file(&path, &with(&[(header::RANGE, "bytes=-10")]))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(r.headers()[header::CONTENT_RANGE], "bytes 990-999/1000");
+        let want: Vec<u8> = (990..1000u32).map(|i| (i % 251) as u8).collect();
+        assert_eq!(body(r).await, want);
+    }
+
+    #[tokio::test]
+    async fn a_range_past_the_end_is_416() {
+        let path = film("past");
+        let r = serve_file(&path, &with(&[(header::RANGE, "bytes=5000-")]))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(r.headers()[header::CONTENT_RANGE], "bytes */1000");
+    }
+
+    #[tokio::test]
+    async fn the_file_carries_validators() {
+        let path = film("validators");
+        let r = serve_file(&path, &HeaderMap::new()).await.unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+        let etag = r.headers()[header::ETAG].to_str().unwrap().to_string();
+        assert!(etag.starts_with('"') && etag.ends_with('"'), "{etag}");
+        let modified = r.headers()[header::LAST_MODIFIED].to_str().unwrap();
+        assert!(modified.ends_with(" GMT"), "{modified}");
+
+        // If-Range with the current tag: the range; with an old one: all of it.
+        let r = serve_file(
+            &path,
+            &with(&[(header::RANGE, "bytes=0-1"), (header::IF_RANGE, &etag)]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.status(), StatusCode::PARTIAL_CONTENT);
+        let r = serve_file(
+            &path,
+            &with(&[(header::RANGE, "bytes=0-1"), (header::IF_RANGE, "\"old\"")]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+        assert_eq!(body(r).await.len(), 1000);
+
+        // A cached copy that is still current: 304, no body.
+        let r = serve_file(&path, &with(&[(header::IF_NONE_MATCH, &etag)]))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::NOT_MODIFIED);
+    }
+}
