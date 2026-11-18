@@ -134,6 +134,14 @@ impl Links {
         self.links.read().await.get(&id).cloned()
     }
 
+    /// True while the link is syncing.
+    pub async fn is_syncing(&self, id: Uuid) -> bool {
+        match self.get(id).await {
+            Some(link) => link.syncing.try_lock().is_err(),
+            None => false,
+        }
+    }
+
     pub async fn ids(&self) -> Vec<Uuid> {
         self.links.read().await.keys().copied().collect()
     }

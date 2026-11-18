@@ -45,6 +45,20 @@ pub async fn list(pool: &PgPool) -> Result<Vec<LinkRow>, sqlx::Error> {
     .await
 }
 
+/// Per link: titles it brought that stand on their own (films and shows only
+/// a friend has) and copies of films and episodes it holds.
+pub async fn counts(pool: &PgPool) -> Result<HashMap<Uuid, (i64, i64)>, sqlx::Error> {
+    let rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+        "SELECT link_id, \
+                COUNT(*) FILTER (WHERE owner_id IS NULL AND item_type IN ('Movie', 'Series')), \
+                COUNT(*) FILTER (WHERE item_type IN ('Movie', 'Episode')) \
+         FROM media_items WHERE link_id IS NOT NULL GROUP BY link_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(l, t, c)| (l, (t, c))).collect())
+}
+
 /// Record how a sync ended: `error` is None when it worked.
 pub async fn record_sync(pool: &PgPool, id: Uuid, error: Option<&str>) -> Result<(), sqlx::Error> {
     sqlx::query(

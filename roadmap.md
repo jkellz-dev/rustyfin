@@ -1502,7 +1502,7 @@ Design, settled before any code:
       come across as films
 - [x] A mapping that fails is skipped with an error recorded on the link; the rest syncs, and nothing is removed
       while any mapping fails
-- [ ] Link errors and last sync shown in the admin
+- [x] Link errors and last sync shown in the admin (Links page; `GET /Rustyfin/Links`, `POST /Rustyfin/Links/{id}/Sync`)
 - [ ] A link removed from the config is removed at start, with its copies and the artwork films borrowed from them
       (today: `docs/linked-servers.md`, "Removing a link", by hand)
 

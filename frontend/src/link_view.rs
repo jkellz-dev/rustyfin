@@ -14,13 +14,29 @@ pub enum LinkState {
     Synced,
 }
 
-pub fn link_state(_link: &LinkInfo) -> LinkState {
-    todo!()
+pub fn link_state(link: &LinkInfo) -> LinkState {
+    if link.syncing {
+        LinkState::Syncing
+    } else if !link.configured {
+        LinkState::Unconfigured
+    } else if let Some(e) = &link.last_error {
+        LinkState::Failed(e.clone())
+    } else if link.last_sync_at.is_none() {
+        LinkState::Never
+    } else {
+        LinkState::Synced
+    }
 }
 
 /// The badge's class and text.
-pub fn badge(_state: &LinkState) -> (&'static str, &'static str) {
-    todo!()
+pub fn badge(state: &LinkState) -> (&'static str, &'static str) {
+    match state {
+        LinkState::Syncing => ("badge badge-running", "Syncing"),
+        LinkState::Unconfigured => ("badge badge-warning", "Not configured"),
+        LinkState::Failed(_) => ("badge badge-error", "Failed"),
+        LinkState::Never => ("badge badge-idle", "Not synced yet"),
+        LinkState::Synced => ("badge badge-success", "Synced"),
+    }
 }
 
 #[cfg(test)]

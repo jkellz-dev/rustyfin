@@ -8,12 +8,13 @@ fn nav_click(e: web_sys::MouseEvent, path: &str) {
 }
 
 /// The admin's pages, in menu order.
-const PAGES: [(&str, &str); 5] = [
+const PAGES: [(&str, &str); 6] = [
     ("Dashboard", "/web"),
     ("Libraries", "/web/libraries"),
     ("Media", "/web/media"),
     ("Users", "/web/users"),
     ("Tasks", "/web/tasks"),
+    ("Links", "/web/links"),
 ];
 
 /// The class of the menu: `sidebar`, plus `open` while the phone menu is

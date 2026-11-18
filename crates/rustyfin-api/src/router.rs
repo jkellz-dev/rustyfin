@@ -423,6 +423,9 @@ pub fn build_router(state: AppState) -> Router {
                 .post(display_preferences::update_display_preferences),
         )
         // ── TV Shows ─────────────────────────────────────────────
+        // Linked servers, for the admin (roadmap 16b).
+        .route("/Rustyfin/Links", get(links::list))
+        .route("/Rustyfin/Links/{id}/Sync", post(links::sync_now))
         // A linked copy's transcode, from the friend's server (roadmap 16b).
         .route(
             "/LinkRelay/{link_id}/{*path}",

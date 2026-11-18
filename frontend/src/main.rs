@@ -1,6 +1,6 @@
 //! The admin UI (Sycamore, compiled to WebAssembly and embedded in the
 //! server under `/web`): dashboard, libraries, the media browser, users,
-//! tasks and setup, plus the player that plays video and music in the page.
+//! tasks, linked servers and setup, plus the player that plays video and music in the page.
 
 mod a11y;
 mod api;
@@ -24,8 +24,8 @@ use sycamore_router::{HistoryIntegration, Route, Router};
 
 use components::nav::Sidebar;
 use pages::{
-    dashboard::Dashboard, libraries::Libraries, media::Media, setup::Setup, tasks::Tasks,
-    user_detail::UserDetail, users::Users,
+    dashboard::Dashboard, libraries::Libraries, links::Links, media::Media, setup::Setup,
+    tasks::Tasks, user_detail::UserDetail, users::Users,
 };
 
 #[derive(Route, Clone)]
@@ -43,6 +43,8 @@ enum AppRoutes {
     Users,
     #[to("/web/users/<id>")]
     UserDetail { id: String },
+    #[to("/web/links")]
+    Links,
     #[to("/web/tasks")]
     Tasks,
     #[to("/web/setup")]
@@ -82,6 +84,7 @@ fn main() {
                                     AppRoutes::Users => view! { Users {} },
                                     AppRoutes::UserDetail { id } => view! { UserDetail(user_id=id) },
                                     AppRoutes::Tasks => view! { Tasks {} },
+                                    AppRoutes::Links => view! { Links {} },
                                     _ => view! { Dashboard {} },
                                     }
                                 })

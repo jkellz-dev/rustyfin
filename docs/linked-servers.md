@@ -26,8 +26,8 @@ ordinary film with more than one version.
 | Films, TV shows and home videos from a current Jellyfin (tested with 10.10) | |
 | Direct play of a friend's copy, with seeking; transcoding by the friend's server | Music |
 | Posters, backdrops, logos and thumbnails | A friend's external subtitle files, chapters, cast |
-| Every version the friend keeps of a film | Link status in the admin (it is in the server log for now) |
-| Several links, one per friend | A faster Rustyfin-to-Rustyfin sync (a Rustyfin is linked through its Jellyfin API) |
+| Every version the friend keeps of a film | |
+| Several links, one per friend; their state in the admin's Links page | A faster Rustyfin-to-Rustyfin sync (a Rustyfin is linked through its Jellyfin API) |
 
 An app that cannot play a friend's copy as is gets it converted by the friend's server, which has the file; your
 server passes the stream on. Your server never converts a friend's copy itself. The [roadmap](../roadmap.md) (16b)
@@ -139,7 +139,9 @@ WARN  rustyfin_core::link: Link Alex did not sync: could not sign in to https://
 WARN  rustyfin_core::link: Link Alex did not sync: Alex shares no library named "Films" with its link user (it shares: Movies)
 ```
 
-The `links` table holds each link's last good sync and last error (see [Database Schema](database-schema.md)).
+The admin's **Links** page (`/web/links`) shows each link: whether its last sync worked and why not, when it last
+synced, how many titles only it brought and how many copies it holds, with a **Sync now** button. The same is
+`GET /Rustyfin/Links` for administrators; `POST /Rustyfin/Links/{id}/Sync` starts a sync.
 
 ## How copies are matched
 
