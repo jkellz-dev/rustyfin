@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 pub use jellyfin::JellyfinClient;
 pub use rustyfin_db::repo::links::{LINK_SCHEME, parse_image_path};
-pub use sync::film_from_jellyfin;
+pub use sync::films_from_jellyfin;
 
 /// What the friend runs. A Rustyfin speaks the Jellyfin API too; its own,
 /// faster sync is roadmap 16b.2r.

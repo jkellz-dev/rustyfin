@@ -31,9 +31,11 @@ pub(crate) async fn stream(
         return Err(ApiError::NotFound);
     };
     let link = state.links.get(link_id).await.ok_or(ApiError::NotFound)?;
-    let source = item
-        .extra_data
-        .as_ref()
+    let data = item.extra_data.as_ref();
+    let remote_id = data
+        .and_then(|d| d["RemoteItemId"].as_str())
+        .unwrap_or_else(|| rustyfin_db::repo::links::remote_item(remote_id));
+    let source = data
         .and_then(|d| d["RemoteSourceId"].as_str())
         .unwrap_or(remote_id)
         .to_string();

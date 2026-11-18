@@ -58,6 +58,9 @@ pub async fn record_sync(pool: &PgPool, id: Uuid, error: Option<&str>) -> Result
 }
 
 /// What is stored of a link's copies: remote id -> (row id, the friend's tag).
+/// A film's first media source is stored under the film's id; any other
+/// source (another version on the friend's server) as `<film>/<source>`
+/// ([`remote_item`] gives the film's id back).
 pub async fn stored_copies(
     pool: &PgPool,
     link_id: Uuid,
@@ -69,6 +72,13 @@ pub async fn stored_copies(
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|(r, id, e)| (r, (id, e))).collect())
+}
+
+/// The friend's item id of a stored copy (`<film>` or `<film>/<source>`).
+pub fn remote_item(remote_id: &str) -> &str {
+    remote_id
+        .split_once('/')
+        .map_or(remote_id, |(item, _)| item)
 }
 
 /// A film as the friend's server describes it.
@@ -99,8 +109,9 @@ pub struct LinkedFilm {
     pub size: Option<i64>,
     /// Jellyfin's ProviderIds (`{"Tmdb": "603", "Imdb": "tt0133093"}`).
     pub external_ids: serde_json::Value,
-    /// The link's name, the friend's name for the copy and its media source
-    /// id: `{"LinkName", "LinkSource", "RemoteSourceId"}`.
+    /// The link's name, the friend's name for the copy, its media source id
+    /// and the friend's item id:
+    /// `{"LinkName", "LinkSource", "RemoteSourceId", "RemoteItemId"}`.
     pub extra_data: serde_json::Value,
     pub streams: Vec<NewMediaStream>,
     /// (image type, index, the friend's tag).
@@ -186,7 +197,13 @@ pub async fn upsert_film(pool: &PgPool, film: &LinkedFilm) -> Result<(Uuid, bool
         )
         .bind(id)
         .bind(kind)
-        .bind(image_path(film.link_id, &film.remote_id, kind, *index, tag))
+        .bind(image_path(
+            film.link_id,
+            remote_item(&film.remote_id),
+            kind,
+            *index,
+            tag,
+        ))
         .bind(index)
         .execute(pool)
         .await?;
@@ -219,7 +236,8 @@ pub fn parse_image_path(path: &str) -> Option<(Uuid, &str, &str, i32, &str)> {
     Some((link, remote, kind, index, tag))
 }
 
-/// Remove the copies the friend no longer shares.
+/// Remove the copies the friend no longer shares, and the artwork other
+/// films borrowed from them (`remote_ids` are stored remote ids).
 pub async fn delete_copies(
     pool: &PgPool,
     link_id: Uuid,
@@ -228,6 +246,15 @@ pub async fn delete_copies(
     if remote_ids.is_empty() {
         return Ok(0);
     }
+    let prefixes: Vec<String> = remote_ids
+        .iter()
+        .filter(|r| !r.contains('/'))
+        .map(|r| format!("{LINK_SCHEME}{link_id}/{r}/%"))
+        .collect();
+    sqlx::query("DELETE FROM images WHERE path LIKE ANY($1)")
+        .bind(&prefixes)
+        .execute(pool)
+        .await?;
     // A copy that held others (a film only friends have) hands them on at the
     // next merge; until then they go with it.
     let done = sqlx::query("DELETE FROM media_items WHERE link_id = $1 AND remote_id = ANY($2)")
@@ -241,8 +268,13 @@ pub async fn delete_copies(
 /// Make linked films that stand alone versions of the same film elsewhere in
 /// their library, matched only by provider id (TMDB, then IMDb):
 /// - of a film this server holds, when exactly one matches;
-/// - else of another linked copy of the same TMDB film (the first by id), so
-///   two friends' copies of a film are one film too.
+/// - else of another linked copy of the same TMDB film, so two friends'
+///   copies (or two versions on one friend's server) are one film too. The
+///   film's main copy (a film's first source) is preferred, then the lowest
+///   id, so a version dropped by the friend never takes the film with it.
+///
+/// Then a local film that took in copies borrows what it lacks from them
+/// ([`borrow`]).
 ///
 /// A copy whose provider ids match two of the server's films stays alone:
 /// a wrong merge would hide a film. Returns how many copies it merged.
@@ -276,7 +308,7 @@ pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
             WHERE o.library_id = l.library_id AND o.item_type = 'Movie'
               AND o.owner_id IS NULL AND o.link_id IS NOT NULL
               AND o.external_ids->>'Tmdb' = l.external_ids->>'Tmdb'
-            ORDER BY o.id LIMIT 1
+            ORDER BY (o.remote_id LIKE '%/%'), o.id LIMIT 1
         ) first ON first.id <> l.id
         WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = 'Movie'
           AND l.external_ids->>'Tmdb' IS NOT NULL
@@ -285,7 +317,59 @@ pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
     .fetch_all(pool)
     .await?;
     merged += make_versions(pool, &linked).await?;
+    borrow(pool).await?;
     Ok(merged)
+}
+
+/// A local film with linked copies borrows what it lacks from one of them
+/// (the first by id): artwork of each kind it has none of, overview, genres,
+/// studios, ratings, premiere date, and provider ids it lacks. Its own values
+/// always win. Borrowed artwork is a `link://` row like the copy's, removed
+/// with the copy ([`delete_copies`]).
+pub async fn borrow(pool: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO images (entity_id, image_type, path, image_index)
+        SELECT DISTINCT ON (v.owner_id, i.image_type, i.image_index)
+               v.owner_id, i.image_type, i.path, i.image_index
+        FROM media_items v
+        JOIN media_items o ON o.id = v.owner_id AND o.link_id IS NULL
+        JOIN images i ON i.entity_id = v.id
+        WHERE v.link_id IS NOT NULL AND v.extra_type = 'Version'
+          AND NOT EXISTS (SELECT 1 FROM images x
+                          WHERE x.entity_id = v.owner_id AND x.image_type = i.image_type)
+        ORDER BY v.owner_id, i.image_type, i.image_index, v.id
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        r#"
+        UPDATE media_items o SET
+            overview = COALESCE(o.overview, v.overview),
+            genres = COALESCE(NULLIF(o.genres, '{}'), v.genres),
+            studios = COALESCE(NULLIF(o.studios, '{}'), v.studios),
+            official_rating = COALESCE(o.official_rating, v.official_rating),
+            community_rating = COALESCE(o.community_rating, v.community_rating),
+            critic_rating = COALESCE(o.critic_rating, v.critic_rating),
+            premiere_date = COALESCE(o.premiere_date, v.premiere_date),
+            production_year = COALESCE(o.production_year, v.production_year),
+            external_ids = COALESCE(v.external_ids, '{}'::jsonb) || COALESCE(o.external_ids, '{}'::jsonb)
+        FROM (
+            SELECT DISTINCT ON (owner_id) * FROM media_items
+            WHERE link_id IS NOT NULL AND extra_type = 'Version' AND owner_id IS NOT NULL
+            ORDER BY owner_id, id
+        ) v
+        WHERE o.id = v.owner_id AND o.link_id IS NULL
+          AND (o.overview IS NULL OR o.genres IS NULL OR o.genres = '{}'
+               OR o.official_rating IS NULL OR o.community_rating IS NULL
+               OR o.premiere_date IS NULL OR o.production_year IS NULL
+               OR NOT (COALESCE(o.external_ids, '{}'::jsonb) @> COALESCE(v.external_ids, '{}'::jsonb)))
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// (copy, film): the copy, and the copies it held, become versions of film.
@@ -317,6 +401,12 @@ async fn make_versions(pool: &PgPool, pairs: &[(Uuid, Uuid)]) -> Result<u64, sql
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copys_item_is_the_film_before_the_slash() {
+        assert_eq!(remote_item("abc"), "abc");
+        assert_eq!(remote_item("abc/def"), "abc");
+    }
 
     #[test]
     fn image_paths_round_trip() {

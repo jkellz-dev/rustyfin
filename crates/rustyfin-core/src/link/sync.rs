@@ -1,7 +1,7 @@
 //! A link's sync: list the friend's films with their tags (cheap), fetch the
 //! details of the new and changed ones, remove the ones gone, then merge.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
@@ -40,39 +40,55 @@ pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<Sync
     }
 
     let stored = links::stored_copies(pool, link.id).await?;
+    // The friend's film -> its stored copies' tags (one per version).
+    let mut stored_tags: HashMap<&str, Vec<&Option<String>>> = HashMap::new();
+    for (remote_id, (_, tag)) in &stored {
+        stored_tags
+            .entry(links::remote_item(remote_id))
+            .or_default()
+            .push(tag);
+    }
     let mut report = SyncReport::default();
-    let mut seen: HashSet<String> = HashSet::new();
+    // Stored remote ids still shared (every copy of an unchanged film, the
+    // copies just written for a changed one).
+    let mut kept: HashSet<String> = HashSet::new();
     for (remote_library, local_library) in wanted {
         let tags = client.film_tags(&remote_library).await?;
-        let changed: Vec<String> = tags
-            .iter()
-            .filter(|(id, tag)| {
-                stored
-                    .get(id)
-                    .is_none_or(|(_, stored_tag)| tag.is_none() || stored_tag != tag)
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-        seen.extend(tags.into_iter().map(|(id, _)| id));
+        let mut changed: Vec<String> = Vec::new();
+        for (id, tag) in &tags {
+            let current = tag.is_some()
+                && stored_tags
+                    .get(id.as_str())
+                    .is_some_and(|stored| stored.iter().all(|t| *t == tag));
+            if current {
+                kept.extend(
+                    stored
+                        .keys()
+                        .filter(|r| links::remote_item(r) == id)
+                        .cloned(),
+                );
+            } else {
+                changed.push(id.clone());
+            }
+        }
         for batch in changed.chunks(DETAIL_BATCH) {
             for item in client.items_by_id(batch).await? {
-                let Some(film) =
-                    film_from_jellyfin(&item, link.id, &link.settings.name, local_library)
-                else {
-                    continue;
-                };
-                let (_, new) = links::upsert_film(pool, &film).await?;
-                if new {
-                    report.added += 1;
-                } else {
-                    report.updated += 1;
+                for film in films_from_jellyfin(&item, link.id, &link.settings.name, local_library)
+                {
+                    kept.insert(film.remote_id.clone());
+                    let (_, new) = links::upsert_film(pool, &film).await?;
+                    if new {
+                        report.added += 1;
+                    } else {
+                        report.updated += 1;
+                    }
                 }
             }
         }
     }
     let gone: Vec<String> = stored
         .keys()
-        .filter(|id| !seen.contains(*id))
+        .filter(|id| !kept.contains(*id))
         .cloned()
         .collect();
     report.removed = links::delete_copies(pool, link.id, &gone).await?;
@@ -80,10 +96,34 @@ pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<Sync
     Ok(report)
 }
 
-/// A Jellyfin film (`/Items` with ProviderIds, MediaSources...) as a linked
-/// copy in `library`. None for anything that is not a film with an id.
-pub fn film_from_jellyfin(
+/// A Jellyfin film (`/Items` with ProviderIds, MediaSources...) as linked
+/// copies in `library`: one per media source (Jellyfin's versions of the
+/// film), the first stored under the film's id and the others as
+/// `<film>/<source>`. Empty for anything that is not a film with an id.
+pub fn films_from_jellyfin(
     item: &Value,
+    link_id: Uuid,
+    link_name: &str,
+    library: Uuid,
+) -> Vec<LinkedFilm> {
+    let sources: Vec<Value> = item["MediaSources"]
+        .as_array()
+        .filter(|s| !s.is_empty())
+        .cloned()
+        .unwrap_or_else(|| vec![Value::Null]);
+    sources
+        .iter()
+        .enumerate()
+        .filter_map(|(i, source)| {
+            film_from_source(item, source, i == 0, link_id, link_name, library)
+        })
+        .collect()
+}
+
+fn film_from_source(
+    item: &Value,
+    source: &Value,
+    first: bool,
     link_id: Uuid,
     link_name: &str,
     library: Uuid,
@@ -91,13 +131,9 @@ pub fn film_from_jellyfin(
     if item["Type"].as_str() != Some("Movie") {
         return None;
     }
-    let remote_id = item["Id"].as_str()?.to_string();
+    let item_id = item["Id"].as_str()?.to_string();
     let name = item["Name"].as_str()?.to_string();
-    let source = item["MediaSources"]
-        .as_array()
-        .and_then(|s| s.first())
-        .cloned()
-        .unwrap_or(Value::Null);
+    let source = source.clone();
     let streams: Vec<NewMediaStream> = source["MediaStreams"]
         .as_array()
         .map(|s| s.iter().filter_map(stream_from_jellyfin).collect())
@@ -127,7 +163,12 @@ pub fn film_from_jellyfin(
         }
     }
     let source_name = source["Name"].as_str().unwrap_or_default().to_string();
-    let source_id = source["Id"].as_str().unwrap_or(&remote_id).to_string();
+    let source_id = source["Id"].as_str().unwrap_or(&item_id).to_string();
+    let remote_id = if first {
+        item_id.clone()
+    } else {
+        format!("{item_id}/{source_id}")
+    };
     Some(LinkedFilm {
         link_id,
         remote_etag: item["Etag"].as_str().map(str::to_string),
@@ -165,6 +206,7 @@ pub fn film_from_jellyfin(
             "LinkName": link_name,
             "LinkSource": source_name,
             "RemoteSourceId": source_id,
+            "RemoteItemId": item_id,
         }),
         streams,
         images,
@@ -262,7 +304,9 @@ mod tests {
     fn a_jellyfin_film_becomes_a_linked_copy() {
         let link = Uuid::new_v4();
         let lib = Uuid::new_v4();
-        let f = film_from_jellyfin(&sample(), link, "Alex", lib).unwrap();
+        let films = films_from_jellyfin(&sample(), link, "Alex", lib);
+        assert_eq!(films.len(), 1);
+        let f = films.into_iter().next().unwrap();
         assert_eq!(f.remote_id, "abc");
         assert_eq!(f.remote_etag.as_deref(), Some("e9"));
         assert_eq!(f.production_year, Some(1999));
@@ -287,6 +331,23 @@ mod tests {
     fn only_films_are_taken() {
         let mut v = sample();
         v["Type"] = json!("Series");
-        assert!(film_from_jellyfin(&v, Uuid::nil(), "Alex", Uuid::nil()).is_none());
+        assert!(films_from_jellyfin(&v, Uuid::nil(), "Alex", Uuid::nil()).is_empty());
+    }
+
+    #[test]
+    fn each_version_is_a_copy_the_first_under_the_films_id() {
+        let mut v = sample();
+        let mut cut = v["MediaSources"][0].clone();
+        cut["Id"] = json!("def");
+        cut["Name"] = json!("1080p");
+        cut["MediaStreams"][0]["Height"] = json!(800);
+        v["MediaSources"].as_array_mut().unwrap().push(cut);
+        let films = films_from_jellyfin(&v, Uuid::nil(), "Alex", Uuid::nil());
+        let ids: Vec<&str> = films.iter().map(|f| f.remote_id.as_str()).collect();
+        assert_eq!(ids, vec!["abc", "abc/def"]);
+        assert_eq!(films[1].extra_data["RemoteSourceId"], "def");
+        assert_eq!(films[1].extra_data["RemoteItemId"], "abc");
+        assert_eq!(films[1].extra_data["LinkSource"], "1080p");
+        assert_eq!(films[1].height, Some(800));
     }
 }

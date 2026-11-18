@@ -134,6 +134,17 @@ pub(crate) async fn attach_versions(
     dtos: &mut [BaseItemDto],
     reveal_path: bool,
 ) {
+    // A copy only a friend has is named for them, as in PlaybackInfo.
+    for (item, dto) in items.iter().zip(dtos.iter_mut()) {
+        if item.link_id.is_some()
+            && let Some(sources) = dto.media_sources.as_mut()
+        {
+            for source in sources {
+                source.name = source_name(item).or(source.name.take());
+                source.path = None;
+            }
+        }
+    }
     let films: Vec<Uuid> = items
         .iter()
         .filter(|i| i.item_type == "Movie" && i.owner_id.is_none())

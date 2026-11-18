@@ -6,6 +6,9 @@ libraries as if they were yours:
 - A film you already have gains their copy as another version. The best copy (resolution, then HDR, then bitrate for
   the codec, then audio) is listed first and plays unless you pick another.
 - A film you do not have is listed like your own, with its artwork, details and provider ids.
+- Every version the friend keeps of a film is a copy of its own ("2160p Director's Cut · Alex").
+- A film of yours that lacks artwork, an overview, genres, ratings or provider ids borrows them from a friend's copy.
+  What your film has is never replaced.
 - Your watched state, resume points and favourites stay on your server, whichever copy you played.
 
 Your apps only ever talk to your server: it signs in to the friend's server, keeps a copy of the shared catalogue
@@ -40,7 +43,7 @@ local = "Movies"                    # one of yours, by name
 
 Restart Rustyfin. It signs in, syncs 30 seconds after start and then every 15 minutes. Each sync lists the friend's
 films with the tag Jellyfin changes when an item does, fetches details only of new and changed films, and removes
-the ones no longer shared. A film you add later takes in the friend's copy at the next sync.
+the ones no longer shared. A film you add later takes in the friend's copy as soon as the library scan finds it.
 
 If a sync fails (wrong password, the friend's server is down, a library name that does not match), the server log
 says why, and the link keeps the films from the last good sync.

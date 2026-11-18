@@ -126,7 +126,7 @@ Central media catalog. Self-referencing hierarchy: Library → Series → Season
 | `external_ids` | JSONB | Yes | | TMDB/TVDB/IMDb IDs |
 | `extra_data` | JSONB | Yes | | Additional metadata (a linked copy: `LinkName`, `LinkSource`, `RemoteSourceId`) |
 | `link_id` | UUID | Yes | | A linked server's copy: FK to `links.id` (CASCADE); such rows have no `path` |
-| `remote_id` | TEXT | Yes | | The copy's item id on the linked server; unique per link |
+| `remote_id` | TEXT | Yes | | The copy's item id on the linked server (`<item>/<source>` for its other versions); unique per link |
 | `remote_etag` | TEXT | Yes | | The linked server's `Etag` when last synced; NULL until fully stored |
 
 **Indexes**: `idx_media_items_type`, `idx_media_items_parent`, `idx_media_items_library`, `idx_media_items_series`,

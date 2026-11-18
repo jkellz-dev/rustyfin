@@ -1491,8 +1491,11 @@ Design, settled before any code:
 - [x] Sync (films): list every film with its `Etag` (light), fetch details only of new and changed ones, remove the
       ones gone, then merge. This replaces the `MinDateLastSaved` and WebSocket plan: one id list per sync catches
       removals too, and costs little. Every 15 minutes and 30 s after start; the result is recorded on the link.
-- [x] Films only, first media source only; external subtitles, chapters and people are not taken yet
-- [ ] Checked against the sandbox's real Jellyfin 10.10.7
+- [x] Films only; every media source (Jellyfin's versions) is a copy. External subtitles, chapters and people
+      are not taken yet
+- [x] Checked against the sandbox's real Jellyfin 10.10.7 (2026-11-18): sync, merge, poster and ranged stream relay
+- [x] A scan merges the films it finds at once (no double listing until the next sync); a local film borrows
+      artwork, overview, genres, ratings and provider ids it lacks from a linked copy
 - [ ] Series, seasons and episodes
 - [ ] Link errors and last sync shown in the admin
 
