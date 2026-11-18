@@ -1412,7 +1412,9 @@ clients support several servers). Browsing, playback, transcoding and watched st
 
 ### 16b. Merged libraries across servers (owner, 2026-11-18)
 
-One library view over several Rustyfin servers: your Movies and a friend's Movies show as one Movies. The same film or
+One library view over several servers: your Movies and a friend's Movies show as one Movies. The friend may run
+current Jellyfin or Rustyfin. Both work through the Jellyfin API, and Rustyfin-to-Rustyfin links get a faster, cheaper
+path. The same film or
 episode held on both servers is one item, with each copy as a version, and the best copy plays by default. This is what
 [Jellyswarrm](https://github.com/LLukas22/Jellyswarrm) does as a proxy in front of Jellyfin servers. Here it is built
 into Rustyfin, and only the merged browsing and playback are taken from it. Jellyswarrm's proxy machinery is not:
@@ -1424,20 +1426,31 @@ Nothing below 16b.1 starts until the Design Boundaries section is changed.
 
 Design, settled before any code:
 
-- **Which server is which.** The *home* server is the one your clients talk to. A *linked* server is a friend's Rustyfin
-  that shares some of its libraries with your home server. Clients only ever talk to the home server; they never need
-  to reach or sign in to the linked one.
-- **How the servers authenticate.** The friend's admin issues a link key scoped to the libraries they choose to share.
-  It is read-only, revocable, and listed in their admin, and the home server keeps it in its TOML config. A Tailscale
+- **Which server is which.** The *home* server (Rustyfin) is the one your clients talk to. A *linked* server is a
+  friend's Jellyfin or Rustyfin that shares some of its libraries with your home server. Clients only ever talk to the
+  home server; they never need to reach or sign in to the linked one.
+- **How the servers authenticate.**
+  - **Jellyfin:** the friend creates a user for the link, with access to only the libraries they share, and the home
+    server signs in as it (`AuthenticateByName`) and keeps that token. A Jellyfin API key is not used: it carries full
+    admin rights. Jellyswarrm's per-user credential vault is not needed either, since one link account serves all home
+    users.
+  - **Rustyfin:** the friend's admin issues a link key scoped to the libraries they choose to share. It is read-only,
+    revocable, and listed in their admin, and the home server keeps it in its TOML config. A Tailscale
   app-capabilities grant could later replace the key. That would mean no secret in Rustyfin, but it needs checking
   across tailnets and through the Kubernetes operator's ingress first. Users stay per server: the friend sees one
   session per link, never your users' identities.
 - **The catalogue is mirrored, not fetched live.** This replaces the earlier "fetched live and cached briefly" plan.
-  Both ends are Rustyfin, so the linked server can offer a change feed, and the home server can keep the shared items
+  The home server keeps the shared items
   (ids, provider ids, names, sort fields, a summary of each stream) in Postgres. Merging, filters, sorting, search,
   paging, counts, Latest, Next Up and Resume then use the same queries as local items. Jellyswarrm has to fetch every
   server live for every page and merge the results in memory, which is most of its complexity
-  (`library_pagination.rs`, `media/grouping.rs`). The media itself is never mirrored.
+  (`library_pagination.rs`, `media/grouping.rs`). The media itself is never mirrored. How the mirror stays current
+  depends on the friend's server:
+  - **Jellyfin:** changes are polled with `/Items?Recursive=true&MinDateLastSaved=<last sync>`. The `LibraryChanged`
+    WebSocket message reports adds and removals as they happen. A periodic list of ids catches removals missed while
+    disconnected.
+  - **Rustyfin (the optimized path):** a change feed with a cursor and removals (`/Link/Catalog?since=`), so one call
+    per sync carries only what changed, with stream summaries included.
 - **Same film or not.** Copies are matched only by provider id: TMDB, IMDb or TVDB for films and series, and the
   series' provider id plus season and episode numbers for episodes. Titles and years are never used, because a wrong
   merge hides a film. Jellyswarrm uses the same conservative rule (`media/identity.rs`). A copy that does not match
@@ -1453,7 +1466,8 @@ Design, settled before any code:
   whose server is unreachable are left out. (Jellyswarrm picks by a fixed server priority instead.)
 - **Playback goes through the home server.** For direct play, the home server relays the linked server's byte ranges
   (the client only knows the home server). For a transcode, the home server passes `PlaybackInfo` and the HLS
-  playlist/segments through to the linked server, which transcodes where the file is. A later option is to send
+  playlist/segments through to the linked server, which transcodes where the file is. These are the standard Jellyfin
+  routes, so Jellyfin and Rustyfin servers are relayed the same way. A later option is to send
   clients that can reach the linked server straight to it (Jellyswarrm's "redirect" mode).
 - **Your watched state stays on your server.** A merged item has one home id, so watched state, resume position and
   favourites are the user's own whichever copy played. Nothing is written back to the friend's server.
@@ -1467,7 +1481,15 @@ Design, settled before any code:
 - [ ] Optional per-user preference "prefer a copy that plays without transcoding" (open question: default off)
 - [ ] Admin player and version menu labels show the ranking inputs ("2160p HDR10 · TrueHD 7.1")
 
-#### 16b.2 The link: what a linked server offers
+#### 16b.2 Jellyfin links (any current Jellyfin server)
+
+- [ ] A link client for the Jellyfin API: sign in as the link user, list the libraries it can see, page items with
+      provider ids, media streams, parent links and sort fields, and fetch images, chapters and subtitles
+- [ ] Sync: a full pull first, then `MinDateLastSaved` polls; removals from `LibraryChanged` on the WebSocket, plus a
+      periodic id list; checked against a sandbox Jellyfin (the parity setup already runs one)
+- [ ] Re-sign-in when the token is revoked, shown as a link error in the admin
+
+#### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 
 - [ ] Link keys: create, scope to libraries, revoke and list in the admin; stored hashed; usable only on `/Link/*`
 - [ ] `GET /Link/Catalog?since=<cursor>`: shared items changed since a cursor (adds, updates, removals as tombstones),
@@ -1480,8 +1502,10 @@ Design, settled before any code:
 
 #### 16b.3 The home side: following a linked server
 
-- [ ] Link config in the TOML file (name, URL, key, which of the friend's libraries map to which local library),
-      checked at startup
+- [ ] Link config in the TOML file: name, kind (`jellyfin` or `rustyfin`), URL, credential (the link user, or a
+      link key), and which of the friend's libraries map to which local library. Checked at startup.
+- [ ] The kind can be detected (`/System/Info/Public` names the product), so a friend who moves from Jellyfin to
+      Rustyfin can switch to the faster sync without re-mapping
 - [ ] Tables for linked items and streams, keyed by (link, remote id), never mixed with local `media_items`. Remote
       ids are namespaced, so they never collide with local ones.
 - [ ] Sync job: first full pull, then the change feed on a schedule and on demand; tombstones remove items; progress
@@ -1521,8 +1545,8 @@ Design, settled before any code:
 
 #### 16b.7 Tests and measurement
 
-- [ ] A second sandbox Rustyfin as the friend, with overlapping and distinct films/shows (same TMDB id at different
-      qualities)
+- [ ] Two friends in the sandbox, the existing Jellyfin and a second Rustyfin, with overlapping and distinct
+      films/shows (the same TMDB id at different qualities on all three servers)
 - [ ] API tests through a link: merged lists, counts, paging, search, best-copy order, playback of both copies,
       unreachable link
 - [ ] `mise run bench`: a sync of the full fixture, browse timings with a linked library, a relayed stream's start time
@@ -1530,9 +1554,7 @@ Design, settled before any code:
 #### Not taken from Jellyswarrm
 
 Creating and syncing users on other servers, a per-user credential vault, proxying the jellyfin-web client, theme
-priority between servers, SyncPlay and WebSocket fan-out, Quick Connect between servers, and plain Jellyfin servers as
-links. Jellyfin has no change feed, so a Jellyfin link would have to fetch live, which is what the mirrored design
-avoids. Open question for the owner.
+priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect between servers.
 
 ---
 
