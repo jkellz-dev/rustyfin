@@ -6,6 +6,8 @@ pub mod names;
 pub mod params;
 pub mod profiles;
 pub mod subtitles;
+pub mod timeline;
+pub mod timing;
 pub mod video_copy;
 
 pub use job::TranscodeJob;

@@ -629,8 +629,9 @@ mod tests {
     mod sessions {
         use super::super::*;
         use crate::transcode::params::{
-            AudioCodec, HardwareAccel, SegmentFormat, SubtitleMode, VideoCodec,
+            AudioCodec, HardwareAccel, SegmentCut, SegmentFormat, SubtitleMode, VideoCodec,
         };
+        use crate::transcode::timeline::Timeline;
         use std::path::Path;
         use std::time::Duration;
 
@@ -665,37 +666,79 @@ mod tests {
             ))
         }
 
-        fn request(root: &Path, session: &str, start_secs: i64) -> TranscodeRequest {
+        fn params(video_codec: VideoCodec, cut: SegmentCut) -> StreamParams {
+            StreamParams {
+                input_path: PathBuf::from("/media/film.mkv"),
+                output_dir: PathBuf::new(),
+                start_time_ticks: None,
+                video_codec,
+                video_tag: None,
+                video_bitrate: None,
+                max_width: None,
+                max_height: None,
+                max_framerate: None,
+                audio_codec: AudioCodec::AAC,
+                audio_bitrate: None,
+                audio_channels: Some(2),
+                audio_sample_rate: Some(48000),
+                audio_stream_index: None,
+                subtitle_mode: SubtitleMode::None,
+                subtitle_stream_index: None,
+                segment_duration: 6,
+                segment_format: SegmentFormat::MpegTs,
+                start_number: 0,
+                hardware_accel: HardwareAccel::None,
+                threads: 0,
+                audio_only: false,
+                run: 0,
+                cut,
+                keyframes_from: None,
+            }
+        }
+
+        /// An encoded two-hour film: a segment every 6 s.
+        fn encoded() -> Plan {
+            Plan {
+                timeline: Arc::new(Timeline::grid(0.0, 7200.0, 6)),
+                params: params(VideoCodec::H264, SegmentCut::Every),
+                source_start: 0.0,
+                b_frames: false,
+            }
+        }
+
+        /// Copied video whose keyframes are uneven (7.5 s, 8 s, 6.5 s, 9 s, 7 s).
+        fn copied(b_frames: bool) -> Plan {
+            let keyframes = [0.0, 7.5, 15.5, 22.0, 31.0, 38.0];
+            Plan {
+                timeline: Arc::new(Timeline::keyframes(&keyframes, 44.0, 6).unwrap()),
+                params: params(VideoCodec::Copy, SegmentCut::At(vec![])),
+                source_start: 0.0,
+                b_frames,
+            }
+        }
+
+        fn request(session: &str, plan: Plan, start_segment: u32) -> TranscodeRequest {
             TranscodeRequest {
                 play_session_id: session.into(),
                 item_id: Uuid::nil(),
                 device_id: "d".into(),
                 user_id: Uuid::nil(),
-                params: StreamParams {
-                    input_path: PathBuf::from("/media/film.mkv"),
-                    output_dir: root.join("t").join(session),
-                    start_time_ticks: Some(start_secs * SEC),
-                    video_codec: VideoCodec::H264,
-                    video_tag: None,
-                    video_bitrate: None,
-                    max_width: None,
-                    max_height: None,
-                    max_framerate: None,
-                    audio_codec: AudioCodec::AAC,
-                    audio_bitrate: None,
-                    audio_channels: Some(2),
-                    audio_sample_rate: Some(48000),
-                    audio_stream_index: None,
-                    subtitle_mode: SubtitleMode::None,
-                    subtitle_stream_index: None,
-                    segment_duration: 6,
-                    segment_format: SegmentFormat::MpegTs,
-                    start_number: 0,
-                    hardware_accel: HardwareAccel::None,
-                    threads: 0,
-                    audio_only: false,
-                },
+                plan,
+                start_segment,
             }
+        }
+
+        /// The fake ffmpeg's command lines, once `n` runs have logged.
+        async fn calls(root: &Path, n: usize) -> Vec<String> {
+            let mut calls = String::new();
+            for _ in 0..50 {
+                calls = std::fs::read_to_string(root.join("calls.log")).unwrap_or_default();
+                if calls.lines().count() >= n {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            calls.lines().map(str::to_string).collect()
         }
 
         async fn wait_exit(tm: &TranscodeManager, session: &str) {
@@ -719,7 +762,7 @@ mod tests {
         async fn a_finished_transcode_stays_until_the_player_leaves() {
             let root = root("finished");
             let tm = manager(&root, fake("finishes"));
-            tm.start_transcode(request(&root, "s1", 2470))
+            tm.start_transcode(request("s1", encoded(), 0))
                 .await
                 .unwrap();
             wait_exit(&tm, "s1").await;
@@ -729,18 +772,20 @@ mod tests {
                 "a finished session is still usable"
             );
             tm.cleanup_stale_jobs().await;
-            let dir = tm
-                .get_job_output_dir("s1")
+            let segment = tm
+                .wait_for_segment("s1", 0, Duration::from_secs(3))
                 .await
                 .expect("kept by the cleanup");
-            assert!(dir.join("0.ts").exists(), "its segments are kept");
+            assert!(segment.exists(), "its segments are kept");
         }
 
         #[tokio::test]
         async fn a_failed_transcode_is_cleaned_up() {
             let root = root("failed");
             let tm = manager(&root, fake("fails"));
-            tm.start_transcode(request(&root, "s2", 0)).await.unwrap();
+            tm.start_transcode(request("s2", encoded(), 0))
+                .await
+                .unwrap();
             wait_exit(&tm, "s2").await;
 
             assert!(!tm.has_active_job("s2").await);
@@ -748,57 +793,138 @@ mod tests {
             assert!(tm.get_job_output_dir("s2").await.is_none());
         }
 
-        // Segment numbers count from where the session started, so a seek in a
-        // session resumed at 41:10 must restart there plus the segment's offset,
-        // not at the segment's offset from the start of the file.
+        // The playlist lists the whole film from the first request; ffmpeg
+        // starts at the segment that holds the resume point (41:06 for 41:10),
+        // with keyframes forced on the segment marks from there.
         #[tokio::test]
-        async fn a_seek_in_a_resumed_session_restarts_from_the_resume_point() {
-            let root = root("seek");
-            let tm = manager(&root, fake("finishes"));
-            tm.start_transcode(request(&root, "s3", 2470))
-                .await
-                .unwrap();
-            wait_exit(&tm, "s3").await;
-            tm.restart_at_segment("s3", 10).await.unwrap();
-
-            // The old session's playlist is still there, so the restart returns
-            // before the new encoder has necessarily logged anything.
-            let mut calls = String::new();
-            for _ in 0..50 {
-                calls = std::fs::read_to_string(root.join("calls.log")).unwrap();
-                if calls.lines().count() > 1 {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-            let second = calls.lines().nth(1).expect("ffmpeg started again");
-            assert!(second.contains("-ss 2530.000"), "{second}");
-            assert!(second.contains("-start_number 10"), "{second}");
-        }
-
-        // ffmpeg runs with -copyts, so it reports progress in file time. In a
-        // session resumed at 41:10 and restarted at segment 10 (41:10 + 60 s),
-        // 41:10 + 65 s of file time is the session's 65 s.
-        #[tokio::test]
-        async fn restart_decisions_use_the_session_clock() {
-            let root = root("clock");
+        async fn a_resumed_session_lists_the_whole_film_and_starts_at_its_segment() {
+            let root = root("resume");
             let tm = manager(&root, fake("runs"));
-            tm.start_transcode(request(&root, "s4", 2470))
+            tm.start_transcode(request("s3", encoded(), 411))
                 .await
                 .unwrap();
-            tm.restart_at_segment("s4", 10).await.unwrap();
-            tm.update_position("s4", (2470 + 65) * SEC).await;
 
+            let playlist = tm.playlist("s3").await.unwrap();
+            assert!(playlist.contains("#EXT-X-PLAYLIST-TYPE:VOD"), "{playlist}");
+            assert!(playlist.contains("\n0.ts\n"), "from the start: {playlist}");
+            assert!(playlist.contains("\n1199.ts\n#EXT-X-ENDLIST"), "{playlist}");
+
+            let first = &calls(&root, 1).await[0];
+            assert!(first.contains("-ss 2466.000"), "{first}");
+            assert!(first.contains("-start_number 411"), "{first}");
             assert!(
-                !tm.needs_restart("s4", 30).await,
-                "180 s is within 2 min of 65 s"
-            );
-            assert!(tm.needs_restart("s4", 31).await, "186 s is beyond it");
-            assert!(
-                tm.needs_restart("s4", 2).await,
-                "before the restart point nothing will write it"
+                first.contains("-force_key_frames expr:gte(t,2466.000000+n_forced*6)"),
+                "{first}"
             );
             tm.kill_all().await;
+        }
+
+        // A copied stream's restart lands on the segment's own keyframe: ffmpeg
+        // starts at the keyframe at or before -ss, so -ss sits just past it,
+        // plus the 3/23 s ffmpeg seeks early for video with B-frames. Its
+        // cuts are the playlist's later keyframes.
+        #[tokio::test]
+        async fn a_copied_stream_restarts_on_the_segments_keyframe() {
+            for (b_frames, ss) in [(false, "-ss 22.002"), (true, "-ss 22.132")] {
+                let root = root(if b_frames { "copy-b" } else { "copy" });
+                let tm = manager(&root, fake("runs"));
+                tm.start_transcode(request("s4", copied(b_frames), 0))
+                    .await
+                    .unwrap();
+                tm.restart_at_segment("s4", 3).await.unwrap();
+
+                let restart = calls(&root, 2).await[1].clone();
+                assert!(restart.contains(ss), "{restart}");
+                assert!(restart.contains("-segment_start_number 3"), "{restart}");
+                assert!(
+                    restart.contains("-segment_times 30.9995,37.9995"),
+                    "{restart}"
+                );
+                tm.kill_all().await;
+            }
+        }
+
+        // ffmpeg reports file time (-copyts). Resumed at 41:06 and 65 s into
+        // the film from there: a segment more than two minutes past that
+        // restarts the encoder, one before the run's start does too.
+        #[tokio::test]
+        async fn restart_decisions_compare_file_times() {
+            let root = root("clock");
+            let tm = manager(&root, fake("runs"));
+            tm.start_transcode(request("s5", encoded(), 411))
+                .await
+                .unwrap();
+            tm.update_position("s5", (2466 + 65) * SEC).await;
+
+            assert!(
+                !tm.needs_restart("s5", 441).await,
+                "2646 s is within 2 min of 2531 s"
+            );
+            assert!(tm.needs_restart("s5", 442).await, "2652 s is beyond it");
+            assert!(
+                tm.needs_restart("s5", 410).await,
+                "before the run's start nothing will write it"
+            );
+            assert!(
+                tm.wait_for_segment("s5", 411, Duration::from_secs(3))
+                    .await
+                    .is_some(),
+                "the run's first segment"
+            );
+            assert!(
+                !tm.needs_restart("s5", 411).await,
+                "a written segment never"
+            );
+            tm.kill_all().await;
+        }
+
+        // A restart writes new files, so segments the old run finished stay
+        // whole and served.
+        #[tokio::test]
+        async fn segments_of_an_earlier_run_are_still_served() {
+            let root = root("runs");
+            let tm = manager(&root, fake("runs"));
+            tm.start_transcode(request("s6", encoded(), 0))
+                .await
+                .unwrap();
+            let first = tm
+                .wait_for_segment("s6", 0, Duration::from_secs(3))
+                .await
+                .unwrap();
+            tm.restart_at_segment("s6", 20).await.unwrap();
+            let later = tm
+                .wait_for_segment("s6", 20, Duration::from_secs(3))
+                .await
+                .unwrap();
+            assert_ne!(first.file_name(), later.file_name());
+            assert_eq!(
+                tm.wait_for_segment("s6", 0, Duration::from_secs(1)).await,
+                Some(first)
+            );
+            tm.kill_all().await;
+        }
+
+        // A run that finished without writing a segment (past the video's end)
+        // answers at once rather than after the full wait.
+        #[tokio::test]
+        async fn a_segment_a_finished_run_never_wrote_is_not_waited_for() {
+            let root = root("past-end");
+            let tm = manager(&root, fake("finishes"));
+            tm.start_transcode(request("s7", encoded(), 0))
+                .await
+                .unwrap();
+            wait_exit(&tm, "s7").await;
+            let started = std::time::Instant::now();
+            assert!(
+                tm.wait_for_segment("s7", 5, Duration::from_secs(10))
+                    .await
+                    .is_none()
+            );
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "{:?}",
+                started.elapsed()
+            );
         }
 
         // ffmpeg runs with -nostdin, so the 'q' written to its stdin never
@@ -808,107 +934,66 @@ mod tests {
         async fn stopping_a_running_transcode_is_prompt() {
             let root = root("stop");
             let tm = manager(&root, fake("deaf"));
-            tm.start_transcode(request(&root, "s6", 0)).await.unwrap();
-            tm.start_transcode(request(&root, "s7", 0)).await.unwrap();
-            tm.jobs.read().await["s7"].pause(); // throttled
+            tm.start_transcode(request("s8", encoded(), 0))
+                .await
+                .unwrap();
+            tm.start_transcode(request("s9", encoded(), 0))
+                .await
+                .unwrap();
+            tm.jobs.read().await["s9"].pause(); // throttled
 
             let started = std::time::Instant::now();
-            tm.kill_job("s6").await;
-            tm.kill_job("s7").await;
+            tm.kill_job("s8").await;
+            tm.kill_job("s9").await;
             assert!(
                 started.elapsed() < Duration::from_secs(2),
                 "took {:?}",
                 started.elapsed()
             );
-            assert!(tm.get_job_output_dir("s6").await.is_none());
+            assert!(tm.get_job_output_dir("s8").await.is_none());
         }
-
-        /// ffmpeg's playlist after copying video: segments end on the source's
-        /// keyframes, so they are not 6 s each.
-        const UNEVEN: &str = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:9\n\
-            #EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n\
-            #EXTINF:7.500000,\n0.ts\n#EXTINF:8.000000,\n1.ts\n\
-            #EXTINF:6.500000,\n2.ts\n#EXTINF:9.000000,\n3.ts\n";
 
         #[test]
-        fn listed_segments_start_where_the_playlist_says() {
-            assert_eq!(listed_segment_start(UNEVEN, 0), Some(0.0));
-            assert_eq!(listed_segment_start(UNEVEN, 3), Some(22.0));
+        fn a_runs_list_names_its_finished_segments() {
+            let hls = "#EXTM3U\n#EXTINF:6,\nr2_40.ts\n#EXTINF:5,\nr2_41.ts\n";
+            assert_eq!(listed_segments(hls, 2, "ts"), vec![40, 41]);
+            let csv = "r3_7.ts,1.000000,2.000000\nr3_8.ts,2.000000,3.000000\n";
+            assert_eq!(listed_segments(csv, 3, "ts"), vec![7, 8]);
+            let mixed = "r1_9.ts\nr3_10.m4s\nr3_init.mp4\nr3_11.ts\nr13_12.ts\n";
             assert_eq!(
-                listed_segment_start(UNEVEN, 4),
-                Some(31.0),
-                "just past the last"
+                listed_segments(mixed, 3, "ts"),
+                vec![11],
+                "this run's, this kind"
             );
-            assert_eq!(listed_segment_start(UNEVEN, 9), None, "not written yet");
-            let restarted = "#EXTM3U\n#EXTINF:7.0,\n40.ts\n#EXTINF:5.0,\n41.ts\n";
-            assert_eq!(listed_segment_start(restarted, 41), Some(7.0));
-            assert_eq!(
-                listed_segment_start(restarted, 12),
-                None,
-                "before this playlist"
-            );
-        }
-
-        // A copied stream's segments are uneven: the player's position and a
-        // restart point come from the playlist's real lengths, not n × 6 s.
-        // Resumed at 41:10, so a mix-up with the file clock would show too.
-        #[tokio::test]
-        async fn uneven_segments_are_placed_by_the_playlist() {
-            let root = root("uneven");
-            let tm = manager(&root, fake("runs"));
-            tm.start_transcode(request(&root, "s6", 2470))
-                .await
-                .unwrap();
-            let dir = tm.get_job_output_dir("s6").await.unwrap();
-            std::fs::write(dir.join("playlist.m3u8"), UNEVEN).unwrap();
-
-            tm.touch_segment("s6", 3).await;
-            assert_eq!(tm.jobs.read().await["s6"].player_ticks, 22 * SEC);
-
-            tm.restart_at_segment("s6", 3).await.unwrap();
-            let log = root.join("calls.log");
-            let mut calls = String::new();
-            for _ in 0..50 {
-                calls = std::fs::read_to_string(&log).unwrap_or_default();
-                if calls.lines().count() >= 2 {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-            let restart = calls.lines().nth(1).expect("a second ffmpeg");
-            assert!(restart.contains("-ss 2492.000"), "{restart}");
-            assert!(restart.contains("-start_number 3"), "{restart}");
-            tm.kill_all().await;
         }
 
         // Throttling pauses an encoder that is far ahead of the player, measured
-        // from the segment the player last asked for.
+        // from the segment the player last asked for, both in file time.
         #[tokio::test]
         async fn throttling_measures_from_the_player() {
             let root = root("throttle");
             let tm = manager(&root, fake("runs"));
-            // Resumed at 41:10: ffmpeg reports file time (-copyts).
-            tm.start_transcode(request(&root, "s5", 2470))
+            tm.start_transcode(request("s10", encoded(), 411))
                 .await
                 .unwrap();
-            tm.touch_segment("s5", 20).await; // the player is at 120 s
-            tm.update_position("s5", (2470 + 150) * SEC).await; // 30 s ahead of it
+            tm.touch_segment("s10", 431).await; // the player is at 2586 s
+            tm.update_position("s10", (2586 + 30) * SEC).await;
 
             tm.throttle_jobs().await;
             assert!(
-                !tm.jobs.read().await["s5"].is_paused,
+                !tm.jobs.read().await["s10"].is_paused,
                 "30 s ahead is not far ahead"
             );
 
-            tm.update_position("s5", (2470 + 250) * SEC).await; // 130 s ahead
+            tm.update_position("s10", (2586 + 130) * SEC).await;
             tm.throttle_jobs().await;
-            assert!(tm.jobs.read().await["s5"].is_paused, "130 s ahead is");
+            assert!(tm.jobs.read().await["s10"].is_paused, "130 s ahead is");
 
             // The player asks for a segment the paused encoder has not written:
             // the request must resume it, or the segment never comes.
-            tm.touch_segment("s5", 45).await;
+            tm.touch_segment("s10", 450).await;
             assert!(
-                !tm.jobs.read().await["s5"].is_paused,
+                !tm.jobs.read().await["s10"].is_paused,
                 "a segment request resumes a paused encoder"
             );
             tm.kill_all().await;

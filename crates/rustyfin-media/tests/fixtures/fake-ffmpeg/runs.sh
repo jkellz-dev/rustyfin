@@ -1,17 +1,33 @@
 #!/bin/sh
 # Stand-in for ffmpeg in the transcode manager's tests (keeps encoding for 30 s).
 # Logs its arguments to calls.log two levels above the session folder (the
-# test's root), writes segment <start_number>.ts and the playlist.
+# test's root), writes the run's first segment (-start_number or
+# -segment_start_number, named by -hls_segment_filename or the segment
+# muxer's output pattern) and lists it in the run's list (the HLS muxer's
+# playlist, the last argument, or the segment muxer's -segment_list).
 for a; do last=$a; done
-dir=$(dirname "$last")
-echo "$*" >>"$dir/../../calls.log"
 n=0
+pattern=
+list=
 prev=
 for a; do
-	[ "$prev" = -start_number ] && n=$a
+	case $prev in
+	-start_number | -segment_start_number) n=$a ;;
+	-hls_segment_filename) pattern=$a ;;
+	-segment_list) list=$a ;;
+	esac
 	prev=$a
 done
-: >"$dir/$n.ts"
-printf '#EXTM3U\n#EXTINF:6,\n%s.ts\n#EXT-X-ENDLIST\n' "$n" >"$last"
+if [ -n "$pattern" ]; then
+	list=$last
+else
+	pattern=$last
+fi
+dir=$(dirname "$list")
+echo "$*" >>"$dir/../../calls.log"
+# shellcheck disable=SC2059 # the pattern is ffmpeg's, %d for the number
+segment=$(printf "$pattern" "$n")
+: >"$segment"
+printf '#EXTM3U\n#EXTINF:6,\n%s\n' "$(basename "$segment")" >"$list"
 sleep 30
 exit 0

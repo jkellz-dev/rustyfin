@@ -419,6 +419,9 @@ mod tests {
             hardware_accel: HardwareAccel::None,
             threads: 0,
             audio_only: false,
+            run: 0,
+            cut: SegmentCut::Every,
+            keyframes_from: None,
         }
     }
 
@@ -560,7 +563,7 @@ mod tests {
         let args = build_hls_args(&params);
         assert!(args.contains(&"fmp4".to_string()));
         assert!(args.contains(&"-hls_fmp4_init_filename".to_string()));
-        assert!(args.contains(&"init.mp4".to_string()));
+        assert!(args.contains(&"r0_init.mp4".to_string()));
     }
 
     #[test]
@@ -715,6 +718,110 @@ mod tests {
     fn test_playlist_output_path() {
         let params = default_params();
         let args = build_hls_args(&params);
-        assert!(args.last().unwrap().ends_with("playlist.m3u8"));
+        assert!(args.last().unwrap().ends_with("/r0.m3u8"));
+    }
+
+    /// Encodes put keyframes on the segment marks only, counted in file time
+    /// from the run's first segment, so a restarted run cuts where the
+    /// playlist says.
+    #[test]
+    fn encodes_put_keyframes_on_the_segment_marks() {
+        let mut params = default_params();
+        params.keyframes_from = Some(2466.0);
+        let args = build_video_args(&params);
+        let at = args.iter().position(|a| a == "-force_key_frames").unwrap();
+        assert_eq!(args[at + 1], "expr:gte(t,2466.000000+n_forced*6)");
+        let g = args.iter().position(|a| a == "-g").unwrap();
+        assert_eq!(args[g + 1], "100000", "no other keyframes");
+        assert!(
+            args.windows(2).any(|w| w == ["-forced-idr", "1"]),
+            "{args:?}"
+        );
+        params.video_codec = VideoCodec::H265;
+        let args = build_video_args(&params);
+        assert!(
+            args.contains(&"expr:gte(t,2466.000000+n_forced*6)".to_string()),
+            "{args:?}"
+        );
+        assert!(args.iter().any(|a| a.contains("scenecut=0")), "{args:?}");
+    }
+
+    #[test]
+    fn segment_files_carry_the_run_number() {
+        let mut params = default_params();
+        params.run = 3;
+        params.start_number = 20;
+        let args = build_hls_args(&params);
+        let at = args
+            .iter()
+            .position(|a| a == "-hls_segment_filename")
+            .unwrap();
+        assert_eq!(args[at + 1], "/tmp/transcode/session1/r3_%d.ts");
+        assert!(args.last().unwrap().ends_with("/r3.m3u8"));
+        assert!(args.windows(2).any(|w| w == ["-hls_time", "6"]), "{args:?}");
+        assert!(
+            args.windows(2).any(|w| w == ["-start_number", "20"]),
+            "{args:?}"
+        );
+    }
+
+    /// Copied video in MPEG-TS goes through the segment muxer, which cuts at
+    /// the given keyframe times wherever the run started.
+    #[test]
+    fn copied_ts_is_cut_at_the_given_keyframes() {
+        let mut params = default_params();
+        params.video_codec = VideoCodec::Copy;
+        params.run = 2;
+        params.start_number = 3;
+        params.cut = SegmentCut::At(vec![30.9995, 37.9995]);
+        let args = build_hls_args(&params);
+        assert!(args.windows(2).any(|w| w == ["-f", "segment"]), "{args:?}");
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["-segment_times", "30.9995,37.9995"]),
+            "{args:?}"
+        );
+        assert!(
+            args.windows(2).any(|w| w == ["-segment_start_number", "3"]),
+            "{args:?}"
+        );
+        let list = args.iter().position(|a| a == "-segment_list").unwrap();
+        assert_eq!(args[list + 1], "/tmp/transcode/session1/r2.csv");
+        assert_eq!(args.last().unwrap(), "/tmp/transcode/session1/r2_%d.ts");
+        // The last segment: nothing left to cut.
+        params.cut = SegmentCut::At(vec![]);
+        let args = build_hls_args(&params);
+        assert!(!args.contains(&"-segment_times".to_string()), "{args:?}");
+    }
+
+    /// Copied video in fMP4: the HLS muxer cuts at every keyframe.
+    #[test]
+    fn copied_fmp4_is_cut_at_every_keyframe() {
+        let mut params = default_params();
+        params.video_codec = VideoCodec::Copy;
+        params.segment_format = SegmentFormat::Fmp4;
+        params.cut = SegmentCut::EveryKeyframe;
+        let args = build_hls_args(&params);
+        assert!(
+            args.windows(2).any(|w| w == ["-hls_time", "0.01"]),
+            "{args:?}"
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["-hls_fmp4_init_filename", "r0_init.mp4"]),
+            "{args:?}"
+        );
+    }
+
+    /// The MPEG-TS muxer's default 1.4 s delay would put every segment's
+    /// times 1.4 s after the playlist's.
+    #[test]
+    fn timestamps_are_written_as_the_file_has_them() {
+        let args = build_ffmpeg_args(&default_params());
+        assert!(args.windows(2).any(|w| w == ["-muxdelay", "0"]), "{args:?}");
+        assert!(
+            args.windows(2).any(|w| w == ["-muxpreload", "0"]),
+            "{args:?}"
+        );
     }
 }
