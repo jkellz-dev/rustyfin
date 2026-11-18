@@ -31,7 +31,12 @@ const POSTER: &[u8] = b"\x89PNG-remote-poster";
 /// What the fake Jellyfin serves; tests change it between syncs.
 #[derive(Default)]
 struct Remote {
+    /// The "Films" library (lib1).
     films: Vec<Value>,
+    /// The "Home Videos" library (lib2).
+    videos: Vec<Value>,
+    /// The "Shows" library (lib3): series, seasons and episodes.
+    shows: Vec<Value>,
     /// Requests seen, as "METHOD path?query".
     seen: Vec<String>,
 }
@@ -103,8 +108,9 @@ async fn views(headers: HeaderMap, Query(q): Query<HashMap<String, String>>) -> 
     }
     axum::Json(json!({"Items": [
         {"Id": "lib1", "Name": "Films", "CollectionType": "movies"},
-        {"Id": "lib2", "Name": "Home Videos", "CollectionType": "homevideos"}
-    ], "TotalRecordCount": 2}))
+        {"Id": "lib2", "Name": "Home Videos", "CollectionType": "homevideos"},
+        {"Id": "lib3", "Name": "Shows", "CollectionType": "tvshows"}
+    ], "TotalRecordCount": 3}))
     .into_response()
 }
 
@@ -121,16 +127,36 @@ async fn items(
     keys.sort();
     r.seen.push(format!("GET /Items?{}", keys.join("&")));
     assert_eq!(q.get("userId").map(String::as_str), Some("u1"), "{q:?}");
-    let films: Vec<Value> = if let Some(ids) = q.get("Ids") {
+    let everything: Vec<Value> = r
+        .films
+        .iter()
+        .chain(&r.videos)
+        .chain(&r.shows)
+        .cloned()
+        .collect();
+    let (films, total): (Vec<Value>, usize) = if let Some(ids) = q.get("Ids") {
         let ids: Vec<&str> = ids.split(',').collect();
-        r.films
-            .iter()
+        let found: Vec<Value> = everything
+            .into_iter()
             .filter(|f| ids.contains(&f["Id"].as_str().unwrap()))
-            .cloned()
-            .collect()
+            .collect();
+        let n = found.len();
+        (found, n)
     } else {
-        assert_eq!(q.get("ParentId").map(String::as_str), Some("lib1"), "{q:?}");
-        assert_eq!(q.get("IncludeItemTypes").map(String::as_str), Some("Movie"));
+        let library = match q.get("ParentId").map(String::as_str) {
+            Some("lib1") => &r.films,
+            Some("lib2") => &r.videos,
+            Some("lib3") => &r.shows,
+            other => panic!("no library {other:?}"),
+        };
+        let types: Vec<&str> = q
+            .get("IncludeItemTypes")
+            .map(|t| t.split(',').collect())
+            .unwrap_or_default();
+        let matching: Vec<&Value> = library
+            .iter()
+            .filter(|f| types.contains(&f["Type"].as_str().unwrap()))
+            .collect();
         let start: usize = q
             .get("StartIndex")
             .and_then(|s| s.parse().ok())
@@ -139,14 +165,14 @@ async fn items(
             .get("Limit")
             .and_then(|s| s.parse().ok())
             .unwrap_or(usize::MAX);
-        r.films
+        let page = matching
             .iter()
             .skip(start)
             .take(limit)
-            .map(|f| json!({"Id": f["Id"], "Etag": f["Etag"], "Type": "Movie"}))
-            .collect()
+            .map(|f| json!({"Id": f["Id"], "Etag": f["Etag"], "Type": f["Type"]}))
+            .collect();
+        (page, matching.len())
     };
-    let total = r.films.len();
     axum::Json(json!({"Items": films, "TotalRecordCount": total})).into_response()
 }
 
@@ -237,7 +263,7 @@ fn settings(url: &str, password: &str) -> LinkSettings {
         password: password.into(),
         libraries: vec![LibraryMap {
             remote: "Films".into(),
-            local: "Movies".into(),
+            local: Some("Movies".into()),
         }],
     }
 }
@@ -605,17 +631,65 @@ async fn a_wrong_password_is_reported_and_nothing_changes() {
     app.cleanup().await;
 }
 
+/// A mapping that names a library the friend does not share, or a local
+/// library that does not exist, is an error for that mapping only: the rest
+/// of the link syncs, and nothing is removed while a mapping fails (its
+/// films might only be out of sight for a moment).
 #[tokio::test]
-async fn a_library_the_link_cannot_see_is_an_error_not_an_empty_sync() {
+async fn a_bad_mapping_skips_itself_and_removes_nothing() {
     let app = common::TestApp::new().await;
-    let (_tree, _lib, _local) = local_library(&app).await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, lib, _local) = local_library(&app).await;
     let remote: Shared = Default::default();
-    let url = fake_jellyfin(remote).await;
+    remote.lock().unwrap().films = vec![film("r200", "Only Theirs", "200", "e1", 1920, 1080)];
+    let url = fake_jellyfin(remote.clone()).await;
     let mut s = settings(&url, "secret");
-    s.libraries[0].remote = "Missing".into();
+    s.libraries.push(LibraryMap {
+        remote: "Missing".into(),
+        local: Some("Movies".into()),
+    });
+    s.libraries.push(LibraryMap {
+        remote: "Films".into(),
+        local: Some("Nope".into()),
+    });
     let link = app.links.register(&app.pool, s).await.unwrap();
-    let err = app.links.sync(&app.pool, link).await.unwrap_err();
-    assert!(err.to_string().contains("Missing"), "{err}");
+    let report = app
+        .links
+        .sync(&app.pool, link)
+        .await
+        .expect("the rest syncs");
+    assert_eq!(report.added, 1, "{report:?}");
+    assert_eq!(report.errors.len(), 2, "{report:?}");
+    assert!(
+        report.errors.iter().any(|e| e.contains("Missing")),
+        "{report:?}"
+    );
+    assert!(
+        report.errors.iter().any(|e| e.contains("Nope")),
+        "{report:?}"
+    );
+    let error: Option<String> = sqlx::query_scalar("SELECT last_error FROM links WHERE id = $1")
+        .bind(link)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert!(error.is_some_and(|e| e.contains("Missing")));
+    let no_nope: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM libraries WHERE name = 'Nope'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(no_nope, 0, "a misspelt local library is not made");
+
+    remote.lock().unwrap().films.clear();
+    let report = app.links.sync(&app.pool, link).await.expect("sync again");
+    assert_eq!(report.removed, 0, "{report:?}");
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
     app.cleanup().await;
 }
 
@@ -703,5 +777,271 @@ async fn every_version_of_a_friends_film_is_a_copy() {
             .is_some_and(|s| s.len() == 1),
         "{item}"
     );
+    app.cleanup().await;
+}
+
+fn video(id: &str, name: &str) -> Value {
+    let mut v = film(id, name, "", "e1", 1280, 720);
+    v["Type"] = json!("Video");
+    v["ProviderIds"] = json!({});
+    v
+}
+
+/// A friend's library with no local counterpart (owner, 2026-11-18): a
+/// mapping with no `local` makes a library of its own, named for the
+/// friend's, with no folders. Home videos (Jellyfin `Video` items) come
+/// across too.
+#[tokio::test]
+async fn a_friends_library_without_a_local_one_gets_its_own() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, _lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    remote.lock().unwrap().videos = vec![video("v1", "Birthday 2019"), video("v2", "Beach")];
+    let url = fake_jellyfin(remote.clone()).await;
+    let mut s = settings(&url, "secret");
+    s.libraries = vec![LibraryMap {
+        remote: "Home Videos".into(),
+        local: None,
+    }];
+    let link = app.links.register(&app.pool, s.clone()).await.unwrap();
+    let report = app.links.sync(&app.pool, link).await.expect("sync");
+    assert_eq!(report.added, 2, "{report:?}");
+
+    let (_, views) = app.get(&format!("/Users/{uid}/Views"), &token).await;
+    let view = views["Items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{views}"))
+        .iter()
+        .find(|v| v["Name"] == "Home Videos · Alex")
+        .unwrap_or_else(|| panic!("a library of its own: {views}"))
+        .clone();
+    let shorts = view["Id"].as_str().unwrap().to_string();
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={shorts}&Recursive=true"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&list), vec!["Beach", "Birthday 2019"], "{list}");
+
+    // It has no folders: a scan of it leaves the friend's videos alone.
+    let id = Uuid::parse_str(&shorts).unwrap();
+    LibraryScanner::new(app.pool.clone(), None)
+        .scan(id, &[])
+        .await
+        .expect("scan");
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={shorts}&Recursive=true"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&list), vec!["Beach", "Birthday 2019"], "{list}");
+
+    // The same library is used again, not a second one.
+    app.links.register(&app.pool, s).await.unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync again");
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM libraries WHERE name = 'Home Videos · Alex'")
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    app.cleanup().await;
+}
+
+fn series(id: &str, name: &str, tvdb: &str) -> Value {
+    json!({"Id": id, "Name": name, "Type": "Series", "ProductionYear": 2020,
+           "Overview": format!("{name} overview"),
+           "ProviderIds": {"Tvdb": tvdb}, "Etag": "e1"})
+}
+
+fn season(id: &str, series: &str, index: i32) -> Value {
+    json!({"Id": id, "Name": format!("Season {index}"), "Type": "Season",
+           "IndexNumber": index, "SeriesId": series, "ParentId": series,
+           "ProviderIds": {}, "Etag": "e1"})
+}
+
+fn episode(id: &str, series: &str, season: &str, s: i32, e: i32, height: i32) -> Value {
+    let mut ep = film(
+        id,
+        &format!("Episode {s}x{e}"),
+        "",
+        "e1",
+        height * 16 / 9,
+        height,
+    );
+    ep["Type"] = json!("Episode");
+    ep["ProviderIds"] = json!({});
+    ep["IndexNumber"] = json!(e);
+    ep["ParentIndexNumber"] = json!(s);
+    ep["SeriesId"] = json!(series);
+    ep["SeasonId"] = json!(season);
+    ep["ParentId"] = json!(season);
+    ep
+}
+
+/// A Shows library holding "Show" (TVDB 1) with S01E01 at 1080p.
+async fn local_shows(app: &common::TestApp) -> (Tree, Uuid, Uuid, Uuid, Uuid) {
+    let dir = std::env::temp_dir().join(format!("rustyfin-link-shows-{}", Uuid::new_v4()));
+    let file = dir.join("Show (2020)/Season 01/Show S01E01.mkv");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, b"local-episode").unwrap();
+    let root = dir.to_string_lossy().to_string();
+    let lib: Uuid = sqlx::query_scalar(
+        "INSERT INTO libraries (name, library_type, paths) VALUES ('Shows', 'tvshows', ARRAY[$1]) RETURNING id",
+    )
+    .bind(&root)
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    LibraryScanner::new(app.pool.clone(), None)
+        .scan(lib, &[root])
+        .await
+        .expect("scan");
+    let (episode, season, series): (Uuid, Uuid, Uuid) =
+        sqlx::query_as("SELECT id, season_id, series_id FROM media_items WHERE path = $1")
+            .bind(file.to_string_lossy().to_string())
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+    media_items::add_external_ids(&app.pool, series, &json!({"Tvdb": "1"}))
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO media_streams (item_id, stream_index, stream_type, codec, width, height, is_default) \
+         VALUES ($1, 0, 'Video', 'h264', 1920, 1080, true)",
+    )
+    .bind(episode)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    (Tree(dir), lib, series, season, episode)
+}
+
+fn shows_settings(url: &str) -> LinkSettings {
+    let mut s = settings(url, "secret");
+    s.libraries = vec![LibraryMap {
+        remote: "Shows".into(),
+        local: Some("Shows".into()),
+    }];
+    s
+}
+
+/// TV shows merge by series id, then season and episode numbers: a show the
+/// server holds gains the friend's episodes and seasons it lacks, and the
+/// friend's copy of an episode it holds; a show it lacks is listed whole.
+#[tokio::test]
+async fn a_friends_shows_merge_into_the_local_ones() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, lib, series_id, season_id, episode_id) = local_shows(&app).await;
+    let remote: Shared = Default::default();
+    remote.lock().unwrap().shows = vec![
+        series("s1", "Show", "1"),
+        season("s1a", "s1", 1),
+        season("s1b", "s1", 2),
+        episode("e11", "s1", "s1a", 1, 1, 2160),
+        episode("e12", "s1", "s1a", 1, 2, 1080),
+        episode("e21", "s1", "s1b", 2, 1, 1080),
+        series("s2", "Their Show", "2"),
+        season("s2a", "s2", 1),
+        episode("e31", "s2", "s2a", 1, 1, 720),
+    ];
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(&app.pool, shows_settings(&url))
+        .await
+        .unwrap();
+    let report = app.links.sync(&app.pool, link).await.expect("sync");
+    assert_eq!(report.added, 9, "{report:?}");
+
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Series"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&list), vec!["Show", "Their Show"], "{list}");
+
+    let (_, seasons) = app
+        .get(&format!("/Shows/{series_id}/Seasons?UserId={uid}"), &token)
+        .await;
+    assert_eq!(names(&seasons), vec!["Season 1", "Season 2"], "{seasons}");
+
+    let (_, eps) = app
+        .get(
+            &format!("/Shows/{series_id}/Episodes?UserId={uid}&SeasonId={season_id}"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&eps), vec!["Episode 1x2", "Show S01E01"], "{eps}");
+    let (_, all) = app
+        .get(&format!("/Shows/{series_id}/Episodes?UserId={uid}"), &token)
+        .await;
+    assert_eq!(all["Items"].as_array().map(Vec::len), Some(3), "{all}");
+    let friends_s2 = all["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["Name"] == "Episode 2x1")
+        .unwrap_or_else(|| panic!("{all}"));
+    assert!(same(&friends_s2["SeriesId"], series_id), "{friends_s2}");
+    assert_eq!(friends_s2["SeriesName"], "Show", "{friends_s2}");
+
+    // The episode both hold: one episode, the friend's 2160p copy first.
+    let (_, ep) = app
+        .get(&format!("/Users/{uid}/Items/{episode_id}"), &token)
+        .await;
+    let sources = ep["MediaSources"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{ep}"));
+    assert_eq!(sources.len(), 2, "{ep}");
+    assert!(
+        sources[0]["Name"]
+            .as_str()
+            .is_some_and(|n| n.contains("Alex")),
+        "{ep}"
+    );
+    assert!(same(&sources[1]["Id"], episode_id), "{ep}");
+
+    // Their own show is whole: its season, its episode, played through here.
+    let theirs = list["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["Name"] == "Their Show")
+        .unwrap()["Id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, their_eps) = app
+        .get(&format!("/Shows/{theirs}/Episodes?UserId={uid}"), &token)
+        .await;
+    assert_eq!(names(&their_eps), vec!["Episode 1x1"], "{their_eps}");
+    assert_eq!(
+        their_eps["Items"][0]["SeriesName"], "Their Show",
+        "{their_eps}"
+    );
+    let their_ep = their_eps["Items"][0]["Id"].as_str().unwrap().to_string();
+    let (status, _, bytes) = app
+        .get_bytes(&format!("/Videos/{their_ep}/stream?static=true"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, FILM_BYTES);
+
+    // The friend drops S01E02: the season keeps the local episode only.
+    remote.lock().unwrap().shows.retain(|i| i["Id"] != "e12");
+    let report = app.links.sync(&app.pool, link).await.expect("sync again");
+    assert_eq!(report.removed, 1, "{report:?}");
+    let (_, eps) = app
+        .get(
+            &format!("/Shows/{series_id}/Episodes?UserId={uid}&SeasonId={season_id}"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&eps), vec!["Show S01E01"], "{eps}");
     app.cleanup().await;
 }
