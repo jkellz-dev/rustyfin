@@ -82,7 +82,8 @@ mod tests {
                 "/web/libraries",
                 "/web/media",
                 "/web/users",
-                "/web/tasks"
+                "/web/tasks",
+                "/web/links"
             ]
         );
     }
