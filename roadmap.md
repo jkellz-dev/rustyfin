@@ -1580,6 +1580,48 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
 
 ---
 
+## Phase 17 — Deployment Targets (owner, 2026-11-18)
+
+### 17a. Synology NAS
+
+A way to run Rustyfin on a Synology NAS with as little hand work as Jellyfin's Synology install. The NAS holds the
+media already, so the server runs beside it and reads it in place.
+
+Design, settled before any code:
+
+- **First: DSM 7.2+ Container Manager project.** A `deploy/synology/` folder with a `compose.yaml` that Container
+  Manager imports as a project: Rustyfin (the published `linux/amd64` and `linux/arm64` image), Postgres, and the
+  sign-in piece (below). Media folders mounted read-only (`/volume1/video:/media/video:ro`), config and cache in a
+  project folder on the NAS (`/volume1/docker/rustyfin`), the user and group ids of a DSM user that can read the media
+  (`PUID`/`PGID`). No native package until the container route works.
+- **Sign-in on a NAS.** DSM's reverse proxy cannot do forward auth, so the project brings its own, chosen from:
+  - LDAPS against DSM's own LDAP Server package (NAS accounts sign in to Rustyfin; no extra service);
+  - a small forward-auth proxy (Authelia behind Caddy) in the project;
+  - Tailscale (the Synology Tailscale package, or a sidecar with `tailscale serve` identity headers).
+
+  Open question for the owner: which is the default. The other two get a section in the guide.
+- **Hardware transcoding.** Intel-based models expose `/dev/dri`: the project passes it through for VAAPI/QSV and the
+  guide says how to check it works; models without it transcode on the CPU.
+- **Which models.** x86-64 and ARMv8 (the published images); 32-bit ARM models are out (no image, and too slow to
+  transcode). The guide lists the DSM version and Container Manager it was tested with.
+- **Later, maybe: a native SPK package** (built with `spksrc`, Package Center install, Postgres bundled or required).
+  Only if the container route proves too hard for NAS owners; it needs per-architecture builds and DSM's package
+  signing.
+
+Work:
+
+- [ ] `deploy/synology/compose.yaml` and an example `rustyfin.toml` for the project (media read-only, Postgres with a
+      volume, health checks, restart policy)
+- [ ] The default sign-in option wired into the compose file; the other two documented
+- [ ] `/dev/dri` pass-through and `hardware_acceleration` set for Intel models
+- [ ] `docs/synology.md`: prerequisites (DSM version, Container Manager, a shared folder for the project), importing
+      the project, permissions on the media shared folders, first sign-in, upgrades (pull and rebuild the project),
+      backups (Postgres dump and the project folder), troubleshooting
+- [ ] Checked on a real Synology (the owner's, or a DSM virtual machine): import, scan, play, transcode, upgrade
+- [ ] README and Getting Started point to it
+
+---
+
 ## Current Maturity Summary
 
 | Area | Status | Notes |
