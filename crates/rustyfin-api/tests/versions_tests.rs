@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 use axum::http::StatusCode;
 use rustyfin_core::LibraryScanner;
+use rustyfin_db::repo::media_streams::{self, NewMediaStream};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -254,5 +255,97 @@ async fn a_collection_lists_a_film_with_versions_once() {
     assert_eq!(ids.iter().filter(|v| same(v, film)).count(), 1, "{films}");
     let other = id_of(&app, &t.path(WEBDL)).await;
     assert!(!ids.iter().any(|v| same(v, other)), "{films}");
+    app.cleanup().await;
+}
+
+fn video_stream(item_id: Uuid, width: i32, height: i32, codec: &str) -> NewMediaStream {
+    NewMediaStream {
+        item_id,
+        stream_index: 0,
+        stream_type: "Video".into(),
+        codec: Some(codec.into()),
+        language: None,
+        title: None,
+        is_default: true,
+        is_forced: false,
+        is_external: false,
+        width: Some(width),
+        height: Some(height),
+        bit_rate: Some(10_000_000),
+        bit_depth: Some(8),
+        pixel_format: Some("yuv420p".into()),
+        aspect_ratio: None,
+        real_frame_rate: Some(24.0),
+        color_space: None,
+        color_primaries: None,
+        color_transfer: None,
+        channels: None,
+        channel_layout: None,
+        sample_rate: None,
+        profile: None,
+        level: None,
+        codec_tag: None,
+        time_base: None,
+        ref_frames: None,
+        nal_length_size: None,
+        is_interlaced: false,
+        path: None,
+    }
+}
+
+/// Owner, 2026-11-18: the highest quality copy plays by default. Here the
+/// second file (by name the lesser one) is the 2160p copy, so it comes first
+/// everywhere and plays when no copy is named.
+#[tokio::test]
+async fn the_best_copy_comes_first_and_plays_by_default() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let t = tree();
+    let lib = library(&app, &t.root()).await;
+    scan(&app, lib, &t.root()).await;
+    let film = id_of(&app, &t.path(BLURAY)).await;
+    let other = id_of(&app, &t.path(WEBDL)).await;
+    for stream in [
+        video_stream(film, 1920, 1080, "h264"),
+        video_stream(other, 3840, 2160, "hevc"),
+    ] {
+        media_streams::insert(&app.pool, &stream).await.unwrap();
+    }
+
+    let (_, item) = app.get(&format!("/Users/{uid}/Items/{film}"), &token).await;
+    let sources = item["MediaSources"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{item}"));
+    assert!(same(&sources[0]["Id"], other), "{item}");
+    assert!(same(&sources[1]["Id"], film), "{item}");
+
+    let (_, info) = app
+        .post(
+            &format!("/Items/{film}/PlaybackInfo?UserId={uid}"),
+            &json!({}),
+            &token,
+        )
+        .await;
+    let sources = info["MediaSources"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{info}"));
+    assert_eq!(sources.len(), 2, "{info}");
+    assert!(same(&sources[0]["Id"], other), "{info}");
+
+    let (status, _, bytes) = app
+        .get_bytes(&format!("/Videos/{film}/stream?static=true"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, b"web", "no copy named: the best plays");
+    let (_, _, bytes) = app
+        .get_bytes(
+            &format!(
+                "/Videos/{film}/stream?static=true&MediaSourceId={}",
+                film.simple()
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(bytes, b"bluray", "the one named plays");
     app.cleanup().await;
 }
