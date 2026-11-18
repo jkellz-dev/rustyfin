@@ -660,6 +660,33 @@ mod tests {
     }
 
     #[test]
+    fn the_browsers_own_controls_drive_a_video_played_directly() {
+        // A file played directly: its timeline is the film's.
+        assert!(native_controls(false, false));
+        // A transcode's timeline starts where it did and grows as it is
+        // made; the admin's controls seek by restarting it.
+        assert!(!native_controls(false, true));
+        // Music keeps the admin's bar (queue, art); its element is hidden.
+        assert!(!native_controls(true, false));
+        assert!(!native_controls(true, true));
+    }
+
+    #[test]
+    fn chapters_read_as_a_menu() {
+        let marks = vec![
+            (0.0, "Opening".to_string(), 0.0),
+            (50.0, "The prom".to_string(), 3600.0),
+        ];
+        assert_eq!(
+            chapter_menu(&marks),
+            vec![
+                ("0".to_string(), "0:00 Opening".to_string()),
+                ("3600".to_string(), "1:00:00 The prom".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn full_screen_takes_the_page_where_it_can_else_the_phones_own_player() {
         // Desktop browsers and iPad: the player's own page goes full screen.
         assert_eq!(fullscreen_way(true, true), FullscreenWay::Page);
