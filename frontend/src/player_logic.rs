@@ -628,6 +628,20 @@ mod tests {
     }
 
     #[test]
+    fn full_screen_takes_the_page_where_it_can_else_the_phones_own_player() {
+        // Desktop browsers and iPad: the player's own page goes full screen.
+        assert_eq!(fullscreen_way(true, true), FullscreenWay::Page);
+        assert_eq!(fullscreen_way(true, false), FullscreenWay::Page);
+        // iPhone: only the video can, in iOS's own player with its controls.
+        assert_eq!(fullscreen_way(false, true), FullscreenWay::NativeVideo);
+        assert_eq!(fullscreen_way(false, false), FullscreenWay::None);
+        // The phone's own player plays the video at once; inline only elsewhere.
+        assert!(!FullscreenWay::NativeVideo.plays_inline());
+        assert!(FullscreenWay::Page.plays_inline());
+        assert!(FullscreenWay::None.plays_inline());
+    }
+
+    #[test]
     fn hls_js_comes_first_and_native_hls_is_the_fallback() {
         assert_eq!(hls_way(true, true), Some(HlsWay::Script));
         assert_eq!(hls_way(true, false), Some(HlsWay::Script));
