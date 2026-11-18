@@ -106,3 +106,16 @@ schedule = "weekly"
 [tasks.image_cache_prune]
 schedule = "weekly"
 max_age_days = 30                              # Delete cached resized images older than this
+
+# ── Linked servers ────────────────────────────────────────
+# A friend's Jellyfin or Rustyfin shares libraries; their films merge into
+# yours (docs/linked-servers.md). One [[link]] per friend.
+# [[link]]
+# name = "Alex"                                # Shown beside their copies
+# kind = "jellyfin"                            # "jellyfin" or "rustyfin"
+# url = "https://jellyfin.alex.example"
+# user = "link-for-sam"                        # A user that sees only the shared libraries
+# password_file = "/run/secrets/alex-link"     # Or: password = "..."
+# [[link.libraries]]
+# remote = "Films"                             # The friend's library, by name
+# local = "Movies"                             # Yours, by name

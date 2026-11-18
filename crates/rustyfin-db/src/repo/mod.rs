@@ -6,6 +6,7 @@ pub mod device_auth;
 pub mod display_preferences;
 pub mod images;
 pub mod libraries;
+pub mod links;
 pub mod media_items;
 pub mod media_streams;
 pub mod people;

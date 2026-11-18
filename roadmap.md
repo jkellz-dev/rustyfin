@@ -1485,11 +1485,16 @@ Design, settled before any code:
 
 #### 16b.2 Jellyfin links (any current Jellyfin server)
 
-- [ ] A link client for the Jellyfin API: sign in as the link user, list the libraries it can see, page items with
-      provider ids, media streams, parent links and sort fields, and fetch images, chapters and subtitles
-- [ ] Sync: a full pull first, then `MinDateLastSaved` polls; removals from `LibraryChanged` on the WebSocket, plus a
-      periodic id list; checked against a sandbox Jellyfin (the parity setup already runs one)
-- [ ] Re-sign-in when the token is revoked, shown as a link error in the admin
+- [x] A link client for the Jellyfin API (`rustyfin-core/src/link/`): sign in as the link user, list the libraries
+      it can see, page films with their tags, fetch details (provider ids, media streams, sort fields), relay streams
+      and images; signs in again once when the token was revoked
+- [x] Sync (films): list every film with its `Etag` (light), fetch details only of new and changed ones, remove the
+      ones gone, then merge. This replaces the `MinDateLastSaved` and WebSocket plan: one id list per sync catches
+      removals too, and costs little. Every 15 minutes and 30 s after start; the result is recorded on the link.
+- [x] Films only, first media source only; external subtitles, chapters and people are not taken yet
+- [ ] Checked against the sandbox's real Jellyfin 10.10.7
+- [ ] Series, seasons and episodes
+- [ ] Link errors and last sync shown in the admin
 
 #### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 
@@ -1504,12 +1509,13 @@ Design, settled before any code:
 
 #### 16b.3 The home side: following a linked server
 
-- [ ] Link config in the TOML file: name, kind (`jellyfin` or `rustyfin`), URL, credential (the link user, or a
-      link key), and which of the friend's libraries map to which local library. Checked at startup.
+- [x] Link config in the TOML file (`[[link]]`): name, kind (`jellyfin` or `rustyfin`), URL, the link user and its
+      password (or `password_file`), and which of the friend's libraries map to which local library
 - [ ] The kind can be detected (`/System/Info/Public` names the product), so a friend who moves from Jellyfin to
       Rustyfin can switch to the faster sync without re-mapping
-- [ ] Tables for linked items and streams, keyed by (link, remote id), never mixed with local `media_items`. Remote
-      ids are namespaced, so they never collide with local ones.
+- [x] A linked copy is a `media_items` row with `link_id`, `remote_id` and `remote_etag` and no path (changed from
+      separate tables, 2026-11-18: every browse route, count, search and watched state then works on linked films
+      with no new code, and the scan's pruning never touches rows without paths). Ids are local UUIDs.
 - [ ] Sync job: first full pull, then the change feed on a schedule and on demand; tombstones remove items; progress
       and errors on the dashboard; metrics per link (items, lag, failures, latency)
 - [ ] Health: a link that is down marks its copies unavailable. An item with no reachable copy is hidden, or shown
@@ -1517,9 +1523,10 @@ Design, settled before any code:
 
 #### 16b.4 Merging
 
-- [ ] Match by provider id (films and series), and by series id plus season and episode (episodes and seasons). A
-      persistent merge table gives each merged group a stable home id, so ids survive re-syncs and links being added
-      or removed.
+- [x] Films match by provider id (TMDB or IMDb): a linked copy becomes a `Version` of the local film, or of
+      another friend's copy of a film the server lacks. Stable ids: the local film keeps its id; a linked copy keeps
+      its row across syncs.
+- [ ] Series and seasons by provider id, episodes by series plus season and episode numbers
 - [ ] An item matched to several items on one server, or carrying conflicting provider ids, is never merged; it is
       listed in an admin "conflicts" view
 - [ ] Series and seasons merge too, so one show lists episodes from both servers, each episode with its copies
@@ -1538,8 +1545,11 @@ Design, settled before any code:
 #### 16b.6 Playback
 
 - [ ] `PlaybackInfo` for a merged item lists all reachable copies best first, each with its own `MediaSourceId`
-- [ ] Direct play of a linked copy: the home server relays byte ranges from the linked server (Range, ETag, If-Range
-      passed through)
+- [x] Direct play of a linked copy: the home server relays byte ranges from the linked server (Range, If-Range
+      forwarded; Content-Range, ETag, Last-Modified passed back); posters and backdrops relayed, sized by the friend's
+      server
+- [x] `PlaybackInfo` offers no transcode for a linked copy until relayed transcodes land, and lists a copy the client
+      cannot play as is after every copy it can
 - [ ] Transcode of a linked copy: `PlaybackInfo`, the HLS playlist and segments relayed from the linked server, which
       runs ffmpeg; addresses rewritten to the home server's
 - [ ] Progress and stop reports update the home user's state; the linked server only sees the link's session

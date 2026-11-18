@@ -28,6 +28,9 @@ use rustyfin_db::pool;
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_search::SearchService;
 
+/// How often linked servers are synced.
+const LINK_SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
@@ -297,6 +300,30 @@ async fn main() -> anyhow::Result<()> {
 
     // Build application state
     let cors_origins = config.server.cors_allowed_origins.clone();
+    // Linked servers (roadmap 16b): registered now, synced shortly after
+    // start and then every LINK_SYNC_INTERVAL.
+    let links = Arc::new(rustyfin_core::link::Links::default());
+    for link in &config.links {
+        match link.settings() {
+            Ok(settings) => match links.register(&db_pool, settings).await {
+                Ok(_) => tracing::info!("Link {} to {}", link.name, link.url),
+                Err(e) => tracing::error!("Link {}: {e:#}", link.name),
+            },
+            Err(e) => tracing::error!("{e:#}"),
+        }
+    }
+    if !config.links.is_empty() {
+        let links = links.clone();
+        let pool = db_pool.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            loop {
+                links.sync_all(&pool).await;
+                tokio::time::sleep(LINK_SYNC_INTERVAL).await;
+            }
+        });
+    }
+
     let state = AppState {
         pool: db_pool,
         server_id,
@@ -317,6 +344,7 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler: task_scheduler_for_state,
         login_limiter: Default::default(),
         shutdown: shutdown.clone(),
+        links,
     };
 
     // Same-origin unless origins are allowlisted (owner decision 2026-11-14).

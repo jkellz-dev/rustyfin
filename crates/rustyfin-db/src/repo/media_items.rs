@@ -57,6 +57,14 @@ pub struct MediaItemRow {
     /// A track's lyrics were found by the scan (None: not looked at yet).
     #[sqlx(default)]
     pub has_lyrics: Option<bool>,
+    /// A linked server's copy (roadmap 16b): the link, and the item's id and
+    /// tag there. Linked copies have no path.
+    #[sqlx(default)]
+    pub link_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub remote_id: Option<String>,
+    #[sqlx(default)]
+    pub remote_etag: Option<String>,
 }
 
 /// Record whether a track has lyrics.

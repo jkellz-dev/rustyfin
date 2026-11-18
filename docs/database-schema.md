@@ -124,10 +124,28 @@ Central media catalog. Self-referencing hierarchy: Library → Series → Season
 | `etag` | TEXT | Yes | | Content hash |
 | `presentation_unique_key` | TEXT | Yes | | Unique key for deduplication |
 | `external_ids` | JSONB | Yes | | TMDB/TVDB/IMDb IDs |
-| `extra_data` | JSONB | Yes | | Additional metadata |
+| `extra_data` | JSONB | Yes | | Additional metadata (a linked copy: `LinkName`, `LinkSource`, `RemoteSourceId`) |
+| `link_id` | UUID | Yes | | A linked server's copy: FK to `links.id` (CASCADE); such rows have no `path` |
+| `remote_id` | TEXT | Yes | | The copy's item id on the linked server; unique per link |
+| `remote_etag` | TEXT | Yes | | The linked server's `Etag` when last synced; NULL until fully stored |
 
 **Indexes**: `idx_media_items_type`, `idx_media_items_parent`, `idx_media_items_library`, `idx_media_items_series`,
 `idx_media_items_path`, `idx_media_items_name`, `idx_media_items_presentation_key`
+
+### `links`
+
+Linked servers (`[[link]]` in the config file; [Linked Servers](linked-servers.md)). Their copies are `media_items`
+rows with `link_id`; a copy of a film the server holds is a `Version` of it (`owner_id`).
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | UUID | No | `gen_random_uuid()` | Primary key |
+| `name` | TEXT | No | | The link's name from the config (unique) |
+| `kind` | TEXT | No | | `jellyfin` or `rustyfin` |
+| `url` | TEXT | No | | The friend's server |
+| `last_sync_at` | TIMESTAMPTZ | Yes | | When the last sync that worked ended |
+| `last_error` | TEXT | Yes | | Why the last sync failed; NULL after one that worked |
+| `created_at` | TIMESTAMPTZ | No | `now()` | |
 
 ### `media_streams`
 
@@ -276,6 +294,7 @@ Server activity audit trail.
 ## Cascade Behavior
 
 - Deleting a **library** cascades to all its `media_items`
+- Deleting a **link** cascades to its copies (`media_items.link_id`)
 - Deleting a **media_item** cascades to its `media_streams`, `images`, `chapters`, `user_data`, `media_item_people`, and
   child `media_items`
 - Deleting a **user** cascades to their `sessions`, `user_data`, and `images`

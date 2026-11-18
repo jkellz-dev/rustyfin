@@ -98,6 +98,10 @@ async fn head_stream_inner(state: &AppState, item_id: Uuid) -> Result<Response, 
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
+    if item.link_id.is_some() {
+        let kind = mime_from_path(&format!(".{}", item.container.as_deref().unwrap_or("")));
+        return Ok(super::link_relay::head(&item, kind));
+    }
 
     let path = item.path.ok_or(ApiError::NotFound)?;
     let metadata = tokio::fs::metadata(&path)
@@ -129,6 +133,9 @@ async fn serve_item_file(
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
 
+    if item.link_id.is_some() {
+        return super::link_relay::stream(state, &item, headers).await;
+    }
     let path = item.path.ok_or(ApiError::NotFound)?;
     streaming::serve_file(&path, headers)
         .await

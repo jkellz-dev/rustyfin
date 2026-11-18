@@ -376,6 +376,21 @@ pub(crate) async fn serve_image(
     state: &AppState,
     req: &ImageRequest<'_>,
 ) -> Result<Response, ApiError> {
+    if source_path.starts_with(rustyfin_core::link::LINK_SCHEME) {
+        let cache_control = if req.tag.is_some() {
+            CACHE_TAGGED
+        } else {
+            CACHE_UNTAGGED
+        };
+        return super::link_relay::image(
+            state,
+            source_path,
+            opts,
+            |etag| etag_matches(req.if_none_match, etag),
+            cache_control,
+        )
+        .await;
+    }
     let meta = tokio::fs::metadata(source_path)
         .await
         .map_err(|_| ApiError::NotFound)?;

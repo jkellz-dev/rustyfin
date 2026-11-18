@@ -45,6 +45,8 @@ pub struct AppState {
     pub shutdown: Arc<tokio::sync::Notify>,
     /// Failed password logins, per name and per address (roadmap 11e).
     pub login_limiter: Arc<crate::login_limit::LoginLimiter>,
+    /// Linked servers, whose copies this server relays (roadmap 16b).
+    pub links: Arc<rustyfin_core::link::Links>,
 }
 
 impl FromRef<AppState> for PgPool {

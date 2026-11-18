@@ -4,10 +4,12 @@
 //! tracks, its enrichment pass, scan schedules and tasks, and the scan
 //! progress board clients hear about over the WebSocket. [`session`]: who
 //! is connected and what they are playing, and the commands sent to them.
-//! [`image`]: resizing and caching of artwork.
+//! [`image`]: resizing and caching of artwork. [`link`]: linked servers,
+//! whose shared libraries merge into this one's.
 
 pub mod image;
 pub mod library;
+pub mod link;
 pub mod session;
 
 pub use library::EnrichmentService;

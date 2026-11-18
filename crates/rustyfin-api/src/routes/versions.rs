@@ -93,6 +93,9 @@ pub(crate) fn is_version_of(row: &media_items::MediaItemRow, film: Uuid) -> bool
 /// A version's name as a media source: its label (`[Bluray-1080p]`), else the
 /// file's name.
 pub(crate) fn source_name(item: &media_items::MediaItemRow) -> Option<String> {
+    if item.link_id.is_some() {
+        return linked_name(item);
+    }
     let path = std::path::Path::new(item.path.as_deref()?);
     rustyfin_core::naming::version_label(path)
         .filter(|l| !l.is_empty())
@@ -101,6 +104,25 @@ pub(crate) fn source_name(item: &media_items::MediaItemRow) -> Option<String> {
                 .and_then(|s| s.to_str())
                 .map(str::to_string)
         })
+}
+
+/// A linked copy is named for the friend's server: "2160p · Alex".
+fn linked_name(item: &media_items::MediaItemRow) -> Option<String> {
+    let data = item.extra_data.as_ref()?;
+    let link = data["LinkName"].as_str()?;
+    match data["LinkSource"].as_str().filter(|s| !s.is_empty()) {
+        Some(source) => Some(format!("{source} · {link}")),
+        None => Some(link.to_string()),
+    }
+}
+
+/// A linked copy plays as is: this server has no file to convert, so it
+/// offers no transcode (relayed transcodes are roadmap 16b.6).
+fn mark_linked(source: &mut rustyfin_models::dto::MediaSourceInfo) {
+    source.supports_transcoding = false;
+    source.supports_direct_stream = false;
+    source.transcoding_url = None;
+    source.path = None;
 }
 
 /// Give films with versions one media source per version (the best first;
@@ -167,6 +189,12 @@ pub(crate) async fn add_playback_versions(
     profile: Option<&DeviceProfile>,
     reveal_path: bool,
 ) -> Result<(), ApiError> {
+    if item.link_id.is_some() {
+        info.media_sources.iter_mut().for_each(mark_linked);
+        for source in &mut info.media_sources {
+            source.name = source_name(item).or(source.name.take());
+        }
+    }
     if item.item_type != "Movie" || item.owner_id.is_some() {
         return Ok(());
     }
@@ -201,18 +229,25 @@ pub(crate) async fn add_playback_versions(
             if reveal_path {
                 source.path = version.path.clone();
             }
+            if version.link_id.is_some() {
+                mark_linked(&mut source);
+            }
             info.media_sources.push(source);
         }
     }
-    // Best first; stable, so on a tie the film's own file stays first.
+    // Best first; stable, so on a tie the film's own file stays first. A
+    // copy that cannot play here at all (a linked one this client cannot
+    // play as is) goes after every copy that can.
     let rank = |id: &str| {
         Uuid::parse_str(id)
             .ok()
             .and_then(|u| ranks.get(&u.simple().to_string()).copied())
             .unwrap_or_default()
     };
-    info.media_sources
-        .sort_by_cached_key(|s| std::cmp::Reverse(rank(&s.id)));
+    info.media_sources.sort_by_cached_key(|s| {
+        let playable = s.supports_direct_play || s.supports_direct_stream || s.supports_transcoding;
+        std::cmp::Reverse((playable, rank(&s.id)))
+    });
     if let Some(wanted) = request
         .and_then(|r| r.media_source_id.as_deref())
         .and_then(|s| Uuid::parse_str(s.trim()).ok())

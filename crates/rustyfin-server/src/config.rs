@@ -21,6 +21,65 @@ pub struct Config {
     pub tasks: TasksConfig,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    /// Linked servers (`[[link]]`, roadmap 16b; docs/linked-servers.md).
+    #[serde(default, rename = "link")]
+    pub links: Vec<LinkConfig>,
+}
+
+/// One `[[link]]`: a friend's server whose shared libraries merge into this
+/// one's.
+#[derive(Clone, Deserialize)]
+pub struct LinkConfig {
+    pub name: String,
+    pub kind: rustyfin_core::link::LinkKind,
+    pub url: String,
+    pub user: String,
+    /// The link user's password, or `password_file` naming a file that holds
+    /// it (a mounted secret).
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub password_file: Option<String>,
+    #[serde(default)]
+    pub libraries: Vec<rustyfin_core::link::LibraryMap>,
+}
+
+impl std::fmt::Debug for LinkConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LinkConfig")
+            .field("name", &self.name)
+            .field("kind", &self.kind)
+            .field("url", &self.url)
+            .field("user", &self.user)
+            .field("password_file", &self.password_file)
+            .field("libraries", &self.libraries)
+            .finish_non_exhaustive()
+    }
+}
+
+impl LinkConfig {
+    /// The settings the link runs on, its password read.
+    pub fn settings(&self) -> anyhow::Result<rustyfin_core::link::LinkSettings> {
+        let password = match (&self.password, &self.password_file) {
+            (Some(p), None) => p.clone(),
+            (None, Some(file)) => std::fs::read_to_string(file)
+                .map_err(|e| anyhow::anyhow!("link {}: cannot read {file}: {e}", self.name))?
+                .trim_end_matches(['\r', '\n'])
+                .to_string(),
+            _ => anyhow::bail!("link {}: set one of password and password_file", self.name),
+        };
+        if self.libraries.is_empty() {
+            anyhow::bail!("link {}: name at least one library to merge", self.name);
+        }
+        Ok(rustyfin_core::link::LinkSettings {
+            name: self.name.clone(),
+            kind: self.kind,
+            url: self.url.clone(),
+            user: self.user.clone(),
+            password,
+            libraries: self.libraries.clone(),
+        })
+    }
 }
 
 /// Prometheus metrics, on a listener of their own (not the public port).

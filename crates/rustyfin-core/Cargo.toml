@@ -27,3 +27,4 @@ cron.workspace = true
 rand.workspace = true
 async-trait.workspace = true
 rustyfin-search.workspace = true
+reqwest.workspace = true
