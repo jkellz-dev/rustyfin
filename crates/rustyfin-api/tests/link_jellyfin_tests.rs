@@ -160,8 +160,9 @@ async fn stream(
         return StatusCode::UNAUTHORIZED.into_response();
     }
     remote.lock().unwrap().seen.push(format!(
-        "GET /Videos/{id}/stream static={:?}",
-        q.get("static")
+        "GET /Videos/{id}/stream static={:?} source={:?}",
+        q.get("static"),
+        q.get("MediaSourceId")
     ));
     let len = FILM_BYTES.len();
     if let Some(range) = headers.get("range").and_then(|v| v.to_str().ok()) {
@@ -366,6 +367,12 @@ async fn a_linked_jellyfin_library_merges_into_the_local_one() {
     let (_, detail) = app
         .get(&format!("/Users/{uid}/Items/{theirs_id}"), &token)
         .await;
+    assert!(
+        detail["MediaSources"][0]["Name"]
+            .as_str()
+            .is_some_and(|n| n.contains("Alex")),
+        "a copy only the friend has is named for them too: {detail}"
+    );
     assert_eq!(detail["ProductionYear"], 2001, "{detail}");
     assert_eq!(detail["Overview"], "Only Theirs overview", "{detail}");
     assert_eq!(detail["ProviderIds"]["Tmdb"], "200", "{detail}");
@@ -397,6 +404,21 @@ async fn a_linked_jellyfin_library_merges_into_the_local_one() {
         header("content-range"),
         format!("bytes 2-5/{}", FILM_BYTES.len())
     );
+
+    // The local film had no poster, overview or IMDb id: it borrows the
+    // friend's, and keeps what it had (its TMDB id, its name).
+    let (_, mine) = app
+        .get(&format!("/Users/{uid}/Items/{local}"), &token)
+        .await;
+    assert_eq!(mine["Overview"], "Shared Film overview", "{mine}");
+    assert_eq!(mine["ProviderIds"]["Imdb"], "tt100", "{mine}");
+    assert_eq!(mine["ProviderIds"]["Tmdb"], "100", "{mine}");
+    assert!(mine["ImageTags"]["Primary"].is_string(), "{mine}");
+    let (status, _, poster) = app
+        .get_bytes(&format!("/Items/{local}/Images/Primary"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(poster, POSTER);
 
     // With no copy named, the shared film plays the friend's better copy.
     let (status, _, bytes) = app
@@ -507,6 +529,11 @@ async fn a_film_gained_locally_takes_in_the_friends_copy() {
     let file = tree.0.join("Gained (2001)/Gained (2001).mkv");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, b"gained").unwrap();
+    std::fs::write(
+        tree.0.join("Gained (2001)/.rustyfin.toml"),
+        "[ids]\ntmdb = 400\n",
+    )
+    .unwrap();
     LibraryScanner::new(app.pool.clone(), None)
         .scan(lib, &[tree.0.to_string_lossy().to_string()])
         .await
@@ -516,11 +543,20 @@ async fn a_film_gained_locally_takes_in_the_friends_copy() {
         .fetch_one(&app.pool)
         .await
         .unwrap();
-    media_items::add_external_ids(&app.pool, gained, &json!({"Tmdb": "400"}))
-        .await
-        .unwrap();
+    // Merged by the scan itself: never listed twice until the next sync.
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie"),
+            &token,
+        )
+        .await;
+    assert_eq!(
+        names(&list),
+        vec!["Gained", "Shared Film"],
+        "after the scan: {list}"
+    );
     let report = app.links.sync(&app.pool, link).await.expect("second sync");
-    assert_eq!(report.merged, 1, "{report:?}");
+    assert_eq!(report.merged, 0, "{report:?}");
 
     let (_, list) = app
         .get(
@@ -580,5 +616,92 @@ async fn a_library_the_link_cannot_see_is_an_error_not_an_empty_sync() {
     let link = app.links.register(&app.pool, s).await.unwrap();
     let err = app.links.sync(&app.pool, link).await.unwrap_err();
     assert!(err.to_string().contains("Missing"), "{err}");
+    app.cleanup().await;
+}
+
+/// A Jellyfin film with two versions (two media sources) is one film here
+/// with two copies, each played by its own source id.
+#[tokio::test]
+async fn every_version_of_a_friends_film_is_a_copy() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    let mut two = film("r500", "Two Cuts", "500", "e1", 1920, 1080);
+    let mut second = two["MediaSources"][0].clone();
+    second["Id"] = json!("r500b");
+    second["Name"] = json!("2160p Director's Cut");
+    second["MediaStreams"][0]["Width"] = json!(3840);
+    second["MediaStreams"][0]["Height"] = json!(2160);
+    two["MediaSources"].as_array_mut().unwrap().push(second);
+    remote.lock().unwrap().films = vec![two];
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(&app.pool, settings(&url, "secret"))
+        .await
+        .unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&list), vec!["Shared Film", "Two Cuts"], "{list}");
+    let id = list["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["Name"] == "Two Cuts")
+        .unwrap()["Id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, item) = app.get(&format!("/Users/{uid}/Items/{id}"), &token).await;
+    let sources = item["MediaSources"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{item}"));
+    assert_eq!(sources.len(), 2, "{item}");
+    assert!(
+        sources[0]["Name"]
+            .as_str()
+            .is_some_and(|n| n.contains("Director's Cut") && n.contains("Alex")),
+        "the 2160p cut first: {item}"
+    );
+    let cut = sources[0]["Id"].as_str().unwrap().to_string();
+    let (status, _, _) = app
+        .get_bytes(
+            &format!("/Videos/{id}/stream?static=true&MediaSourceId={cut}"),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        remote
+            .lock()
+            .unwrap()
+            .seen
+            .iter()
+            .any(|s| s.starts_with("GET /Videos/r500/stream") && s.contains("Some(\"r500b\")")),
+        "the director's cut asked for by its source id: {:?}",
+        remote.lock().unwrap().seen
+    );
+
+    // The friend drops the second cut: its copy goes, the film stays.
+    {
+        let mut r = remote.lock().unwrap();
+        r.films[0]["MediaSources"].as_array_mut().unwrap().pop();
+        r.films[0]["Etag"] = json!("e2");
+    }
+    app.links.sync(&app.pool, link).await.expect("sync again");
+    let (_, item) = app.get(&format!("/Users/{uid}/Items/{id}"), &token).await;
+    assert!(
+        item["MediaSources"]
+            .as_array()
+            .is_some_and(|s| s.len() == 1),
+        "{item}"
+    );
     app.cleanup().await;
 }
