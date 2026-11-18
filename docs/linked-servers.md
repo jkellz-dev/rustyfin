@@ -23,15 +23,15 @@ ordinary film with more than one version.
 
 | Works | Not yet |
 |-------|---------|
-| Films, TV shows and home videos from a current Jellyfin (tested with 10.10) | Music |
-| Direct play of a friend's copy, with seeking | Transcoding a friend's copy |
+| Films, TV shows and home videos from a current Jellyfin (tested with 10.10) | |
+| Direct play of a friend's copy, with seeking; transcoding by the friend's server | Music |
 | Posters, backdrops, logos and thumbnails | A friend's external subtitle files, chapters, cast |
 | Every version the friend keeps of a film | Link status in the admin (it is in the server log for now) |
 | Several links, one per friend | A faster Rustyfin-to-Rustyfin sync (a Rustyfin is linked through its Jellyfin API) |
 
-Since a friend's copy cannot be transcoded yet, it is offered only to apps that can play it as is. An app that cannot
-gets your own copy first; a film only the friend has will not play in that app until transcoding through links lands.
-The [roadmap](../roadmap.md) (16b) tracks the rest.
+An app that cannot play a friend's copy as is gets it converted by the friend's server, which has the file; your
+server passes the stream on. Your server never converts a friend's copy itself. The [roadmap](../roadmap.md) (16b)
+tracks the rest.
 
 ## What your friend does
 
@@ -109,7 +109,8 @@ internet with HTTPS, or across a private network such as a VPN or a Tailscale no
 `http://` is only for servers on a network you trust: the link's password and the media would cross it unencrypted.
 
 Playback of a friend's copy runs through your server, so it uses your server's bandwidth twice (in from the friend,
-out to your app) and the friend's upload speed limits it.
+out to your app) and the friend's upload speed limits it. A converted copy uses the friend's CPU (or GPU), counts
+against their server's transcode limits, and stops when their server sees it idle.
 
 ## How syncing works
 
@@ -167,13 +168,13 @@ All copies of a film or episode, yours and your friends', are ranked by:
 5. lossless audio over lossy.
 
 The best copy is listed first and plays when an app does not pick one; on a tie, your own copy wins. An app's version
-menu lists every copy, the friend's named with the link's name. A copy the app cannot play as is (a friend's copy, for
-now) is listed after every copy it can play.
+menu lists every copy, the friend's named with the link's name. A copy the app can play neither as is nor converted
+(the friend's server is down) is listed after every copy it can play.
 
 ## What your friend sees
 
-One signed-in device named "Rustyfin link" for the link user, and one stream per film playing through the link. Your
-users' names and what they watch stay on your server.
+One signed-in device named "Rustyfin link" for the link user, and one stream (or transcode) per title playing through
+the link. Your users' names and what they watch stay on your server.
 
 ## Removing a link
 

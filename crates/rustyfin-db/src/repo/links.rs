@@ -83,6 +83,24 @@ pub fn remote_item(remote_id: &str) -> &str {
         .map_or(remote_id, |(item, _)| item)
 }
 
+/// The copy a link holds of the friend's item `remote` (its main copy when
+/// the item has several versions), for the transcode relay's access check.
+pub async fn find_copy(
+    pool: &PgPool,
+    link_id: Uuid,
+    remote: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM media_items WHERE link_id = $1 \
+         AND (remote_id = $2 OR remote_id LIKE $2 || '/%') \
+         ORDER BY (remote_id LIKE '%/%'), id LIMIT 1",
+    )
+    .bind(link_id)
+    .bind(remote)
+    .fetch_optional(pool)
+    .await
+}
+
 /// A friend's library with no local counterpart: the library of its own made
 /// for it (no folders), found again by link and name on later syncs.
 pub async fn ensure_library(

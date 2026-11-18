@@ -423,6 +423,11 @@ pub fn build_router(state: AppState) -> Router {
                 .post(display_preferences::update_display_preferences),
         )
         // ── TV Shows ─────────────────────────────────────────────
+        // A linked copy's transcode, from the friend's server (roadmap 16b).
+        .route(
+            "/LinkRelay/{link_id}/{*path}",
+            get(link_relay::relay_media),
+        )
         .route("/Shows/NextUp", get(shows::get_next_up))
         .route("/Shows/Upcoming", get(shows::get_upcoming))
         .route("/Shows/{seriesId}/Seasons", get(shows::get_seasons))

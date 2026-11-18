@@ -70,8 +70,11 @@ pub async fn post_playback_info(
     headers: HeaderMap,
     uri: Uri,
     Path(item_id): Path<Uuid>,
-    Json(body): Json<PlaybackInfoRequest>,
+    Json(raw): Json<serde_json::Value>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
+    // Kept whole: a linked copy's friend is asked with the client's own request.
+    let body: PlaybackInfoRequest = serde_json::from_value(raw.clone())
+        .map_err(|e| ApiError::BadRequest(format!("PlaybackInfo: {e}")))?;
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
@@ -108,6 +111,7 @@ pub async fn post_playback_info(
         auth.is_administrator,
     )
     .await?;
+    super::link_relay::offer_transcodes(&state, &mut info, &raw).await;
     let token = rustyfin_auth::middleware::request_token(&headers, uri.query());
     let profile = body.device_profile.as_ref().or(stored_profile.as_ref());
     playback_info::apply_subtitle_delivery(&mut info, item_id, profile, token.as_deref());
