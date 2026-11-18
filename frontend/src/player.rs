@@ -31,7 +31,6 @@ pub struct Now {
     pub play_method: &'static str,
     pub is_hls: bool,
     /// Where the transcode started: the element's 0 is this many seconds in.
-    pub offset: f64,
     pub duration: f64,
     pub audio_tracks: Vec<TrackChoice>,
     pub subtitle_tracks: Vec<TrackChoice>,
@@ -270,7 +269,6 @@ impl Player {
             media_source_id: media_source_id.clone(),
             play_method,
             is_hls,
-            offset: if is_hls { start_at } else { 0.0 },
             duration: item["RunTimeTicks"]
                 .as_i64()
                 .map(logic::ticks_to_secs)
@@ -303,11 +301,14 @@ impl Player {
             let native = !el.can_play_type("application/vnd.apple.mpegurl").is_empty();
             match logic::hls_way(has_media_source(), native) {
                 Some(logic::HlsWay::Script) => {
-                    if let Err(e) = attach_hls(&el, &url, self).await {
+                    if let Err(e) = attach_hls(&el, &url, start_at, self).await {
                         return self.fail(e);
                     }
                 }
-                Some(logic::HlsWay::Native) => el.set_src(&url),
+                Some(logic::HlsWay::Native) => {
+                    PENDING_SEEK.with(|p| *p.borrow_mut() = (start_at > 0.0).then_some(start_at));
+                    el.set_src(&url);
+                }
                 None => return self.fail("This browser cannot play streams.".to_string()),
             }
         } else {
@@ -379,22 +380,11 @@ impl Player {
         });
     }
 
-    /// Jump to `secs` into the item. A transcode only reaches what it has
-    /// made so far, so a jump past that starts it again from there.
+    /// Jump to `secs` into the item. A transcode's playlist lists the whole
+    /// film, and the server makes a segment it has not reached on request.
     pub fn seek(self, secs: f64) {
         let Some(el) = media() else { return };
-        let Some((offset, is_hls, duration, item, audio, sub)) = self.now.with(|n| {
-            n.as_ref().map(|n| {
-                (
-                    n.offset,
-                    n.is_hls,
-                    n.duration,
-                    n.item_id.clone(),
-                    n.audio_index,
-                    n.subtitle_index,
-                )
-            })
-        }) else {
+        let Some(duration) = self.now.with(|n| n.as_ref().map(|n| n.duration)) else {
             return;
         };
         let target = if duration > 0.0 {
@@ -402,14 +392,8 @@ impl Player {
         } else {
             secs.max(0.0)
         };
-        let rel = target - offset;
-        let reachable = !is_hls || (rel >= 0.0 && rel <= seekable_end(&el));
-        if reachable {
-            el.set_current_time(rel);
-            self.position.set(target);
-        } else {
-            spawn_local(async move { self.start(item, Some(target), audio, sub).await });
-        }
+        el.set_current_time(target);
+        self.position.set(target);
     }
 
     fn toggle(self) {
@@ -539,15 +523,6 @@ fn is_text_subtitle(stream: &Value) -> bool {
     )
 }
 
-fn seekable_end(el: &HtmlMediaElement) -> f64 {
-    let ranges = el.seekable();
-    let n = ranges.length();
-    if n == 0 {
-        return 0.0;
-    }
-    ranges.end(n - 1).unwrap_or(0.0)
-}
-
 fn set_subtitle(el: &HtmlMediaElement, url: Option<&str>) {
     while let Some(child) = el.first_element_child() {
         child.remove();
@@ -610,7 +585,12 @@ async fn load_hls_js() -> Result<JsValue, String> {
     Reflect::get(&window, &"Hls".into()).map_err(|_| "could not load the HLS player".to_string())
 }
 
-async fn attach_hls(el: &HtmlMediaElement, url: &str, p: Player) -> Result<(), String> {
+async fn attach_hls(
+    el: &HtmlMediaElement,
+    url: &str,
+    start_at: f64,
+    p: Player,
+) -> Result<(), String> {
     let ctor = load_hls_js().await?;
     let supported = Reflect::get(&ctor, &"isSupported".into())
         .ok()
@@ -622,7 +602,14 @@ async fn attach_hls(el: &HtmlMediaElement, url: &str, p: Player) -> Result<(), S
         return Err("This browser cannot play streamed video.".into());
     }
     let ctor: Function = ctor.dyn_into().map_err(|_| "HLS player missing")?;
-    let hls = Reflect::construct(&ctor, &Array::new()).map_err(|_| "HLS player failed")?;
+    // Start loading at the resume point: the playlist lists the whole film.
+    let config = js_sys::Object::new();
+    let _ = Reflect::set(
+        &config,
+        &"startPosition".into(),
+        &JsValue::from_f64(start_at),
+    );
+    let hls = Reflect::construct(&ctor, &Array::of1(&config)).map_err(|_| "HLS player failed")?;
     let call = |name: &str, arg: &JsValue| {
         Reflect::get(&hls, &name.into())
             .ok()
@@ -695,7 +682,7 @@ fn enter_native_fullscreen(el: &HtmlMediaElement) {
 fn native_now(p: Player) -> bool {
     p.now.with_untracked(|n| {
         n.as_ref()
-            .is_some_and(|n| logic::native_controls(n.is_audio, n.is_hls))
+            .is_some_and(|n| logic::native_controls(n.is_audio))
     })
 }
 
@@ -760,10 +747,7 @@ fn attach(p: Player, el: HtmlMediaElement, shell: web_sys::Element) {
     {
         let el2 = el.clone();
         listen(target, "timeupdate", move |_| {
-            let offset = p
-                .now
-                .with_untracked(|n| n.as_ref().map(|n| n.offset).unwrap_or(0.0));
-            let pos = offset + el2.current_time();
+            let pos = el2.current_time();
             p.position.set(pos);
             if !p.dragging.get_untracked() {
                 p.seek_value.set(pos);
@@ -931,7 +915,7 @@ pub fn PlayerHost() -> View {
 
     view! {
         div(class=class, r#ref=shell_ref, role="region", aria-label="Player") {
-            video(r#ref=media_ref, class="player-media", playsinline=inline, preload="auto", controls=move || p.now.with(|n| n.as_ref().is_some_and(|n| logic::native_controls(n.is_audio, n.is_hls)))) {}
+            video(r#ref=media_ref, class="player-media", playsinline=inline, preload="auto", controls=move || p.now.with(|n| n.as_ref().is_some_and(|n| logic::native_controls(n.is_audio)))) {}
             (if p.loading.get() {
                 view! { div(class="player-loading", aria-live="polite") { span(class="spinner") {} " Starting…" } }
             } else {

@@ -184,13 +184,12 @@ pub enum HlsWay {
     Native,
 }
 
-/// Whether the browser's own controls drive the video: they do for a file
-/// played directly, whose timeline is the film's. A transcode's timeline
-/// starts where the transcode did and grows as it is made, so the admin's
-/// controls (which seek past it by restarting the transcode) stay. Music
-/// keeps the admin's bar; its element is hidden.
-pub fn native_controls(is_audio: bool, is_hls: bool) -> bool {
-    !is_audio && !is_hls
+/// Whether the browser's own controls drive the item: every video, played
+/// directly or transcoded (the server lists a transcode's whole film, so its
+/// timeline is the film's). Music keeps the admin's bar; its element is
+/// hidden.
+pub fn native_controls(is_audio: bool) -> bool {
+    !is_audio
 }
 
 /// Chapters as menu entries: (seconds to jump to, "clock name").

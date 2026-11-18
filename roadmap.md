@@ -162,6 +162,13 @@ ffmpeg HLS output, device profiles, subtitle delivery, throttling, seek support.
 - [x] Hardware acceleration support (VAAPI, NVENC, QSV) — configurable via `rustyfin.toml`
 - [x] Audio transcoding (multi-channel → stereo, codec conversion)
 - [x] Seeking support (start transcoding from arbitrary position)
+- [x] Full-film VOD playlists (owner, 2026-11-18): `main.m3u8` lists every segment from the first request, as Jellyfin's
+      does, so players show the film's timeline and seek anywhere; segment times are fixed before ffmpeg runs (6 s marks
+      with forced keyframes for encodes, the source's keyframes for copied video) so a restarted run cuts at the same
+      places; ffmpeg starts at the resume point's segment and restarts for a segment it will not reach
+- [ ] Copied HEVC (fMP4) segments merged to ~6 s: today one segment per keyframe, because ffmpeg's HLS muxer, the only
+      fMP4 writer, cannot be told where to cut
+- [ ] Keep keyframe scans across restarts (in memory today; a scan reads the whole file)
 - [x] Process throttling (SIGSTOP/SIGCONT when encoding too far ahead of playback)
 
 ### 8d. Subtitle Delivery [DONE]
