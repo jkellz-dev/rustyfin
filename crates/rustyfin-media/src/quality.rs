@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn then_dynamic_range() {
         let base = video("hevc", 3840, 2160, 20);
-        let sdr = q(&[base.clone()]);
+        let sdr = q(std::slice::from_ref(&base));
         let hlg = q(&[hdr(base.clone(), "arib-std-b67")]);
         let hdr10 = q(&[hdr(base.clone(), "smpte2084")]);
         let mut dv = hdr(base.clone(), "smpte2084");
