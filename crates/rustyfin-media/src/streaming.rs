@@ -6,30 +6,71 @@ use axum::{
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-/// Parse HTTP Range header: "bytes=START-END" or "bytes=START-".
-fn parse_range(range_header: &str, file_size: u64) -> Option<(u64, u64)> {
-    let range = range_header.strip_prefix("bytes=")?;
-    let (start_str, end_str) = range.split_once('-')?;
+/// What a `Range` header asks of a file (RFC 9110, section 14).
+#[derive(Debug, PartialEq, Eq)]
+enum Ranged {
+    /// Bytes `start..=end`.
+    Part(u64, u64),
+    /// A range that starts past the end, or an empty suffix: 416.
+    Unsatisfiable,
+    /// Not a single byte range we serve (other units, several ranges,
+    /// malformed): the whole file, as the RFC allows.
+    Whole,
+}
 
-    let start: u64 = if start_str.is_empty() {
-        // Suffix range: "bytes=-500" means last 500 bytes
-        let suffix: u64 = end_str.parse().ok()?;
-        file_size.saturating_sub(suffix)
-    } else {
-        start_str.parse().ok()?
+/// `bytes=START-END`, `bytes=START-` or `bytes=-SUFFIX` (the last SUFFIX
+/// bytes).
+fn parse_range(range_header: &str, file_size: u64) -> Ranged {
+    let Some(range) = range_header.trim().strip_prefix("bytes=") else {
+        return Ranged::Whole;
     };
-
-    let end: u64 = if end_str.is_empty() {
-        file_size - 1
-    } else {
-        end_str.parse().ok()?
-    };
-
-    if start > end || start >= file_size {
-        return None;
+    if range.contains(',') {
+        return Ranged::Whole;
     }
+    let Some((start_str, end_str)) = range.trim().split_once('-') else {
+        return Ranged::Whole;
+    };
+    if start_str.is_empty() {
+        let Ok(suffix) = end_str.parse::<u64>() else {
+            return Ranged::Whole;
+        };
+        if suffix == 0 || file_size == 0 {
+            return Ranged::Unsatisfiable;
+        }
+        return Ranged::Part(file_size.saturating_sub(suffix), file_size - 1);
+    }
+    let Ok(start) = start_str.parse::<u64>() else {
+        return Ranged::Whole;
+    };
+    let end = if end_str.is_empty() {
+        u64::MAX
+    } else {
+        match end_str.parse::<u64>() {
+            Ok(e) => e,
+            Err(_) => return Ranged::Whole,
+        }
+    };
+    if start > end {
+        return Ranged::Whole;
+    }
+    if start >= file_size {
+        return Ranged::Unsatisfiable;
+    }
+    Ranged::Part(start, end.min(file_size - 1))
+}
 
-    Some((start, end.min(file_size - 1)))
+/// The file's validators: a strong `ETag` from its size and modification
+/// time, and `Last-Modified` as an HTTP date. Players use them to reuse what
+/// they have (`If-Range`, `If-None-Match`).
+pub fn validators(metadata: &std::fs::Metadata) -> (String, Option<String>) {
+    let modified = metadata
+        .modified()
+        .ok()
+        .map(chrono::DateTime::<chrono::Utc>::from);
+    let stamp = modified.map_or(0, |m| m.timestamp_nanos_opt().unwrap_or(0));
+    let etag = format!("\"{:x}-{:x}\"", metadata.len(), stamp);
+    let last_modified = modified.map(|m| m.format("%a, %d %b %Y %H:%M:%S GMT").to_string());
+    (etag, last_modified)
 }
 
 /// Content type from file extension.
@@ -58,6 +99,7 @@ pub async fn serve_file(path: &str, headers: &HeaderMap) -> Result<Response, Sta
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
     let file_size = metadata.len();
+    let (etag, last_modified) = validators(&metadata);
 
     let ext = std::path::Path::new(path)
         .extension()
@@ -65,49 +107,75 @@ pub async fn serve_file(path: &str, headers: &HeaderMap) -> Result<Response, Sta
         .unwrap_or("");
     let content_type = content_type_for_extension(ext);
 
-    // Check for Range header
-    if let Some(range_value) = headers.get(header::RANGE).and_then(|v| v.to_str().ok())
-        && let Some((start, end)) = parse_range(range_value, file_size)
-    {
-        let length = end - start + 1;
-
-        let mut file = File::open(path)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        file.seek(std::io::SeekFrom::Start(start))
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        let stream = tokio_util::io::ReaderStream::new(file.take(length));
-        let body = Body::from_stream(stream);
-
-        return Ok(Response::builder()
-            .status(StatusCode::PARTIAL_CONTENT)
+    let header_str = |name: header::HeaderName| headers.get(name).and_then(|v| v.to_str().ok());
+    let base = || {
+        let mut b = Response::builder()
             .header(header::CONTENT_TYPE, content_type)
-            .header(header::CONTENT_LENGTH, length.to_string())
-            .header(
-                header::CONTENT_RANGE,
-                format!("bytes {start}-{end}/{file_size}"),
-            )
             .header(header::ACCEPT_RANGES, "bytes")
-            .body(body)
+            .header(header::ETAG, &etag);
+        if let Some(lm) = &last_modified {
+            b = b.header(header::LAST_MODIFIED, lm);
+        }
+        b
+    };
+
+    // A copy the client holds that is still this file.
+    if header_str(header::IF_NONE_MATCH)
+        .is_some_and(|v| v.split(',').any(|t| t.trim() == etag || t.trim() == "*"))
+    {
+        return Ok(base()
+            .status(StatusCode::NOT_MODIFIED)
+            .body(Body::empty())
             .unwrap());
     }
 
-    // Full file response
-    let file = File::open(path)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let stream = tokio_util::io::ReaderStream::new(file);
-    let body = Body::from_stream(stream);
+    // If-Range: the range only if the client's copy is this file.
+    let range_applies = header_str(header::IF_RANGE).is_none_or(|v| {
+        let v = v.trim();
+        v == etag || last_modified.as_deref() == Some(v)
+    });
+    let ranged = match header_str(header::RANGE) {
+        Some(r) if range_applies => parse_range(r, file_size),
+        _ => Ranged::Whole,
+    };
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, content_type)
-        .header(header::CONTENT_LENGTH, file_size.to_string())
-        .header(header::ACCEPT_RANGES, "bytes")
-        .body(body)
-        .unwrap())
+    match ranged {
+        Ranged::Unsatisfiable => Ok(base()
+            .status(StatusCode::RANGE_NOT_SATISFIABLE)
+            .header(header::CONTENT_RANGE, format!("bytes */{file_size}"))
+            .body(Body::empty())
+            .unwrap()),
+        Ranged::Part(start, end) => {
+            let length = end - start + 1;
+            let mut file = File::open(path)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            file.seek(std::io::SeekFrom::Start(start))
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let stream = tokio_util::io::ReaderStream::new(file.take(length));
+            Ok(base()
+                .status(StatusCode::PARTIAL_CONTENT)
+                .header(header::CONTENT_LENGTH, length.to_string())
+                .header(
+                    header::CONTENT_RANGE,
+                    format!("bytes {start}-{end}/{file_size}"),
+                )
+                .body(Body::from_stream(stream))
+                .unwrap())
+        }
+        Ranged::Whole => {
+            let file = File::open(path)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let stream = tokio_util::io::ReaderStream::new(file);
+            Ok(base()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_LENGTH, file_size.to_string())
+                .body(Body::from_stream(stream))
+                .unwrap())
+        }
+    }
 }
 
 #[cfg(test)]

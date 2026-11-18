@@ -105,14 +105,18 @@ async fn head_stream_inner(state: &AppState, item_id: Uuid) -> Result<Response, 
         .map_err(|_| ApiError::NotFound)?;
 
     let content_type = mime_from_path(&path);
+    let (etag, last_modified) = streaming::validators(&metadata);
 
-    Ok(Response::builder()
+    let mut response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
         .header(header::CONTENT_LENGTH, metadata.len().to_string())
         .header(header::ACCEPT_RANGES, "bytes")
-        .body(Body::empty())
-        .unwrap())
+        .header(header::ETAG, etag);
+    if let Some(lm) = last_modified {
+        response = response.header(header::LAST_MODIFIED, lm);
+    }
+    Ok(response.body(Body::empty()).unwrap())
 }
 
 async fn serve_item_file(
