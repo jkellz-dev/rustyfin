@@ -936,6 +936,8 @@ mod tests {
                 tm.start_transcode(request("s4", copied(b_frames), 0))
                     .await
                     .unwrap();
+                // Let the first run log before it is stopped.
+                calls(&root, 1).await;
                 tm.restart_at_segment("s4", 3).await.unwrap();
 
                 let restart = calls(&root, 2).await[1].clone();

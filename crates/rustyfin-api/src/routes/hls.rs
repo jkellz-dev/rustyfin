@@ -98,13 +98,9 @@ pub async fn get_master_playlist(
     let video_stream = stream_dtos.iter().find(|s| s.stream_type == "Video");
 
     let source = source_video(&streams);
-    let video_codec = decide_video(
-        &state.transcode_manager,
-        item.path.as_deref(),
-        source.as_ref(),
-        &params,
-    )
-    .await;
+    // The keyframe scan copying needs runs with the variant playlist; if it
+    // fails there, that one session is encoded (rare: the scan is quick).
+    let video_codec = plan_video(source.as_ref(), &copy_limits(&params));
     let copied = source
         .as_ref()
         .filter(|_| video_codec == VideoCodec::Copy)
