@@ -1244,3 +1244,77 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     app.cleanup().await;
 }
+
+/// The admin's Links page (roadmap 16b): each link's last sync, its error,
+/// how many titles and copies it brought, and a sync on demand.
+#[tokio::test]
+async fn the_admin_sees_each_link_and_can_sync_it_now() {
+    let app = common::TestApp::new().await;
+    let (_admin, admin_token) = app.create_user("admin", true).await;
+    let (_viewer, viewer_token) = app.create_user("viewer", false).await;
+    let (_tree, _lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    remote.lock().unwrap().films = vec![
+        film("r100", "Shared Film", "100", "e1", 3840, 2160),
+        film("r200", "Only Theirs", "200", "e1", 1920, 1080),
+    ];
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(&app.pool, settings(&url, "secret"))
+        .await
+        .unwrap();
+
+    let (status, _) = app.get("/Rustyfin/Links", &viewer_token).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, list) = app.get("/Rustyfin/Links", &admin_token).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let entry = &list[0];
+    assert_eq!(entry["Name"], "Alex", "{list}");
+    assert_eq!(entry["Kind"], "jellyfin", "{list}");
+    assert!(entry["LastSyncAt"].is_null(), "never synced yet: {list}");
+    assert_eq!(entry["Configured"], true, "{list}");
+
+    // Sync now: answered at once, done in the background.
+    let (status, _) = app
+        .post(
+            &format!("/Rustyfin/Links/{link}/Sync"),
+            &json!({}),
+            &admin_token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let mut synced = Value::Null;
+    for _ in 0..50 {
+        let (_, list) = app.get("/Rustyfin/Links", &admin_token).await;
+        if list[0]["LastSyncAt"].is_string() && list[0]["Syncing"] == false {
+            synced = list[0].clone();
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(synced.is_object(), "the sync finished");
+    // "Shared Film" merged into the local film: one title of its own, two copies.
+    assert_eq!(synced["Titles"], 1, "{synced}");
+    assert_eq!(synced["Copies"], 2, "{synced}");
+    assert!(synced["LastError"].is_null(), "{synced}");
+
+    let (status, _) = app
+        .post(
+            &format!("/Rustyfin/Links/{}/Sync", Uuid::new_v4()),
+            &json!({}),
+            &admin_token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = app
+        .post(
+            &format!("/Rustyfin/Links/{link}/Sync"),
+            &json!({}),
+            &viewer_token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    app.cleanup().await;
+}

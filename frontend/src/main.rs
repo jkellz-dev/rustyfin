@@ -9,6 +9,7 @@ mod browse;
 mod components;
 mod dashboard_view;
 mod form_rules;
+mod link_view;
 mod media_route;
 mod pages;
 mod player;

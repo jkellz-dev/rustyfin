@@ -516,3 +516,25 @@ pub struct ItemFilters {
     #[serde(default)]
     pub years: Vec<i32>,
 }
+
+/// A linked server, for the admin's Links page (`GET /Rustyfin/Links`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LinkInfo {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub url: String,
+    #[serde(default)]
+    pub last_sync_at: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+    #[serde(default)]
+    pub syncing: bool,
+    #[serde(default)]
+    pub configured: bool,
+    #[serde(default)]
+    pub titles: i64,
+    #[serde(default)]
+    pub copies: i64,
+}
