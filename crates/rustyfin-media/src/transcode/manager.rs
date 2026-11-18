@@ -631,8 +631,10 @@ impl TranscodeManager {
             >= self.max_concurrent
     }
 
-    /// Where the current run's ffmpeg has got (file time, from `-copyts`).
-    pub(crate) async fn update_position(&self, play_session_id: &str, position_ticks: i64) {
+    /// Where the current run's ffmpeg has got (file time, from `-copyts`):
+    /// what its progress lines report, set directly by tests.
+    #[cfg(test)]
+    async fn update_position(&self, play_session_id: &str, position_ticks: i64) {
         let run = {
             let jobs = self.jobs.read().await;
             let Some(job) = jobs.get(play_session_id) else {

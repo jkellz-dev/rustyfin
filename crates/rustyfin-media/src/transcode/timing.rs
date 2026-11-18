@@ -113,10 +113,13 @@ pub async fn probe(ffprobe: &str, path: &Path, keyframes: bool) -> anyhow::Resul
         .context("ffprobe gave no duration")
 }
 
+/// A file as it is now: path, size and modification time.
+type FileKey = (PathBuf, u64, Option<SystemTime>);
+
 /// Timings by file, while the file is unchanged.
 #[derive(Default)]
 pub struct TimingCache {
-    entries: Mutex<HashMap<(PathBuf, u64, Option<SystemTime>), Arc<SourceTiming>>>,
+    entries: Mutex<HashMap<FileKey, Arc<SourceTiming>>>,
 }
 
 impl TimingCache {
