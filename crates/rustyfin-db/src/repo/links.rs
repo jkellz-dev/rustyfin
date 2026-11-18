@@ -407,7 +407,7 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
     }
 
     // Seasons.
-    let seasons: Vec<(Uuid, Uuid, String, Option<i32>, Option<String>)> = sqlx::query_as(
+    let seasons: Vec<LinkedSeasonRow> = sqlx::query_as(
         "SELECT id, link_id, remote_id, index_number, extra_data->>'RemoteSeriesId' \
          FROM media_items WHERE link_id IS NOT NULL AND item_type = 'Season'",
     )
@@ -432,7 +432,7 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let mut places: Vec<Place> = Vec::new();
     // (link, remote season) -> the season its episodes go under.
     let mut effective_season: HashMap<(Uuid, String), (Uuid, Uuid)> = HashMap::new();
-    let mut groups: HashMap<(Uuid, i32), Vec<(Uuid, Uuid, String)>> = HashMap::new();
+    let mut groups: HashMap<(Uuid, i32), Vec<SeasonMember>> = HashMap::new();
     for (id, link, remote, index, remote_series) in seasons {
         let Some(series) = remote_series.and_then(|r| effective_series.get(&(link, r)).copied())
         else {
@@ -468,14 +468,7 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
     }
 
     // Episodes.
-    let episodes: Vec<(
-        Uuid,
-        Uuid,
-        String,
-        Option<i32>,
-        Option<String>,
-        Option<String>,
-    )> = sqlx::query_as(
+    let episodes: Vec<LinkedEpisodeRow> = sqlx::query_as(
         "SELECT id, link_id, remote_id, index_number, \
                     extra_data->>'RemoteSeasonId', extra_data->>'RemoteSeriesId' \
              FROM media_items WHERE link_id IS NOT NULL AND item_type = 'Episode'",
@@ -550,6 +543,21 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
     }
     write_places(pool, &places).await
 }
+
+/// A linked season: id, link, remote id, number, the friend's series id.
+type LinkedSeasonRow = (Uuid, Uuid, String, Option<i32>, Option<String>);
+/// A linked season in a (series, number) group: id, link, remote id.
+type SeasonMember = (Uuid, Uuid, String);
+/// A linked episode: id, link, remote id, number, the friend's season and
+/// series ids.
+type LinkedEpisodeRow = (
+    Uuid,
+    Uuid,
+    String,
+    Option<i32>,
+    Option<String>,
+    Option<String>,
+);
 
 /// Where one linked row goes.
 struct Place {
