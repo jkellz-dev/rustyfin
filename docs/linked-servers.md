@@ -180,14 +180,13 @@ the link. Your users' names and what they watch stay on your server.
 
 ## Removing a link
 
-Delete its `[[link]]` and restart: it stops syncing. Its films stay listed, but no longer play, until the link is
-removed from the database too:
+Delete its `[[link]]` and restart. At start, Rustyfin removes every link the config no longer names: its copies, any
+library of its own and what is in it, and the artwork your titles borrowed from it. The log says so:
 
-```sql
-DELETE FROM images WHERE path LIKE 'link://' || (SELECT id FROM links WHERE name = 'Alex') || '/%';
-DELETE FROM links WHERE name = 'Alex';
+```text
+WARN  rustyfin_server: Link Alex is no longer in the config: removed it and its 412 copies
 ```
 
-The first line removes the artwork your films borrowed from the friend's copies; the second removes the link and every
-copy it brought (and the watched state of films only the friend had). Your own films are never touched. Removing a
-link from the config should do this by itself; that is on the [roadmap](../roadmap.md).
+Watched state and resume points of titles only that friend had go with them. Your own titles stay, with any overview,
+genres or provider ids they borrowed. A link still named in the config stays even if its settings are broken (a
+missing password file, say), so a typo never wipes it; fix the setting and it syncs again.

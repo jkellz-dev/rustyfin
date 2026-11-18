@@ -312,6 +312,18 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => tracing::error!("{e:#}"),
         }
     }
+    // A link taken out of the config goes, with what it brought.
+    let configured: Vec<String> = config.links.iter().map(|l| l.name.clone()).collect();
+    match rustyfin_db::repo::links::remove_unconfigured(&db_pool, &configured).await {
+        Ok(removed) => {
+            for (name, copies) in removed {
+                tracing::warn!(
+                    "Link {name} is no longer in the config: removed it and its {copies} copies"
+                );
+            }
+        }
+        Err(e) => tracing::error!("Could not remove links no longer in the config: {e}"),
+    }
     if !config.links.is_empty() {
         let links = links.clone();
         let pool = db_pool.clone();

@@ -59,6 +59,42 @@ pub async fn counts(pool: &PgPool) -> Result<HashMap<Uuid, (i64, i64)>, sqlx::Er
     Ok(rows.into_iter().map(|(l, t, c)| (l, (t, c))).collect())
 }
 
+/// Remove every link whose name is not in `configured` (the config file's
+/// `[[link]]` names, broken ones included): its copies, the libraries of its
+/// own and everything in them, and the artwork local titles borrowed from
+/// it. Watched state of titles only it had goes with them; local titles stay
+/// (with the details they borrowed). Returns (name, copies removed) per link.
+pub async fn remove_unconfigured(
+    pool: &PgPool,
+    configured: &[String],
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let gone: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, name FROM links WHERE NOT (name = ANY($1)) ORDER BY name")
+            .bind(configured)
+            .fetch_all(pool)
+            .await?;
+    let mut removed = Vec::with_capacity(gone.len());
+    for (id, name) in gone {
+        let copies: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM media_items WHERE link_id = $1 AND item_type IN ('Movie', 'Episode')",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+        sqlx::query("DELETE FROM images WHERE path LIKE $1")
+            .bind(format!("{LINK_SCHEME}{id}/%"))
+            .execute(pool)
+            .await?;
+        // Copies and libraries of its own go with it (ON DELETE CASCADE).
+        sqlx::query("DELETE FROM links WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        removed.push((name, copies));
+    }
+    Ok(removed)
+}
+
 /// Record how a sync ended: `error` is None when it worked.
 pub async fn record_sync(pool: &PgPool, id: Uuid, error: Option<&str>) -> Result<(), sqlx::Error> {
     sqlx::query(
