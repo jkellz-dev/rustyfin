@@ -1787,6 +1787,13 @@ select:focus {
   display: flex;
   flex-direction: column;
   background: #000;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+/* The page under an open video does not scroll (nor show scroll bars). */
+html:has(.player-video),
+body:has(.player-video) {
+  overflow: hidden;
 }
 .player-video .player-media {
   flex: 1;

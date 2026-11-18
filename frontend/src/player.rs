@@ -664,14 +664,47 @@ fn exit_fullscreen() {
     }
 }
 
+/// How this browser goes full screen (asked once per page).
+fn fullscreen_way() -> logic::FullscreenWay {
+    let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
+        return logic::FullscreenWay::None;
+    };
+    let flag = |name: &str| {
+        js_sys::Reflect::get(doc.as_ref(), &name.into())
+            .ok()
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    };
+    let element = flag("fullscreenEnabled") || flag("webkitFullscreenEnabled");
+    let video = doc.create_element("video").ok().is_some_and(|v| {
+        js_sys::Reflect::has(v.as_ref(), &"webkitEnterFullscreen".into()).unwrap_or(false)
+    });
+    logic::fullscreen_way(element, video)
+}
+
+/// iOS's own player, full screen, with its controls.
+fn enter_native_fullscreen(el: &HtmlMediaElement) {
+    if let Ok(f) = js_sys::Reflect::get(el.as_ref(), &"webkitEnterFullscreen".into())
+        && let Some(f) = f.dyn_ref::<js_sys::Function>()
+    {
+        let _ = f.call0(el.as_ref());
+    }
+}
+
 fn toggle_fullscreen(shell: &web_sys::Element) {
     let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
-    if doc.fullscreen_element().is_some() {
-        doc.exit_fullscreen();
-    } else {
-        let _ = shell.request_fullscreen();
+    match fullscreen_way() {
+        logic::FullscreenWay::NativeVideo => {
+            if let Some(el) = media() {
+                enter_native_fullscreen(&el);
+            }
+        }
+        _ if doc.fullscreen_element().is_some() => doc.exit_fullscreen(),
+        _ => {
+            let _ = shell.request_fullscreen();
+        }
     }
 }
 
@@ -685,6 +718,13 @@ fn listen(el: &web_sys::EventTarget, event: &str, f: impl FnMut(web_sys::Event) 
 fn attach(p: Player, el: HtmlMediaElement, shell: web_sys::Element) {
     MEDIA.with(|m| *m.borrow_mut() = Some(el.clone()));
     let target: &web_sys::EventTarget = el.as_ref();
+    // iPhone: the video plays in iOS's own player; leaving it (Done) pauses
+    // the video, so the player closes and the position is saved.
+    listen(target, "webkitendfullscreen", move |_| {
+        if !p.loading.get_untracked() && p.now.with_untracked(Option::is_some) {
+            p.close();
+        }
+    });
     {
         let el2 = el.clone();
         listen(target, "loadedmetadata", move |_| {
@@ -810,6 +850,7 @@ pub fn PlayerHost() -> View {
     let p = use_context::<Player>();
     let media_ref = create_node_ref();
     let shell_ref = create_node_ref();
+    let inline = fullscreen_way().plays_inline();
     on_mount(move || {
         let (Ok(el), Ok(shell)) = (
             media_ref.get().dyn_into::<HtmlMediaElement>(),
@@ -865,7 +906,7 @@ pub fn PlayerHost() -> View {
 
     view! {
         div(class=class, r#ref=shell_ref, role="region", aria-label="Player") {
-            video(r#ref=media_ref, class="player-media", playsinline=true, preload="auto") {}
+            video(r#ref=media_ref, class="player-media", playsinline=inline, preload="auto") {}
             (if p.loading.get() {
                 view! { div(class="player-loading", aria-live="polite") { span(class="spinner") {} " Starting…" } }
             } else {

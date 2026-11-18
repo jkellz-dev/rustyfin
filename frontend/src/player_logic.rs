@@ -184,6 +184,38 @@ pub enum HlsWay {
     Native,
 }
 
+/// How the player goes full screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FullscreenWay {
+    /// The player's own page (video plus its controls): desktop browsers,
+    /// iPad.
+    Page,
+    /// Only the video, in the phone's own player with its own controls:
+    /// iPhone Safari, which has no full screen for page elements.
+    NativeVideo,
+    None,
+}
+
+impl FullscreenWay {
+    /// Whether the video plays inside the page. On iPhone it does not: the
+    /// video opens in iOS's player, full screen, as soon as it plays.
+    pub fn plays_inline(self) -> bool {
+        self != Self::NativeVideo
+    }
+}
+
+/// `element_fullscreen`: the browser can put page elements full screen;
+/// `video_fullscreen`: its video element has `webkitEnterFullscreen`.
+pub fn fullscreen_way(element_fullscreen: bool, video_fullscreen: bool) -> FullscreenWay {
+    if element_fullscreen {
+        FullscreenWay::Page
+    } else if video_fullscreen {
+        FullscreenWay::NativeVideo
+    } else {
+        FullscreenWay::None
+    }
+}
+
 /// hls.js wherever MediaSource exists (as hls.js advises and Jellyfin's web
 /// client does): browsers' own HLS differs between them (Chrome's could not
 /// parse Rustyfin's MPEG-TS segments). The browser's own only without it.
