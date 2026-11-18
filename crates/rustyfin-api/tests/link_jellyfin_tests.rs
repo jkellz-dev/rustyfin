@@ -1318,3 +1318,74 @@ async fn the_admin_sees_each_link_and_can_sync_it_now() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     app.cleanup().await;
 }
+
+/// A link taken out of the config file is removed when the server starts
+/// (roadmap 16b): its copies, the library of its own, and the artwork local
+/// films borrowed from it. A link still named in the config stays, even one
+/// whose settings are broken for now. Local films stay.
+#[tokio::test]
+async fn a_link_taken_out_of_the_config_is_removed_at_start() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, lib, local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    {
+        let mut r = remote.lock().unwrap();
+        r.films = vec![
+            film("r100", "Shared Film", "100", "e1", 3840, 2160),
+            film("r200", "Only Theirs", "200", "e1", 1920, 1080),
+        ];
+        r.videos = vec![video("v1", "Beach")];
+    }
+    let url = fake_jellyfin(remote).await;
+    let mut s = settings(&url, "secret");
+    s.libraries.push(LibraryMap {
+        remote: "Home Videos".into(),
+        local: None,
+    });
+    let link = app.links.register(&app.pool, s).await.unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    let (_, mine) = app
+        .get(&format!("/Users/{uid}/Items/{local}"), &token)
+        .await;
+    assert!(mine["ImageTags"]["Primary"].is_string(), "borrowed: {mine}");
+
+    // Still named in the config: nothing goes.
+    let removed = rustyfin_db::repo::links::remove_unconfigured(&app.pool, &["Alex".to_string()])
+        .await
+        .unwrap();
+    assert!(removed.is_empty(), "{removed:?}");
+
+    let removed = rustyfin_db::repo::links::remove_unconfigured(&app.pool, &[])
+        .await
+        .unwrap();
+    assert_eq!(removed.len(), 1, "{removed:?}");
+    assert_eq!(removed[0].0, "Alex");
+    assert_eq!(removed[0].1, 3, "two films and a video: {removed:?}");
+
+    let left: i64 = sqlx::query_scalar(
+        "SELECT (SELECT COUNT(*) FROM links) + (SELECT COUNT(*) FROM media_items WHERE link_id IS NOT NULL) \
+         + (SELECT COUNT(*) FROM libraries WHERE link_id IS NOT NULL) \
+         + (SELECT COUNT(*) FROM images WHERE path LIKE 'link://%')",
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
+    let (_, list) = app
+        .get(
+            &format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie"),
+            &token,
+        )
+        .await;
+    assert_eq!(names(&list), vec!["Shared Film"], "{list}");
+    let (_, mine) = app
+        .get(&format!("/Users/{uid}/Items/{local}"), &token)
+        .await;
+    assert_eq!(
+        mine["MediaSources"].as_array().map(Vec::len),
+        Some(1),
+        "{mine}"
+    );
+    app.cleanup().await;
+}
