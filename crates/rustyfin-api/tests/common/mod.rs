@@ -35,6 +35,8 @@ pub struct TestApp {
     /// Libraries being scanned (shared with the scheduler and webhooks).
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
     pub scan_board: rustyfin_core::library::progress::ScanBoard,
+    /// Linked servers (roadmap 16b), empty until a test registers one.
+    pub links: Arc<rustyfin_core::link::Links>,
 }
 
 impl TestApp {
@@ -124,6 +126,7 @@ impl TestApp {
 
         let scan_in_flight = Arc::new(RwLock::new(HashSet::new()));
         let scan_board = rustyfin_core::library::progress::ScanBoard::global().clone();
+        let links = Arc::new(rustyfin_core::link::Links::default());
         let state = AppState {
             pool: pool.clone(),
             server_id: "test-server-id".to_string(),
@@ -144,6 +147,7 @@ impl TestApp {
             task_scheduler: None,
             shutdown: shutdown.clone(),
             login_limiter: Default::default(),
+            links: links.clone(),
         };
 
         let metrics_router = rustyfin_api::metrics::router(state.clone());
@@ -159,6 +163,7 @@ impl TestApp {
             transcodes,
             scan_in_flight,
             scan_board,
+            links,
         }
     }
 
