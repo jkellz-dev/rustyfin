@@ -1,11 +1,15 @@
 # Linked Servers
 
-A friend's Jellyfin (or Rustyfin) can share some of its libraries with your Rustyfin. Their films then appear in your
-libraries next to yours, as one collection:
+A friend's Jellyfin (or Rustyfin) can share some of its libraries with your Rustyfin. Their films and shows then
+appear in your libraries next to yours, as one collection:
 
 - A film you already have gains their copy as another version. The best copy is listed first and plays unless you pick
   another (see [Which copy plays](#which-copy-plays)).
 - A film you do not have is listed like your own, with its artwork, details and provider ids.
+- A show you already have gains the seasons and episodes you lack, and their copy of each episode you both have. A
+  show you do not have is listed whole.
+- A library of theirs with no counterpart on your server (home videos, a collection of shorts) can get a library of
+  its own.
 - Every version the friend keeps of a film is a copy of its own ("2160p Director's Cut · Alex").
 - A film of yours that lacks artwork, an overview, genres, ratings or provider ids borrows them from a friend's copy.
   What your film has is never replaced.
@@ -19,7 +23,7 @@ ordinary film with more than one version.
 
 | Works | Not yet |
 |-------|---------|
-| Films from a current Jellyfin (tested with 10.10) | TV shows, music |
+| Films, TV shows and home videos from a current Jellyfin (tested with 10.10) | Music |
 | Direct play of a friend's copy, with seeking | Transcoding a friend's copy |
 | Posters, backdrops, logos and thumbnails | A friend's external subtitle files, chapters, cast |
 | Every version the friend keeps of a film | Link status in the admin (it is in the server log for now) |
@@ -65,6 +69,13 @@ local = "Movies"                       # one of your libraries, by name
 [[link.libraries]]                     # as many as you like
 remote = "4K Films"
 local = "Movies"
+
+[[link.libraries]]
+remote = "Shows"
+local = "TV Shows"
+
+[[link.libraries]]                     # no local: a library of its own,
+remote = "Homemade Shorts"             # "Homemade Shorts · Alex"
 ```
 
 | Field | Required | Description |
@@ -74,13 +85,22 @@ local = "Movies"
 | `url` | yes | The friend's server as your server reaches it, with `https://` or `http://` |
 | `user` | yes | The user your friend made for the link |
 | `password` / `password_file` | one of them | The user's password, or a file holding it (a trailing newline is ignored) |
-| `libraries` | at least one | `remote` (the friend's library) merges into `local` (yours) |
+| `libraries` | at least one | `remote` (the friend's library) merges into `local` (yours); with no `local`, it gets a library of its own |
 
 Prefer `password_file` with a secret mounted into the container (a Docker or Kubernetes secret) over writing the
 password into the config file. Environment variables cannot set `[[link]]` tables.
 
 A link with a missing password or no libraries is skipped at start with an error in the log; the server still starts.
-A `local` library must already exist on your server; map the friend's films to a films library.
+A `local` library must already exist on your server (a misspelt name is an error, never a new library). Map films to
+a films library and shows to a shows library.
+
+### A library of its own
+
+A mapping with no `local` gets a library of its own on your server, named after the friend's library and the link
+("Homemade Shorts · Alex"), of the same kind (shows for a shows library, films for anything else). It has no folders:
+scans leave it alone, and only the link fills it. It shows in your apps like your other libraries, and
+[per-user library access](configuration.md) applies to it. Home videos (Jellyfin's "Home Videos" libraries) come across
+as films; they have no provider ids, so they are never merged with anything.
 
 ### Reaching the friend's server
 
@@ -96,11 +116,15 @@ out to your app) and the friend's upload speed limits it.
 Your server syncs each link 30 seconds after it starts and then every 15 minutes:
 
 1. It signs in as the link user (and signs in again if the friend's server forgot the session).
-2. For each mapped library, it lists the friend's films with Jellyfin's change tag (`Etag`). This is a light request.
-3. It fetches the full details of new and changed films only, 100 at a time.
-4. It removes the films, and the versions of films, the friend no longer shares, and the artwork your films borrowed
-   from them.
+2. For each mapped library, it lists the friend's films (or series, seasons and episodes) with Jellyfin's change tag
+   (`Etag`). This is a light request.
+3. It fetches the full details of new and changed items only, 100 at a time.
+4. It removes what the friend no longer shares, and the artwork your titles borrowed from it.
 5. It merges (below).
+
+A mapping that cannot sync (a library the friend no longer shares with the link user, a local library that does not
+exist) is skipped with a warning; the link's other libraries still sync. While any mapping fails, nothing is removed:
+its titles may only be out of sight for a moment.
 
 A sync with nothing changed costs one light request per library. A library scan on your server merges too, so a film
 you add takes in the friend's copy as soon as the scan finds it.
@@ -118,18 +142,22 @@ The `links` table holds each link's last good sync and last error (see [Database
 
 ## How copies are matched
 
-Only by provider id: the same TMDB or IMDb id. Titles and years are never compared, because a wrong match would hide a
-film behind another. So:
+Only by provider id: a film by its TMDB or IMDb id, a show by its TVDB, TMDB or IMDb id. Titles and years are never
+compared, because a wrong match would hide a title behind another. Within a show, seasons match by season number and
+episodes by episode number. So:
 
 - A film your server knows only by its title (no TMDB or IMDb id from its folder name, NFO or
   [`.rustyfin.toml`](title-settings.md)) is never merged; it is listed beside the friend's copy. Give it an id and the
   next scan merges it.
 - A friend's film whose ids match two of your films stays on its own.
-- Two friends' copies of a film you lack are one film, and so are the versions one friend keeps of it.
+- Two friends' copies of a film you lack are one film, and so are the versions one friend keeps of it. The same goes
+  for shows.
+- A friend's season you lack goes into your show; a friend's episode you lack goes into your season; a friend's copy
+  of an episode you have is another version of yours.
 
 ## Which copy plays
 
-All copies of a film, yours and your friends', are ranked by:
+All copies of a film or episode, yours and your friends', are ranked by:
 
 1. resolution (a wide film is judged by its width, so 1920×800 counts as 1080p);
 2. dynamic range: Dolby Vision, then HDR10 and HDR10+, then HLG, then SDR;

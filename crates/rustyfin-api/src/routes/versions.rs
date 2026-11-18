@@ -147,7 +147,7 @@ pub(crate) async fn attach_versions(
     }
     let films: Vec<Uuid> = items
         .iter()
-        .filter(|i| i.item_type == "Movie" && i.owner_id.is_none())
+        .filter(|i| matches!(i.item_type.as_str(), "Movie" | "Episode") && i.owner_id.is_none())
         .map(|i| i.id)
         .collect();
     if films.is_empty() {
@@ -206,7 +206,7 @@ pub(crate) async fn add_playback_versions(
             source.name = source_name(item).or(source.name.take());
         }
     }
-    if item.item_type != "Movie" || item.owner_id.is_some() {
+    if !matches!(item.item_type.as_str(), "Movie" | "Episode") || item.owner_id.is_some() {
         return Ok(());
     }
     let versions = media_items::list_versions(&state.pool, &[item.id])

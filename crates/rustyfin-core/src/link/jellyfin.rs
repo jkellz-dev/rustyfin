@@ -133,8 +133,8 @@ impl JellyfinClient {
         bail!("could not sign in to {} as {}", self.base, self.user)
     }
 
-    /// The libraries the link user can see: (id, name).
-    pub async fn libraries(&self) -> anyhow::Result<Vec<(String, String)>> {
+    /// The libraries the link user can see: (id, name, collection type).
+    pub async fn libraries(&self) -> anyhow::Result<Vec<(String, String, String)>> {
         let body = self.get_json("/UserViews", &[]).await?;
         Ok(items(&body)
             .iter()
@@ -142,13 +142,19 @@ impl JellyfinClient {
                 Some((
                     v["Id"].as_str()?.to_string(),
                     v["Name"].as_str()?.to_string(),
+                    v["CollectionType"].as_str().unwrap_or_default().to_string(),
                 ))
             })
             .collect())
     }
 
-    /// Every film in a library: (id, etag). Light: no details.
-    pub async fn film_tags(&self, library: &str) -> anyhow::Result<Vec<(String, Option<String>)>> {
+    /// Every item of these types (`Movie,Video`) in a library: (id, etag).
+    /// Light: no details.
+    pub async fn item_tags(
+        &self,
+        library: &str,
+        types: &str,
+    ) -> anyhow::Result<Vec<(String, Option<String>)>> {
         const PAGE: usize = 1000;
         let mut out = Vec::new();
         loop {
@@ -158,7 +164,7 @@ impl JellyfinClient {
                     &[
                         ("ParentId", library.to_string()),
                         ("Recursive", "true".into()),
-                        ("IncludeItemTypes", "Movie".into()),
+                        ("IncludeItemTypes", types.into()),
                         ("Fields", "Etag".into()),
                         ("EnableImages", "false".into()),
                         ("EnableUserData", "false".into()),
@@ -190,7 +196,7 @@ impl JellyfinClient {
                     (
                         "Fields",
                         "ProviderIds,MediaSources,MediaStreams,Overview,Genres,Studios,Tags,\
-                         SortName,OriginalTitle,DateCreated,Etag"
+                         SortName,OriginalTitle,DateCreated,Etag,ParentId"
                             .into(),
                     ),
                     ("EnableUserData", "false".into()),

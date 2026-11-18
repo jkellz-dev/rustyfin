@@ -208,7 +208,7 @@ the friend sets up, is [Linked Servers](linked-servers.md).
 | `user` | `String` | (required) | The user the friend made for the link |
 | `password` | `String` | --- | Its password; or use `password_file` |
 | `password_file` | `String` | --- | A file holding the password (a mounted secret); a trailing newline is ignored |
-| `libraries` | array of tables | (at least one) | `remote` (the friend's library name) merges into `local` (yours) |
+| `libraries` | array of tables | (at least one) | `remote` (the friend's library name) merges into `local` (yours); with no `local`, it gets a library of its own |
 
 ```toml
 [[link]]

@@ -717,7 +717,7 @@ pub async fn delete_empty_pathless_folders(
     // Artist -> album -> track is the deepest chain, so a few passes settle it.
     for _ in 0..4 {
         let done = sqlx::query(
-            "DELETE FROM media_items f WHERE f.library_id = $1 AND f.path IS NULL \
+            "DELETE FROM media_items f WHERE f.library_id = $1 AND f.path IS NULL AND f.link_id IS NULL \
              AND f.item_type IN ('Series', 'Season', 'MusicAlbum', 'MusicArtist') \
              AND NOT EXISTS (SELECT 1 FROM media_items c WHERE c.parent_id = f.id)",
         )

@@ -1496,7 +1496,12 @@ Design, settled before any code:
 - [x] Checked against the sandbox's real Jellyfin 10.10.7 (2026-11-18): sync, merge, poster and ranged stream relay
 - [x] A scan merges the films it finds at once (no double listing until the next sync); a local film borrows
       artwork, overview, genres, ratings and provider ids it lacks from a linked copy
-- [ ] Series, seasons and episodes
+- [x] Series, seasons and episodes: series match by TVDB/TMDB/IMDb id, seasons by number in their series, episodes by
+      number in their season; a friend's episode of a held episode is a copy, ranked like film copies
+- [x] A mapping with no `local` gets a library of its own (no folders; removed with the link); Jellyfin home videos
+      come across as films
+- [x] A mapping that fails is skipped with an error recorded on the link; the rest syncs, and nothing is removed
+      while any mapping fails
 - [ ] Link errors and last sync shown in the admin
 - [ ] A link removed from the config is removed at start, with its copies and the artwork films borrowed from them
       (today: `docs/linked-servers.md`, "Removing a link", by hand)

@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 pub use jellyfin::JellyfinClient;
 pub use rustyfin_db::repo::links::{LINK_SCHEME, parse_image_path};
-pub use sync::films_from_jellyfin;
+pub use sync::items_from_jellyfin;
 
 /// What the friend runs. A Rustyfin speaks the Jellyfin API too; its own,
 /// faster sync is roadmap 16b.2r.
@@ -75,10 +75,13 @@ impl std::fmt::Debug for LinkSettings {
 }
 
 /// The friend's library `remote` (by name) merges into the local `local`.
+/// With no `local`, it gets a library of its own, named
+/// "<remote> · <link name>", with no folders.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LibraryMap {
     pub remote: String,
-    pub local: String,
+    #[serde(default)]
+    pub local: Option<String>,
 }
 
 /// What a sync changed.
@@ -87,8 +90,11 @@ pub struct SyncReport {
     pub added: u64,
     pub updated: u64,
     pub removed: u64,
-    /// Copies that became versions of a film held elsewhere.
+    /// Copies that became versions of a title held elsewhere.
     pub merged: u64,
+    /// Mappings that could not sync (the rest did). While any fails, nothing
+    /// is removed.
+    pub errors: Vec<String>,
 }
 
 /// One configured link.
@@ -141,7 +147,11 @@ impl Links {
         let _one = link.syncing.lock().await;
         let started = std::time::Instant::now();
         let result = sync::sync_link(pool, &link).await;
-        let error = result.as_ref().err().map(|e| format!("{e:#}"));
+        let error = match &result {
+            Err(e) => Some(format!("{e:#}")),
+            Ok(r) if !r.errors.is_empty() => Some(r.errors.join("; ")),
+            Ok(_) => None,
+        };
         if let Err(e) = rustyfin_db::repo::links::record_sync(pool, id, error.as_deref()).await {
             tracing::warn!(
                 "Could not record the sync of link {}: {e}",
@@ -149,15 +159,20 @@ impl Links {
             );
         }
         match &result {
-            Ok(r) => tracing::info!(
-                "Link {}: {} added, {} updated, {} removed, {} merged in {:?}",
-                link.settings.name,
-                r.added,
-                r.updated,
-                r.removed,
-                r.merged,
-                started.elapsed()
-            ),
+            Ok(r) => {
+                tracing::info!(
+                    "Link {}: {} added, {} updated, {} removed, {} merged in {:?}",
+                    link.settings.name,
+                    r.added,
+                    r.updated,
+                    r.removed,
+                    r.merged,
+                    started.elapsed()
+                );
+                for e in &r.errors {
+                    tracing::warn!("Link {}: {e}", link.settings.name);
+                }
+            }
             Err(e) => tracing::warn!("Link {} did not sync: {e:#}", link.settings.name),
         }
         result

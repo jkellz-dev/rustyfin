@@ -5,6 +5,8 @@
 //! so every list shows the film once and the copies are ranked like local
 //! versions.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -81,9 +83,45 @@ pub fn remote_item(remote_id: &str) -> &str {
         .map_or(remote_id, |(item, _)| item)
 }
 
-/// A film as the friend's server describes it.
+/// A friend's library with no local counterpart: the library of its own made
+/// for it (no folders), found again by link and name on later syncs.
+pub async fn ensure_library(
+    pool: &PgPool,
+    link_id: Uuid,
+    name: &str,
+    library_type: &str,
+) -> Result<Uuid, sqlx::Error> {
+    if let Some(id) =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM libraries WHERE link_id = $1 AND name = $2")
+            .bind(link_id)
+            .bind(name)
+            .fetch_optional(pool)
+            .await?
+    {
+        return Ok(id);
+    }
+    sqlx::query_scalar(
+        "INSERT INTO libraries (name, library_type, paths, link_id) \
+         VALUES ($1, $2, '{}', $3) RETURNING id",
+    )
+    .bind(name)
+    .bind(library_type)
+    .bind(link_id)
+    .fetch_one(pool)
+    .await
+}
+
+/// An item as the friend's server describes it: a film (or home video), a
+/// series, a season or an episode.
 #[derive(Debug, Clone, Default)]
-pub struct LinkedFilm {
+pub struct LinkedItem {
+    /// `Movie`, `Series`, `Season` or `Episode`.
+    pub item_type: String,
+    /// A season's number; an episode's number in its season.
+    pub index_number: Option<i32>,
+    /// An episode's season number.
+    pub parent_index_number: Option<i32>,
+    pub is_folder: bool,
     pub link_id: Uuid,
     pub remote_id: String,
     pub remote_etag: Option<String>,
@@ -110,17 +148,19 @@ pub struct LinkedFilm {
     /// Jellyfin's ProviderIds (`{"Tmdb": "603", "Imdb": "tt0133093"}`).
     pub external_ids: serde_json::Value,
     /// The link's name, the friend's name for the copy, its media source id
-    /// and the friend's item id:
-    /// `{"LinkName", "LinkSource", "RemoteSourceId", "RemoteItemId"}`.
+    /// and the friend's item id, and for seasons and episodes the friend's
+    /// series and season ids: `{"LinkName", "LinkSource", "RemoteSourceId",
+    /// "RemoteItemId", "RemoteSeriesId", "RemoteSeasonId"}`.
     pub extra_data: serde_json::Value,
     pub streams: Vec<NewMediaStream>,
     /// (image type, index, the friend's tag).
     pub images: Vec<(String, i32, String)>,
 }
 
-/// Store a linked film (new or changed); returns its row id and whether it
-/// was new. A new copy starts out on its own; [`merge`] makes it a version.
-pub async fn upsert_film(pool: &PgPool, film: &LinkedFilm) -> Result<(Uuid, bool), sqlx::Error> {
+/// Store a linked item (new or changed); returns its row id and whether it
+/// was new. A new copy starts out on its own; [`merge`] makes it a version
+/// and puts seasons and episodes in place.
+pub async fn upsert_item(pool: &PgPool, film: &LinkedItem) -> Result<(Uuid, bool), sqlx::Error> {
     let (id, inserted): (Uuid, bool) = sqlx::query_as(
         r#"
         INSERT INTO media_items (
@@ -128,13 +168,15 @@ pub async fn upsert_film(pool: &PgPool, film: &LinkedFilm) -> Result<(Uuid, bool
             community_rating, critic_rating, official_rating, genres, studios, tags,
             production_year, premiere_date, date_created, runtime_ticks,
             container, total_bitrate, width, height, size,
-            external_ids, extra_data, is_folder, link_id, remote_id, remote_etag
+            external_ids, extra_data, is_folder, link_id, remote_id, remote_etag,
+            index_number, parent_index_number
         ) VALUES (
-            'Movie', $1, $2, $3, $4, $5,
+            $25, $1, $2, $3, $4, $5,
             $6, $7, $8, $9, $10, $11,
             $12, $13, COALESCE($14, now()), $15,
             $16, $17, $18, $19, $20,
-            $21, $22, false, $23, $24, NULL
+            $21, $22, $26, $23, $24, NULL,
+            $27, $28
         )
         ON CONFLICT (link_id, remote_id) WHERE link_id IS NOT NULL DO UPDATE SET
             library_id = EXCLUDED.library_id, name = EXCLUDED.name,
@@ -147,6 +189,9 @@ pub async fn upsert_film(pool: &PgPool, film: &LinkedFilm) -> Result<(Uuid, bool
             total_bitrate = EXCLUDED.total_bitrate, width = EXCLUDED.width,
             height = EXCLUDED.height, size = EXCLUDED.size,
             external_ids = EXCLUDED.external_ids, extra_data = EXCLUDED.extra_data,
+            item_type = EXCLUDED.item_type, is_folder = EXCLUDED.is_folder,
+            index_number = EXCLUDED.index_number,
+            parent_index_number = EXCLUDED.parent_index_number,
             remote_etag = NULL, date_modified = now()
         RETURNING id, (xmax = 0)
         "#,
@@ -175,6 +220,10 @@ pub async fn upsert_film(pool: &PgPool, film: &LinkedFilm) -> Result<(Uuid, bool
     .bind(&film.extra_data)
     .bind(film.link_id)
     .bind(&film.remote_id)
+    .bind(&film.item_type)
+    .bind(film.is_folder)
+    .bind(film.index_number)
+    .bind(film.parent_index_number)
     .fetch_one(pool)
     .await?;
 
@@ -265,63 +314,355 @@ pub async fn delete_copies(
     Ok(done.rows_affected())
 }
 
-/// Make linked films that stand alone versions of the same film elsewhere in
-/// their library, matched only by provider id (TMDB, then IMDb):
-/// - of a film this server holds, when exactly one matches;
-/// - else of another linked copy of the same TMDB film, so two friends'
-///   copies (or two versions on one friend's server) are one film too. The
-///   film's main copy (a film's first source) is preferred, then the lowest
-///   id, so a version dropped by the friend never takes the film with it.
+/// Make linked films and series that stand alone versions of the same title
+/// elsewhere in their library, matched only by provider id (films: TMDB,
+/// IMDb; series: TVDB, TMDB, IMDb):
+/// - of a title this server holds, when exactly one matches;
+/// - else of another linked copy of the same title, so two friends' copies
+///   (or two versions on one friend's server) are one title too. The title's
+///   main copy (a film's first source) is preferred, then the lowest id, so a
+///   version dropped by the friend never takes the title with it.
 ///
-/// Then a local film that took in copies borrows what it lacks from them
-/// ([`borrow`]).
+/// Then seasons and episodes are put in place ([`place_shows`]), and a local
+/// title that took in copies borrows what it lacks from them ([`borrow`]).
 ///
-/// A copy whose provider ids match two of the server's films stays alone:
-/// a wrong merge would hide a film. Returns how many copies it merged.
+/// A copy whose provider ids match two of the server's titles stays alone:
+/// a wrong merge would hide a title. Returns how many copies it merged.
 pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let local: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        r#"
-        SELECT l.id, (array_agg(o.id))[1]
-        FROM media_items l
-        JOIN media_items o
-          ON o.library_id = l.library_id AND o.item_type = 'Movie'
-         AND o.owner_id IS NULL AND o.link_id IS NULL
-         AND ((l.external_ids->>'Tmdb' IS NOT NULL
-               AND o.external_ids->>'Tmdb' = l.external_ids->>'Tmdb')
-           OR (l.external_ids->>'Imdb' IS NOT NULL
-               AND o.external_ids->>'Imdb' = l.external_ids->>'Imdb'))
-        WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = 'Movie'
-        GROUP BY l.id
-        HAVING count(DISTINCT o.id) = 1
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-    let mut merged = make_versions(pool, &local).await?;
+    let mut merged = 0;
+    for (item_type, keys) in [
+        ("Movie", &["Tmdb", "Imdb"][..]),
+        ("Series", &["Tvdb", "Tmdb", "Imdb"][..]),
+    ] {
+        let keys: Vec<String> = keys.iter().map(|k| k.to_string()).collect();
+        let local: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            r#"
+            SELECT l.id, (array_agg(o.id))[1]
+            FROM media_items l
+            JOIN media_items o
+              ON o.library_id = l.library_id AND o.item_type = $1
+             AND o.owner_id IS NULL AND o.link_id IS NULL
+             AND EXISTS (SELECT 1 FROM unnest($2::text[]) k
+                         WHERE l.external_ids->>k IS NOT NULL
+                           AND o.external_ids->>k = l.external_ids->>k)
+            WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = $1
+            GROUP BY l.id
+            HAVING count(DISTINCT o.id) = 1
+            "#,
+        )
+        .bind(item_type)
+        .bind(&keys)
+        .fetch_all(pool)
+        .await?;
+        merged += make_versions(pool, &local).await?;
 
-    let linked: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        r#"
-        SELECT l.id, first.id
-        FROM media_items l
-        JOIN LATERAL (
-            SELECT o.id FROM media_items o
-            WHERE o.library_id = l.library_id AND o.item_type = 'Movie'
-              AND o.owner_id IS NULL AND o.link_id IS NOT NULL
-              AND o.external_ids->>'Tmdb' = l.external_ids->>'Tmdb'
-            ORDER BY (o.remote_id LIKE '%/%'), o.id LIMIT 1
-        ) first ON first.id <> l.id
-        WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = 'Movie'
-          AND l.external_ids->>'Tmdb' IS NOT NULL
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-    merged += make_versions(pool, &linked).await?;
+        let linked: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            r#"
+            SELECT l.id, first.id
+            FROM media_items l
+            JOIN LATERAL (
+                SELECT o.id FROM media_items o
+                WHERE o.library_id = l.library_id AND o.item_type = $1
+                  AND o.owner_id IS NULL AND o.link_id IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM unnest($2::text[]) k
+                              WHERE l.external_ids->>k IS NOT NULL
+                                AND o.external_ids->>k = l.external_ids->>k)
+                ORDER BY (o.remote_id LIKE '%/%'), o.id LIMIT 1
+            ) first ON first.id <> l.id
+            WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = $1
+            "#,
+        )
+        .bind(item_type)
+        .bind(&keys)
+        .fetch_all(pool)
+        .await?;
+        merged += make_versions(pool, &linked).await?;
+    }
+    place_shows(pool).await?;
     borrow(pool).await?;
     Ok(merged)
 }
 
-/// A local film with linked copies borrows what it lacks from one of them
+/// Put the friends' seasons and episodes in place (after series are merged):
+/// - a season goes under its series, or under the series that series merged
+///   into; one with the same number there already (the server's own first,
+///   else the friends' lowest id) makes it a `Version` of that one;
+/// - an episode goes under its season (or the season that merged it), and is
+///   a `Version` of an episode with the same number there.
+///
+/// Versions have no parent, so lists, counts and Next Up never see them; the
+/// episode they belong to lists them as its copies. Returns how many rows
+/// changed place.
+pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    // Linked series: (link, remote id) -> the series it stands for, and names.
+    let series: Vec<(Uuid, String, Uuid, Option<Uuid>)> = sqlx::query_as(
+        "SELECT link_id, remote_id, id, owner_id FROM media_items \
+         WHERE link_id IS NOT NULL AND item_type = 'Series'",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut effective_series: HashMap<(Uuid, String), Uuid> = HashMap::new();
+    for (link, remote, id, owner) in series {
+        effective_series.insert((link, remote), owner.unwrap_or(id));
+    }
+
+    // Seasons.
+    let seasons: Vec<(Uuid, Uuid, String, Option<i32>, Option<String>)> = sqlx::query_as(
+        "SELECT id, link_id, remote_id, index_number, extra_data->>'RemoteSeriesId' \
+         FROM media_items WHERE link_id IS NOT NULL AND item_type = 'Season'",
+    )
+    .fetch_all(pool)
+    .await?;
+    let series_ids: Vec<Uuid> = effective_series.values().copied().collect();
+    let names = names_of(pool, &series_ids).await?;
+    let local_seasons: Vec<(Uuid, Uuid, Option<i32>)> = sqlx::query_as(
+        "SELECT id, parent_id, index_number FROM media_items \
+         WHERE item_type = 'Season' AND link_id IS NULL AND owner_id IS NULL \
+           AND parent_id = ANY($1)",
+    )
+    .bind(&series_ids)
+    .fetch_all(pool)
+    .await?;
+    let mut local_by_key: HashMap<(Uuid, i32), Uuid> = HashMap::new();
+    for (id, parent, index) in local_seasons {
+        if let Some(index) = index {
+            local_by_key.entry((parent, index)).or_insert(id);
+        }
+    }
+    let mut places: Vec<Place> = Vec::new();
+    // (link, remote season) -> the season its episodes go under.
+    let mut effective_season: HashMap<(Uuid, String), (Uuid, Uuid)> = HashMap::new();
+    let mut groups: HashMap<(Uuid, i32), Vec<(Uuid, Uuid, String)>> = HashMap::new();
+    for (id, link, remote, index, remote_series) in seasons {
+        let Some(series) = remote_series.and_then(|r| effective_series.get(&(link, r)).copied())
+        else {
+            continue;
+        };
+        match index {
+            Some(index) => groups
+                .entry((series, index))
+                .or_default()
+                .push((id, link, remote)),
+            None => {
+                places.push(Place::primary(id, series, None, names.get(&series)));
+                effective_season.insert((link, remote), (id, series));
+            }
+        }
+    }
+    for ((series, index), mut members) in groups {
+        members.sort_by_key(|m| m.0);
+        let first = match local_by_key.get(&(series, index)) {
+            Some(local) => *local,
+            None => {
+                let (id, _, _) = &members[0];
+                places.push(Place::primary(*id, series, None, names.get(&series)));
+                *id
+            }
+        };
+        for (id, link, remote) in members {
+            if id != first {
+                places.push(Place::version(id, first));
+            }
+            effective_season.insert((link, remote), (first, series));
+        }
+    }
+
+    // Episodes.
+    let episodes: Vec<(
+        Uuid,
+        Uuid,
+        String,
+        Option<i32>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT id, link_id, remote_id, index_number, \
+                    extra_data->>'RemoteSeasonId', extra_data->>'RemoteSeriesId' \
+             FROM media_items WHERE link_id IS NOT NULL AND item_type = 'Episode'",
+    )
+    .fetch_all(pool)
+    .await?;
+    let season_ids: Vec<Uuid> = effective_season.values().map(|(s, _)| *s).collect();
+    let season_names = names_of(pool, &season_ids).await?;
+    let local_episodes: Vec<(Uuid, Uuid, Option<i32>)> = sqlx::query_as(
+        "SELECT id, parent_id, index_number FROM media_items \
+         WHERE item_type = 'Episode' AND link_id IS NULL AND owner_id IS NULL \
+           AND parent_id = ANY($1)",
+    )
+    .bind(&season_ids)
+    .fetch_all(pool)
+    .await?;
+    let mut local_eps: HashMap<(Uuid, i32), Uuid> = HashMap::new();
+    for (id, parent, index) in local_episodes {
+        if let Some(index) = index {
+            local_eps.entry((parent, index)).or_insert(id);
+        }
+    }
+    let mut ep_groups: HashMap<(Uuid, i32), Vec<(bool, Uuid)>> = HashMap::new();
+    for (id, link, remote, index, remote_season, remote_series) in episodes {
+        let season = remote_season.and_then(|s| effective_season.get(&(link, s)).copied());
+        match (season, index) {
+            (Some((season, _)), Some(index)) => ep_groups
+                .entry((season, index))
+                .or_default()
+                .push((remote.contains('/'), id)),
+            (Some((season, series)), None) => places.push(Place::episode(
+                id,
+                season,
+                series,
+                names.get(&series),
+                season_names.get(&season),
+            )),
+            (None, _) => {
+                // A season the friend does not share: under the series.
+                if let Some(series) =
+                    remote_series.and_then(|r| effective_series.get(&(link, r)).copied())
+                {
+                    places.push(Place::primary(id, series, None, names.get(&series)));
+                }
+            }
+        }
+    }
+    let series_of_season: HashMap<Uuid, Uuid> = effective_season.values().copied().collect();
+    for ((season, index), mut members) in ep_groups {
+        // A film's main copy before its other versions, then the lowest id.
+        members.sort();
+        let series = series_of_season[&season];
+        let first = match local_eps.get(&(season, index)) {
+            Some(local) => *local,
+            None => {
+                let id = members[0].1;
+                places.push(Place::episode(
+                    id,
+                    season,
+                    series,
+                    names.get(&series),
+                    season_names.get(&season),
+                ));
+                id
+            }
+        };
+        for (_, id) in members {
+            if id != first {
+                places.push(Place::version(id, first));
+            }
+        }
+    }
+    write_places(pool, &places).await
+}
+
+/// Where one linked row goes.
+struct Place {
+    id: Uuid,
+    owner: Option<Uuid>,
+    parent: Option<Uuid>,
+    series: Option<Uuid>,
+    season: Option<Uuid>,
+    extra_type: Option<String>,
+    series_name: Option<String>,
+    season_name: Option<String>,
+}
+
+impl Place {
+    fn primary(id: Uuid, parent: Uuid, season: Option<Uuid>, series_name: Option<&String>) -> Self {
+        Place {
+            id,
+            owner: None,
+            parent: Some(parent),
+            series: Some(parent),
+            season,
+            extra_type: None,
+            series_name: series_name.cloned(),
+            season_name: None,
+        }
+    }
+
+    fn episode(
+        id: Uuid,
+        season: Uuid,
+        series: Uuid,
+        series_name: Option<&String>,
+        season_name: Option<&String>,
+    ) -> Self {
+        Place {
+            id,
+            owner: None,
+            parent: Some(season),
+            series: Some(series),
+            season: Some(season),
+            extra_type: None,
+            series_name: series_name.cloned(),
+            season_name: season_name.cloned(),
+        }
+    }
+
+    fn version(id: Uuid, of: Uuid) -> Self {
+        Place {
+            id,
+            owner: Some(of),
+            parent: None,
+            series: None,
+            season: None,
+            extra_type: Some("Version".into()),
+            series_name: None,
+            season_name: None,
+        }
+    }
+}
+
+async fn names_of(pool: &PgPool, ids: &[Uuid]) -> Result<HashMap<Uuid, String>, sqlx::Error> {
+    let rows: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, name FROM media_items WHERE id = ANY($1)")
+            .bind(ids)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().collect())
+}
+
+async fn write_places(pool: &PgPool, places: &[Place]) -> Result<u64, sqlx::Error> {
+    if places.is_empty() {
+        return Ok(0);
+    }
+    let ids: Vec<Uuid> = places.iter().map(|p| p.id).collect();
+    let owners: Vec<Option<Uuid>> = places.iter().map(|p| p.owner).collect();
+    let parents: Vec<Option<Uuid>> = places.iter().map(|p| p.parent).collect();
+    let series: Vec<Option<Uuid>> = places.iter().map(|p| p.series).collect();
+    let seasons: Vec<Option<Uuid>> = places.iter().map(|p| p.season).collect();
+    let extra: Vec<Option<String>> = places.iter().map(|p| p.extra_type.clone()).collect();
+    let series_names: Vec<Option<String>> = places.iter().map(|p| p.series_name.clone()).collect();
+    let season_names: Vec<Option<String>> = places.iter().map(|p| p.season_name.clone()).collect();
+    let done = sqlx::query(
+        r#"
+        UPDATE media_items m SET
+            owner_id = u.owner, parent_id = u.parent, series_id = u.series,
+            season_id = u.season, extra_type = u.extra,
+            series_name = COALESCE(u.series_name, m.series_name),
+            season_name = COALESCE(u.season_name, m.season_name)
+        FROM unnest($1::uuid[], $2::uuid[], $3::uuid[], $4::uuid[], $5::uuid[],
+                    $6::text[], $7::text[], $8::text[])
+             AS u(id, owner, parent, series, season, extra, series_name, season_name)
+        WHERE m.id = u.id
+          AND (m.owner_id IS DISTINCT FROM u.owner OR m.parent_id IS DISTINCT FROM u.parent
+               OR m.series_id IS DISTINCT FROM u.series OR m.season_id IS DISTINCT FROM u.season
+               OR m.extra_type IS DISTINCT FROM u.extra
+               OR (u.series_name IS NOT NULL AND m.series_name IS DISTINCT FROM u.series_name)
+               OR (u.season_name IS NOT NULL AND m.season_name IS DISTINCT FROM u.season_name))
+        "#,
+    )
+    .bind(&ids)
+    .bind(&owners)
+    .bind(&parents)
+    .bind(&series)
+    .bind(&seasons)
+    .bind(&extra)
+    .bind(&series_names)
+    .bind(&season_names)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected())
+}
+
+/// A local title with linked copies borrows what it lacks from one of them
 /// (the first by id): artwork of each kind it has none of, overview, genres,
 /// studios, ratings, premiere date, and provider ids it lacks. Its own values
 /// always win. Borrowed artwork is a `link://` row like the copy's, removed

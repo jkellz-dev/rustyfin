@@ -236,11 +236,13 @@ impl LibraryScanner {
 
         if library_type == "movies" {
             self.sync_movie_collections(library_id).await;
-            // A film this scan found may be one a linked server shares: merge
-            // now, not at the link's next sync, so it is never listed twice.
-            if let Err(e) = rustyfin_db::repo::links::merge(&self.pool).await {
-                tracing::warn!("Could not merge linked copies after the scan: {e}");
-            }
+        }
+        // A title this scan found may be one a linked server shares: merge
+        // now, not at the link's next sync, so it is never listed twice.
+        if library_type != "music"
+            && let Err(e) = rustyfin_db::repo::links::merge(&self.pool).await
+        {
+            tracing::warn!("Could not merge linked copies after the scan: {e}");
         }
 
         libraries::touch_updated_at(&self.pool, library_id)
