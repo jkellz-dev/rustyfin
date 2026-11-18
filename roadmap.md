@@ -1560,8 +1560,9 @@ Design, settled before any code:
       server
 - [x] `PlaybackInfo` offers no transcode for a linked copy until relayed transcodes land, and lists a copy the client
       cannot play as is after every copy it can
-- [ ] Transcode of a linked copy: `PlaybackInfo`, the HLS playlist and segments relayed from the linked server, which
-      runs ffmpeg; addresses rewritten to the home server's
+- [x] Transcode of a linked copy: `PlaybackInfo` asked of the linked server with the client's request, the HLS
+      playlists and segments relayed through `/LinkRelay/{link}/...` (the link's copies only; the link's token never
+      reaches a client); the linked server runs ffmpeg
 - [ ] Progress and stop reports update the home user's state; the linked server only sees the link's session
 - [ ] If a linked server drops mid-play, the client gets an error it can retry with another copy (no silent switch)
 

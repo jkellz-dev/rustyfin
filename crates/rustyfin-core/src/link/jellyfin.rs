@@ -133,6 +133,66 @@ impl JellyfinClient {
         bail!("could not sign in to {} as {}", self.base, self.user)
     }
 
+    /// POST JSON to a route as the link user (`userId` added to the query),
+    /// signing in again once if the token was revoked.
+    pub async fn post_json(&self, path: &str, body: &Value) -> anyhow::Result<Value> {
+        for attempt in 0..2 {
+            let session = self.session().await?;
+            let response = self
+                .http
+                .post(format!("{}{}", self.base, path))
+                .header(AUTHORIZATION, self.authorization(Some(&session.token)))
+                .query(&[("userId", session.user_id.as_str())])
+                .timeout(CALL_TIMEOUT)
+                .json(body)
+                .send()
+                .await
+                .with_context(|| format!("could not reach {}", self.base))?;
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
+                *self.session.write().await = None;
+                continue;
+            }
+            if !response.status().is_success() {
+                bail!("{} answered {path} with {}", self.base, response.status());
+            }
+            return response
+                .json()
+                .await
+                .with_context(|| format!("{} answered {path} with something else", self.base));
+        }
+        bail!("could not sign in to {} as {}", self.base, self.user)
+    }
+
+    /// GET `path_and_query` (already encoded) as the link user and hand back
+    /// the response as it comes, passing on `forward` headers.
+    pub async fn relay_url(
+        &self,
+        path_and_query: &str,
+        forward: HeaderMap,
+    ) -> anyhow::Result<reqwest::Response> {
+        for attempt in 0..2 {
+            let session = self.session().await?;
+            let mut headers = forward.clone();
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&self.authorization(Some(&session.token)))?,
+            );
+            let response = self
+                .http
+                .get(format!("{}{}", self.base, path_and_query))
+                .headers(headers)
+                .send()
+                .await
+                .with_context(|| format!("could not reach {}", self.base))?;
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
+                *self.session.write().await = None;
+                continue;
+            }
+            return Ok(response);
+        }
+        bail!("could not sign in to {} as {}", self.base, self.user)
+    }
+
     /// The libraries the link user can see: (id, name, collection type).
     pub async fn libraries(&self) -> anyhow::Result<Vec<(String, String, String)>> {
         let body = self.get_json("/UserViews", &[]).await?;
