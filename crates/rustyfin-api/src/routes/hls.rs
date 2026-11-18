@@ -262,7 +262,7 @@ pub async fn get_variant_playlist(
             audio_only: false,
             run: 0,
             cut,
-            keyframes_from: None,
+            keyframes_at: vec![],
         };
 
         let plan = session_plan(timeline, stream_params, &timing);
@@ -543,7 +543,7 @@ pub async fn get_audio_variant_playlist(
             audio_only: true,
             run: 0,
             cut: SegmentCut::Every,
-            keyframes_from: None,
+            keyframes_at: vec![],
         };
 
         let plan = session_plan(timeline, stream_params, &timing);

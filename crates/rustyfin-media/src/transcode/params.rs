@@ -45,10 +45,11 @@ pub struct StreamParams {
     pub run: u32,
     /// Where ffmpeg cuts segments.
     pub cut: SegmentCut,
-    /// Encoded video: force keyframes on the segment marks, from this file
-    /// time every `segment_duration` seconds (and nowhere else), so the HLS
-    /// muxer cuts exactly there.
-    pub keyframes_from: Option<f64>,
+    /// Encoded video: force keyframes at these file times, the later segment
+    /// marks (and nowhere else), so the HLS muxer cuts exactly there. An
+    /// expression on `t` does not do: with `-copyts` it counts from the run's
+    /// start, so the marks moved with every restart.
+    pub keyframes_at: Vec<f64>,
 }
 
 /// Where ffmpeg cuts a stream into segments.

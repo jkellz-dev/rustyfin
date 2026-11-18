@@ -98,6 +98,12 @@ impl Timeline {
         after.saturating_sub(1) as u32
     }
 
+    /// Where the segments after `n` start: the marks an encode that starts
+    /// at segment `n` forces keyframes on.
+    pub fn starts_after(&self, n: u32) -> Vec<f64> {
+        self.starts.iter().skip(n as usize + 1).copied().collect()
+    }
+
     /// The cut times for a run that starts at segment `n` (ffmpeg's segment
     /// muxer, `-segment_times`): one just before each later segment's
     /// keyframe.
@@ -217,6 +223,7 @@ mod tests {
         // still cuts at that keyframe and not the next.
         assert_eq!(t.cut_times_after(3), vec![30.9995, 37.9995]);
         assert!(t.cut_times_after(5).is_empty());
+        assert_eq!(t.starts_after(3), vec![31.0, 38.0]);
     }
 
     #[test]

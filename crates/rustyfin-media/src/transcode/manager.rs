@@ -70,7 +70,7 @@ impl Plan {
             p.cut = SegmentCut::At(self.timeline.cut_times_after(n));
         }
         if !p.audio_only && p.video_codec != VideoCodec::Copy {
-            p.keyframes_from = Some(at);
+            p.keyframes_at = self.timeline.starts_after(n);
         }
         p
     }
@@ -386,20 +386,23 @@ impl TranscodeManager {
         }
     }
 
-    /// The fMP4 init section of the latest run that wrote one, waiting up to
-    /// `timeout` for it.
+    /// The fMP4 init section of the latest run that has finished a segment
+    /// (ffmpeg creates the file empty and writes it with the first segment),
+    /// waiting up to `timeout` for one.
     pub async fn wait_for_init(&self, play_session_id: &str, timeout: Duration) -> Option<PathBuf> {
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
-            let (dir, run) = {
+            self.refresh_done(play_session_id).await;
+            let (dir, runs) = {
                 let jobs = self.jobs.read().await;
                 let job = jobs.get(play_session_id)?;
-                (job.output_dir.clone(), job.run)
+                (job.output_dir.clone(), runs_with_segments(&job.done))
             };
-            if let Some(path) = (1..=run)
+            if let Some(path) = runs
+                .iter()
                 .rev()
                 .map(|r| dir.join(format!("r{r}_init.mp4")))
-                .find(|p| p.exists())
+                .find(|p| std::fs::metadata(p).is_ok_and(|m| m.len() > 0))
             {
                 return Some(path);
             }
@@ -657,6 +660,20 @@ impl TranscodeManager {
     }
 }
 
+/// The runs that finished at least one segment, ascending.
+fn runs_with_segments(done: &BTreeMap<u32, PathBuf>) -> Vec<u32> {
+    let mut runs: Vec<u32> = done
+        .values()
+        .filter_map(|p| {
+            let name = p.file_name()?.to_str()?;
+            name.strip_prefix('r')?.split('_').next()?.parse().ok()
+        })
+        .collect();
+    runs.sort_unstable();
+    runs.dedup();
+    runs
+}
+
 /// The segments of run `run` a list names (`r<run>_<n>.<ext>`), in order.
 fn listed_segments(list: &str, run: u32, ext: &str) -> Vec<u32> {
     let prefix = format!("r{run}_");
@@ -797,7 +814,7 @@ mod tests {
                 audio_only: false,
                 run: 0,
                 cut,
-                keyframes_from: None,
+                keyframes_at: vec![],
             }
         }
 
@@ -918,7 +935,7 @@ mod tests {
             assert!(first.contains("-ss 2466.000"), "{first}");
             assert!(first.contains("-start_number 411"), "{first}");
             assert!(
-                first.contains("-force_key_frames expr:gte(t,2466.000000+n_forced*6)"),
+                first.contains("-force_key_frames 2472.000000,2478.000000,"),
                 "{first}"
             );
             tm.kill_all().await;
@@ -1058,6 +1075,32 @@ mod tests {
                 started.elapsed()
             );
             assert!(tm.get_job_output_dir("s8").await.is_none());
+        }
+
+        // ffmpeg creates the init section empty and writes it with the first
+        // segment: an empty one is never served.
+        #[tokio::test]
+        async fn the_init_section_is_served_once_written() {
+            let root = root("init");
+            let tm = manager(&root, fake("runs"));
+            let mut plan = encoded();
+            plan.params.segment_format = SegmentFormat::Fmp4;
+            tm.start_transcode(request("s11", plan, 0)).await.unwrap();
+            tm.wait_for_segment("s11", 0, Duration::from_secs(3))
+                .await
+                .unwrap();
+            let dir = tm.get_job_output_dir("s11").await.unwrap();
+            std::fs::write(dir.join("r1_init.mp4"), b"").unwrap();
+            assert_eq!(
+                tm.wait_for_init("s11", Duration::from_millis(500)).await,
+                None
+            );
+            std::fs::write(dir.join("r1_init.mp4"), b"ftyp-moov").unwrap();
+            assert_eq!(
+                tm.wait_for_init("s11", Duration::from_millis(500)).await,
+                Some(dir.join("r1_init.mp4"))
+            );
+            tm.kill_all().await;
         }
 
         #[test]

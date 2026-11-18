@@ -155,8 +155,8 @@ fn build_h264_args(params: &StreamParams) -> Vec<String> {
         ]);
     }
 
-    if let Some(from) = params.keyframes_from {
-        args.extend(forced_keyframes(params, from));
+    if !params.keyframes_at.is_empty() {
+        args.extend(forced_keyframes(params));
         let idr = match params.hardware_accel {
             HardwareAccel::Qsv => "-forced_idr",
             _ => "-forced-idr",
@@ -197,7 +197,7 @@ fn build_h265_args(params: &StreamParams) -> Vec<String> {
         ],
         _ => {
             // On the segment marks only when given; else a fixed interval.
-            let keyint = if params.keyframes_from.is_some() {
+            let keyint = if !params.keyframes_at.is_empty() {
                 MARKS_ONLY_KEYINT
             } else {
                 let fps = params.max_framerate.unwrap_or(24.0);
@@ -217,8 +217,8 @@ fn build_h265_args(params: &StreamParams) -> Vec<String> {
             ]
         }
     };
-    if let Some(from) = params.keyframes_from {
-        args.extend(forced_keyframes(params, from));
+    if !params.keyframes_at.is_empty() {
+        args.extend(forced_keyframes(params));
         let idr = match params.hardware_accel {
             HardwareAccel::Qsv => "-forced_idr",
             _ => "-forced-idr",
@@ -245,13 +245,18 @@ fn build_h265_args(params: &StreamParams) -> Vec<String> {
 /// A keyframe interval long enough that the forced ones are the only ones.
 const MARKS_ONLY_KEYINT: u32 = 100_000;
 
-/// Keyframes on the segment marks only: from file time `from` (ffmpeg's
-/// clock with `-copyts`) every `segment_duration` seconds. The HLS muxer
-/// then cuts on exactly those marks, wherever the run started.
-fn forced_keyframes(params: &StreamParams, from: f64) -> Vec<String> {
+/// Keyframes on the segment marks only (file times, ffmpeg's clock with
+/// `-copyts`). The HLS muxer then cuts on exactly those marks, wherever the
+/// run started.
+fn forced_keyframes(params: &StreamParams) -> Vec<String> {
+    let marks: Vec<String> = params
+        .keyframes_at
+        .iter()
+        .map(|t| format!("{t:.6}"))
+        .collect();
     vec![
         "-force_key_frames".to_string(),
-        format!("expr:gte(t,{from:.6}+n_forced*{})", params.segment_duration),
+        marks.join(","),
         "-g".to_string(),
         MARKS_ONLY_KEYINT.to_string(),
     ]
@@ -496,7 +501,7 @@ mod tests {
             audio_only: false,
             run: 0,
             cut: SegmentCut::Every,
-            keyframes_from: None,
+            keyframes_at: vec![],
         }
     }
 
@@ -802,10 +807,10 @@ mod tests {
     #[test]
     fn encodes_put_keyframes_on_the_segment_marks() {
         let mut params = default_params();
-        params.keyframes_from = Some(2466.0);
+        params.keyframes_at = vec![2472.0, 2478.0];
         let args = build_video_args(&params);
         let at = args.iter().position(|a| a == "-force_key_frames").unwrap();
-        assert_eq!(args[at + 1], "expr:gte(t,2466.000000+n_forced*6)");
+        assert_eq!(args[at + 1], "2472.000000,2478.000000");
         let g = args.iter().position(|a| a == "-g").unwrap();
         assert_eq!(args[g + 1], "100000", "no other keyframes");
         assert!(
@@ -815,7 +820,7 @@ mod tests {
         params.video_codec = VideoCodec::H265;
         let args = build_video_args(&params);
         assert!(
-            args.contains(&"expr:gte(t,2466.000000+n_forced*6)".to_string()),
+            args.contains(&"2472.000000,2478.000000".to_string()),
             "{args:?}"
         );
         assert!(args.iter().any(|a| a.contains("scenecut=0")), "{args:?}");
