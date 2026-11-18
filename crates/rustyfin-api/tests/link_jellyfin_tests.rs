@@ -39,6 +39,8 @@ struct Remote {
     shows: Vec<Value>,
     /// Requests seen, as "METHOD path?query".
     seen: Vec<String>,
+    /// PlaybackInfo bodies the link sent.
+    playback_bodies: Vec<Value>,
 }
 
 type Shared = Arc<Mutex<Remote>>;
@@ -230,6 +232,75 @@ async fn image(headers: HeaderMap, Path((id, kind)): Path<(String, String)>) -> 
     }
 }
 
+/// Jellyfin's answer for a client that cannot play the file as is: an HLS
+/// transcode, its URL carrying the link user's token (as Jellyfin's does).
+async fn playback_info(
+    State(remote): State<Shared>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    axum::Json(body): axum::Json<Value>,
+) -> Response {
+    if !authorised(&headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let source = body["MediaSourceId"].as_str().unwrap_or(&id).to_string();
+    remote.lock().unwrap().playback_bodies.push(body);
+    axum::Json(json!({
+        "MediaSources": [{
+            "Id": source,
+            "SupportsDirectPlay": false,
+            "SupportsTranscoding": true,
+            "TranscodingUrl": format!(
+                "/videos/{id}/master.m3u8?MediaSourceId={source}&PlaySessionId=p1&VideoCodec=h264&api_key=tok"
+            ),
+            "TranscodingSubProtocol": "hls",
+            "TranscodingContainer": "ts"
+        }],
+        "PlaySessionId": "p1"
+    }))
+    .into_response()
+}
+
+/// HLS requests must be the link's, never carry a client's token.
+fn hls_allowed(headers: &HeaderMap, q: &HashMap<String, String>) -> bool {
+    authorised(headers)
+        && q.iter()
+            .all(|(k, v)| !k.eq_ignore_ascii_case("api_key") || v == "tok")
+}
+
+async fn master(headers: HeaderMap, Query(q): Query<HashMap<String, String>>) -> Response {
+    if !hls_allowed(&headers, &q) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    (
+        [("content-type", "application/vnd.apple.mpegurl")],
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nmain.m3u8?MediaSourceId=r200&PlaySessionId=p1&api_key=tok\n",
+    )
+        .into_response()
+}
+
+async fn variant(headers: HeaderMap, Query(q): Query<HashMap<String, String>>) -> Response {
+    if !hls_allowed(&headers, &q) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    (
+        [("content-type", "application/vnd.apple.mpegurl")],
+        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MAP:URI=\"hls1/main/-1.mp4?runtimeTicks=0&api_key=tok\"\n#EXTINF:6.0,\nhls1/main/0.mp4?runtimeTicks=0\n#EXT-X-ENDLIST\n",
+    )
+        .into_response()
+}
+
+async fn segment(
+    headers: HeaderMap,
+    Path((_id, segment)): Path<(String, String)>,
+    Query(q): Query<HashMap<String, String>>,
+) -> Response {
+    if !hls_allowed(&headers, &q) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    format!("SEGMENT {segment}").into_response()
+}
+
 /// A fake Jellyfin 10.10 on a free port; returns its base URL.
 async fn fake_jellyfin(remote: Shared) -> String {
     let app = Router::new()
@@ -237,6 +308,10 @@ async fn fake_jellyfin(remote: Shared) -> String {
         .route("/UserViews", get(views))
         .route("/Items", get(items))
         .route("/Videos/{id}/stream", get(stream))
+        .route("/Items/{id}/PlaybackInfo", post(playback_info))
+        .route("/videos/{id}/master.m3u8", get(master))
+        .route("/videos/{id}/main.m3u8", get(variant))
+        .route("/videos/{id}/hls1/main/{segment}", get(segment))
         .route("/Items/{id}/Images/{kind}", get(image))
         .route(
             "/System/Info/Public",
@@ -1043,5 +1118,129 @@ async fn a_friends_shows_merge_into_the_local_ones() {
         )
         .await;
     assert_eq!(names(&eps), vec!["Show S01E01"], "{eps}");
+    app.cleanup().await;
+}
+
+/// A client that cannot play a friend's copy as is gets the friend's
+/// transcode, relayed through this server (roadmap 16b.6): the friend's
+/// server converts, the client only ever sees this server's URLs and its own
+/// token, never the link's.
+#[tokio::test]
+async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, _lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    remote.lock().unwrap().films = vec![film("r200", "Only Theirs", "200", "e1", 3840, 2160)];
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(&app.pool, settings(&url, "secret"))
+        .await
+        .unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+    // An H.264-only client: the friend's HEVC copy needs converting.
+    let profile = json!({
+        "DeviceProfile": {
+            "Name": "h264 only",
+            "DirectPlayProfiles": [{"Container": "mp4", "VideoCodec": "h264", "AudioCodec": "aac", "Type": "Video"}],
+            "TranscodingProfiles": [{"Container": "ts", "Type": "Video", "Protocol": "hls",
+                                     "VideoCodec": "h264", "AudioCodec": "aac", "Context": "Streaming"}]
+        },
+        "StartTimeTicks": 600_000_000_i64,
+        "UserId": uid
+    });
+    let (status, info) = app
+        .post(
+            &format!("/Items/{theirs}/PlaybackInfo?UserId={uid}"),
+            &profile,
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{info}");
+    let source = &info["MediaSources"][0];
+    assert_eq!(source["SupportsDirectPlay"], false, "{info}");
+    assert_eq!(source["SupportsTranscoding"], true, "{info}");
+    let tc = source["TranscodingUrl"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{info}"));
+    assert!(
+        tc.starts_with(&format!("/LinkRelay/{link}/videos/r200/master.m3u8?")),
+        "{tc}"
+    );
+    assert!(
+        !tc.contains("tok"),
+        "the link's token never reaches a client: {tc}"
+    );
+    assert_eq!(source["TranscodingSubProtocol"], "hls", "{info}");
+
+    // The friend was asked for the copy with the client's profile and start,
+    // to convert (not to play as is), and not for this server's user.
+    {
+        let r = remote.lock().unwrap();
+        let body = r.playback_bodies.last().expect("asked the friend");
+        assert_eq!(body["MediaSourceId"], "r200", "{body}");
+        assert_eq!(body["EnableDirectPlay"], false, "{body}");
+        assert_eq!(body["StartTimeTicks"], 600_000_000_i64, "{body}");
+        assert_eq!(body["DeviceProfile"]["Name"], "h264 only", "{body}");
+        assert!(body.get("UserId").is_none_or(Value::is_null), "{body}");
+    }
+
+    // The playlists come through here, with the client's token, never the link's.
+    let (status, _, master) = app.get_raw(&format!("{tc}&api_key={token}"), &token).await;
+    assert_eq!(status, StatusCode::OK, "{master}");
+    assert!(!master.contains("tok"), "{master}");
+    let variant_line = master
+        .lines()
+        .find(|l| l.starts_with("main.m3u8"))
+        .unwrap_or_else(|| panic!("{master}"));
+    assert!(
+        variant_line.contains(&format!("api_key={token}")),
+        "{variant_line}"
+    );
+    let variant_url = format!("/LinkRelay/{link}/videos/r200/{variant_line}");
+    let (status, _, variant) = app.get_raw(&variant_url, &token).await;
+    assert_eq!(status, StatusCode::OK, "{variant}");
+    assert!(!variant.contains("tok"), "{variant}");
+    assert!(
+        variant.contains(&format!(
+            "URI=\"hls1/main/-1.mp4?runtimeTicks=0&api_key={token}\""
+        )),
+        "{variant}"
+    );
+    let segment_line = variant
+        .lines()
+        .find(|l| l.starts_with("hls1/main/0.mp4"))
+        .unwrap_or_else(|| panic!("{variant}"));
+    let (status, _, bytes) = app
+        .get_bytes(
+            &format!("/LinkRelay/{link}/videos/r200/{segment_line}"),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, b"SEGMENT 0.mp4");
+
+    // The relay reaches only the link's copies' media, nothing else there.
+    let (status, _, _) = app
+        .get_raw(&format!("/LinkRelay/{link}/Users"), &token)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _, _) = app
+        .get_raw(
+            &format!("/LinkRelay/{link}/videos/unknown/master.m3u8"),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _, _) = app
+        .get_raw(&format!("/LinkRelay/{link}/videos/r200/master.m3u8"), "")
+        .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
     app.cleanup().await;
 }
