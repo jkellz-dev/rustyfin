@@ -682,15 +682,12 @@ mod tests {
     }
 
     #[test]
-    fn the_browsers_own_controls_drive_a_video_played_directly() {
-        // A file played directly: its timeline is the film's.
-        assert!(native_controls(false, false));
-        // A transcode's timeline starts where it did and grows as it is
-        // made; the admin's controls seek by restarting it.
-        assert!(!native_controls(false, true));
+    fn the_browsers_own_controls_drive_every_video() {
+        // Played directly or transcoded alike: the server lists a
+        // transcode's whole film, so its timeline is the film's too.
+        assert!(native_controls(false));
         // Music keeps the admin's bar (queue, art); its element is hidden.
-        assert!(!native_controls(true, false));
-        assert!(!native_controls(true, true));
+        assert!(!native_controls(true));
     }
 
     #[test]
