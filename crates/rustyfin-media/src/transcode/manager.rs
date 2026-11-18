@@ -649,13 +649,26 @@ impl TranscodeManager {
             .await;
     }
 
-    /// Where run `run` has got; ignored once a newer run replaced it.
+    /// Where run `run` has got (ffmpeg's `time=`); ignored once a newer
+    /// run replaced it.
     async fn update_run_position(&self, play_session_id: &str, run: u32, position_ticks: i64) {
         let mut jobs = self.jobs.write().await;
         if let Some(job) = jobs.get_mut(play_session_id)
             && job.run == run
         {
-            job.encoded_secs = position_ticks as f64 / TICKS;
+            let reported = position_ticks as f64 / TICKS;
+            let start = job
+                .plan
+                .as_ref()
+                .and_then(|p| p.timeline.start(job.run_start))
+                .unwrap_or(0.0);
+            // ffmpeg 5.1 counts time= from the run's start even with
+            // -copyts; a time before the run's start can only be that.
+            job.encoded_secs = if reported + 1.0 < start {
+                start + reported
+            } else {
+                reported
+            };
         }
     }
 }
