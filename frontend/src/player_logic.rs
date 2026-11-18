@@ -602,7 +602,20 @@ mod tests {
         let none = profile_for(&|c| c == "mp3");
         let direct = none["DirectPlayProfiles"].as_array().unwrap();
         assert!(direct.iter().all(|d| d["Container"] != "mp4,m4v"));
-        assert_eq!(none["TranscodingProfiles"], all["TranscodingProfiles"]);
+        // HLS: HEVC first when the browser decodes it (the server copies HEVC
+        // then, and encodes H.264 otherwise).
+        let hls = |p: &Value| {
+            p["TranscodingProfiles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|t| t["Type"] == "Video")
+                .unwrap()["VideoCodec"]
+                .clone()
+        };
+        assert_eq!(hls(&all), "hevc,h264");
+        assert_eq!(hls(&none), "h264");
+        assert_eq!(hls(&open), "h264");
     }
 
     #[test]

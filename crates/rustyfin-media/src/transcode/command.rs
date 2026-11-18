@@ -474,6 +474,19 @@ mod tests {
         assert_eq!(args, vec!["-c:v", "copy"]);
     }
 
+    /// Copied HEVC is tagged `hvc1`, which Apple's players need (MKV files
+    /// usually carry `hev1`).
+    #[test]
+    fn copied_video_carries_its_tag() {
+        let mut params = default_params();
+        params.video_codec = VideoCodec::Copy;
+        params.video_tag = Some("hvc1".into());
+        assert_eq!(
+            build_video_args(&params),
+            vec!["-c:v", "copy", "-tag:v", "hvc1"]
+        );
+    }
+
     /// Copied video is never decoded, so no hardware decoder is set up for
     /// it, and nothing touches the picture (no scaling, no keyframe forcing).
     #[test]

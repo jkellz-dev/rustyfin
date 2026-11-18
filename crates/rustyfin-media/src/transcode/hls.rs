@@ -295,6 +295,25 @@ mod tests {
         assert_eq!(audio_codec_string(AudioCodec::FLAC), "fLaC");
     }
 
+    /// fMP4 segments start with an init section named in `#EXT-X-MAP`; its
+    /// link goes through the segment route like the segments'.
+    #[test]
+    fn the_init_section_link_is_rewritten() {
+        let raw = "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:6.0,\n0.m4s\n";
+        let out = rewrite_variant_playlist_with_key(raw, Uuid::nil(), "ps", Some("tok"));
+        let id = Uuid::nil();
+        assert!(
+            out.contains(&format!(
+                "#EXT-X-MAP:URI=\"/Videos/{id}/hls1/ps/init.mp4?api_key=tok\""
+            )),
+            "{out}"
+        );
+        assert!(
+            out.contains(&format!("/Videos/{id}/hls1/ps/0.m4s?api_key=tok")),
+            "{out}"
+        );
+    }
+
     #[test]
     fn segment_links_carry_the_key() {
         let raw = "#EXTM3U\n#EXTINF:6.0,\n0.ts\n#EXTINF:6.0,\n1.ts\n";
