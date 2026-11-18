@@ -20,6 +20,8 @@ Postgres for state, media folders mounted read-only.
   browser, and a player for video and music. Works on a phone.
 - **Metadata** from NFO files and artwork beside the media; the `rustyfin` tool fills in what is missing from TMDB,
   MusicBrainz and others, and fetches lyrics, into the media folders.
+- **Linked servers**: a friend's Jellyfin shares libraries with yours, and their films merge into your libraries as
+  extra versions, the best copy playing by default. [Linked Servers](docs/linked-servers.md).
 - **Operations**: Prometheus metrics, health on the dashboard, migrations at start.
 
 ## What it leaves out, on purpose
@@ -34,6 +36,7 @@ Postgres for state, media folders mounted read-only.
 - [Deployment](docs/deployment.md): container, systemd, Caddy, nginx or Traefik.
 - [Configuration](docs/configuration.md): every setting.
 - [Moving from Jellyfin](docs/migrating-from-jellyfin.md): what comes across and what does not.
+- [Linked Servers](docs/linked-servers.md): merge a friend's libraries into yours.
 
 Images: `ghcr.io/jkellz-dev/rustyfin-server` (the server) and `ghcr.io/jkellz-dev/rustyfin-meta` (the `rustyfin`
 tool), for `linux/amd64` and `linux/arm64`.

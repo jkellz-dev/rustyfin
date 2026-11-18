@@ -19,6 +19,14 @@ GET /Audio/{itemId}/stream
 
 Both endpoints require authentication and serve the raw media file from disk.
 
+### Linked Copies
+
+A film's copy from a [linked server](linked-servers.md) has no file here. `GET /Videos/{id}/stream` relays the
+friend's `/Videos/{id}/stream?static=true` for that copy, forwarding `Range` and `If-Range` and passing back the
+status, `Content-Range`, `Content-Length`, `Content-Type`, `ETag` and `Last-Modified`, so seeking works as for a local
+file. `HEAD` answers from the size recorded at the last sync. Such copies are offered for direct play only:
+`PlaybackInfo` gives them `SupportsTranscoding: false` and lists them after every copy the app can play.
+
 ## HTTP Range Support
 
 Rustyfin fully supports [RFC 7233 Range Requests](https://tools.ietf.org/html/rfc7233), which enables:

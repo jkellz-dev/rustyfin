@@ -73,7 +73,9 @@ stores no passwords. The `AuthenticatedUser`, `AdminUser` and `OptionalUser` ext
 The long-running parts: the library scanner (walks folders, probes files, reads NFOs and sidecar files, prunes what is
 gone), enrichment (NFO files and per-title settings into the database), the task scheduler and its tasks, the session
 manager (who is connected and what they play, commands to them), the scan board (scan progress and outcomes, sent over
-the WebSocket), and image resizing. See [Library Scanning](library-scanning.md).
+the WebSocket), and image resizing. See [Library Scanning](library-scanning.md). `link/` holds linked servers: the
+`Links` registry, a Jellyfin API client that signs in as the friend's link user, and the sync that mirrors the shared
+catalogue into `media_items` and merges it ([Linked Servers](linked-servers.md)).
 
 ### `rustyfin-db`
 
@@ -119,7 +121,8 @@ the only writer to the media folders and runs with its own writable mount (a sid
 `AppState` (in `rustyfin-api/src/router.rs`) is cloned into every handler. It holds the Postgres pool; the server's id,
 name, address and port; the session manager, search service and transcode manager; the forward-auth and LDAP settings;
 the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the
-login limiter; and the shutdown signal. `PgPool` is reachable through `FromRef`, so extractors can use the database
+login limiter; the shutdown signal; and the linked servers (`links`), whose copies the stream and image routes
+relay. `PgPool` is reachable through `FromRef`, so extractors can use the database
 without knowing the whole state. The scan board is one shared instance for the process
 (`ScanBoard::global()`), so the scanner can report without being handed the state.
 
@@ -131,8 +134,10 @@ without knowing the whole state. The scan board is one shared instance for the p
 4. Image and people cache folders.
 5. The task scheduler and its tasks (library scans, search reindex, activity-log and session pruning, transcode and
    image-cache cleanup, database maintenance); with `run_on_startup`, each runs once now.
-6. Forward-auth and LDAP settings, CORS, `AppState`.
-7. The metrics listener (if configured), then the API router with the admin merged under `/web`, and `/` redirected to
+6. Linked servers from `[[link]]`: each is recorded in the `links` table, and one task syncs them all 30 seconds later
+   and then every 15 minutes.
+7. Forward-auth and LDAP settings, CORS, `AppState`.
+8. The metrics listener (if configured), then the API router with the admin merged under `/web`, and `/` redirected to
    it.
 
 ## Design principles
@@ -141,6 +146,8 @@ without knowing the whole state. The scan board is one shared instance for the p
   fields or its own routes, never a changed shape.
 - **Forward auth first**: identity comes from the proxy (or LDAPS); no stored passwords, no OIDC, no plugins.
 - **Read-only media**: the server never writes to media folders; the `rustyfin` tool is the one writer.
+- **One server for the apps**: a friend's films come through linked servers, merged into this server's libraries;
+  apps never talk to the friend's server.
 - **One binary per role**: the server embeds the admin and the migrations.
 - **Measured performance**: changes to scanning, browsing or streaming are timed with `mise run bench` before and
   after ([Performance](performance.md)).

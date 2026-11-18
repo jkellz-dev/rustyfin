@@ -1498,6 +1498,8 @@ Design, settled before any code:
       artwork, overview, genres, ratings and provider ids it lacks from a linked copy
 - [ ] Series, seasons and episodes
 - [ ] Link errors and last sync shown in the admin
+- [ ] A link removed from the config is removed at start, with its copies and the artwork films borrowed from them
+      (today: `docs/linked-servers.md`, "Removing a link", by hand)
 
 #### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 

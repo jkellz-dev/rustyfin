@@ -28,6 +28,16 @@ Rustyfin deliberately excludes:
 
 All credential management happens outside Rustyfin. This reduces attack surface and centralizes authentication policy.
 
+### Linked Servers
+
+A [linked server](linked-servers.md) does not change how people sign in to Rustyfin. Rustyfin is the one signing in:
+to a friend's Jellyfin, as the user the friend made for the link, with the password from `[[link]]` (or the file it
+names). That user should see only the shared libraries; an administrator's API key is never needed.
+
+A link between two Rustyfin servers will use a read-only key, issued by the friend's server, scoped to the libraries it
+shares and accepted only on `/Link/*` routes. It is the one exception to forward-auth-only, approved for this purpose;
+until it lands, a Rustyfin is linked through its Jellyfin API like a Jellyfin.
+
 ## Forward Auth
 
 ### How It Works

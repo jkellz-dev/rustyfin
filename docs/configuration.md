@@ -195,6 +195,37 @@ hour, day, month, weekday, year) and each task refers to one by name.
 Obtain a free key from [themoviedb.org](https://www.themoviedb.org/settings/api). Without it, metadata enrichment relies
 solely on local NFO files.
 
+### `[[link]]` (optional, repeatable)
+
+A friend's Jellyfin or Rustyfin whose shared libraries merge into yours. One table per friend; the guide, with what
+the friend sets up, is [Linked Servers](linked-servers.md).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `String` | (required) | Unique; shown beside the friend's copies ("2160p · Alex") |
+| `kind` | `String` | (required) | `jellyfin` or `rustyfin` |
+| `url` | `String` | (required) | The friend's server, as this server reaches it |
+| `user` | `String` | (required) | The user the friend made for the link |
+| `password` | `String` | --- | Its password; or use `password_file` |
+| `password_file` | `String` | --- | A file holding the password (a mounted secret); a trailing newline is ignored |
+| `libraries` | array of tables | (at least one) | `remote` (the friend's library name) merges into `local` (yours) |
+
+```toml
+[[link]]
+name = "Alex"
+kind = "jellyfin"
+url = "https://jellyfin.alex.example"
+user = "link-for-sam"
+password_file = "/run/secrets/alex-link-password"
+
+[[link.libraries]]
+remote = "Films"
+local = "Movies"
+```
+
+Links sync 30 seconds after start and then every 15 minutes. Environment variables cannot set `[[link]]` tables; use
+`password_file` for the secret. A link that is missing its password or libraries is skipped with an error in the log.
+
 ## Docker Compose
 
 A `docker-compose.yml` is provided for development:
