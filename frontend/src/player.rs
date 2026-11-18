@@ -691,17 +691,30 @@ fn enter_native_fullscreen(el: &HtmlMediaElement) {
     }
 }
 
-fn toggle_fullscreen(shell: &web_sys::Element) {
+/// Whether the open item is a video the browser's own controls drive.
+fn native_now(p: Player) -> bool {
+    p.now.with_untracked(|n| {
+        n.as_ref()
+            .is_some_and(|n| logic::native_controls(n.is_audio, n.is_hls))
+    })
+}
+
+fn toggle_fullscreen(shell: &web_sys::Element, native: bool) {
     let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
     match fullscreen_way() {
+        _ if doc.fullscreen_element().is_some() => doc.exit_fullscreen(),
+        logic::FullscreenWay::Page if native => {
+            if let Some(el) = media() {
+                let _ = el.request_fullscreen();
+            }
+        }
         logic::FullscreenWay::NativeVideo => {
             if let Some(el) = media() {
                 enter_native_fullscreen(&el);
             }
         }
-        _ if doc.fullscreen_element().is_some() => doc.exit_fullscreen(),
         _ => {
             let _ = shell.request_fullscreen();
         }
@@ -720,6 +733,17 @@ fn attach(p: Player, el: HtmlMediaElement, shell: web_sys::Element) {
     let target: &web_sys::EventTarget = el.as_ref();
     // iPhone: the video plays in iOS's own player; leaving it (Done) pauses
     // the video, so the player closes and the position is saved.
+    {
+        let el2 = el.clone();
+        listen(target, "volumechange", move |_| {
+            if (p.volume.get_untracked() - el2.volume()).abs() > f64::EPSILON {
+                p.volume.set(el2.volume());
+            }
+            if p.muted.get_untracked() != el2.muted() {
+                p.muted.set(el2.muted());
+            }
+        });
+    }
     listen(target, "webkitendfullscreen", move |_| {
         if !p.loading.get_untracked() && p.now.with_untracked(Option::is_some) {
             p.close();
@@ -825,7 +849,7 @@ fn attach(p: Player, el: HtmlMediaElement, shell: web_sys::Element) {
                 Shortcut::TogglePlay => p.toggle(),
                 Shortcut::Seek(by) => p.seek(p.position.get_untracked() + by),
                 Shortcut::Mute => p.muted.set(!p.muted.get_untracked()),
-                Shortcut::Fullscreen => toggle_fullscreen(&shell),
+                Shortcut::Fullscreen => toggle_fullscreen(&shell, native_now(p)),
                 Shortcut::Close => p.close(),
             }
         });
@@ -863,6 +887,7 @@ pub fn PlayerHost() -> View {
     let class = move || match p.now.with(|n| n.as_ref().map(|n| n.is_audio)) {
         None => "player player-off",
         Some(true) => "player player-audio",
+        Some(false) if native_now(p) => "player player-video player-native",
         Some(false) => "player player-video",
     };
     let field =
@@ -906,7 +931,7 @@ pub fn PlayerHost() -> View {
 
     view! {
         div(class=class, r#ref=shell_ref, role="region", aria-label="Player") {
-            video(r#ref=media_ref, class="player-media", playsinline=inline, preload="auto") {}
+            video(r#ref=media_ref, class="player-media", playsinline=inline, preload="auto", controls=move || p.now.with(|n| n.as_ref().is_some_and(|n| logic::native_controls(n.is_audio, n.is_hls)))) {}
             (if p.loading.get() {
                 view! { div(class="player-loading", aria-live="polite") { span(class="spinner") {} " Starting…" } }
             } else {
@@ -982,6 +1007,30 @@ pub fn PlayerHost() -> View {
                     span(class="player-time") { (time()) }
                 }
                 div(class="player-extras") {
+                    (if chapters().is_empty() {
+                        view! {}
+                    } else {
+                        view! {
+                            select(
+                                class="player-select player-chapters",
+                                aria-label="Chapters",
+                                on:change=move |e: web_sys::Event| {
+                                    if let Some(at) = select_value(&e) {
+                                        p.seek(f64::from(at));
+                                    }
+                                    if let Some(s) = e.target().and_then(|t| t.dyn_into::<HtmlSelectElement>().ok()) {
+                                        s.set_value("");
+                                    }
+                                }
+                            ) {
+                                option(value="", selected=true) { "Chapters" }
+                                Indexed(
+                                    list=move || logic::chapter_menu(&chapters()),
+                                    view=move |(at, label)| view! { option(value=at) { (label) } }
+                                )
+                            }
+                        }
+                    })
                     (if audio_tracks().len() > 1 {
                         view! {
                             select(
@@ -1024,7 +1073,7 @@ pub fn PlayerHost() -> View {
                         view! {}
                     })
                     button(
-                        class="player-btn",
+                        class="player-btn player-mute",
                         aria-label=move || if p.muted.get() { "Unmute" } else { "Mute" },
                         on:click=move |_| p.muted.set(!p.muted.get())
                     ) {
@@ -1044,7 +1093,7 @@ pub fn PlayerHost() -> View {
                         aria-label="Full screen",
                         on:click=move |_| {
                             if let Ok(shell) = shell_ref.get().dyn_into::<web_sys::Element>() {
-                                toggle_fullscreen(&shell);
+                                toggle_fullscreen(&shell, native_now(p));
                             }
                         }
                     ) { "⛶" }

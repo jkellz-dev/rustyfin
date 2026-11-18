@@ -1812,6 +1812,19 @@ body:has(.player-video) {
 .player-audio .player-media {
   display: none;
 }
+/* A video played directly: the browser's own controls; the bar keeps only
+   what they lack (title, queue, chapters, tracks, close). */
+.player-native .player-play,
+.player-native .player-timeline,
+.player-native .player-mute,
+.player-native .player-volume,
+.player-native .player-fullscreen,
+.player-chapters {
+  display: none;
+}
+.player-native .player-chapters {
+  display: inline-block;
+}
 .player-bar {
   display: flex;
   align-items: center;

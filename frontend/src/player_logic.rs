@@ -184,6 +184,28 @@ pub enum HlsWay {
     Native,
 }
 
+/// Whether the browser's own controls drive the video: they do for a file
+/// played directly, whose timeline is the film's. A transcode's timeline
+/// starts where the transcode did and grows as it is made, so the admin's
+/// controls (which seek past it by restarting the transcode) stay. Music
+/// keeps the admin's bar; its element is hidden.
+pub fn native_controls(is_audio: bool, is_hls: bool) -> bool {
+    !is_audio && !is_hls
+}
+
+/// Chapters as menu entries: (seconds to jump to, "clock name").
+pub fn chapter_menu(marks: &[(f64, String, f64)]) -> Vec<(String, String)> {
+    marks
+        .iter()
+        .map(|(_, name, at)| {
+            (
+                format!("{}", at.floor() as u64),
+                format!("{} {name}", clock(*at)),
+            )
+        })
+        .collect()
+}
+
 /// How the player goes full screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FullscreenWay {
