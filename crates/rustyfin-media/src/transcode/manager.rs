@@ -972,6 +972,33 @@ mod tests {
         // the film from there: a segment more than two minutes past that
         // restarts the encoder, one before the run's start does too.
         #[tokio::test]
+        async fn ffmpegs_progress_counts_from_the_runs_start() {
+            // ffmpeg 5.1 reports time= from where the run started, even with
+            // -copyts (checked in the sandbox: 0 to 9.45 s on a run from
+            // 600 s). 65 s into a run that started at 2466 s is 2531 s.
+            let root = root("progress");
+            let tm = manager(&root, fake("runs"));
+            tm.start_transcode(request("s12", encoded(), 411))
+                .await
+                .unwrap();
+            tm.update_position("s12", 65 * SEC).await;
+            assert!(
+                !tm.needs_restart("s12", 441).await,
+                "2646 s is within reach"
+            );
+            assert!(tm.needs_restart("s12", 442).await, "2652 s is not");
+
+            tm.touch_segment("s12", 431).await; // the player is at 2586 s
+            tm.update_position("s12", 150 * SEC).await; // 2616 s
+            tm.throttle_jobs().await;
+            assert!(!tm.jobs.read().await["s12"].is_paused, "30 s ahead");
+            tm.update_position("s12", 250 * SEC).await; // 2716 s
+            tm.throttle_jobs().await;
+            assert!(tm.jobs.read().await["s12"].is_paused, "130 s ahead");
+            tm.kill_all().await;
+        }
+
+        #[tokio::test]
         async fn restart_decisions_compare_file_times() {
             let root = root("clock");
             let tm = manager(&root, fake("runs"));
