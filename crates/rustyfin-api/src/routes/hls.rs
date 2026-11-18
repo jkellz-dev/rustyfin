@@ -21,7 +21,7 @@ use rustyfin_media::transcode::{
     manager::TranscodeRequest,
     names::{encode_query_value, is_valid_segment_name, is_valid_session_id},
     params::*,
-    video_copy::{CopyLimits, SourceVideo, plan_video},
+    video_copy::{CopyLimits, SourceVideo, parse_video_codecs, plan_video},
 };
 
 use crate::error::ApiError;
@@ -45,6 +45,10 @@ pub struct HlsQueryParams {
     /// `false` when the client wants the video encoded even if it could take
     /// the source's own (Jellyfin's `allowVideoStreamCopy`).
     pub allow_video_stream_copy: Option<bool>,
+    /// The HEVC ranges the client shows (`SDR,HDR10,HLG`), Jellyfin's
+    /// `hevc-rangetype` (the query middleware capitalises the first letter).
+    #[serde(rename = "Hevc-rangetype", alias = "hevc-rangetype")]
+    pub hevc_rangetype: Option<String>,
     /// The token, when the player signs with the address; passed on to the
     /// playlist's links, which players follow without headers.
     #[serde(rename = "api_key")]
@@ -125,6 +129,9 @@ pub async fn get_master_playlist(
     if params.allow_video_stream_copy == Some(false) {
         extra_qs.push_str("&AllowVideoStreamCopy=false");
     }
+    if let Some(ref ranges) = params.hevc_rangetype {
+        extra_qs.push_str(&format!("&hevc-rangetype={}", encode_query_value(ranges)));
+    }
     if let Some(ref key) = params.api_key {
         extra_qs.push_str(&format!("&api_key={}", encode_query_value(key)));
     }
@@ -187,9 +194,15 @@ pub async fn get_variant_playlist(
         let streams = media_streams::list_by_item(&state.pool, file)
             .await
             .map_err(ApiError::Database)?;
-        let video_codec = plan_video(source_video(&streams).as_ref(), &copy_limits(&params));
+        let source = source_video(&streams);
+        let video_codec = plan_video(source.as_ref(), &copy_limits(&params));
         let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
+        // HEVC goes in fMP4 (Apple's HLS takes it only there), copied HEVC
+        // tagged hvc1 (libx265's output already is), whatever the client asked.
+        let copied_hevc =
+            video_codec == VideoCodec::Copy && source.as_ref().is_some_and(SourceVideo::needs_fmp4);
         let segment_format = match params.transcoding_container.as_deref() {
+            _ if copied_hevc || video_codec == VideoCodec::H265 => SegmentFormat::Fmp4,
             Some("mp4" | "m4s" | "fmp4") => SegmentFormat::Fmp4,
             _ => SegmentFormat::MpegTs,
         };
@@ -201,6 +214,7 @@ pub async fn get_variant_playlist(
             output_dir,
             start_time_ticks: params.start_time_ticks,
             video_codec,
+            video_tag: copied_hevc.then(|| "hvc1".to_string()),
             video_bitrate: params.max_streaming_bitrate,
             max_width: params.max_width,
             max_height: params.max_height,
@@ -317,9 +331,16 @@ async fn get_segment_inner(
     }
 
     // If segment exists, serve it directly
+    // fMP4's init section (`init.mp4`) is no position in the stream: it is
+    // fetched again on every restart and must not move the player back to 0.
+    let is_init = segment_file.starts_with("init.");
     if segment_path.exists() {
-        tm.touch_segment(play_session_id, segment_number(segment_file))
-            .await;
+        if is_init {
+            tm.touch_job(play_session_id).await;
+        } else {
+            tm.touch_segment(play_session_id, segment_number(segment_file))
+                .await;
+        }
         return serve_segment(&segment_path).await;
     }
 
@@ -328,9 +349,13 @@ async fn get_segment_inner(
 
     // The player is here now: a throttled (paused) encoder must resume before
     // the wait below, or the segment is never written.
-    tm.touch_segment(play_session_id, segment_id).await;
+    if is_init {
+        tm.touch_job(play_session_id).await;
+    } else {
+        tm.touch_segment(play_session_id, segment_id).await;
+    }
 
-    if tm.needs_restart(play_session_id, segment_id).await {
+    if !is_init && tm.needs_restart(play_session_id, segment_id).await {
         info!(
             play_session_id = %play_session_id,
             segment_id,
@@ -354,7 +379,9 @@ async fn get_segment_inner(
             ApiError::NotFound
         })?;
 
-    tm.touch_segment(play_session_id, segment_id).await;
+    if !is_init {
+        tm.touch_segment(play_session_id, segment_id).await;
+    }
 
     let content_type = if segment_file.ends_with(".m4s") || segment_file.ends_with(".mp4") {
         "video/mp4"
@@ -498,6 +525,7 @@ pub async fn get_audio_variant_playlist(
             output_dir,
             start_time_ticks: params.start_time_ticks,
             video_codec: VideoCodec::Copy,
+            video_tag: None,
             video_bitrate: None,
             max_width: None,
             max_height: None,
@@ -583,6 +611,7 @@ fn source_video(streams: &[media_streams::MediaStreamRow]) -> Option<SourceVideo
             height: s.height,
             bit_rate: s.bit_rate.map(i64::from),
             is_interlaced: s.is_interlaced,
+            color_transfer: s.color_transfer.clone(),
         })
 }
 
@@ -591,21 +620,20 @@ fn source_video(streams: &[media_streams::MediaStreamRow]) -> Option<SourceVideo
 /// Subtitles are not drawn into HLS video yet, so none force an encode.
 fn copy_limits(params: &HlsQueryParams) -> CopyLimits {
     CopyLimits {
-        wanted: parse_video_codec(params.video_codec.as_deref()),
+        accepted: parse_video_codecs(params.video_codec.as_deref()),
+        hevc_ranges: params
+            .hevc_rangetype
+            .as_deref()
+            .unwrap_or_default()
+            .split(',')
+            .map(|r| r.trim().to_string())
+            .filter(|r| !r.is_empty())
+            .collect(),
         allowed: params.allow_video_stream_copy != Some(false),
         burn_subtitles: false,
         max_bitrate: params.max_streaming_bitrate,
         max_width: params.max_width,
         max_height: params.max_height,
-    }
-}
-
-fn parse_video_codec(s: Option<&str>) -> VideoCodec {
-    match s.map(|s| s.to_lowercase()).as_deref() {
-        Some("h264" | "avc") => VideoCodec::H264,
-        Some("h265" | "hevc") => VideoCodec::H265,
-        Some("copy") => VideoCodec::Copy,
-        _ => VideoCodec::H264,
     }
 }
 

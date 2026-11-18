@@ -362,6 +362,20 @@ fn apply_transcode_urls(
         if req.allow_video_stream_copy == Some(false) {
             url.push_str("&AllowVideoStreamCopy=false");
         }
+        // The HDR the client shows decides whether HDR HEVC is copied to it.
+        let lists_hevc = video_codec
+            .split(',')
+            .any(|c| matches!(c.trim().to_ascii_lowercase().as_str(), "hevc" | "h265"));
+        if !audio_only
+            && lists_hevc
+            && let Some(ranges) = req.device_profile.as_ref().and_then(|p| p.hevc_ranges())
+        {
+            let ranges: Vec<String> = ranges
+                .iter()
+                .map(|r| crate::transcode::names::encode_query_value(r))
+                .collect();
+            url.push_str(&format!("&hevc-rangetype={}", ranges.join(",")));
+        }
     }
 
     source.transcoding_url = Some(url);

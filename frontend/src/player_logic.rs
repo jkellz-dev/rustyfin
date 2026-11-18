@@ -127,6 +127,15 @@ pub fn profile_for(can: &dyn Fn(&str) -> bool) -> Value {
     }
     let mut profile = browser_profile();
     profile["DirectPlayProfiles"] = Value::Array(direct);
+    // The server copies HEVC the browser decodes (into fMP4) rather than
+    // encoding it to H.264.
+    if can("hevc")
+        && let Some(tps) = profile["TranscodingProfiles"].as_array_mut()
+    {
+        for tp in tps.iter_mut().filter(|t| t["Type"] == "Video") {
+            tp["VideoCodec"] = json!("hevc,h264");
+        }
+    }
     profile
 }
 

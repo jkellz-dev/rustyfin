@@ -1,11 +1,16 @@
 //! Whether a transcode copies the source's video or encodes it again.
 //!
 //! A file often fails direct play only for its audio (EAC3, DTS, TrueHD) or
-//! its container (MKV). Its H.264 is then copied into the HLS segments as it
+//! its container (MKV). Its video is then copied into the HLS segments as it
 //! is, and only the audio is converted, as Jellyfin does: the picture keeps
 //! its quality and the encode costs a few percent of a core instead of
 //! several cores. Segments then end on the source's keyframes, so they are
 //! not all the same length; the manager places them by the playlist.
+//!
+//! H.264 is copied to any client that asks for H.264; HEVC to a client that
+//! lists HEVC (`VideoCodec=hevc,h264`), in fMP4 segments tagged `hvc1` as
+//! Apple's HLS requires, and HDR HEVC only to a client that says it shows that
+//! range (`hevc-rangetype`, from its profile's `CodecProfiles`).
 
 use super::params::VideoCodec;
 
@@ -21,13 +26,18 @@ pub struct SourceVideo {
     pub height: Option<i32>,
     pub bit_rate: Option<i64>,
     pub is_interlaced: bool,
+    /// ffprobe's `color_transfer`: `smpte2084` is HDR10 (PQ), `arib-std-b67`
+    /// HLG; anything else is SDR.
+    pub color_transfer: Option<String>,
 }
 
 /// What the client asked for.
 #[derive(Debug, Clone)]
 pub struct CopyLimits {
-    /// The codec the client takes (`VideoCodec=` in the stream address).
-    pub wanted: VideoCodec,
+    /// The codecs the client takes, in its order (`VideoCodec=hevc,h264`).
+    pub accepted: Vec<VideoCodec>,
+    /// The HEVC ranges it shows (`hevc-rangetype=SDR,HDR10,HLG`); SDR always.
+    pub hevc_ranges: Vec<String>,
     /// `AllowVideoStreamCopy` (default true).
     pub allowed: bool,
     /// Subtitles drawn into the picture need the picture encoded.
@@ -37,27 +47,64 @@ pub struct CopyLimits {
     pub max_height: Option<u32>,
 }
 
-/// Copy the video when the client takes it as it is; otherwise encode it to
-/// the codec it asked for. Only H.264 is copied: 8-bit 4:2:0, progressive,
-/// within the client's bitrate and size (what every browser decodes).
+/// The codecs in a `VideoCodec=` list that Rustyfin encodes, in the client's
+/// order; H.264 when it names none of them.
+pub fn parse_video_codecs(list: Option<&str>) -> Vec<VideoCodec> {
+    let mut out = Vec::new();
+    for name in list.unwrap_or_default().split(',') {
+        let codec = match name.trim().to_ascii_lowercase().as_str() {
+            "h264" | "avc" => VideoCodec::H264,
+            "h265" | "hevc" => VideoCodec::H265,
+            _ => continue,
+        };
+        if !out.contains(&codec) {
+            out.push(codec);
+        }
+    }
+    if out.is_empty() {
+        out.push(VideoCodec::H264);
+    }
+    out
+}
+
+/// Copy the video when the client takes it as it is; otherwise encode it,
+/// to H.264 whenever the client takes H.264 (libx265 costs several times
+/// what libx264 does), else to the first codec it lists.
 pub fn plan_video(source: Option<&SourceVideo>, limits: &CopyLimits) -> VideoCodec {
-    let wanted = match limits.wanted {
-        VideoCodec::Copy => VideoCodec::H264,
-        other => other,
+    let encode = if limits.accepted.contains(&VideoCodec::H264) {
+        VideoCodec::H264
+    } else {
+        limits
+            .accepted
+            .iter()
+            .copied()
+            .find(|c| *c != VideoCodec::Copy)
+            .unwrap_or(VideoCodec::H264)
     };
     let Some(src) = source else {
-        return wanted;
+        return encode;
+    };
+    let codec_ok = if src.is_h264() {
+        limits.accepted.contains(&VideoCodec::H264) && src.is_8bit_420()
+    } else if src.is_hevc() {
+        limits.accepted.contains(&VideoCodec::H265)
+            && src.is_hevc_420_upto_10bit()
+            && (src.range_type() == "SDR"
+                || limits
+                    .hevc_ranges
+                    .iter()
+                    .any(|r| r.eq_ignore_ascii_case(src.range_type())))
+    } else {
+        false
     };
     let copy = limits.allowed
         && !limits.burn_subtitles
-        && wanted == VideoCodec::H264
-        && src.is_h264()
-        && src.is_8bit_420()
+        && codec_ok
         && !src.is_interlaced
         && fits(src.bit_rate, limits.max_bitrate)
         && fits(src.width.map(i64::from), limits.max_width.map(i64::from))
         && fits(src.height.map(i64::from), limits.max_height.map(i64::from));
-    if copy { VideoCodec::Copy } else { wanted }
+    if copy { VideoCodec::Copy } else { encode }
 }
 
 /// Within the limit, or either side unknown.
@@ -69,13 +116,21 @@ fn fits(value: Option<i64>, limit: Option<i64>) -> bool {
 }
 
 impl SourceVideo {
+    fn codec_name(&self) -> String {
+        self.codec
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    }
+
     fn is_h264(&self) -> bool {
+        matches!(self.codec_name().as_str(), "h264" | "avc" | "avc1")
+    }
+
+    fn is_hevc(&self) -> bool {
         matches!(
-            self.codec
-                .as_deref()
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("h264" | "avc" | "avc1")
+            self.codec_name().as_str(),
+            "hevc" | "h265" | "hvc1" | "hev1"
         )
     }
 
@@ -89,18 +144,56 @@ impl SourceVideo {
         }
     }
 
-    /// The RFC 6381 name of this H.264 for the master playlist (players set
-    /// up their decoder from it), as Jellyfin writes it: High, Main and
-    /// Baseline profiles; High at level 4.1 when unknown.
+    /// Main and Main 10: 4:2:0 at 8 or 10 bits.
+    fn is_hevc_420_upto_10bit(&self) -> bool {
+        if self.bit_depth.is_some_and(|d| d > 10) {
+            return false;
+        }
+        match self.pixel_format.as_deref() {
+            Some(f) => matches!(
+                f,
+                "yuv420p" | "yuvj420p" | "nv12" | "yuv420p10le" | "p010le"
+            ),
+            None => self.bit_depth.is_some(),
+        }
+    }
+
+    /// `SDR`, `HDR10` or `HLG`, by the transfer function.
+    pub fn range_type(&self) -> &'static str {
+        match self.color_transfer.as_deref() {
+            Some("smpte2084") => "HDR10",
+            Some("arib-std-b67") => "HLG",
+            _ => "SDR",
+        }
+    }
+
+    /// Copied HEVC goes in fMP4 segments (Apple's HLS takes HEVC only there).
+    pub fn needs_fmp4(&self) -> bool {
+        self.is_hevc()
+    }
+
+    /// The RFC 6381 name of the video for the master playlist (players set up
+    /// their decoder from it), as Jellyfin writes it. H.264: High, Main and
+    /// Baseline profiles, High at level 4.1 when unknown. HEVC: Main or
+    /// Main 10, level 5.0 when unknown (ffprobe gives HEVC levels × 30).
     pub fn codec_string(&self) -> String {
-        let profile = match self
+        let profile = self
             .profile
             .as_deref()
             .map(str::to_ascii_lowercase)
-            .as_deref()
-        {
-            Some("main") => "4d40",
-            Some("baseline" | "constrained baseline") => "42e0",
+            .unwrap_or_default();
+        if self.is_hevc() {
+            let level = self.level.filter(|l| (30..=186).contains(l)).unwrap_or(150);
+            let ten = profile.contains("10") || self.bit_depth.is_some_and(|d| d > 8);
+            return if ten {
+                format!("hvc1.2.4.L{level}.B0")
+            } else {
+                format!("hvc1.1.6.L{level}.B0")
+            };
+        }
+        let profile = match profile.as_str() {
+            "main" => "4d40",
+            "baseline" | "constrained baseline" => "42e0",
             _ => "6400",
         };
         let level = self.level.filter(|l| (9..=62).contains(l)).unwrap_or(41);

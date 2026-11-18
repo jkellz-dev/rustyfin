@@ -107,7 +107,13 @@ fn build_stream_mapping(params: &StreamParams) -> Vec<String> {
 
 pub fn build_video_args(params: &StreamParams) -> Vec<String> {
     match params.video_codec {
-        VideoCodec::Copy => vec!["-c:v".to_string(), "copy".to_string()],
+        VideoCodec::Copy => {
+            let mut args = vec!["-c:v".to_string(), "copy".to_string()];
+            if let Some(tag) = &params.video_tag {
+                args.extend(["-tag:v".to_string(), tag.clone()]);
+            }
+            args
+        }
         VideoCodec::H264 => build_h264_args(params),
         VideoCodec::H265 => build_h265_args(params),
     }
@@ -395,6 +401,7 @@ mod tests {
             output_dir: PathBuf::from("/tmp/transcode/session1"),
             start_time_ticks: None,
             video_codec: VideoCodec::H264,
+            video_tag: None,
             video_bitrate: Some(8_000_000),
             max_width: Some(1920),
             max_height: Some(1080),

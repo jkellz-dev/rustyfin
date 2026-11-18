@@ -190,7 +190,15 @@ audio is converted, as Jellyfin does.
 - [x] The master playlist names the source's own profile and level (`avc1.4d401f`, …)
 - [x] Copied segments end on the source's keyframes, so they are uneven: the player's position, restart points and
       throttling read the segment lengths from ffmpeg's playlist instead of assuming 6 s each
-- [ ] H.265 copy for clients that take it (the admin web player asks for H.264 only)
+- [x] HEVC copy for clients that list it (`VideoCodec=hevc,h264`, in their order; an encode is H.264 whenever the
+      client takes it): Main and Main 10, 4:2:0, into fMP4 segments tagged `hvc1` (Apple's HLS takes HEVC only
+      there); the init section's `#EXT-X-MAP` link goes through the segment route
+- [x] HDR HEVC (HDR10, HLG) copied only to a client whose profile's `CodecProfiles` list that `VideoRangeType`
+      (passed on as Jellyfin's `hevc-rangetype`); others get an H.264 encode
+- [x] The admin web player lists HEVC first when the browser decodes it
+- [ ] Tone-mapping HDR to SDR for the H.264 encode (today HDR encodes to H.264 keep their PQ/HLG values and look
+      washed out)
+- [ ] Check HEVC copy in Safari (macOS, iOS) and on Apple TV: the sandbox has Chrome only
 - [ ] A third `mise run bench -- --streams` mode for a copied stream (audio-only conversion)
 
 ---

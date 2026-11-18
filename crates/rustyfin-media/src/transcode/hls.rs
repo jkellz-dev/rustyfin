@@ -166,7 +166,14 @@ fn rewrite_playlist_segments(
         .unwrap_or_default();
 
     for line in raw_playlist.lines() {
-        if line.starts_with('#') || line.is_empty() {
+        if let Some(rest) = line.strip_prefix("#EXT-X-MAP:URI=\"")
+            && let Some((name, tail)) = rest.split_once('"')
+        {
+            // fMP4's init section, fetched through the segment route too.
+            result.push_str(&format!(
+                "#EXT-X-MAP:URI=\"/{prefix}/{item_id}/hls1/{play_session_id}/{name}{key}\"{tail}"
+            ));
+        } else if line.starts_with('#') || line.is_empty() {
             result.push_str(line);
         } else {
             result.push_str(&format!(

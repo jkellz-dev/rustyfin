@@ -369,6 +369,7 @@ mod tests {
                 context: Some("Streaming".to_string()),
             }],
             subtitle_profiles: vec![],
+            codec_profiles: vec![],
         }
     }
 
@@ -528,6 +529,7 @@ mod tests {
                 context: Some("Streaming".to_string()),
             }],
             subtitle_profiles: vec![],
+            codec_profiles: vec![],
         }
     }
 

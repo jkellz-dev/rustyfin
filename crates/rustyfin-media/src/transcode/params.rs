@@ -9,6 +9,8 @@ pub struct StreamParams {
 
     // Video
     pub video_codec: VideoCodec,
+    /// The tag copied video is written with (`hvc1` for HEVC in fMP4).
+    pub video_tag: Option<String>,
     pub video_bitrate: Option<i64>,
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,

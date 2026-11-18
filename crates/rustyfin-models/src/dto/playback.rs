@@ -46,6 +46,63 @@ pub struct DeviceProfile {
     pub transcoding_profiles: Vec<TranscodingProfile>,
     #[serde(default)]
     pub subtitle_profiles: Vec<SubtitleProfile>,
+    /// Limits per codec (Jellyfin's `CodecProfiles`); Rustyfin reads the
+    /// HEVC `VideoRangeType` condition, the HDR the client shows.
+    #[serde(default)]
+    pub codec_profiles: Vec<CodecProfile>,
+}
+
+/// A codec's limits in a device profile.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CodecProfile {
+    #[serde(rename = "Type")]
+    pub profile_type: Option<String>,
+    /// Comma-separated codec names.
+    pub codec: Option<String>,
+    #[serde(default)]
+    pub conditions: Vec<ProfileCondition>,
+}
+
+/// One condition, e.g. `VideoRangeType EqualsAny "SDR|HDR10|HLG"`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ProfileCondition {
+    pub condition: Option<String>,
+    pub property: Option<String>,
+    pub value: Option<String>,
+    pub is_required: Option<bool>,
+}
+
+impl DeviceProfile {
+    /// The video ranges the profile says it shows for HEVC (`VideoRangeType`
+    /// with `Equals`/`EqualsAny`), or `None` when it says nothing.
+    pub fn hevc_ranges(&self) -> Option<Vec<String>> {
+        self.codec_profiles
+            .iter()
+            .filter(|cp| {
+                cp.profile_type
+                    .as_deref()
+                    .is_none_or(|t| t.eq_ignore_ascii_case("Video"))
+                    && cp.codec.as_deref().is_some_and(|c| {
+                        c.split(',').any(|n| {
+                            matches!(n.trim().to_ascii_lowercase().as_str(), "hevc" | "h265")
+                        })
+                    })
+            })
+            .flat_map(|cp| cp.conditions.iter())
+            .find(|c| {
+                c.property.as_deref() == Some("VideoRangeType")
+                    && matches!(c.condition.as_deref(), Some("Equals" | "EqualsAny"))
+            })
+            .and_then(|c| c.value.as_deref())
+            .map(|v| {
+                v.split('|')
+                    .map(|r| r.trim().to_string())
+                    .filter(|r| !r.is_empty())
+                    .collect()
+            })
+    }
 }
 
 /// A container and codecs the app plays as they are (`DeviceProfile.DirectPlayProfiles`).
