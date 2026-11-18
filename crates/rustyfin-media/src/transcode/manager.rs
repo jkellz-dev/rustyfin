@@ -1,6 +1,7 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, bail};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -11,25 +12,100 @@ use uuid::Uuid;
 
 use super::command::build_ffmpeg_args;
 use super::job::TranscodeJob;
-use super::params::StreamParams;
+use super::params::{SegmentCut, StreamParams, VideoCodec};
+use super::timeline::Timeline;
+use super::timing::{SourceTiming, TimingCache, ffprobe_beside};
 
-/// Request to start a new transcode job.
+/// A request to start a transcode.
 pub struct TranscodeRequest {
     pub play_session_id: String,
     pub item_id: Uuid,
     pub device_id: String,
     pub user_id: Uuid,
+    pub plan: Plan,
+    /// The segment ffmpeg starts at: the one that holds the resume point.
+    pub start_segment: u32,
+}
+
+/// What every ffmpeg run of a session shares: where the segments start and
+/// how to encode. Each run sets its own start, file names, cut times and
+/// keyframe marks ([`Plan::run_params`]).
+#[derive(Debug, Clone)]
+pub struct Plan {
+    pub timeline: Arc<Timeline>,
     pub params: StreamParams,
+    /// The file's start time: ffmpeg's `-ss` counts from it.
+    pub source_start: f64,
+    /// The video has B-frames, so ffmpeg seeks 3/23 s before an `-ss`.
+    pub b_frames: bool,
+}
+
+/// ffmpeg starts a stream copy at the keyframe at or before `-ss`: aim this
+/// far past the segment's keyframe (`-ss` is printed to the millisecond).
+const COPY_SEEK_PAST: f64 = 0.002;
+
+/// How early ffmpeg seeks when the video has B-frames (its DTS heuristic).
+const B_FRAME_SEEK_ALLOWANCE: f64 = 3.0 / 23.0;
+
+/// A missing segment further than this past the encoder restarts it there.
+const SEEK_AHEAD_SECS: f64 = 120.0;
+
+/// Throttling pauses an encoder this far ahead of the player...
+const THROTTLE_AHEAD_SECS: f64 = 120.0;
+/// ...and resumes it within this.
+const THROTTLE_RESUME_SECS: f64 = 30.0;
+
+/// 100ns ticks per second.
+const TICKS: f64 = 10_000_000.0;
+
+impl Plan {
+    /// ffmpeg's settings for run `run`, starting at segment `n`.
+    pub fn run_params(&self, run: u32, n: u32) -> StreamParams {
+        let at = self.timeline.start(n).unwrap_or(self.timeline.first());
+        let mut p = self.params.clone();
+        p.run = run;
+        p.start_number = n;
+        p.start_time_ticks = (n > 0).then(|| (self.seek_secs(at) * TICKS).round() as i64);
+        if let SegmentCut::At(_) = p.cut {
+            p.cut = SegmentCut::At(self.timeline.cut_times_after(n));
+        }
+        if !p.audio_only && p.video_codec != VideoCodec::Copy {
+            p.keyframes_from = Some(at);
+        }
+        p
+    }
+
+    /// The `-ss` for a run whose first segment starts at file time `at`.
+    fn seek_secs(&self, at: f64) -> f64 {
+        let from_start = (at - self.source_start).max(0.0);
+        if self.params.audio_only || self.params.video_codec != VideoCodec::Copy {
+            // Decoded: ffmpeg drops frames before -ss, so it starts on it.
+            return from_start;
+        }
+        let allowance = if self.b_frames {
+            B_FRAME_SEEK_ALLOWANCE
+        } else {
+            0.0
+        };
+        from_start + COPY_SEEK_PAST + allowance
+    }
+
+    /// The segment files' extension.
+    pub fn extension(&self) -> &'static str {
+        self.params.segment_extension()
+    }
 }
 
 pub struct TranscodeManager {
     jobs: RwLock<HashMap<String, TranscodeJob>>,
     pub ffmpeg_path: String,
+    pub ffprobe_path: String,
     pub temp_base: PathBuf,
     pub hardware_acceleration: String,
     pub max_concurrent: usize,
     pub segment_duration: u32,
     pub threads_per_job: u32,
+    timings: TimingCache,
 }
 
 impl TranscodeManager {
@@ -47,24 +123,37 @@ impl TranscodeManager {
 
         info!(
             ffmpeg = %ffmpeg_path,
-            temp = %temp_base.display(),
-            hw = %hardware_acceleration,
+            temp_dir = %temp_base.display(),
+            hw_accel = %hardware_acceleration,
             max_concurrent,
-            "TranscodeManager initialized"
+            "transcode manager initialized"
         );
 
         Self {
             jobs: RwLock::new(HashMap::new()),
+            ffprobe_path: ffprobe_beside(&ffmpeg_path),
             ffmpeg_path,
             temp_base,
             hardware_acceleration,
             max_concurrent,
             segment_duration,
             threads_per_job,
+            timings: TimingCache::default(),
         }
     }
 
-    /// Start a new transcode job, spawning ffmpeg and waiting for the first segment.
+    /// The file's timing (start, length, B-frames, and with `keyframes` the
+    /// video's keyframes), read with ffprobe once per file.
+    pub async fn source_timing(
+        &self,
+        path: &Path,
+        keyframes: bool,
+    ) -> anyhow::Result<Arc<SourceTiming>> {
+        self.timings.get(&self.ffprobe_path, path, keyframes).await
+    }
+
+    /// Start a session: its playlist lists the whole film at once, and ffmpeg
+    /// starts at `start_segment`.
     pub async fn start_transcode(
         self: &Arc<Self>,
         request: TranscodeRequest,
@@ -88,23 +177,80 @@ impl TranscodeManager {
         // Kill any existing job for this session
         self.kill_job(&request.play_session_id).await;
 
-        // Create output directory
         let output_dir = self.temp_base.join(&request.play_session_id);
         tokio::fs::create_dir_all(&output_dir)
             .await
             .context("failed to create transcode output directory")?;
 
-        // Build ffmpeg args
-        let args = build_ffmpeg_args(&request.params);
+        let now = chrono::Utc::now();
+        let at = request
+            .plan
+            .timeline
+            .start(request.start_segment)
+            .unwrap_or(request.plan.timeline.first());
+        let job = TranscodeJob {
+            id: Uuid::new_v4(),
+            play_session_id: request.play_session_id.clone(),
+            item_id: request.item_id,
+            device_id: request.device_id,
+            user_id: request.user_id,
+            output_dir,
+            process: None,
+            started_at: now,
+            last_segment_request: now,
+            kill_timer: None,
+            is_paused: false,
+            plan: Some(request.plan),
+            run: 0,
+            run_start: request.start_segment,
+            done: BTreeMap::new(),
+            encoded_secs: at,
+            player_secs: at,
+        };
+        let play_session_id = request.play_session_id.clone();
+        self.insert_job(play_session_id.clone(), job).await;
+        if let Err(e) = self
+            .spawn_run(&play_session_id, request.start_segment)
+            .await
+        {
+            self.kill_job(&play_session_id).await;
+            return Err(e);
+        }
+        Ok(play_session_id)
+    }
 
+    /// Start the session's next ffmpeg run at segment `n`. Each run writes
+    /// files of its own (`r<run>_<n>.ts`), so segments an earlier run
+    /// finished stay whole while a player reads them.
+    async fn spawn_run(self: &Arc<Self>, play_session_id: &str, n: u32) -> anyhow::Result<()> {
+        let (params, run) = {
+            let mut jobs = self.jobs.write().await;
+            let job = jobs
+                .get_mut(play_session_id)
+                .context("no such transcode session")?;
+            let plan = job.plan.as_ref().context("session has no plan")?;
+            if n >= plan.timeline.len() {
+                bail!("segment {n} is past the end");
+            }
+            let run = job.run + 1;
+            let mut params = plan.run_params(run, n);
+            params.output_dir = job.output_dir.clone();
+            let at = plan.timeline.start(n).unwrap_or_default();
+            job.run = run;
+            job.run_start = n;
+            job.encoded_secs = at;
+            job.is_paused = false;
+            (params, run)
+        };
+
+        let args = build_ffmpeg_args(&params);
         info!(
-            play_session_id = %request.play_session_id,
-            item_id = %request.item_id,
+            play_session_id,
+            run,
+            segment = n,
             args = ?args,
             "starting ffmpeg transcode"
         );
-
-        // Spawn ffmpeg process
         let mut child = Command::new(&self.ffmpeg_path)
             .args(&args)
             .stdin(std::process::Stdio::null())
@@ -113,212 +259,200 @@ impl TranscodeManager {
             .kill_on_drop(true)
             .spawn()
             .context("failed to spawn ffmpeg")?;
-
-        // Take stderr for progress monitoring
         let stderr = child.stderr.take();
 
-        let now = chrono::Utc::now();
-        let segment_duration = request.params.segment_duration;
-        let offset_ticks = request.params.start_number as i64 * segment_duration as i64 * TICKS;
-        let session_start_ticks = request.params.start_time_ticks.unwrap_or(0) - offset_ticks;
-        let job = TranscodeJob {
-            id: Uuid::new_v4(),
-            play_session_id: request.play_session_id.clone(),
-            item_id: request.item_id,
-            device_id: request.device_id,
-            user_id: request.user_id,
-            output_dir: output_dir.clone(),
-            process: Some(child),
-            started_at: now,
-            last_segment_request: now,
-            transcoding_position_ticks: offset_ticks,
-            offset_ticks,
-            session_start_ticks,
-            player_ticks: offset_ticks,
-            kill_timer: None,
-            segment_duration,
-            stream_params_cache: Some(request.params),
-            is_paused: false,
-        };
+        {
+            let mut jobs = self.jobs.write().await;
+            match jobs.get_mut(play_session_id) {
+                Some(job) if job.run == run => job.process = Some(child),
+                // Stopped or restarted meanwhile: this run is not wanted.
+                _ => return Ok(()),
+            }
+        }
 
-        let play_session_id = request.play_session_id.clone();
-        self.insert_job(play_session_id.clone(), job).await;
-
-        // Spawn progress monitoring task
         if let Some(stderr) = stderr {
             let manager = Arc::clone(self);
-            let session_id = play_session_id.clone();
+            let session_id = play_session_id.to_string();
             tokio::spawn(async move {
-                monitor_progress(&manager, &session_id, stderr).await;
+                monitor_progress(&manager, &session_id, run, stderr).await;
             });
         }
-
-        // Wait for first segment to appear (up to 30 seconds)
-        let first_segment = output_dir.join("0.ts");
-        let alt_segment = output_dir.join("0.m4s");
-        let playlist = output_dir.join("playlist.m3u8");
-
-        let wait_result = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            wait_for_any_file(&[&first_segment, &alt_segment, &playlist]),
-        )
-        .await;
-
-        match wait_result {
-            Ok(()) => {
-                info!(
-                    play_session_id = %play_session_id,
-                    "first transcode segment ready"
-                );
-            }
-            Err(_) => {
-                warn!(
-                    play_session_id = %play_session_id,
-                    "timeout waiting for first segment, continuing anyway"
-                );
-            }
-        }
-
-        Ok(play_session_id)
-    }
-
-    /// Restart a transcode at a specific position (for seeking).
-    pub async fn restart_at(
-        self: &Arc<Self>,
-        play_session_id: &str,
-        start_ticks: i64,
-        start_number: u32,
-    ) -> anyhow::Result<()> {
-        let old_job = self.remove_job(play_session_id).await;
-        if let Some(mut job) = old_job {
-            // Stop the old encoder but keep the output dir for existing segments
-            job.stop_process().await;
-            if let Some(timer) = job.kill_timer.take() {
-                timer.abort();
-            }
-
-            // Build new params with updated start position
-            let mut params = job.stream_params_cache.unwrap_or_else(|| {
-                warn!("no cached stream params for restart, cannot seek");
-                StreamParams {
-                    input_path: PathBuf::new(),
-                    output_dir: job.output_dir.clone(),
-                    start_time_ticks: Some(start_ticks),
-                    video_codec: super::params::VideoCodec::H264,
-                    video_tag: None,
-                    video_bitrate: None,
-                    max_width: None,
-                    max_height: None,
-                    max_framerate: None,
-                    audio_codec: super::params::AudioCodec::AAC,
-                    audio_bitrate: None,
-                    audio_channels: None,
-                    audio_sample_rate: None,
-                    audio_stream_index: None,
-                    subtitle_mode: super::params::SubtitleMode::None,
-                    subtitle_stream_index: None,
-                    segment_duration: self.segment_duration,
-                    segment_format: super::params::SegmentFormat::MpegTs,
-                    start_number: 0,
-                    hardware_accel: super::params::HardwareAccel::None,
-                    threads: 0,
-                    audio_only: false,
-                }
-            });
-            params.start_time_ticks = Some(start_ticks);
-            params.start_number = start_number;
-
-            let request = TranscodeRequest {
-                play_session_id: play_session_id.to_string(),
-                item_id: job.item_id,
-                device_id: job.device_id.clone(),
-                user_id: job.user_id,
-                params,
-            };
-
-            self.start_transcode(request).await?;
-        }
-
         Ok(())
     }
 
-    /// Restart the session's transcode at a segment (a seek the encoder has not
-    /// reached).
+    /// Restart the session's ffmpeg at segment `n` (a seek the running one
+    /// will not reach, or one before where it started). Segments the old
+    /// run finished stay served.
     pub async fn restart_at_segment(
         self: &Arc<Self>,
         play_session_id: &str,
-        segment_id: u32,
+        n: u32,
     ) -> anyhow::Result<()> {
-        let Some(session_start) = self
-            .jobs
-            .read()
-            .await
-            .get(play_session_id)
-            .map(|j| j.session_start_ticks)
-        else {
-            return Ok(());
+        let old = {
+            let mut jobs = self.jobs.write().await;
+            let Some(job) = jobs.get_mut(play_session_id) else {
+                return Ok(());
+            };
+            job.process.take()
         };
-        let Some(at) = self.segment_ticks(play_session_id, segment_id).await else {
-            return Ok(());
-        };
-        self.restart_at(play_session_id, session_start + at, segment_id)
-            .await?;
-        // The new encoder's first segment sits where the playlist placed it,
-        // which for copied video is not `segment_id` × the segment length.
-        if let Some(job) = self.jobs.write().await.get_mut(play_session_id) {
-            job.offset_ticks = at;
-            job.session_start_ticks = session_start;
-            job.player_ticks = at;
-            job.transcoding_position_ticks = job.transcoding_position_ticks.max(at);
+        if let Some(mut process) = old {
+            super::job::stop_child(play_session_id, &mut process).await;
         }
-        Ok(())
+        // The stopped run's list now names everything it finished.
+        self.refresh_done(play_session_id).await;
+        self.spawn_run(play_session_id, n).await
     }
 
-    /// Where segment `n` starts on the session clock: from the playlist when
-    /// it lists the segment (copied video ends segments on the source's
-    /// keyframes, so they are uneven), else `n` × the segment length.
-    async fn segment_ticks(&self, play_session_id: &str, segment_id: u32) -> Option<i64> {
-        let (dir, offset, duration) = {
-            let jobs = self.jobs.read().await;
-            let job = jobs.get(play_session_id)?;
-            (
-                job.output_dir.clone(),
-                job.offset_ticks,
-                job.segment_duration,
-            )
+    /// Pick up the segments the current run has finished, from its list
+    /// (the HLS muxer's playlist or the segment muxer's CSV).
+    async fn refresh_done(&self, play_session_id: &str) {
+        let Some((list, run, ext, dir)) = self.current_list(play_session_id).await else {
+            return;
         };
-        let listed = tokio::fs::read_to_string(dir.join("playlist.m3u8"))
-            .await
-            .ok()
-            .and_then(|p| listed_segment_start(&p, segment_id));
-        Some(match listed {
-            Some(secs) => offset + (secs * TICKS as f64).round() as i64,
-            None => segment_start_ticks(segment_id, duration),
-        })
+        let Ok(text) = tokio::fs::read_to_string(&list).await else {
+            return;
+        };
+        let finished = listed_segments(&text, run, ext);
+        if finished.is_empty() {
+            return;
+        }
+        let mut jobs = self.jobs.write().await;
+        if let Some(job) = jobs.get_mut(play_session_id)
+            && job.run == run
+        {
+            for n in finished {
+                job.done
+                    .entry(n)
+                    .or_insert_with(|| dir.join(format!("r{run}_{n}.{ext}")));
+            }
+        }
     }
 
-    /// Whether a missing segment needs the encoder restarted at it, rather than
-    /// waiting for the running encoder to reach it: it lies before this
-    /// encoder's first segment (nothing will write it), or more than two
-    /// minutes past what it has encoded.
-    pub async fn needs_restart(&self, play_session_id: &str, segment_id: u32) -> bool {
-        let Some(start) = self.segment_ticks(play_session_id, segment_id).await else {
-            return false;
-        };
+    /// The current run's list file, run number, segment extension and the
+    /// session's directory.
+    async fn current_list(
+        &self,
+        play_session_id: &str,
+    ) -> Option<(PathBuf, u32, &'static str, PathBuf)> {
+        let jobs = self.jobs.read().await;
+        let job = jobs.get(play_session_id)?;
+        let plan = job.plan.as_ref()?;
+        let mut params = plan.params.clone();
+        params.run = job.run;
+        Some((
+            job.output_dir.join(params.list_file()),
+            job.run,
+            plan.extension(),
+            job.output_dir.clone(),
+        ))
+    }
+
+    /// Segment `n`'s file, if a run has finished it.
+    pub async fn ready_segment(&self, play_session_id: &str, n: u32) -> Option<PathBuf> {
+        self.refresh_done(play_session_id).await;
+        let jobs = self.jobs.read().await;
+        jobs.get(play_session_id)?
+            .done
+            .get(&n)
+            .filter(|p| p.exists())
+            .cloned()
+    }
+
+    /// Wait for segment `n` (up to `timeout`). `None` when it does not come:
+    /// the session ended, or its ffmpeg exited without writing it.
+    pub async fn wait_for_segment(
+        &self,
+        play_session_id: &str,
+        n: u32,
+        timeout: Duration,
+    ) -> Option<PathBuf> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            if let Some(path) = self.ready_segment(play_session_id, n).await {
+                return Some(path);
+            }
+            let running = {
+                let mut jobs = self.jobs.write().await;
+                jobs.get_mut(play_session_id)?.is_alive()
+            };
+            if !running {
+                // Whatever the run wrote is listed by now.
+                return self.ready_segment(play_session_id, n).await;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return None;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+
+    /// The fMP4 init section of the latest run that wrote one, waiting up to
+    /// `timeout` for it.
+    pub async fn wait_for_init(&self, play_session_id: &str, timeout: Duration) -> Option<PathBuf> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let (dir, run) = {
+                let jobs = self.jobs.read().await;
+                let job = jobs.get(play_session_id)?;
+                (job.output_dir.clone(), job.run)
+            };
+            if let Some(path) = (1..=run)
+                .rev()
+                .map(|r| dir.join(format!("r{r}_init.mp4")))
+                .find(|p| p.exists())
+            {
+                return Some(path);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return None;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+
+    /// The session's playlist: every segment of the film.
+    pub async fn playlist(&self, play_session_id: &str) -> Option<String> {
+        let jobs = self.jobs.read().await;
+        let plan = jobs.get(play_session_id)?.plan.as_ref()?;
+        Some(plan.timeline.playlist(plan.extension()))
+    }
+
+    /// Whether segment `n` is in the session's playlist.
+    pub async fn has_segment(&self, play_session_id: &str, n: u32) -> bool {
+        let jobs = self.jobs.read().await;
+        jobs.get(play_session_id)
+            .and_then(|j| j.plan.as_ref())
+            .is_some_and(|plan| n < plan.timeline.len())
+    }
+
+    /// Whether a segment nobody has written needs ffmpeg restarted at it,
+    /// rather than waiting for the running one: it lies before the run's
+    /// first segment (nothing will write it), or more than two minutes past
+    /// what ffmpeg has reached.
+    pub async fn needs_restart(&self, play_session_id: &str, n: u32) -> bool {
+        self.refresh_done(play_session_id).await;
         let jobs = self.jobs.read().await;
         let Some(job) = jobs.get(play_session_id) else {
             return false;
         };
-        start < job.offset_ticks || start > job.transcoding_position_ticks + SEEK_AHEAD_TICKS
+        if job.done.contains_key(&n) {
+            return false;
+        }
+        let Some(start) = job.plan.as_ref().and_then(|p| p.timeline.start(n)) else {
+            return false;
+        };
+        n < job.run_start || start > job.encoded_secs + SEEK_AHEAD_SECS
     }
 
     /// Record a segment request: the player is at that segment. Resumes a
     /// throttled encoder.
-    pub async fn touch_segment(&self, play_session_id: &str, segment_id: u32) {
-        if let Some(at) = self.segment_ticks(play_session_id, segment_id).await {
+    pub async fn touch_segment(&self, play_session_id: &str, n: u32) {
+        {
             let mut jobs = self.jobs.write().await;
-            if let Some(job) = jobs.get_mut(play_session_id) {
-                job.player_ticks = at;
+            if let Some(job) = jobs.get_mut(play_session_id)
+                && let Some(at) = job.plan.as_ref().and_then(|p| p.timeline.start(n))
+            {
+                job.player_secs = at;
             }
         }
         self.touch_job(play_session_id).await;
@@ -330,8 +464,8 @@ impl TranscodeManager {
         jobs.get(play_session_id).map(|j| j.output_dir.clone())
     }
 
-    /// Whether the session has a usable transcode: ffmpeg running, or finished
-    /// with every segment on disk (see [`TranscodeJob::is_usable`]).
+    /// Whether the session has a usable transcode: ffmpeg running, or it
+    /// finished with every segment on disk (see [`TranscodeJob::is_usable`]).
     pub async fn has_active_job(&self, play_session_id: &str) -> bool {
         let mut jobs = self.jobs.write().await;
         jobs.get_mut(play_session_id)
@@ -352,17 +486,12 @@ impl TranscodeManager {
         }
     }
 
-    /// Get the transcoding position (in ticks) for a job.
+    /// How far ffmpeg has got, in ticks of the film (from its first segment).
     pub async fn get_transcoding_position(&self, play_session_id: &str) -> Option<i64> {
         let jobs = self.jobs.read().await;
-        jobs.get(play_session_id)
-            .map(|j| j.transcoding_position_ticks)
-    }
-
-    /// Get the segment duration for a job.
-    pub async fn get_segment_duration(&self, play_session_id: &str) -> Option<u32> {
-        let jobs = self.jobs.read().await;
-        jobs.get(play_session_id).map(|j| j.segment_duration)
+        let job = jobs.get(play_session_id)?;
+        let first = job.plan.as_ref().map_or(0.0, |p| p.timeline.first());
+        Some(((job.encoded_secs - first) * TICKS).round() as i64)
     }
 
     /// Kill a specific job by play session ID.
@@ -415,20 +544,17 @@ impl TranscodeManager {
     /// To avoid wasting CPU and disk, pause it when it's >120s ahead
     /// and resume when it's <30s ahead.
     pub async fn throttle_jobs(&self) {
-        let throttle_ahead = 120 * TICKS;
-        let resume_threshold = 30 * TICKS;
-
         let mut jobs = self.jobs.write().await;
         for job in jobs.values_mut() {
             if !job.is_alive() {
                 continue;
             }
             // How far the encoder is past the segment the player last asked for.
-            let ahead = job.transcoding_position_ticks - job.player_ticks;
-            if ahead > throttle_ahead && !job.is_paused {
+            let ahead = job.encoded_secs - job.player_secs;
+            if ahead > THROTTLE_AHEAD_SECS && !job.is_paused {
                 job.pause();
                 job.is_paused = true;
-            } else if ahead <= resume_threshold && job.is_paused {
+            } else if ahead <= THROTTLE_RESUME_SECS && job.is_paused {
                 job.resume();
                 job.is_paused = false;
             }
@@ -491,12 +617,6 @@ impl TranscodeManager {
         jobs.insert(play_session_id, job);
     }
 
-    /// Remove and return a job (e.g. for restarting during seek).
-    pub(crate) async fn remove_job(&self, play_session_id: &str) -> Option<TranscodeJob> {
-        let mut jobs = self.jobs.write().await;
-        jobs.remove(play_session_id)
-    }
-
     /// Check if adding a new job would exceed the concurrency limit.
     pub async fn at_capacity(&self) -> bool {
         if self.max_concurrent == 0 {
@@ -511,21 +631,51 @@ impl TranscodeManager {
             >= self.max_concurrent
     }
 
-    /// Update the transcoding position for a job.
+    /// Where the current run's ffmpeg has got (file time, from `-copyts`).
     pub(crate) async fn update_position(&self, play_session_id: &str, position_ticks: i64) {
+        let run = {
+            let jobs = self.jobs.read().await;
+            let Some(job) = jobs.get(play_session_id) else {
+                return;
+            };
+            job.run
+        };
+        self.update_run_position(play_session_id, run, position_ticks)
+            .await;
+    }
+
+    /// Where run `run` has got; ignored once a newer run replaced it.
+    async fn update_run_position(&self, play_session_id: &str, run: u32, position_ticks: i64) {
         let mut jobs = self.jobs.write().await;
-        if let Some(job) = jobs.get_mut(play_session_id) {
-            // ffmpeg runs with -copyts, so it reports file time; segment 0
-            // sits at the session's start in the file.
-            job.transcoding_position_ticks = position_ticks - job.session_start_ticks;
+        if let Some(job) = jobs.get_mut(play_session_id)
+            && job.run == run
+        {
+            job.encoded_secs = position_ticks as f64 / TICKS;
         }
     }
 }
 
-/// Parse ffmpeg stderr output to track transcoding progress.
+/// The segments of run `run` a list names (`r<run>_<n>.<ext>`), in order.
+fn listed_segments(list: &str, run: u32, ext: &str) -> Vec<u32> {
+    let prefix = format!("r{run}_");
+    let suffix = format!(".{ext}");
+    list.split(|c: char| c.is_whitespace() || c == ',')
+        .filter_map(|word| {
+            word.rsplit('/')
+                .next()?
+                .strip_prefix(&prefix)?
+                .strip_suffix(&suffix)?
+                .parse()
+                .ok()
+        })
+        .collect()
+}
+
+/// Parse ffmpeg's stderr to track how far a run has got.
 async fn monitor_progress(
     manager: &TranscodeManager,
     play_session_id: &str,
+    run: u32,
     stderr: tokio::process::ChildStderr,
 ) {
     let reader = BufReader::new(stderr);
@@ -539,7 +689,9 @@ async fn monitor_progress(
             if let Some(end) = time_str.find(' ') {
                 let timestamp = &time_str[..end];
                 if let Some(ticks) = parse_ffmpeg_time(timestamp) {
-                    manager.update_position(play_session_id, ticks).await;
+                    manager
+                        .update_run_position(play_session_id, run, ticks)
+                        .await;
                     debug!(
                         play_session_id,
                         position_ticks = ticks,
@@ -555,44 +707,7 @@ async fn monitor_progress(
         }
     }
 
-    info!(play_session_id, "ffmpeg progress monitor ended");
-}
-
-/// 100ns ticks per second.
-const TICKS: i64 = 10_000_000;
-
-/// A missing segment further than this past the encoder restarts it there.
-const SEEK_AHEAD_TICKS: i64 = 120 * TICKS;
-
-/// Where segment `n` starts on the session clock.
-fn segment_start_ticks(segment_id: u32, segment_duration: u32) -> i64 {
-    segment_id as i64 * segment_duration as i64 * TICKS
-}
-
-/// Seconds from the first segment a playlist lists to the start of segment
-/// `n` (segments are named `<n>.ts` / `<n>.m4s`), or `None` when the playlist
-/// does not reach it yet or starts after it. The segment just past the last
-/// listed one starts where that one ends.
-fn listed_segment_start(playlist: &str, n: u32) -> Option<f64> {
-    let mut at = 0.0;
-    let mut length = None;
-    let mut first = None;
-    let mut next = None;
-    for line in playlist.lines().map(str::trim) {
-        if let Some(rest) = line.strip_prefix("#EXTINF:") {
-            length = rest.split(',').next()?.trim().parse::<f64>().ok();
-        } else if !line.is_empty() && !line.starts_with('#') {
-            let name = line.rsplit('/').next()?;
-            let number: u32 = name.split('.').next()?.parse().ok()?;
-            first.get_or_insert(number);
-            if number == n {
-                return Some(at);
-            }
-            at += length.take()?;
-            next = Some(number + 1);
-        }
-    }
-    (next == Some(n) && first.is_some_and(|f| f <= n)).then_some(at)
+    info!(play_session_id, run, "ffmpeg progress monitor ended");
 }
 
 /// Parse ffmpeg timestamp "HH:MM:SS.ms" to 100ns ticks.
@@ -608,18 +723,6 @@ fn parse_ffmpeg_time(timestamp: &str) -> Option<i64> {
 
     let total_seconds = hours * 3600.0 + minutes * 60.0 + seconds;
     Some((total_seconds * 10_000_000.0) as i64)
-}
-
-/// Wait until any of the given files exists.
-async fn wait_for_any_file(paths: &[&std::path::Path]) {
-    loop {
-        for path in paths {
-            if path.exists() {
-                return;
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-    }
 }
 
 #[cfg(test)]

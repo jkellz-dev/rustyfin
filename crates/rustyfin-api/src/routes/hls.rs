@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     body::Body,
@@ -18,9 +20,11 @@ use rustyfin_media::transcode::{
         MasterPlaylistParams, generate_audio_master_playlist, generate_master_playlist,
         rewrite_audio_variant_playlist_with_key, rewrite_variant_playlist_with_key,
     },
-    manager::TranscodeRequest,
+    manager::{Plan, TranscodeManager, TranscodeRequest},
     names::{encode_query_value, is_valid_segment_name, is_valid_session_id},
     params::*,
+    timeline::Timeline,
+    timing::SourceTiming,
     video_copy::{CopyLimits, SourceVideo, parse_video_codecs, plan_video},
 };
 
@@ -94,7 +98,13 @@ pub async fn get_master_playlist(
     let video_stream = stream_dtos.iter().find(|s| s.stream_type == "Video");
 
     let source = source_video(&streams);
-    let video_codec = plan_video(source.as_ref(), &copy_limits(&params));
+    let video_codec = decide_video(
+        &state.transcode_manager,
+        item.path.as_deref(),
+        source.as_ref(),
+        &params,
+    )
+    .await;
     let copied = source
         .as_ref()
         .filter(|_| video_codec == VideoCodec::Copy)
@@ -195,7 +205,8 @@ pub async fn get_variant_playlist(
             .await
             .map_err(ApiError::Database)?;
         let source = source_video(&streams);
-        let video_codec = plan_video(source.as_ref(), &copy_limits(&params));
+        let video_codec =
+            decide_video(tm, Some(input_path.as_str()), source.as_ref(), &params).await;
         let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
         // HEVC goes in fMP4 (Apple's HLS takes it only there), copied HEVC
         // tagged hvc1 (libx265's output already is), whatever the client asked.
@@ -207,12 +218,33 @@ pub async fn get_variant_playlist(
             _ => SegmentFormat::MpegTs,
         };
 
-        let output_dir = tm.temp_base.join(&play_session_id);
+        let timing = tm
+            .source_timing(FsPath::new(&input_path), video_codec == VideoCodec::Copy)
+            .await
+            .map_err(|e| ApiError::Internal(format!("cannot read the file's timing: {e}")))?;
+        let end = timing.start + timing.duration;
+        let keyframes = timing.keyframes.as_deref().unwrap_or_default();
+        let (timeline, cut) = match (video_codec, segment_format) {
+            (VideoCodec::Copy, SegmentFormat::Fmp4) => (
+                Timeline::every_keyframe(keyframes, end),
+                SegmentCut::EveryKeyframe,
+            ),
+            (VideoCodec::Copy, SegmentFormat::MpegTs) => (
+                Timeline::keyframes(keyframes, end, tm.segment_duration),
+                SegmentCut::At(vec![]),
+            ),
+            _ => (
+                Some(Timeline::grid(timing.start, end, tm.segment_duration)),
+                SegmentCut::Every,
+            ),
+        };
+        let timeline =
+            timeline.ok_or_else(|| ApiError::Internal("the video has no keyframes".to_string()))?;
 
         let stream_params = StreamParams {
             input_path: PathBuf::from(&input_path),
-            output_dir,
-            start_time_ticks: params.start_time_ticks,
+            output_dir: PathBuf::new(),
+            start_time_ticks: None,
             video_codec,
             video_tag: copied_hevc.then(|| "hvc1".to_string()),
             video_bitrate: params.max_streaming_bitrate,
@@ -232,36 +264,31 @@ pub async fn get_variant_playlist(
             hardware_accel: tm.hardware_acceleration.parse().unwrap(),
             threads: tm.threads_per_job,
             audio_only: false,
+            run: 0,
+            cut,
+            keyframes_from: None,
         };
 
-        let request = TranscodeRequest {
-            play_session_id: play_session_id.clone(),
+        let plan = session_plan(timeline, stream_params, &timing);
+        start_session(
+            tm,
+            &auth,
+            &play_session_id,
             item_id,
-            device_id: auth.device_id.clone(),
-            user_id: auth.user_id,
-            params: stream_params,
-        };
-
-        tm.start_transcode(request)
-            .await
-            .map_err(|e| ApiError::Internal(format!("failed to start transcode: {e}")))?;
+            plan,
+            params.start_time_ticks,
+        )
+        .await?;
     }
 
-    // Read the ffmpeg-generated playlist and rewrite segment URLs
-    let output_dir = tm
-        .get_job_output_dir(&play_session_id)
+    // The whole film, whatever ffmpeg has made so far.
+    let playlist = tm
+        .playlist(&play_session_id)
         .await
         .ok_or(ApiError::NotFound)?;
 
-    let playlist_path = output_dir.join("playlist.m3u8");
-
-    // Wait for playlist file (ffmpeg may still be starting)
-    let playlist_content = wait_and_read_file(&playlist_path, 30)
-        .await
-        .map_err(|_| ApiError::Internal("timeout waiting for transcode playlist".to_string()))?;
-
     let rewritten = rewrite_variant_playlist_with_key(
-        &playlist_content,
+        &playlist,
         item_id,
         &play_session_id,
         params.api_key.as_deref(),
@@ -284,13 +311,12 @@ pub async fn get_segment(
     get_segment_inner(&state, auth.user_id, &play_session_id, &segment_file).await
 }
 
-/// The segment number in `<n>.ts` / `<n>.m4s` (0 for anything else).
-fn segment_number(segment_file: &str) -> u32 {
-    segment_file
-        .split('.')
-        .next()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0)
+/// How long a segment request waits for ffmpeg to write the segment.
+const SEGMENT_WAIT: Duration = Duration::from_secs(30);
+
+/// The segment number in `<n>.ts` / `<n>.m4s`.
+fn segment_number(segment_file: &str) -> Option<u32> {
+    segment_file.split('.').next()?.parse().ok()
 }
 
 /// Shared segment-serving logic for both video and audio HLS segments.
@@ -318,83 +344,52 @@ async fn get_segment_inner(
         return Err(ApiError::NotFound);
     }
 
-    let output_dir = tm
-        .get_job_output_dir(play_session_id)
-        .await
-        .ok_or(ApiError::NotFound)?;
-
-    let segment_path = output_dir.join(segment_file);
-    // Belt and braces: whatever the names were, the file must sit directly in the
-    // job's output directory.
-    if segment_path.parent() != Some(output_dir.as_path()) {
-        return Err(ApiError::NotFound);
-    }
-
-    // If segment exists, serve it directly
     // fMP4's init section (`init.mp4`) is no position in the stream: it is
     // fetched again on every restart and must not move the player back to 0.
-    let is_init = segment_file.starts_with("init.");
-    if segment_path.exists() {
-        if is_init {
-            tm.touch_job(play_session_id).await;
-        } else {
-            tm.touch_segment(play_session_id, segment_number(segment_file))
-                .await;
-        }
-        return serve_segment(&segment_path).await;
+    if segment_file.starts_with("init.") {
+        tm.touch_job(play_session_id).await;
+        let path = tm
+            .wait_for_init(play_session_id, SEGMENT_WAIT)
+            .await
+            .ok_or(ApiError::NotFound)?;
+        return serve_segment(&path).await;
     }
-
-    // Segment doesn't exist yet — check if we need to seek or just wait
-    let segment_id = segment_number(segment_file);
+    let segment_id = segment_number(segment_file).ok_or(ApiError::NotFound)?;
 
     // The player is here now: a throttled (paused) encoder must resume before
     // the wait below, or the segment is never written.
-    if is_init {
-        tm.touch_job(play_session_id).await;
-    } else {
-        tm.touch_segment(play_session_id, segment_id).await;
+    tm.touch_segment(play_session_id, segment_id).await;
+    if let Some(path) = tm.ready_segment(play_session_id, segment_id).await {
+        return serve_segment(&path).await;
+    }
+    if !tm.has_segment(play_session_id, segment_id).await {
+        return Err(ApiError::NotFound);
     }
 
-    if !is_init && tm.needs_restart(play_session_id, segment_id).await {
+    if tm.needs_restart(play_session_id, segment_id).await {
         info!(
             play_session_id = %play_session_id,
             segment_id,
             "segment outside the running encoder's reach — restarting transcode"
         );
-
         tm.restart_at_segment(play_session_id, segment_id)
             .await
             .map_err(|e| ApiError::Internal(format!("failed to restart transcode: {e}")))?;
     }
 
-    // Wait for segment file to appear (up to 30 seconds)
-    let content = wait_and_read_file_bytes(&segment_path, 30)
+    let path = tm
+        .wait_for_segment(play_session_id, segment_id, SEGMENT_WAIT)
         .await
-        .map_err(|_| {
+        .ok_or_else(|| {
             warn!(
                 play_session_id = %play_session_id,
                 segment = %segment_file,
-                "timeout waiting for segment"
+                "segment did not come"
             );
             ApiError::NotFound
         })?;
-
-    if !is_init {
-        tm.touch_segment(play_session_id, segment_id).await;
-    }
-
-    let content_type = if segment_file.ends_with(".m4s") || segment_file.ends_with(".mp4") {
-        "video/mp4"
-    } else {
-        "video/mp2t"
-    };
-
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, content_type)
-        .header(header::CONTENT_LENGTH, content.len().to_string())
-        .body(Body::from(content))
-        .unwrap())
+    tm.touch_segment(play_session_id, segment_id).await;
+    serve_segment(&path).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -517,13 +512,20 @@ pub async fn get_audio_variant_playlist(
 
         let input_path = item.path.ok_or(ApiError::NotFound)?;
         let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
-
-        let output_dir = tm.temp_base.join(&play_session_id);
+        let timing = tm
+            .source_timing(FsPath::new(&input_path), false)
+            .await
+            .map_err(|e| ApiError::Internal(format!("cannot read the file's timing: {e}")))?;
+        let timeline = Timeline::grid(
+            timing.start,
+            timing.start + timing.duration,
+            tm.segment_duration,
+        );
 
         let stream_params = StreamParams {
             input_path: PathBuf::from(&input_path),
-            output_dir,
-            start_time_ticks: params.start_time_ticks,
+            output_dir: PathBuf::new(),
+            start_time_ticks: None,
             video_codec: VideoCodec::Copy,
             video_tag: None,
             video_bitrate: None,
@@ -543,34 +545,30 @@ pub async fn get_audio_variant_playlist(
             hardware_accel: HardwareAccel::None,
             threads: tm.threads_per_job,
             audio_only: true,
+            run: 0,
+            cut: SegmentCut::Every,
+            keyframes_from: None,
         };
 
-        let request = TranscodeRequest {
-            play_session_id: play_session_id.clone(),
+        let plan = session_plan(timeline, stream_params, &timing);
+        start_session(
+            tm,
+            &auth,
+            &play_session_id,
             item_id,
-            device_id: auth.device_id.clone(),
-            user_id: auth.user_id,
-            params: stream_params,
-        };
-
-        tm.start_transcode(request)
-            .await
-            .map_err(|e| ApiError::Internal(format!("failed to start audio transcode: {e}")))?;
+            plan,
+            params.start_time_ticks,
+        )
+        .await?;
     }
 
-    let output_dir = tm
-        .get_job_output_dir(&play_session_id)
+    let playlist = tm
+        .playlist(&play_session_id)
         .await
         .ok_or(ApiError::NotFound)?;
 
-    let playlist_path = output_dir.join("playlist.m3u8");
-
-    let playlist_content = wait_and_read_file(&playlist_path, 30).await.map_err(|_| {
-        ApiError::Internal("timeout waiting for audio transcode playlist".to_string())
-    })?;
-
     let rewritten = rewrite_audio_variant_playlist_with_key(
-        &playlist_content,
+        &playlist,
         item_id,
         &play_session_id,
         params.api_key.as_deref(),
@@ -595,6 +593,70 @@ pub async fn get_audio_segment(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+/// Copy or encode the video. Copying cuts segments on the source's
+/// keyframes, so it needs them read first; if they cannot be read (no path,
+/// no keyframes, a scan too slow) the video is encoded instead.
+async fn decide_video(
+    tm: &TranscodeManager,
+    path: Option<&str>,
+    source: Option<&SourceVideo>,
+    params: &HlsQueryParams,
+) -> VideoCodec {
+    let planned = plan_video(source, &copy_limits(params));
+    if planned != VideoCodec::Copy {
+        return planned;
+    }
+    let keyframes = match path {
+        Some(path) => tm.source_timing(FsPath::new(path), true).await,
+        None => return VideoCodec::H264,
+    };
+    match keyframes {
+        Ok(t) if t.keyframes.as_ref().is_some_and(|k| !k.is_empty()) => VideoCodec::Copy,
+        Ok(_) => VideoCodec::H264,
+        Err(e) => {
+            warn!("encoding instead of copying: cannot read the keyframes: {e}");
+            VideoCodec::H264
+        }
+    }
+}
+
+/// What a session plays: its segments, ffmpeg's settings and the file's
+/// clock.
+fn session_plan(timeline: Timeline, params: StreamParams, timing: &SourceTiming) -> Plan {
+    Plan {
+        timeline: Arc::new(timeline),
+        params,
+        source_start: timing.start,
+        b_frames: timing.b_frames,
+    }
+}
+
+/// Start a session at the segment that holds `start_ticks` (the film's
+/// clock); its playlist lists every segment from the start.
+async fn start_session(
+    tm: &Arc<TranscodeManager>,
+    auth: &AuthenticatedUser,
+    play_session_id: &str,
+    item_id: Uuid,
+    plan: Plan,
+    start_ticks: Option<i64>,
+) -> Result<(), ApiError> {
+    let resume = ticks_to_seconds(start_ticks.unwrap_or(0).max(0));
+    let start_segment = plan.timeline.segment_at(plan.timeline.first() + resume);
+    let request = TranscodeRequest {
+        play_session_id: play_session_id.to_string(),
+        item_id,
+        device_id: auth.device_id.clone(),
+        user_id: auth.user_id,
+        plan,
+        start_segment,
+    };
+    tm.start_transcode(request)
+        .await
+        .map_err(|e| ApiError::Internal(format!("failed to start transcode: {e}")))?;
+    Ok(())
+}
 
 /// The file's first video stream, for the copy-or-encode decision.
 fn source_video(streams: &[media_streams::MediaStreamRow]) -> Option<SourceVideo> {
@@ -670,47 +732,4 @@ async fn serve_segment(path: &std::path::Path) -> Result<Response, ApiError> {
         .header(header::CONTENT_LENGTH, content.len().to_string())
         .body(Body::from(content))
         .unwrap())
-}
-
-/// Wait for a text file to appear and read its contents.
-async fn wait_and_read_file(path: &std::path::Path, timeout_secs: u64) -> Result<String, ()> {
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-
-    loop {
-        if path.exists()
-            && let Ok(content) = tokio::fs::read_to_string(path).await
-            && !content.is_empty()
-        {
-            return Ok(content);
-        }
-
-        if tokio::time::Instant::now() >= deadline {
-            return Err(());
-        }
-
-        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-    }
-}
-
-/// Wait for a binary file to appear and read its contents.
-async fn wait_and_read_file_bytes(
-    path: &std::path::Path,
-    timeout_secs: u64,
-) -> Result<Vec<u8>, ()> {
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-
-    loop {
-        if path.exists()
-            && let Ok(content) = tokio::fs::read(path).await
-            && !content.is_empty()
-        {
-            return Ok(content);
-        }
-
-        if tokio::time::Instant::now() >= deadline {
-            return Err(());
-        }
-
-        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-    }
 }

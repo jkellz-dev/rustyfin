@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
@@ -6,7 +7,7 @@ use tokio::task::JoinHandle;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use super::params::StreamParams;
+use super::manager::Plan;
 
 pub struct TranscodeJob {
     pub id: Uuid,
@@ -18,25 +19,23 @@ pub struct TranscodeJob {
     pub process: Option<Child>,
     pub started_at: DateTime<Utc>,
     pub last_segment_request: DateTime<Utc>,
-    /// How far ffmpeg has encoded, on the session clock (100ns ticks from the
-    /// start of segment 0).
-    pub transcoding_position_ticks: i64,
-    /// Where this encoder's first segment sits on the session clock (its
-    /// `-start_number` times the segment duration). ffmpeg itself reports file
-    /// time (`-copyts`).
-    pub offset_ticks: i64,
-    /// The file position of segment 0, so a restart at segment n seeks to
-    /// this plus n segments.
-    pub session_start_ticks: i64,
-    /// The start of the segment the player last asked for, on the session clock.
-    pub player_ticks: i64,
     pub kill_timer: Option<JoinHandle<()>>,
-    /// The segment duration in seconds, needed for seek calculations.
-    pub segment_duration: u32,
-    /// Cached stream params for seek/restart support.
-    pub stream_params_cache: Option<StreamParams>,
     /// Whether the ffmpeg process is currently paused (SIGSTOP'd) for throttling.
     pub is_paused: bool,
+    /// The session's segments and ffmpeg settings (absent only for jobs
+    /// planted in tests).
+    pub plan: Option<Plan>,
+    /// The current ffmpeg run (its files are `r<run>_<n>.<ext>`) and the
+    /// segment it started at.
+    pub run: u32,
+    pub run_start: u32,
+    /// Segments some run finished, and their files.
+    pub done: BTreeMap<u32, PathBuf>,
+    /// How far the current run has got, in file time (ffmpeg runs with
+    /// `-copyts`).
+    pub encoded_secs: f64,
+    /// Where the segment the player last asked for starts, in file time.
+    pub player_secs: f64,
 }
 
 impl TranscodeJob {
@@ -56,34 +55,8 @@ impl TranscodeJob {
     /// after a SIGCONT in case throttling paused it, wait up to 5 s, then
     /// force kill. ffmpeg runs with `-nostdin`, so a `q` on stdin is never read.
     pub async fn stop_process(&mut self) {
-        let Some(process) = self.process.as_mut() else {
-            return;
-        };
-        if let Ok(Some(_)) = process.try_wait() {
-            return; // already exited
-        }
-        #[cfg(unix)]
-        if let Some(pid) = process.id() {
-            // SAFETY: plain signal sends to the child we spawned.
-            unsafe {
-                libc::kill(pid as i32, libc::SIGCONT);
-                libc::kill(pid as i32, libc::SIGTERM);
-            }
-        }
-        match tokio::time::timeout(std::time::Duration::from_secs(5), process.wait()).await {
-            Ok(Ok(status)) => {
-                info!(play_session_id = %self.play_session_id, "ffmpeg stopped: {status}");
-            }
-            Ok(Err(e)) => {
-                warn!(play_session_id = %self.play_session_id, "ffmpeg wait error: {e}");
-            }
-            Err(_) => {
-                warn!(
-                    play_session_id = %self.play_session_id,
-                    "ffmpeg did not exit in 5s, force killing"
-                );
-                let _ = process.kill().await;
-            }
+        if let Some(process) = self.process.as_mut() {
+            stop_child(&self.play_session_id, process).await;
         }
     }
 
@@ -163,6 +136,34 @@ impl TranscodeJob {
                     self.output_dir.display()
                 );
             }
+        }
+    }
+}
+
+/// Stop an ffmpeg process: SIGCONT (throttling may have paused it), SIGTERM
+/// (ffmpeg then ends its output cleanly), up to 5 s, then a kill.
+pub async fn stop_child(play_session_id: &str, process: &mut Child) {
+    if let Ok(Some(_)) = process.try_wait() {
+        return; // already exited
+    }
+    #[cfg(unix)]
+    if let Some(pid) = process.id() {
+        // SAFETY: plain signal sends to the child we spawned.
+        unsafe {
+            libc::kill(pid as i32, libc::SIGCONT);
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), process.wait()).await {
+        Ok(Ok(status)) => {
+            info!(play_session_id, "ffmpeg stopped: {status}");
+        }
+        Ok(Err(e)) => {
+            warn!(play_session_id, "ffmpeg wait error: {e}");
+        }
+        Err(_) => {
+            warn!(play_session_id, "ffmpeg did not exit in 5s, force killing");
+            let _ = process.kill().await;
         }
     }
 }

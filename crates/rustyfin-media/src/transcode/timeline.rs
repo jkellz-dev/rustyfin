@@ -1,3 +1,157 @@
+//! Where a transcode's segments start, decided before ffmpeg runs.
+//!
+//! The variant playlist lists the whole film from the first request (a VOD
+//! playlist, as Jellyfin serves), so a player shows the film's own timeline
+//! and can seek anywhere. Every ffmpeg run, from the start or restarted at a
+//! segment, must then cut at exactly these places:
+//!
+//! - encoded video: a segment every `length` seconds; ffmpeg forces a keyframe
+//!   on each mark (and no others) and its HLS muxer cuts there;
+//! - copied video: ffmpeg can only cut at the source's keyframes, so segments
+//!   start on keyframes read from the file beforehand;
+//! - audio: a segment every `length` seconds.
+//!
+//! Times are in the file's own clock, which is what ffmpeg reports and writes
+//! with `-copyts`.
+
+/// A mark closer than this to the end starts no segment: there may be no
+/// frame after it for ffmpeg to cut at.
+const LAST_SEGMENT_MIN: f64 = 1.0;
+
+/// Slack for comparing times read back from text.
+const EPSILON: f64 = 1e-6;
+
+/// Cut times sit this far before their keyframe, so a time rounded up when it
+/// was printed still cuts at that keyframe rather than the next one.
+const CUT_LEAD: f64 = 0.0005;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Timeline {
+    /// Segment start times, ascending; never empty.
+    starts: Vec<f64>,
+    /// Where the last segment ends.
+    end: f64,
+}
+
+impl Timeline {
+    /// A segment every `length` seconds from `start` (the file's start time)
+    /// to `end`.
+    pub fn grid(start: f64, end: f64, length: u32) -> Self {
+        let length = f64::from(length.max(1));
+        let end = end.max(start);
+        let mut starts = vec![start];
+        let mut n = 1.0;
+        while start + n * length < end - LAST_SEGMENT_MIN {
+            starts.push(start + n * length);
+            n += 1.0;
+        }
+        Self { starts, end }
+    }
+
+    /// Copied video: the first keyframe starts a segment, then each keyframe
+    /// at least `length` seconds after the previous segment's start. A
+    /// keyframe gap longer than `length` makes a longer segment, never an
+    /// empty one. `None` without keyframes.
+    pub fn keyframes(keyframes: &[f64], end: f64, length: u32) -> Option<Self> {
+        let keyframes = tidy(keyframes, end);
+        let length = f64::from(length.max(1));
+        let mut starts = vec![*keyframes.first()?];
+        for &k in &keyframes[1..] {
+            if k - starts[starts.len() - 1] >= length - EPSILON {
+                starts.push(k);
+            }
+        }
+        Some(Self { starts, end })
+    }
+
+    /// Copied video in fMP4: ffmpeg's HLS muxer, the one that writes fMP4
+    /// for HLS, cannot be told where to cut, only to cut at every keyframe,
+    /// so every keyframe starts a segment. `None` without keyframes.
+    pub fn every_keyframe(keyframes: &[f64], end: f64) -> Option<Self> {
+        let starts = tidy(keyframes, end);
+        (!starts.is_empty()).then_some(Self { starts, end })
+    }
+
+    /// The number of segments.
+    pub fn len(&self) -> u32 {
+        self.starts.len() as u32
+    }
+
+    /// Never true: a timeline has at least one segment.
+    pub fn is_empty(&self) -> bool {
+        self.starts.is_empty()
+    }
+
+    /// Where segment `n` starts.
+    pub fn start(&self, n: u32) -> Option<f64> {
+        self.starts.get(n as usize).copied()
+    }
+
+    /// Where the first segment starts (the film's 0:00).
+    pub fn first(&self) -> f64 {
+        self.starts[0]
+    }
+
+    /// The segment that holds file time `t`.
+    pub fn segment_at(&self, t: f64) -> u32 {
+        let after = self.starts.partition_point(|s| *s <= t + EPSILON);
+        after.saturating_sub(1) as u32
+    }
+
+    /// The cut times for a run that starts at segment `n` (ffmpeg's segment
+    /// muxer, `-segment_times`): one just before each later segment's
+    /// keyframe.
+    pub fn cut_times_after(&self, n: u32) -> Vec<f64> {
+        self.starts
+            .iter()
+            .skip(n as usize + 1)
+            .map(|s| ((s - CUT_LEAD) * 10_000.0).round() / 10_000.0)
+            .collect()
+    }
+
+    fn duration(&self, n: usize) -> f64 {
+        let next = self.starts.get(n + 1).copied().unwrap_or(self.end);
+        (next - self.starts[n]).max(0.0)
+    }
+
+    /// The whole film as a VOD playlist, segments named `<n>.<ext>` (the
+    /// routes turn the names into addresses). fMP4 (`m4s`) names its
+    /// `init.mp4`.
+    pub fn playlist(&self, ext: &str) -> String {
+        let fmp4 = ext == "m4s";
+        let target = (0..self.starts.len())
+            .map(|n| self.duration(n).ceil() as u64)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        let mut out = format!(
+            "#EXTM3U\n#EXT-X-VERSION:{}\n#EXT-X-TARGETDURATION:{target}\n\
+             #EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n",
+            if fmp4 { 7 } else { 3 }
+        );
+        if fmp4 {
+            out.push_str("#EXT-X-MAP:URI=\"init.mp4\"\n");
+        }
+        for n in 0..self.starts.len() {
+            out.push_str(&format!("#EXTINF:{:.6},\n{n}.{ext}\n", self.duration(n)));
+        }
+        out.push_str("#EXT-X-ENDLIST\n");
+        out
+    }
+}
+
+/// Finite keyframe times before `end`, sorted, without repeats.
+fn tidy(keyframes: &[f64], end: f64) -> Vec<f64> {
+    let mut out: Vec<f64> = keyframes
+        .iter()
+        .copied()
+        .filter(|t| t.is_finite() && *t < end)
+        .collect();
+    out.sort_by(f64::total_cmp);
+    out.dedup_by(|a, b| (*a - *b).abs() < EPSILON);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

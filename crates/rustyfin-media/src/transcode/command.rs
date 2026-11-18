@@ -155,16 +155,28 @@ fn build_h264_args(params: &StreamParams) -> Vec<String> {
         ]);
     }
 
-    // Keyframe interval aligned to segment boundaries
-    let fps = params.max_framerate.unwrap_or(24.0);
-    let keyint = (params.segment_duration as f64 * fps) as u32;
-    if params.hardware_accel == HardwareAccel::None {
-        args.extend([
-            "-g".to_string(),
-            keyint.to_string(),
-            "-sc_threshold".to_string(),
-            "0".to_string(),
-        ]);
+    if let Some(from) = params.keyframes_from {
+        args.extend(forced_keyframes(params, from));
+        let idr = match params.hardware_accel {
+            HardwareAccel::Qsv => "-forced_idr",
+            _ => "-forced-idr",
+        };
+        args.extend([idr.to_string(), "1".to_string()]);
+        if params.hardware_accel == HardwareAccel::None {
+            args.extend(["-sc_threshold".to_string(), "0".to_string()]);
+        }
+    } else {
+        // Keyframe interval aligned to segment boundaries
+        let fps = params.max_framerate.unwrap_or(24.0);
+        let keyint = (params.segment_duration as f64 * fps) as u32;
+        if params.hardware_accel == HardwareAccel::None {
+            args.extend([
+                "-g".to_string(),
+                keyint.to_string(),
+                "-sc_threshold".to_string(),
+                "0".to_string(),
+            ]);
+        }
     }
 
     // Scale filter
@@ -184,8 +196,13 @@ fn build_h265_args(params: &StreamParams) -> Vec<String> {
             "28".to_string(),
         ],
         _ => {
-            let fps = params.max_framerate.unwrap_or(24.0);
-            let keyint = (params.segment_duration as f64 * fps) as u32;
+            // On the segment marks only when given; else a fixed interval.
+            let keyint = if params.keyframes_from.is_some() {
+                MARKS_ONLY_KEYINT
+            } else {
+                let fps = params.max_framerate.unwrap_or(24.0);
+                (params.segment_duration as f64 * fps) as u32
+            };
             vec![
                 "-c:v".to_string(),
                 "libx265".to_string(),
@@ -196,10 +213,18 @@ fn build_h265_args(params: &StreamParams) -> Vec<String> {
                 "-tag:v".to_string(),
                 "hvc1".to_string(),
                 "-x265-params".to_string(),
-                format!("keyint={keyint}:min-keyint={keyint}:scenecut=0"),
+                format!("keyint={keyint}:min-keyint=1:scenecut=0"),
             ]
         }
     };
+    if let Some(from) = params.keyframes_from {
+        args.extend(forced_keyframes(params, from));
+        let idr = match params.hardware_accel {
+            HardwareAccel::Qsv => "-forced_idr",
+            _ => "-forced-idr",
+        };
+        args.extend([idr.to_string(), "1".to_string()]);
+    }
 
     // Bitrate cap
     if let Some(bitrate) = params.video_bitrate {
@@ -215,6 +240,21 @@ fn build_h265_args(params: &StreamParams) -> Vec<String> {
     args.extend(build_scale_filter(params));
 
     args
+}
+
+/// A keyframe interval long enough that the forced ones are the only ones.
+const MARKS_ONLY_KEYINT: u32 = 100_000;
+
+/// Keyframes on the segment marks only: from file time `from` (ffmpeg's
+/// clock with `-copyts`) every `segment_duration` seconds. The HLS muxer
+/// then cuts on exactly those marks, wherever the run started.
+fn forced_keyframes(params: &StreamParams, from: f64) -> Vec<String> {
+    vec![
+        "-force_key_frames".to_string(),
+        format!("expr:gte(t,{from:.6}+n_forced*{})", params.segment_duration),
+        "-g".to_string(),
+        MARKS_ONLY_KEYINT.to_string(),
+    ]
 }
 
 fn build_scale_filter(params: &StreamParams) -> Vec<String> {
@@ -338,6 +378,12 @@ fn build_common_output_args() -> Vec<String> {
         "-avoid_negative_ts",
         "disabled",
         "-copyts",
+        // Timestamps as the file has them: the MPEG-TS muxer otherwise adds
+        // 1.4 s, and the segments would sit after the playlist's times.
+        "-muxdelay",
+        "0",
+        "-muxpreload",
+        "0",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -345,32 +391,66 @@ fn build_common_output_args() -> Vec<String> {
 }
 
 pub fn build_hls_args(params: &StreamParams) -> Vec<String> {
-    let mut args = vec!["-f".to_string(), "hls".to_string()];
+    let dir = params.output_dir.to_string_lossy();
+    let segments = format!("{dir}/{}", params.segment_pattern());
+    let list = format!("{dir}/{}", params.list_file());
 
-    args.extend(["-hls_time".to_string(), params.segment_duration.to_string()]);
+    if let SegmentCut::At(times) = &params.cut {
+        // Copied MPEG-TS: the segment muxer cuts at the first keyframe at or
+        // after each given time, so the cuts do not depend on where the run
+        // started (the HLS muxer counts its cuts from there).
+        let mut args = vec![
+            "-f".to_string(),
+            "segment".to_string(),
+            "-segment_format".to_string(),
+            "mpegts".to_string(),
+        ];
+        if times.is_empty() {
+            // The film's last segment: nothing left to cut.
+            args.extend(["-segment_time".to_string(), "1000000".to_string()]);
+        } else {
+            let times: Vec<String> = times.iter().map(f64::to_string).collect();
+            args.extend(["-segment_times".to_string(), times.join(",")]);
+        }
+        args.extend([
+            "-segment_start_number".to_string(),
+            params.start_number.to_string(),
+            "-segment_list".to_string(),
+            list,
+            "-segment_list_type".to_string(),
+            "csv".to_string(),
+            segments,
+        ]);
+        return args;
+    }
 
+    let hls_time = match params.cut {
+        // Below any keyframe gap: every keyframe cuts.
+        SegmentCut::EveryKeyframe => "0.01".to_string(),
+        _ => params.segment_duration.to_string(),
+    };
+    let mut args = vec![
+        "-f".to_string(),
+        "hls".to_string(),
+        "-hls_time".to_string(),
+        hls_time,
+    ];
     match params.segment_format {
         SegmentFormat::MpegTs => {
             args.extend(["-hls_segment_type".to_string(), "mpegts".to_string()]);
-            args.extend([
-                "-hls_segment_filename".to_string(),
-                format!("{}/%d.ts", params.output_dir.to_string_lossy()),
-            ]);
         }
         SegmentFormat::Fmp4 => {
-            args.extend(["-hls_segment_type".to_string(), "fmp4".to_string()]);
             args.extend([
+                "-hls_segment_type".to_string(),
+                "fmp4".to_string(),
                 "-hls_fmp4_init_filename".to_string(),
-                "init.mp4".to_string(),
-            ]);
-            args.extend([
-                "-hls_segment_filename".to_string(),
-                format!("{}/%d.m4s", params.output_dir.to_string_lossy()),
+                params.init_file(),
             ]);
         }
     }
-
     args.extend([
+        "-hls_segment_filename".to_string(),
+        segments,
         "-hls_playlist_type".to_string(),
         "event".to_string(),
         "-hls_list_size".to_string(),
@@ -379,14 +459,9 @@ pub fn build_hls_args(params: &StreamParams) -> Vec<String> {
         "temp_file".to_string(),
         "-start_number".to_string(),
         params.start_number.to_string(),
+        // The run's own list of finished segments (must be last).
+        list,
     ]);
-
-    // Output playlist path (must be last argument)
-    args.push(format!(
-        "{}/playlist.m3u8",
-        params.output_dir.to_string_lossy()
-    ));
-
     args
 }
 
