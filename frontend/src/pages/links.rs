@@ -113,6 +113,13 @@ pub fn Links() -> View {
                                         let id = link.id.clone();
                                         let name = link.name.clone();
                                         let can_sync = link.configured && !link.syncing;
+                                        // Built once: the row is rebuilt whenever the list changes.
+                                        let reason = if why.is_empty() {
+                                            view! {}
+                                        } else {
+                                            let shown = why.clone();
+                                            view! { br {} span(class="text-muted text-sm") { (shown) } }
+                                        };
                                         view! {
                                             tr {
                                                 td(data-label="Name") {
@@ -122,13 +129,8 @@ pub fn Links() -> View {
                                                 }
                                                 td(class="text-muted", data-label="Server") { (link.url.clone()) }
                                                 td(data-label="State") {
-                                                    span(class=class, title=why.clone()) { (label) }
-                                                    (if why.is_empty() {
-                                                        view! {}
-                                                    } else {
-                                                        let why = why.clone();
-                                                        view! { br {} span(class="text-muted text-sm") { (why) } }
-                                                    })
+                                                    span(class=class, title=why) { (label) }
+                                                    (reason)
                                                 }
                                                 td(class="text-muted", data-label="Last sync") { (last) }
                                                 td(data-label="Titles") { (link.titles) }
