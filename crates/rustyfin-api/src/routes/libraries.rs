@@ -46,9 +46,34 @@ pub async fn update_scan_schedule(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// `GET /UserViews`'s query.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ViewsQuery {
+    /// Also the libraries the user hid (`MyMediaExcludes`), as for the app's
+    /// own settings page.
+    pub include_hidden: Option<bool>,
+}
+
 /// `GET /UserViews` — Get library root views (new route).
-/// Filters libraries based on per-user access settings.
+/// Filters libraries based on per-user access settings, in the user's order
+/// without the ones they hid (`user_prefs::arrange_views`).
 pub async fn get_user_views(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    axum::extract::Query(query): axum::extract::Query<ViewsQuery>,
+) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    let include_hidden = query.include_hidden.unwrap_or(false);
+    let user = auth.user_id;
+    let Json(mut views) = all_views(state.clone(), auth).await?;
+    let config = crate::user_prefs::load(&state.pool, user).await;
+    crate::user_prefs::arrange_views(&mut views.items, &config, include_hidden);
+    views.total_record_count = views.items.len() as i32;
+    Ok(Json(views))
+}
+
+/// Every library root the caller may see, and the Collections view.
+async fn all_views(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -75,13 +100,14 @@ pub async fn get_user_views(
 }
 
 /// `GET /Library/MediaFolders`: every library root the caller may see, as items.
-/// The same objects as the views; Jellyfin's `isHidden` filter has nothing to
-/// filter here, so it is accepted and ignored.
+/// The same objects as the views, all of them (a user's hidden ones too);
+/// Jellyfin's `isHidden` filter has nothing to filter here, so it is accepted
+/// and ignored.
 pub async fn get_media_folders(
     state: State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    get_user_views(state, auth).await
+    all_views(state, auth).await
 }
 
 /// `GET /Library/PhysicalPaths` — every library root, for administrators.
@@ -265,8 +291,9 @@ pub async fn get_user_views_legacy(
     state: State<AppState>,
     auth: AuthenticatedUser,
     axum::extract::Path(_user_id): axum::extract::Path<uuid::Uuid>,
+    query: axum::extract::Query<ViewsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    get_user_views(state, auth).await
+    get_user_views(state, auth, query).await
 }
 
 /// `GET /Library/VirtualFolders` — Library listing.

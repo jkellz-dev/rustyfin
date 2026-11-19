@@ -45,7 +45,7 @@ const SUBTITLE_MODES: [&str; 5] = ["Default", "Always", "OnlyForced", "None", "S
 
 /// The user's `UserConfiguration`: what the app last saved, with the settings
 /// that have their own columns read from them.
-fn user_configuration(row: &users::UserRow) -> UserConfiguration {
+pub(crate) fn user_configuration(row: &users::UserRow) -> UserConfiguration {
     let mut config = row
         .configuration
         .clone()

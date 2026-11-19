@@ -21,3 +21,4 @@ pub mod query_case;
 pub mod request_log;
 pub mod router;
 pub mod routes;
+pub mod user_prefs;
