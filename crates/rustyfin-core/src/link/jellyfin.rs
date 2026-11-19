@@ -163,7 +163,8 @@ impl JellyfinClient {
             if cursor.is_none() {
                 cursor = page["cursor"].as_str().map(str::to_string);
             }
-            for item in items(&page) {
+            // Rustyfin's own API: snake_case keys, not Jellyfin's `Items`.
+            for item in page["items"].as_array().map(Vec::as_slice).unwrap_or(&[]) {
                 if let (Some(id), Some(kind), Some(library)) = (
                     item["id"].as_str(),
                     item["type"].as_str(),
