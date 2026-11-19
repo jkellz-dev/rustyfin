@@ -93,6 +93,7 @@ mod tests {
             name: "Tailscale-User-Name".to_string(),
             email: "Remote-Email".to_string(),
             groups: "Remote-Groups".to_string(),
+            ..Default::default()
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -116,5 +117,66 @@ mod tests {
         let config = ForwardAuthHeaders::default();
         let headers = HeaderMap::new();
         assert!(extract_identity(&headers, &config).is_none());
+    }
+
+    /// A tagged Tailscale node (a server) carries no user login; the
+    /// friend's tailnet policy grants it an app capability instead, which
+    /// Tailscale Serve (`--accept-app-caps`) forwards as JSON (roadmap
+    /// 16b.2r). Its `user` names the Rustyfin user.
+    fn tailscale(cap: Option<&str>) -> ForwardAuthHeaders {
+        ForwardAuthHeaders {
+            user: "Tailscale-User-Login".to_string(),
+            name: "Tailscale-User-Name".to_string(),
+            app_capability: cap.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    fn caps(json: &'static str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("Tailscale-App-Capabilities", HeaderValue::from_static(json));
+        headers
+    }
+
+    #[test]
+    fn a_tagged_node_is_named_by_its_app_capability() {
+        let config = tailscale(Some("rustyfin.dev/cap/link"));
+        let headers = caps(
+            r#"{"rustyfin.dev/cap/link":[{"user":"jonathan@example.com","name":"Jonathan's server"}],"other/cap":[{}]}"#,
+        );
+        let identity = extract_identity(&headers, &config).unwrap();
+        assert_eq!(identity.remote_user, "jonathan@example.com");
+        assert_eq!(identity.display_name.as_deref(), Some("Jonathan's server"));
+        assert!(identity.groups.is_empty());
+    }
+
+    #[test]
+    fn a_capability_counts_only_when_configured_and_well_formed() {
+        let granted = r#"{"rustyfin.dev/cap/link":[{"user":"jonathan@example.com"}]}"#;
+        // Not configured: the header means nothing.
+        assert!(extract_identity(&caps(granted), &tailscale(None)).is_none());
+        // Another capability, no user, an empty user, not JSON.
+        let config = tailscale(Some("rustyfin.dev/cap/link"));
+        for bad in [
+            r#"{"other/cap":[{"user":"x"}]}"#,
+            r#"{"rustyfin.dev/cap/link":[{}]}"#,
+            r#"{"rustyfin.dev/cap/link":[{"user":""}]}"#,
+            r#"{"rustyfin.dev/cap/link":[]}"#,
+            "not json",
+        ] {
+            assert!(extract_identity(&caps(bad), &config).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_user_login_wins_over_a_capability() {
+        let config = tailscale(Some("rustyfin.dev/cap/link"));
+        let mut headers = caps(r#"{"rustyfin.dev/cap/link":[{"user":"server"}]}"#);
+        headers.insert(
+            "Tailscale-User-Login",
+            HeaderValue::from_static("alice@example.com"),
+        );
+        let identity = extract_identity(&headers, &config).unwrap();
+        assert_eq!(identity.remote_user, "alice@example.com");
     }
 }
