@@ -56,7 +56,19 @@ impl FromRef<AppState> for PgPool {
 }
 
 /// Build the complete Axum router with all Jellyfin-compatible API routes.
+/// The router. Rustyfin's own routes (`/api/v1`) match in any case: their
+/// path is put in lower case before routing, which a layer inside the router
+/// would be too late for, so the routes sit behind a fallback that does it.
 pub fn build_router(state: AppState) -> Router {
+    let routes = routes(state);
+    Router::new().fallback_service(
+        tower::ServiceBuilder::new()
+            .layer(axum::middleware::from_fn(crate::api_v1::lower_case_path))
+            .service(routes),
+    )
+}
+
+fn routes(state: AppState) -> Router {
     Router::new()
         // ── System (no auth) ────────────────────────────────────
         .route("/System/Info/Public", get(system::get_public_info))
