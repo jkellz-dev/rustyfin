@@ -1656,3 +1656,138 @@ async fn the_visible_view_has_every_column_of_media_items() {
     assert_eq!(columns("visible_media_items").await, table);
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-19: "Keep watched history" when a link is removed. What a
+/// user had of a friend's title (watched, resume point, favourite) is kept
+/// aside when the link goes, and given back when the same title (by provider
+/// id) turns up again: on this server, or through another link.
+#[tokio::test]
+async fn watched_state_outlives_a_removed_link_and_comes_back_with_the_title() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, lib, _local) = local_library(&app).await;
+    let alex: Shared = Default::default();
+    alex.lock().unwrap().films = vec![film("r200", "Only Theirs", "200", "e1", 1920, 1080)];
+    let url = fake_jellyfin(alex).await;
+    let link = app
+        .links
+        .register(&app.pool, settings(&url, "secret"))
+        .await
+        .unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO user_data (user_id, item_id, played, play_count, is_favorite, last_played_date) \
+         VALUES ($1, $2, true, 2, true, now())",
+    )
+    .bind(uid)
+    .bind(theirs)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+
+    rustyfin_db::repo::links::remove_unconfigured(&app.pool, &[])
+        .await
+        .unwrap();
+    let movies = format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie");
+    let (_, list) = app.get(&movies, &token).await;
+    assert_eq!(names(&list), vec!["Shared Film"], "{list}");
+
+    // The same film comes back through another friend.
+    let sam: Shared = Default::default();
+    sam.lock().unwrap().films = vec![film("s9", "Only Theirs", "200", "e1", 1280, 720)];
+    let url = fake_jellyfin(sam).await;
+    let mut s = settings(&url, "secret");
+    s.name = "Sam".into();
+    let link = app.links.register(&app.pool, s).await.unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    let (_, list) = app.get(&movies, &token).await;
+    let back = list["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["Name"] == "Only Theirs")
+        .cloned()
+        .unwrap_or_else(|| panic!("{list}"));
+    assert_eq!(back["UserData"]["Played"], true, "{back}");
+    assert_eq!(back["UserData"]["IsFavorite"], true, "{back}");
+    assert_eq!(back["UserData"]["PlayCount"], 2, "{back}");
+    let parked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM parked_user_data")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(parked, 0, "given back once");
+    app.cleanup().await;
+}
+
+/// Owner, 2026-11-19: a setting to prefer a copy that plays as is over a
+/// better one that would have to be converted. Off by default: the best copy
+/// comes first even when the friend's server has to convert it.
+#[tokio::test]
+async fn a_copy_that_plays_as_is_can_be_preferred_over_a_better_one() {
+    for prefer in [false, true] {
+        let app = if prefer {
+            common::TestApp::with_prefer_direct_play().await
+        } else {
+            common::TestApp::new().await
+        };
+        let (uid, token) = app.create_user("viewer", true).await;
+        let (_tree, _lib, local) = local_library(&app).await;
+        sqlx::query("UPDATE media_items SET container = 'mkv' WHERE id = $1")
+            .bind(local)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+        let remote: Shared = Default::default();
+        remote.lock().unwrap().films = vec![film("r100", "Shared Film", "100", "e1", 3840, 2160)];
+        let url = fake_jellyfin(remote).await;
+        let link = app
+            .links
+            .register(&app.pool, settings(&url, "secret"))
+            .await
+            .unwrap();
+        app.links.sync(&app.pool, link).await.expect("sync");
+        // An H.264 client: this server's 1080p H.264 copy plays as is; the
+        // friend's 2160p HEVC copy has to be converted (by the friend).
+        let profile = json!({
+            "DeviceProfile": {
+                "Name": "h264 only",
+                "DirectPlayProfiles": [{"Container": "mkv,mp4", "VideoCodec": "h264",
+                                        "AudioCodec": "aac,eac3", "Type": "Video"}],
+                "TranscodingProfiles": [{"Container": "ts", "Type": "Video", "Protocol": "hls",
+                                         "VideoCodec": "h264", "AudioCodec": "aac", "Context": "Streaming"}]
+            },
+            "UserId": uid
+        });
+        let (status, info) = app
+            .post(
+                &format!("/Items/{local}/PlaybackInfo?UserId={uid}"),
+                &profile,
+                &token,
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{info}");
+        let first = &info["MediaSources"][0];
+        let mine = first["Id"]
+            .as_str()
+            .is_some_and(|id| same(&json!(id), local));
+        if prefer {
+            assert!(
+                mine && first["SupportsDirectPlay"] == true,
+                "plays as is first: {info}"
+            );
+        } else {
+            assert!(!mine, "the better copy first: {info}");
+            assert_eq!(first["SupportsTranscoding"], true, "{info}");
+        }
+        assert_eq!(
+            info["MediaSources"].as_array().map(Vec::len),
+            Some(2),
+            "{info}"
+        );
+        app.cleanup().await;
+    }
+}

@@ -51,6 +51,11 @@ impl TestApp {
         Self::build(None, None, true).await
     }
 
+    /// A test app with `[playback] prefer_direct_play = true`.
+    pub async fn with_prefer_direct_play() -> Self {
+        Self::build_with(None, None, false, true).await
+    }
+
     /// A test app whose people headshots come from `dir`.
     pub async fn with_people_cache_dir(dir: PathBuf) -> Self {
         Self::build(Some(dir), None, false).await
@@ -66,6 +71,15 @@ impl TestApp {
         people_cache_dir: Option<PathBuf>,
         acquire_timeout: Option<std::time::Duration>,
         forward_auth: bool,
+    ) -> Self {
+        Self::build_with(people_cache_dir, acquire_timeout, forward_auth, false).await
+    }
+
+    async fn build_with(
+        people_cache_dir: Option<PathBuf>,
+        acquire_timeout: Option<std::time::Duration>,
+        forward_auth: bool,
+        prefer_direct_play: bool,
     ) -> Self {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://rustyfin:rustyfin@localhost:5432/rustyfin".to_string());
@@ -161,6 +175,7 @@ impl TestApp {
             shutdown: shutdown.clone(),
             login_limiter: Default::default(),
             links: links.clone(),
+            prefer_direct_play,
         };
 
         rustyfin_api::link_notices::spawn(state.clone());
