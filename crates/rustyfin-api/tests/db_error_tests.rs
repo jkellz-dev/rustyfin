@@ -20,6 +20,12 @@ async fn break_media_items(app: &common::TestApp) {
         .execute(&app.pool)
         .await
         .expect("make media_items unavailable");
+    // The views read `visible_media_items`, which follows the table through a
+    // rename: break it too.
+    sqlx::query("ALTER VIEW visible_media_items RENAME TO visible_media_items_unavailable")
+        .execute(&app.pool)
+        .await
+        .expect("make visible_media_items unavailable");
 }
 
 /// Routes whose whole answer comes from `media_items`.
