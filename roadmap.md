@@ -4,8 +4,9 @@
 
 These are **not** on the roadmap — they are intentional exclusions:
 
-- Local password authentication / OIDC — forward auth only. One exception, for linked servers (16b, owner OK
-  2026-11-18): a Rustyfin accepts a read-only link key, scoped to the libraries it shares, on the `/Link/*` routes only
+- Local password authentication / OIDC sign-in — forward auth only. Rustyfin never checks a credential. To link to
+  another server (16b) it may *fetch* one (an OAuth 2.0 client-credentials token) and send it to that server's proxy,
+  which checks it (owner, 2026-11-18)
 - Plugin/extension system
 - Runtime server config mutation — config files are read-only
 - Server writing to the media filesystem — the server is a read-only consumer of media; a separate CLI tool
@@ -1422,9 +1423,11 @@ into Rustyfin, and only the merged browsing and playback are taken from it. Jell
 creating users on the other servers, storing each user's passwords and tokens for every server, proxying the web client,
 SyncPlay and Quick Connect.
 
-**Design boundary:** the Rustyfin link key is a second way in besides forward auth. The owner approved it on
-2026-11-18, and the Design Boundaries section records the exception. Jellyfin links need no exception: the home server
-is only a client of the friend's Jellyfin.
+**Design boundary:** no second way in. A link arrives at the friend's Rustyfin through their forward-auth proxy like
+any person, as an ordinary user. The home server only ever acts as a client: of a friend's Jellyfin (its password), or
+of a friend's proxy (a token it fetches). The owner first approved a Rustyfin link key, then replaced it the same day
+(2026-11-18): "By the time a request hits rustyfin it has an identity. What we want to change is what that identity is
+doing."
 
 Design, settled before any code:
 
@@ -1436,11 +1439,21 @@ Design, settled before any code:
     server signs in as it (`AuthenticateByName`) and keeps that token. A Jellyfin API key is not used: it carries full
     admin rights. Jellyswarrm's per-user credential vault is not needed either, since one link account serves all home
     users.
-  - **Rustyfin:** the friend's admin issues a link key scoped to the libraries they choose to share. It is read-only,
-    revocable, and listed in their admin, and the home server keeps it in its TOML config. A Tailscale
-  app-capabilities grant could later replace the key. That would mean no secret in Rustyfin, but it needs checking
-  across tailnets and through the Kubernetes operator's ingress first. Users stay per server: the friend sees one
-  session per link, never your users' identities.
+  - **Rustyfin:** forward auth, as for people. The request reaches the friend's Rustyfin with an identity from
+    their proxy, and that identity is an ordinary user: the same one that signs in directly, not a hidden or special
+    account. The friend's admin turns on **may link** for that user (off by default); what it syncs is what that user
+    can already see. Nothing else changes for the user, and the home server never reports progress or played state
+    back, so their own watch state is untouched. How the home server gets an identity the friend's proxy accepts:
+    - **Tailscale:** the friend's tailnet policy grants the home server's node an app capability. Tailscale Serve's
+      `--accept-app-caps` forwards it as `Tailscale-App-Capabilities` for users and tagged nodes alike, so the home
+      server needs no secret. Still to check: a node shared in from another tailnet, and through the Kubernetes
+      operator's ingress.
+    - **Any other proxy (OIDC):** the friend registers the home server as a client at their identity provider. The
+      home server fetches short-lived tokens with the OAuth 2.0 client-credentials grant (issuer, client id,
+      `client_secret_file`) and sends them as `Authorization: Bearer`; the proxy checks them and forwards identity
+      headers. Rustyfin only fetches tokens, never checks them.
+
+    Users stay per server: the friend sees the linking user's session, never your users' identities.
 - **The catalogue is mirrored, not fetched live.** This replaces the earlier "fetched live and cached briefly" plan.
   The home server keeps the shared items
   (ids, provider ids, names, sort fields, a summary of each stream) in Postgres. Merging, filters, sorting, search,
@@ -1508,19 +1521,25 @@ Design, settled before any code:
 
 #### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 
-- [ ] Link keys: create, scope to libraries, revoke and list in the admin; stored hashed; usable only on `/Link/*`
+- [ ] **May link**, a permission on an ordinary user (off by default), set in the admin; the `/Link/*` routes answer
+      403 without it, and a link sees what that user can see
+- [ ] The identity from a Tailscale app capability (`Tailscale-App-Capabilities`) for tagged nodes, which carry no
+      user login
 - [ ] `GET /Link/Catalog?since=<cursor>`: shared items changed since a cursor (adds, updates, removals as tombstones),
       with provider ids, parent links, sort fields, user-independent metadata and a stream summary; paged; benchmarked
       at 250k items
 - [ ] Images, item details, chapters and subtitles for shared items through the link
 - [ ] Streams for shared items through the link: byte ranges (direct play) and `PlaybackInfo` plus HLS (transcodes on
       this server); only items in shared libraries, read-only
-- [ ] Sessions from a link show in the friend's dashboard as one "link" user and count against their transcode limit
+- [ ] Sessions from a link show in the friend's dashboard as the linking user and count against their transcode
+      limit
 
 #### 16b.3 The home side: following a linked server
 
 - [x] Link config in the TOML file (`[[link]]`): name, kind (`jellyfin` or `rustyfin`), URL, the link user and its
       password (or `password_file`), and which of the friend's libraries map to which local library
+- [ ] Outbound identity for `rustyfin` links: none (Tailscale) or an OAuth 2.0 client-credentials token fetched from
+      the issuer in `[[link]]` (client id, `client_secret_file`), refreshed before it expires
 - [ ] The kind can be detected (`/System/Info/Public` names the product), so a friend who moves from Jellyfin to
       Rustyfin can switch to the faster sync without re-mapping
 - [x] A linked copy is a `media_items` row with `link_id`, `remote_id` and `remote_etag` and no path (changed from
