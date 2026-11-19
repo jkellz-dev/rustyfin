@@ -1,6 +1,7 @@
 //! Jellyfin's routes match in any case, and so do Rustyfin's (owner,
 //! 2026-11-19: "all routes must be case insensitive").
 
+#[allow(dead_code)]
 mod common;
 
 use axum::http::StatusCode;
