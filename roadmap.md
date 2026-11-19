@@ -1515,18 +1515,18 @@ Design, settled before any code:
       come across as films
 - [x] A mapping that fails is skipped with an error recorded on the link; the rest syncs, and nothing is removed
       while any mapping fails
-- [x] Link errors and last sync shown in the admin (Links page; `GET /Rustyfin/Links`, `POST /Rustyfin/Links/{id}/Sync`)
+- [x] Link errors and last sync shown in the admin (Links page; `GET /api/v1/links`, `POST /api/v1/links/{id}/sync`)
 - [x] A link removed from the config is removed at start, with its copies, its own libraries and the artwork
       titles borrowed from it; a link still named in the config stays even if its settings are broken
 
 #### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 
-- [x] **May link**, a permission on an ordinary user (off by default), set with the user's Policy (`MayLink`); the
-      `/Link/*` routes answer 403 without it, and a link sees what that user can see
+- [x] **May link**, a permission on an ordinary user (off by default), set with `PATCH /api/v1/users/{id}/permissions`
+      (`may_link`); the change feed answers 403 without it, and a link sees what that user can see
 - [ ] The admin's Users page sets **May link**
 - [ ] The identity from a Tailscale app capability (`Tailscale-App-Capabilities`) for tagged nodes, which carry no
       user login
-- [x] `GET /Link/Catalog?since=<cursor>`: items changed since a cursor (ids, type, library) and removals, paged; the
+- [x] `GET /api/v1/catalog?since=<cursor>`: items changed since a cursor (ids, type, library) and removals, paged; the
       cursor is a Postgres snapshot, so a late-committing transaction is never missed; details come from `/Items?Ids=`
 - [ ] The change feed benchmarked at 250k items; old `media_removals` rows pruned (a cursor older than the oldest kept
       removal then means a full sync)
@@ -1581,8 +1581,8 @@ Design, settled before any code:
       server
 - [x] `PlaybackInfo` offers no transcode for a linked copy until relayed transcodes land, and lists a copy the client
       cannot play as is after every copy it can
-- [x] Transcode of a linked copy: `PlaybackInfo` asked of the linked server with the client's request, the HLS
-      playlists and segments relayed through `/LinkRelay/{link}/...` (the link's copies only; the link's token never
+- [x] Transcode of a linked copy: `PlaybackInfo` asked of the linked server with the client's request, the HLS playlists
+      and segments relayed through `/api/v1/links/{link}/relay/...` (the link's copies only; the link's token never
       reaches a client); the linked server runs ffmpeg
 - [ ] Progress and stop reports update the home user's state; the linked server only sees the link's session
 - [ ] If a linked server drops mid-play, the client gets an error it can retry with another copy (no silent switch)

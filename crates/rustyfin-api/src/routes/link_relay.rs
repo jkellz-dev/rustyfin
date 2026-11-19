@@ -229,7 +229,8 @@ pub(crate) async fn offer_transcodes(
         };
         source.supports_transcoding = true;
         source.transcoding_url = Some(format!(
-            "/LinkRelay/{link_id}{}",
+            "{}/links/{link_id}/relay{}",
+            crate::api_v1::PREFIX,
             without_api_key(url, None)
         ));
         source.transcoding_sub_protocol = theirs["TranscodingSubProtocol"]
@@ -246,7 +247,7 @@ pub(crate) async fn offer_transcodes(
     });
 }
 
-/// `GET /LinkRelay/{link}/{*path}`: a linked copy's transcode (playlists and
+/// `GET /api/v1/links/{link}/relay/{*path}`: a linked copy's transcode (playlists and
 /// segments) from the friend's server. Only `videos/<id>/...` and
 /// `audio/<id>/...` of the link's own copies the user may see; the link's
 /// token is added here and taken out of every playlist, and the client's

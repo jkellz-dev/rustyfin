@@ -13,6 +13,7 @@ Jellyfin Media Player) connect to it seamlessly.
 | [Configuration](configuration.md) | Config file, environment variables, deployment |
 | [API Compatibility](api-compatibility.md) | What is answered for real, what is a no-op, what is left out |
 | [API Reference](api-reference.md) | Complete HTTP API documentation (40+ routes) |
+| [Rustyfin API](rustyfin-api.md) | Rustyfin's own routes under `/api/v1`, apart from the Jellyfin API |
 | [Authentication](authentication.md) | Forward auth, session management, extractors |
 | [Database Schema](database-schema.md) | All tables, columns, indexes, relationships |
 | [Library Scanning](library-scanning.md) | Scanner workflow, file naming, NFO parsing, TMDB |

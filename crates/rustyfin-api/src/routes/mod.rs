@@ -43,6 +43,7 @@ pub mod system;
 pub mod theme_media;
 pub mod universal_audio;
 pub mod user_data;
+pub mod user_permissions;
 pub mod users;
 pub mod versions;
 pub mod webhooks;

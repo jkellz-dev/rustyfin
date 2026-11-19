@@ -517,9 +517,8 @@ pub struct ItemFilters {
     pub years: Vec<i32>,
 }
 
-/// A linked server, for the admin's Links page (`GET /Rustyfin/Links`).
+/// A linked server, for the admin's Links page (`GET /api/v1/links`).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct LinkInfo {
     pub id: String,
     pub name: String,

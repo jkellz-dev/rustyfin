@@ -140,7 +140,6 @@ pub async fn authenticate_by_name(
         policy: UserPolicy {
             is_administrator: user.is_administrator,
             is_disabled: user.is_disabled,
-            may_link: user.may_link,
             ..Default::default()
         },
         primary_image_tag: None,

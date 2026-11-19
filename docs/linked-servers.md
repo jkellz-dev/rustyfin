@@ -141,7 +141,7 @@ WARN  rustyfin_core::link: Link Alex did not sync: Alex shares no library named 
 
 The admin's **Links** page (`/web/links`) shows each link: whether its last sync worked and why not, when it last
 synced, how many titles only it brought and how many copies it holds, with a **Sync now** button. The same is
-`GET /Rustyfin/Links` for administrators; `POST /Rustyfin/Links/{id}/Sync` starts a sync.
+`GET /api/v1/links` for administrators; `POST /api/v1/links/{id}/sync` starts a sync ([Rustyfin API](rustyfin-api.md)).
 
 ## How copies are matched
 
@@ -187,7 +187,7 @@ to:
   same one that person uses themselves. In the admin, or with `POST /Users/{id}/Policy` and `"MayLink": true`, you let
   that user link. It is off for everyone until you turn it on, and a Policy edit that does not mention it (Jellyfin's
   web client sends none) leaves it as it is. A link sees what that user can see.
-- **The change feed.** `GET /Link/Catalog` lists what changed in those libraries since a cursor: changed items (id,
+- **The change feed.** `GET /api/v1/catalog` lists what changed in those libraries since a cursor: changed items (id,
   type, library) and removed ones. Without `since` it lists everything. Pages of up to `limit` items (1000 by default)
   say `More` and give a `Next` to pass as `after`; keep the first page's `Cursor` and pass it as `since` next time. The
   details come from `/Items?Ids=` as usual. A user not allowed to link gets 403. Only your own items are offered,
