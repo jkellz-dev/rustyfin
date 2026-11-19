@@ -1364,11 +1364,36 @@ pub async fn get_latest_items(
     if !wanted.is_empty() && fetch_types.is_empty() {
         return Ok(Json(Vec::new()));
     }
-    let fetch_limit = if group { (limit * 20).min(1000) } else { limit };
-    let added =
+    // The user's settings: across libraries, not those they keep out of
+    // Latest; and (Jellyfin's default) not what they have played.
+    let config = crate::user_prefs::load(&state.pool, auth.user_id).await;
+    let left_out = if query.parent_id.is_none() {
+        crate::user_prefs::ids(&config.latest_items_excludes)
+    } else {
+        Vec::new()
+    };
+    let hide_played = query.is_played != Some(true) && config.hide_played_in_latest;
+    let filtered = !left_out.is_empty() || hide_played;
+    let fetch_limit = if group || filtered {
+        (limit * 20).min(1000)
+    } else {
+        limit
+    };
+    let mut added =
         media_items::latest_by_library(&state.pool, query.parent_id, &fetch_types, fetch_limit)
             .await
             .map_err(ApiError::Database)?;
+    added.retain(|i| i.library_id.is_none_or(|l| !left_out.contains(&l)));
+    if hide_played {
+        let ids: Vec<Uuid> = added.iter().map(|i| i.id).collect();
+        let data = user_data::get_many(&state.pool, auth.user_id, &ids)
+            .await
+            .or_log_default("user_data::get_many");
+        added.retain(|i| !data.get(&i.id).is_some_and(|d| d.played));
+    }
+    if !group {
+        added.truncate(limit as usize);
+    }
     let items = if group {
         group_latest(&state.pool, added, &wanted, limit).await?
     } else {

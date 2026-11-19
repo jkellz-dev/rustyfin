@@ -344,6 +344,10 @@ pub struct MediaSourceInfo {
     pub required_http_headers: HashMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_audio_stream_index: Option<i32>,
+    /// The subtitle track playback starts with, -1 for none (the user's
+    /// `SubtitleMode` and languages; `user_prefs`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_subtitle_stream_index: Option<i32>,
 }
 
 /// Individual media stream (video, audio, subtitle track).

@@ -603,7 +603,7 @@ Jellyfin parity.
 |-------|----------|------------------|
 | `POST /Users/New` | 403 (admin) | Create a new user (N/A: users created on first forward auth login) |
 | `POST /Users/{userId}/Password` | 204 (auth) | Change user password (N/A: no local passwords) |
-| `POST /Users/{userId}/Configuration` | 204 (auth) | Update user preferences (e.g. subtitle mode, audio language) |
+| `POST /Users/{userId}/Configuration` | 204 (auth) | Update user preferences; applied (owner, 2026-11-19): library order and hidden libraries in `/UserViews`, Latest excludes and hide-played, audio and subtitle languages and mode in PlaybackInfo's default tracks |
 
 **Auth providers** — forward auth is the only provider; clients expect these for setup wizard.
 
