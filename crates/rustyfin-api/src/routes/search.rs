@@ -35,12 +35,21 @@ pub async fn search_hints(
 ) -> Result<Json<SearchHintResult>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
 
-    let item_types: Option<Vec<String>> = query.include_item_types.as_deref().map(|s| {
-        s.split(',')
-            .filter(|t| !t.is_empty())
-            .map(String::from)
-            .collect()
-    });
+    // The Collections view is no library: searching in it means collections,
+    // wherever their films are (the admin searches the view a page is in).
+    let in_collections =
+        query.parent_id == Some(super::libraries::collections_view_id(&state.server_id));
+    let item_types: Option<Vec<String>> = if in_collections {
+        Some(vec!["BoxSet".to_string()])
+    } else {
+        query.include_item_types.as_deref().map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(String::from)
+                .collect()
+        })
+    };
 
     let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
         .await
@@ -79,15 +88,22 @@ pub async fn search_hints(
     let hits: Vec<_> = hits
         .into_iter()
         .filter(|hit| !hidden.contains(&hit.id) && shown.contains(&hit.id))
+        // The kinds asked for (the index may not filter: Postgres search).
+        .filter(|hit| {
+            item_types
+                .as_ref()
+                .is_none_or(|t| t.iter().any(|t| t.eq_ignore_ascii_case(&hit.item_type)))
+        })
         .filter(|hit| {
             accessible
                 .as_ref()
                 .is_none_or(|ids| hit.library_id.is_none_or(|lid| ids.contains(&lid)))
         })
         .filter(|hit| {
-            query
-                .parent_id
-                .is_none_or(|pid| hit.library_id == Some(pid))
+            in_collections
+                || query
+                    .parent_id
+                    .is_none_or(|pid| hit.library_id == Some(pid))
         })
         .take(limit as usize)
         .collect();

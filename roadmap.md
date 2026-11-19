@@ -1609,10 +1609,11 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
 
 To fix once the Phase 16b link work is done (owner, 2026-11-19).
 
-- [ ] **Searching in collections finds nothing.** Owner: "Searching in collections fails completely and never finds
-      anything." Not yet reproduced or narrowed down: which client, whether it is the search box inside one
-      collection, or collections in search results, and which request it sends (`/Items?ParentId=<collection>&
-      SearchTerm=`, `/Search/Hints`, or `IncludeItemTypes=BoxSet`). First step: reproduce it with a test, then fix
+- [x] **Searching in collections finds nothing.** Owner: "I was searching in the collections library using the
+      admin. All in all I'm not seeing collections in search results." The Collections view is no library, so a search
+      scoped to it matched nothing; it now means collections wherever their films are. `IncludeItemTypes` was ignored
+      by the Postgres search (only Meilisearch applied it) and is now applied to every result; the admin's search
+      offers "Collections" as a kind
 
 ---
 
