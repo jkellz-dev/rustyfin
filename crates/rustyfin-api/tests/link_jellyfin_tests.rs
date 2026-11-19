@@ -41,6 +41,8 @@ struct Remote {
     seen: Vec<String>,
     /// PlaybackInfo bodies the link sent.
     playback_bodies: Vec<Value>,
+    /// The server is down: everything answers 503.
+    down: bool,
 }
 
 type Shared = Arc<Mutex<Remote>>;
@@ -322,7 +324,19 @@ async fn fake_jellyfin(remote: Shared) -> String {
                 )
             }),
         )
-        .with_state(remote);
+        .with_state(remote.clone())
+        .layer(axum::middleware::from_fn(
+            move |req: axum::extract::Request, next: axum::middleware::Next| {
+                let down = remote.lock().unwrap().down;
+                async move {
+                    if down {
+                        StatusCode::SERVICE_UNAVAILABLE.into_response()
+                    } else {
+                        next.run(req).await
+                    }
+                }
+            },
+        ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -1393,5 +1407,252 @@ async fn a_link_taken_out_of_the_config_is_removed_at_start() {
         Some(1),
         "{mine}"
     );
+    app.cleanup().await;
+}
+
+/// The next "DisplayMessage" a session gets, as (header, text).
+async fn notice(
+    rx: &mut tokio::sync::broadcast::Receiver<rustyfin_models::dto::SessionCommand>,
+) -> (String, String) {
+    let wait = std::time::Duration::from_secs(5);
+    loop {
+        match tokio::time::timeout(wait, rx.recv()).await {
+            Ok(Ok(rustyfin_models::dto::SessionCommand::GeneralCommand(c)))
+                if c.name == "DisplayMessage" =>
+            {
+                return (
+                    c.arguments.get("Header").cloned().unwrap_or_default(),
+                    c.arguments.get("Text").cloned().unwrap_or_default(),
+                );
+            }
+            Ok(Ok(_)) => continue,
+            other => panic!("no notice: {other:?}"),
+        }
+    }
+}
+
+/// Owner, 2026-11-19: "When a friends server is down, the user should be
+/// notified. Their titles should be omitted from the views." Every view
+/// leaves out what only that friend has (lists, search, Latest, Resume, the
+/// item itself, a library of its own) and drops the friend's copy from a title
+/// the server holds; users who can see those titles get a message. All of it
+/// comes back, with another message, when the friend's server does.
+#[tokio::test]
+async fn a_friends_titles_leave_the_views_while_their_server_is_down() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", false).await;
+    let (_admin, admin_token) = app.create_user("admin", true).await;
+    let (_tree, lib, local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    {
+        let mut r = remote.lock().unwrap();
+        r.films = vec![
+            film("r100", "Shared Film", "100", "e1", 3840, 2160),
+            film("r200", "Only Theirs", "200", "e1", 1920, 1080),
+        ];
+        r.videos = vec![video("v1", "Beach")];
+    }
+    let url = fake_jellyfin(remote.clone()).await;
+    let mut s = settings(&url, "secret");
+    s.libraries.push(LibraryMap {
+        remote: "Home Videos".into(),
+        local: None,
+    });
+    let link = app.links.register(&app.pool, s).await.unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO user_data (user_id, item_id, playback_position_ticks, last_played_date) \
+         VALUES ($1, $2, 6000000000, now())",
+    )
+    .bind(uid)
+    .bind(theirs)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    let session: Uuid = sqlx::query_scalar("SELECT id FROM sessions WHERE access_token = $1")
+        .bind(&token)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    let mut rx = app.session_manager.subscribe(session).await;
+
+    let movies = format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie");
+    let resume = format!("/Users/{uid}/Items/Resume");
+    let latest = format!("/Users/{uid}/Items/Latest?ParentId={lib}");
+    let views = format!("/Users/{uid}/Views");
+    let search = "/Search/Hints?SearchTerm=Only";
+    let view_names = |v: &Value| -> Vec<String> {
+        v["Items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["Name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let sources = |v: &Value| v["MediaSources"].as_array().map(Vec::len).unwrap_or(0);
+
+    // Up: everything is there.
+    let (_, list) = app.get(&movies, &token).await;
+    assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
+    let (_, list) = app.get(&resume, &token).await;
+    assert_eq!(names(&list), vec!["Only Theirs"], "{list}");
+    let (_, v) = app.get(&views, &token).await;
+    assert!(
+        view_names(&v).contains(&"Home Videos · Alex".to_string()),
+        "{v}"
+    );
+    let (_, mine) = app
+        .get(&format!("/Users/{uid}/Items/{local}"), &token)
+        .await;
+    assert_eq!(sources(&mine), 2, "{mine}");
+
+    // Down.
+    remote.lock().unwrap().down = true;
+    assert!(app.links.sync(&app.pool, link).await.is_err());
+    let (header, text) = notice(&mut rx).await;
+    assert!(!header.is_empty());
+    assert!(text.contains("Alex") && text.contains("hidden"), "{text}");
+    let (_, list) = app.get(&movies, &token).await;
+    assert_eq!(names(&list), vec!["Shared Film"], "{list}");
+    let (status, _) = app
+        .get(&format!("/Users/{uid}/Items/{theirs}"), &token)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (_, list) = app.get(&resume, &token).await;
+    assert!(names(&list).is_empty(), "{list}");
+    let (_, list) = app.get(&latest, &token).await;
+    let latest_names: Vec<&str> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["Name"].as_str().unwrap())
+        .collect();
+    assert!(!latest_names.contains(&"Only Theirs"), "{list}");
+    let (_, hints) = app.get(search, &token).await;
+    assert_eq!(hints["TotalRecordCount"], 0, "{hints}");
+    let (_, v) = app.get(&views, &token).await;
+    assert!(
+        !view_names(&v).contains(&"Home Videos · Alex".to_string()),
+        "{v}"
+    );
+    let (_, mine) = app
+        .get(&format!("/Users/{uid}/Items/{local}"), &token)
+        .await;
+    assert_eq!(sources(&mine), 1, "only this server's copy: {mine}");
+    let (_, links) = app.get("/api/v1/links", &admin_token).await;
+    assert!(links[0]["offline_since"].is_string(), "{links}");
+    // Still down: no second message.
+    assert!(app.links.recheck_offline(&app.pool).await == 0);
+    assert!(rx.try_recv().is_err(), "one message per change");
+
+    // Back.
+    remote.lock().unwrap().down = false;
+    assert_eq!(app.links.recheck_offline(&app.pool).await, 1);
+    let (_, text) = notice(&mut rx).await;
+    assert!(text.contains("Alex") && text.contains("back"), "{text}");
+    let (_, list) = app.get(&movies, &token).await;
+    assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
+    let (_, list) = app.get(&resume, &token).await;
+    assert_eq!(
+        names(&list),
+        vec!["Only Theirs"],
+        "watched state kept: {list}"
+    );
+    let (_, links) = app.get("/api/v1/links", &admin_token).await;
+    assert!(links[0]["offline_since"].is_null(), "{links}");
+    app.cleanup().await;
+}
+
+/// A title two friends hold stays while one of them is down: the other's
+/// copy stands in for it.
+#[tokio::test]
+async fn a_title_another_friend_holds_stays_while_one_is_down() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let (_tree, lib, _local) = local_library(&app).await;
+    let mut ids = Vec::new();
+    let mut remotes = Vec::new();
+    for name in ["Alex", "Sam"] {
+        let remote: Shared = Default::default();
+        remote.lock().unwrap().films = vec![film("r200", "Only Theirs", "200", "e1", 1920, 1080)];
+        let url = fake_jellyfin(remote.clone()).await;
+        let mut s = settings(&url, "secret");
+        s.name = name.into();
+        let link = app.links.register(&app.pool, s).await.unwrap();
+        app.links.sync(&app.pool, link).await.expect("sync");
+        ids.push(link);
+        remotes.push(remote);
+    }
+    // Take down the friend whose copy stands for the title.
+    let standing: Uuid = sqlx::query_scalar(
+        "SELECT link_id FROM media_items WHERE remote_id = 'r200' AND owner_id IS NULL",
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    let down = ids.iter().position(|i| *i == standing).unwrap();
+    remotes[down].lock().unwrap().down = true;
+    assert!(app.links.sync(&app.pool, standing).await.is_err());
+
+    let movies = format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie");
+    let (_, list) = app.get(&movies, &token).await;
+    assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
+    let item = list["Items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["Name"] == "Only Theirs")
+        .unwrap()["Id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (status, film) = app.get(&format!("/Users/{uid}/Items/{item}"), &token).await;
+    assert_eq!(status, StatusCode::OK, "{film}");
+    assert_eq!(
+        film["MediaSources"].as_array().map(Vec::len),
+        Some(1),
+        "{film}"
+    );
+
+    remotes[down].lock().unwrap().down = false;
+    app.links.recheck_offline(&app.pool).await;
+    let (_, list) = app.get(&movies, &token).await;
+    assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
+    let (_, film) = app.get(&format!("/Users/{uid}/Items/{item}"), &token).await;
+    assert_eq!(
+        film["MediaSources"].as_array().map(Vec::len),
+        Some(2),
+        "both copies again: {film}"
+    );
+    app.cleanup().await;
+}
+
+/// The views read `visible_media_items`, a view over `media_items` whose
+/// columns are fixed when it is made: a migration adding a column to
+/// `media_items` must make the view again.
+#[tokio::test]
+async fn the_visible_view_has_every_column_of_media_items() {
+    let app = common::TestApp::new().await;
+    let columns = |table: &'static str| {
+        let pool = app.pool.clone();
+        async move {
+            let names: Vec<String> = sqlx::query_scalar(
+                "SELECT column_name::text FROM information_schema.columns \
+                 WHERE table_schema = current_schema() AND table_name = $1 ORDER BY ordinal_position",
+            )
+            .bind(table)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            names
+        }
+    };
+    let table = columns("media_items").await;
+    assert!(!table.is_empty());
+    assert_eq!(columns("visible_media_items").await, table);
     app.cleanup().await;
 }

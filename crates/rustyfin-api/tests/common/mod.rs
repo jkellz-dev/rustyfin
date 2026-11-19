@@ -163,6 +163,7 @@ impl TestApp {
             links: links.clone(),
         };
 
+        rustyfin_api::link_notices::spawn(state.clone());
         let metrics_router = rustyfin_api::metrics::router(state.clone());
         let router = build_router(state);
 
