@@ -1521,13 +1521,15 @@ Design, settled before any code:
 
 #### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 
-- [ ] **May link**, a permission on an ordinary user (off by default), set in the admin; the `/Link/*` routes answer
-      403 without it, and a link sees what that user can see
+- [x] **May link**, a permission on an ordinary user (off by default), set with the user's Policy (`MayLink`); the
+      `/Link/*` routes answer 403 without it, and a link sees what that user can see
+- [ ] The admin's Users page sets **May link**
 - [ ] The identity from a Tailscale app capability (`Tailscale-App-Capabilities`) for tagged nodes, which carry no
       user login
-- [ ] `GET /Link/Catalog?since=<cursor>`: shared items changed since a cursor (adds, updates, removals as tombstones),
-      with provider ids, parent links, sort fields, user-independent metadata and a stream summary; paged; benchmarked
-      at 250k items
+- [x] `GET /Link/Catalog?since=<cursor>`: items changed since a cursor (ids, type, library) and removals, paged; the
+      cursor is a Postgres snapshot, so a late-committing transaction is never missed; details come from `/Items?Ids=`
+- [ ] The change feed benchmarked at 250k items; old `media_removals` rows pruned (a cursor older than the oldest kept
+      removal then means a full sync)
 - [ ] Images, item details, chapters and subtitles for shared items through the link
 - [ ] Streams for shared items through the link: byte ranges (direct play) and `PlaybackInfo` plus HLS (transcodes on
       this server); only items in shared libraries, read-only

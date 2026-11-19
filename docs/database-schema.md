@@ -45,6 +45,7 @@ Stores user accounts. Users are auto-provisioned via forward auth headers.
 | `created_at` | TIMESTAMPTZ | No | `NOW()` | Row creation time |
 | `updated_at` | TIMESTAMPTZ | No | `NOW()` | Last update time |
 | `configuration` | JSONB | Yes | | The rest of the app's `UserConfiguration` (ordered views, excludes, ...), as sent |
+| `may_link` | BOOLEAN | No | `false` | The admin lets this user link a server to this one (`/Link/Catalog`) |
 
 **Unique constraints**: `username`, `remote_user_id`
 
@@ -128,6 +129,7 @@ Central media catalog. Self-referencing hierarchy: Library → Series → Season
 | `link_id` | UUID | Yes | | A linked server's copy: FK to `links.id` (CASCADE); such rows have no `path` |
 | `remote_id` | TEXT | Yes | | The copy's item id on the linked server (`<item>/<source>` for its other versions); unique per link |
 | `remote_etag` | TEXT | Yes | | The linked server's `Etag` when last synced; NULL until fully stored |
+| `change_xid` | XID8 | No | `pg_current_xact_id()` | The transaction that last changed the item, its streams or its images (set by triggers); the change feed's position |
 
 **Indexes**: `idx_media_items_type`, `idx_media_items_parent`, `idx_media_items_library`, `idx_media_items_series`,
 `idx_media_items_path`, `idx_media_items_name`, `idx_media_items_presentation_key`
@@ -146,6 +148,17 @@ rows with `link_id`; a copy of a film the server holds is a `Version` of it (`ow
 | `last_sync_at` | TIMESTAMPTZ | Yes | | When the last sync that worked ended |
 | `last_error` | TEXT | Yes | | Why the last sync failed; NULL after one that worked |
 | `created_at` | TIMESTAMPTZ | No | `now()` | |
+
+### `media_removals`
+
+Items removed, for the change feed (`/Link/Catalog`); written by a trigger on `media_items` (not for linked copies).
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `item_id` | UUID | No | | The removed item |
+| `library_id` | UUID | Yes | | Its library, so a feed shows only removals the user could see |
+| `removed_xid` | XID8 | No | `pg_current_xact_id()` | The transaction that removed it |
+| `removed_at` | TIMESTAMPTZ | No | `NOW()` | |
 
 ### `media_streams`
 

@@ -178,6 +178,21 @@ menu lists every copy, the friend's named with the link's name. A copy the app c
 One signed-in device named "Rustyfin link" for the link user, and one stream (or transcode) per title playing through
 the link. Your users' names and what they watch stay on your server.
 
+## Letting a Rustyfin link to yours
+
+The faster Rustyfin-to-Rustyfin sync is being built (roadmap 16b.2r). What is in already, on the server being linked
+to:
+
+- **Who may link.** A linking server signs in through your forward-auth proxy like anyone, as an ordinary user: the
+  same one that person uses themselves. In the admin, or with `POST /Users/{id}/Policy` and `"MayLink": true`, you let
+  that user link. It is off for everyone until you turn it on, and a Policy edit that does not mention it (Jellyfin's
+  web client sends none) leaves it as it is. A link sees what that user can see.
+- **The change feed.** `GET /Link/Catalog` lists what changed in those libraries since a cursor: changed items (id,
+  type, library) and removed ones. Without `since` it lists everything. Pages of up to `limit` items (1000 by default)
+  say `More` and give a `Next` to pass as `after`; keep the first page's `Cursor` and pass it as `since` next time. The
+  details come from `/Items?Ids=` as usual. A user not allowed to link gets 403. Only your own items are offered,
+  never copies you hold from another link.
+
 ## Removing a link
 
 Delete its `[[link]]` and restart. At start, Rustyfin removes every link the config no longer names: its copies, any

@@ -16,6 +16,7 @@ pub mod hls;
 pub mod images;
 pub mod items;
 pub mod libraries;
+pub mod link_catalog;
 pub(crate) mod link_relay;
 pub mod links;
 pub mod localization;
