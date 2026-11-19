@@ -56,7 +56,7 @@ pub(crate) async fn stream(
             forward,
         )
         .await
-        .map_err(|e| unreachable(&state, &link, &e))?;
+        .map_err(|e| unreachable(state, &link, &e))?;
     let status = response.status();
     if status == StatusCode::NOT_FOUND {
         return Err(ApiError::NotFound);
@@ -136,7 +136,7 @@ pub(crate) async fn image(
         .client
         .relay(&path, &query, HeaderMap::new())
         .await
-        .map_err(|e| unreachable(&state, &link, &e))?;
+        .map_err(|e| unreachable(state, &link, &e))?;
     if !response.status().is_success() {
         return Err(ApiError::NotFound);
     }
