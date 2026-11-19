@@ -1,5 +1,7 @@
 //! The friend's side of a Rustyfin-to-Rustyfin link (roadmap 16b.2r): an
 //! ordinary user the admin lets link, and the change feed it syncs from.
+//! Both are Rustyfin's own API (`/api/v1`, owner 2026-11-19), apart from the
+//! Jellyfin routes: snake_case JSON and query keys.
 
 #[allow(dead_code)]
 mod common;
@@ -8,70 +10,85 @@ use axum::http::StatusCode;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Ids in a catalogue page's `Items`, as UUIDs.
+/// Ids in a catalogue page's `key` list, as UUIDs.
 fn ids(page: &Value, key: &str) -> Vec<Uuid> {
     page[key]
         .as_array()
         .unwrap_or_else(|| panic!("no {key}: {page}"))
         .iter()
-        .map(|i| i["Id"].as_str().unwrap().parse().unwrap())
+        .map(|i| i["id"].as_str().unwrap().parse().unwrap())
         .collect()
 }
 
 fn catalog(since: &Value) -> String {
     match since.as_str() {
-        Some(c) => format!("/Link/Catalog?since={c}"),
-        None => "/Link/Catalog".to_string(),
+        Some(c) => format!("/api/v1/catalog?since={c}"),
+        None => "/api/v1/catalog".to_string(),
     }
 }
 
-/// Linking is a permission on an ordinary user, off by default and set by an
-/// administrator; the admin's Policy edits without it (Jellyfin's own web
-/// client sends none) leave it as it is.
+/// Linking is a permission on an ordinary user, off by default, set by an
+/// administrator through Rustyfin's own API; the Jellyfin routes and their
+/// `Policy` are left as Jellyfin has them.
 #[tokio::test]
 async fn an_admin_lets_an_ordinary_user_link() {
     let app = common::TestApp::new().await;
     let (_admin, admin_token) = app.create_user("admin", true).await;
     let (friend, friend_token) = app.create_user("jonathan", false).await;
+    let permissions = format!("/api/v1/users/{friend}/permissions");
 
-    let (status, _) = app.get("/Link/Catalog", &friend_token).await;
+    let (status, _) = app.get("/api/v1/catalog", &friend_token).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "off by default");
+    let (status, mine) = app.get(&permissions, &friend_token).await;
+    assert_eq!(status, StatusCode::OK, "a user sees their own: {mine}");
+    assert_eq!(mine["may_link"], false, "{mine}");
     let (_, me) = app.get(&format!("/Users/{friend}"), &friend_token).await;
-    assert_eq!(me["Policy"]["MayLink"], false, "{me}");
+    assert!(
+        me["Policy"].get("MayLink").is_none(),
+        "not in Jellyfin's Policy: {me}"
+    );
 
     // Only an admin may turn it on.
-    let on = json!({"IsAdministrator": false, "EnableAllFolders": true, "MayLink": true});
-    let (status, _) = app
-        .post(&format!("/Users/{friend}/Policy"), &on, &friend_token)
-        .await;
+    let on = json!({"may_link": true});
+    let (status, _) = app.patch(&permissions, &on, &friend_token).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let (status, _) = app
-        .post(&format!("/Users/{friend}/Policy"), &on, &admin_token)
-        .await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let (_, me) = app.get(&format!("/Users/{friend}"), &friend_token).await;
-    assert_eq!(me["Policy"]["MayLink"], true, "{me}");
-    let (status, _) = app.get("/Link/Catalog", &friend_token).await;
+    let (status, now) = app.patch(&permissions, &on, &admin_token).await;
+    assert_eq!(status, StatusCode::OK, "{now}");
+    assert_eq!(now["may_link"], true, "{now}");
+    let (status, _) = app.get("/api/v1/catalog", &friend_token).await;
     assert_eq!(status, StatusCode::OK);
 
-    // A policy edit that does not mention it keeps it.
+    // A Jellyfin Policy edit leaves it alone.
     let edit = json!({"IsAdministrator": false, "EnableAllFolders": true});
     app.post(&format!("/Users/{friend}/Policy"), &edit, &admin_token)
         .await;
-    let (_, me) = app.get(&format!("/Users/{friend}"), &friend_token).await;
-    assert_eq!(me["Policy"]["MayLink"], true, "{me}");
+    let (_, mine) = app.get(&permissions, &friend_token).await;
+    assert_eq!(mine["may_link"], true, "{mine}");
 
-    let off = json!({"IsAdministrator": false, "EnableAllFolders": true, "MayLink": false});
-    app.post(&format!("/Users/{friend}/Policy"), &off, &admin_token)
+    // Another user's are the admin's business only.
+    let (_, other_token) = app.create_user("other", false).await;
+    let (status, _) = app.get(&permissions, &other_token).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = app
+        .patch(
+            &format!("/api/v1/users/{}/permissions", Uuid::new_v4()),
+            &on,
+            &admin_token,
+        )
         .await;
-    let (status, _) = app.get("/Link/Catalog", &friend_token).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    app.patch(&permissions, &json!({"may_link": false}), &admin_token)
+        .await;
+    let (status, _) = app.get("/api/v1/catalog", &friend_token).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     app.cleanup().await;
 }
 
-/// `GET /Link/Catalog`: what changed in the libraries the user can see since a
-/// cursor, as ids (the details come from `/Items?Ids=`), with removals. Only
-/// this server's own items: never a copy it holds from another link.
+/// `GET /api/v1/catalog`: what changed in the libraries the user can see
+/// since a cursor, as ids (the details come from `/Items?Ids=`), with
+/// removals. Only this server's own items: never a copy it holds from another
+/// link.
 #[tokio::test]
 async fn the_change_feed_carries_only_what_changed_where_the_user_can_see() {
     let app = common::TestApp::new().await;
@@ -103,37 +120,45 @@ async fn the_change_feed_carries_only_what_changed_where_the_user_can_see() {
         .unwrap();
     let policy = json!({
         "IsAdministrator": false, "EnableAllFolders": false,
-        "EnabledFolders": [movies, shows], "MayLink": true
+        "EnabledFolders": [movies, shows]
     });
     let (status, _) = app
         .post(&format!("/Users/{friend}/Policy"), &policy, &admin_token)
         .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = app
+        .patch(
+            &format!("/api/v1/users/{friend}/permissions"),
+            &json!({"may_link": true}),
+            &admin_token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
 
     // Everything, from the start.
-    let (status, first) = app.get("/Link/Catalog", &token).await;
+    let (status, first) = app.get("/api/v1/catalog", &token).await;
     assert_eq!(status, StatusCode::OK, "{first}");
-    let mut seen = ids(&first, "Items");
+    let mut seen = ids(&first, "items");
     seen.sort();
     let mut want = vec![film, other, series];
     want.sort();
     assert_eq!(seen, want, "{first}");
-    let entry = first["Items"]
+    let entry = first["items"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|i| i["Id"].as_str() == Some(&series.to_string()))
+        .find(|i| i["id"].as_str() == Some(&series.to_string()))
         .cloned()
         .unwrap();
-    assert_eq!(entry["Type"], "Series", "{first}");
-    assert_eq!(entry["LibraryId"], json!(shows), "{first}");
-    assert_eq!(first["More"], false, "{first}");
-    assert!(first["Cursor"].is_string(), "{first}");
+    assert_eq!(entry["type"], "Series", "{first}");
+    assert_eq!(entry["library_id"], json!(shows), "{first}");
+    assert_eq!(first["more"], false, "{first}");
+    assert!(first["cursor"].is_string(), "{first}");
 
     // Nothing changed: nothing comes.
-    let (_, quiet) = app.get(&catalog(&first["Cursor"]), &token).await;
-    assert!(ids(&quiet, "Items").is_empty(), "{quiet}");
-    assert!(ids(&quiet, "Removed").is_empty(), "{quiet}");
+    let (_, quiet) = app.get(&catalog(&first["cursor"]), &token).await;
+    assert!(ids(&quiet, "items").is_empty(), "{quiet}");
+    assert!(ids(&quiet, "removed").is_empty(), "{quiet}");
 
     // A renamed film, a new stream on another, a removed one, a hidden change.
     sqlx::query("UPDATE media_items SET name = 'Film (Director''s Cut)' WHERE id = $1")
@@ -158,31 +183,34 @@ async fn the_change_feed_carries_only_what_changed_where_the_user_can_see() {
         .execute(&app.pool)
         .await
         .unwrap();
-    let (_, next) = app.get(&catalog(&quiet["Cursor"]), &token).await;
-    let mut changed = ids(&next, "Items");
+    let (_, next) = app.get(&catalog(&quiet["cursor"]), &token).await;
+    let mut changed = ids(&next, "items");
     changed.sort();
     let mut want = vec![film, other];
     want.sort();
     assert_eq!(changed, want, "{next}");
-    assert_eq!(ids(&next, "Removed"), vec![series], "{next}");
+    assert_eq!(ids(&next, "removed"), vec![series], "{next}");
 
-    // Paged: a short page says there is more and where to go on from.
-    let (_, page) = app.get("/Link/Catalog?limit=1", &token).await;
-    assert_eq!(ids(&page, "Items").len(), 1, "{page}");
-    assert_eq!(page["More"], true, "{page}");
-    let after = page["Next"].as_str().unwrap_or_else(|| panic!("{page}"));
+    // Paged: a short page says there is more and where to go on from. The
+    // keys stay as sent (the Jellyfin routes' camelCase fix-up is not applied).
+    let (_, page) = app.get("/api/v1/catalog?limit=1", &token).await;
+    assert_eq!(ids(&page, "items").len(), 1, "{page}");
+    assert_eq!(page["more"], true, "{page}");
+    let after = page["next"].as_str().unwrap_or_else(|| panic!("{page}"));
     let (_, rest) = app
-        .get(&format!("/Link/Catalog?limit=10&after={after}"), &token)
+        .get(&format!("/api/v1/catalog?limit=10&after={after}"), &token)
         .await;
-    let mut all = ids(&page, "Items");
-    all.extend(ids(&rest, "Items"));
+    let mut all = ids(&page, "items");
+    all.extend(ids(&rest, "items"));
     all.sort();
     let mut want = vec![film, other];
     want.sort();
     assert_eq!(all, want, "{rest}");
-    assert_eq!(rest["More"], false, "{rest}");
+    assert_eq!(rest["more"], false, "{rest}");
 
-    let (status, _) = app.get("/Link/Catalog?since=nonsense", &token).await;
+    let (status, _) = app.get("/api/v1/catalog?since=nonsense", &token).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = app.get("/api/v1/catalog", "").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
     app.cleanup().await;
 }
