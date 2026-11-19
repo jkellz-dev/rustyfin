@@ -369,6 +369,7 @@ async fn main() -> anyhow::Result<()> {
         login_limiter: Default::default(),
         shutdown: shutdown.clone(),
         links,
+        prefer_direct_play: config.playback.prefer_direct_play,
     };
 
     // Same-origin unless origins are allowlisted (owner decision 2026-11-14).

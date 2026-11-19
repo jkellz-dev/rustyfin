@@ -24,6 +24,8 @@ pub struct Config {
     /// Linked servers (`[[link]]`, roadmap 16b; docs/linked-servers.md).
     #[serde(default, rename = "link")]
     pub links: Vec<LinkConfig>,
+    #[serde(default)]
+    pub playback: PlaybackConfig,
 }
 
 /// One `[[link]]`: a friend's server whose shared libraries merge into this
@@ -201,6 +203,18 @@ pub struct SearchConfig {
 pub struct MetadataConfig {
     pub tmdb_api_key: Option<String>,
     pub people_cache_dir: Option<String>,
+}
+
+// ── Playback ─────────────────────────────────────────────────────────
+
+/// `[playback]`: how a title's copies are offered.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PlaybackConfig {
+    /// Of a title's copies, offer first those the app can play as is (no
+    /// conversion) over better ones that would be converted. Off: the best
+    /// copy comes first.
+    #[serde(default)]
+    pub prefer_direct_play: bool,
 }
 
 // ── Transcode configuration ──────────────────────────────────────────

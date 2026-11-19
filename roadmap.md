@@ -1518,6 +1518,10 @@ Design, settled before any code:
 - [x] Link errors and last sync shown in the admin (Links page; `GET /api/v1/links`, `POST /api/v1/links/{id}/sync`)
 - [x] A link removed from the config is removed at start, with its copies, its own libraries and the artwork
       titles borrowed from it; a link still named in the config stays even if its settings are broken
+- [x] Watched history of a removed link's titles is kept (owner, 2026-11-19) and given back when the title turns up
+      again, by provider id
+- [x] `[playback] prefer_direct_play` (owner, 2026-11-19): a copy that plays as is before a better one needing
+      conversion; off by default
 
 #### 16b.2r Rustyfin links (the optimized path): what a linked Rustyfin offers
 
