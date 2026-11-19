@@ -340,6 +340,7 @@ fn settings(url: &str, password: &str) -> LinkSettings {
             remote: "Films".into(),
             local: Some("Movies".into()),
         }],
+        oidc: None,
     }
 }
 

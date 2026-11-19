@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::extract::Request;
 use axum::http::HeaderValue;
+use axum::response::IntoResponse;
 use rustyfin_core::link::{LibraryMap, LinkKind, LinkSettings};
 use rustyfin_db::repo::{media_items, users};
 use serde_json::json;
@@ -86,6 +87,7 @@ fn settings(url: &str) -> LinkSettings {
             remote: "Films".into(),
             local: Some("Movies".into()),
         }],
+        oidc: None,
     }
 }
 
@@ -223,6 +225,144 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
     };
     assert!(why.contains("403"), "{why}");
     assert_eq!(names(&home, link).await, vec!["Shared Film"]);
+    home.cleanup().await;
+    friend.cleanup().await;
+}
+
+/// Behind a proxy that takes OIDC tokens (oauth2-proxy and the like), this
+/// server fetches one with the OAuth 2.0 client-credentials grant from the
+/// friend's identity provider and sends it as `Authorization: Bearer`; the
+/// proxy checks it and names the user. Rustyfin only fetches tokens, never
+/// checks one (owner, 2026-11-19). A token is reused until it is about to
+/// expire.
+#[tokio::test]
+async fn a_rustyfin_behind_an_oidc_proxy_is_reached_with_a_client_credentials_token() {
+    // The friend's identity provider: discovery and a token endpoint that
+    // wants this server's client id and secret (HTTP Basic, RFC 6749 2.3.1).
+    let issued = Arc::new(Mutex::new(0_u32));
+    let idp = {
+        let issued = issued.clone();
+        let app = axum::Router::new()
+            .route(
+                "/.well-known/openid-configuration",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    let host = headers["host"].to_str().unwrap().to_string();
+                    axum::Json(json!({"issuer": format!("http://{host}"), "token_endpoint": format!("http://{host}/token")}))
+                }),
+            )
+            .route(
+                "/token",
+                axum::routing::post(move |headers: axum::http::HeaderMap, body: String| {
+                    let issued = issued.clone();
+                    async move {
+                        let basic = headers
+                            .get("authorization")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or_default();
+                        if basic != "Basic aG9tZTpzM2NyZXQ="
+                            || !body.contains("grant_type=client_credentials")
+                            || !body.contains("scope=rustyfin")
+                        {
+                            return (axum::http::StatusCode::UNAUTHORIZED, axum::Json(json!({"error": "invalid_client"})));
+                        }
+                        *issued.lock().unwrap() += 1;
+                        (
+                            axum::http::StatusCode::OK,
+                            axum::Json(json!({"access_token": "tok-1", "token_type": "Bearer", "expires_in": 3600})),
+                        )
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}")
+    };
+
+    // The friend's Rustyfin behind a proxy that lets in only that token.
+    let friend = common::TestApp::with_forward_auth().await;
+    let (_admin, _) = friend.create_user("alex", true).await;
+    let films = friend.create_library("Films", "movies").await;
+    film(&friend, "Only Theirs", "200", films).await;
+    let jonathan =
+        users::upsert_from_forward_auth(&friend.pool, "jonathan", "jonathan", None, None)
+            .await
+            .unwrap();
+    users::set_may_link(&friend.pool, jonathan.id, true)
+        .await
+        .unwrap();
+    let router = friend.router.clone().layer(axum::middleware::from_fn(
+        |mut req: Request, next: axum::middleware::Next| async move {
+            let bearer = req
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                == Some("Bearer tok-1");
+            if !bearer {
+                return axum::http::StatusCode::UNAUTHORIZED.into_response();
+            }
+            req.headers_mut()
+                .insert("Remote-User", HeaderValue::from_static("jonathan"));
+            next.run(req).await
+        },
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
+    });
+
+    let home = common::TestApp::new().await;
+    home.create_library("Movies", "movies").await;
+    let mut s = settings(&format!("http://{addr}"));
+    s.oidc = Some(rustyfin_core::link::OidcSettings {
+        issuer: Some(idp.clone()),
+        token_url: None,
+        client_id: "home".into(),
+        client_secret: "s3cret".into(),
+        scope: Some("rustyfin".into()),
+        audience: None,
+    });
+    let link = home.links.register(&home.pool, s).await.unwrap();
+    let report = home.links.sync(&home.pool, link).await.expect("sync");
+    assert!(report.errors.is_empty(), "{report:?}");
+    assert_eq!(report.added, 1, "{report:?}");
+    home.links
+        .sync(&home.pool, link)
+        .await
+        .expect("second sync");
+    assert_eq!(*issued.lock().unwrap(), 1, "one token, reused");
+    // The friend sees the link's device, though the proxy took Authorization.
+    let devices: Vec<String> =
+        sqlx::query_scalar("SELECT device_name FROM sessions WHERE user_id = $1")
+            .bind(jonathan.id)
+            .fetch_all(&friend.pool)
+            .await
+            .unwrap();
+    assert_eq!(devices, vec!["Rustyfin link"]);
+
+    // A wrong secret: the sync says the identity provider refused it.
+    let mut s = settings(&format!("http://{addr}"));
+    s.name = "Wrong".into();
+    s.oidc = Some(rustyfin_core::link::OidcSettings {
+        issuer: None,
+        token_url: Some(format!("{idp}/token")),
+        client_id: "home".into(),
+        client_secret: "wrong".into(),
+        scope: Some("rustyfin".into()),
+        audience: None,
+    });
+    let wrong = home.links.register(&home.pool, s).await.unwrap();
+    let why = match home.links.sync(&home.pool, wrong).await {
+        Err(e) => format!("{e:#}"),
+        Ok(r) => r.errors.join("; "),
+    };
+    assert!(why.contains("token") && why.contains("401"), "{why}");
     home.cleanup().await;
     friend.cleanup().await;
 }
