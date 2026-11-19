@@ -338,9 +338,10 @@ pub fn toggle_selected(selected: &mut Vec<String>, id: &str) {
 }
 
 /// The kinds a search can be narrowed to: (IncludeItemTypes value, label).
-pub const SEARCH_KINDS: [(&str, &str); 7] = [
+pub const SEARCH_KINDS: [(&str, &str); 8] = [
     ("", "Everything"),
     ("Movie", "Films"),
+    ("BoxSet", "Collections"),
     ("Series", "Shows"),
     ("Episode", "Episodes"),
     ("MusicAlbum", "Albums"),
