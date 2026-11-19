@@ -1,6 +1,5 @@
-//! The admin's view of linked servers (roadmap 16b): `GET /Rustyfin/Links`
-//! and `POST /Rustyfin/Links/{id}/Sync`. Rustyfin's own routes, not
-//! Jellyfin's; administrators only.
+//! The admin's view of linked servers (roadmap 16b): `GET /api/v1/links`
+//! and `POST /api/v1/links/{id}/sync`. Administrators only.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -15,7 +14,6 @@ use crate::error::ApiError;
 use crate::router::AppState;
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct LinkInfo {
     pub id: Uuid,
     pub name: String,
@@ -34,7 +32,7 @@ pub struct LinkInfo {
     pub copies: i64,
 }
 
-/// `GET /Rustyfin/Links`
+/// `GET /api/v1/links`
 pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
@@ -63,7 +61,7 @@ pub async fn list(
     Ok(Json(out))
 }
 
-/// `POST /Rustyfin/Links/{id}/Sync`: start a sync now; 204 at once.
+/// `POST /api/v1/links/{id}/sync`: start a sync now; 204 at once.
 pub async fn sync_now(
     State(state): State<AppState>,
     _admin: AdminUser,

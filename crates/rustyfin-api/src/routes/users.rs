@@ -34,7 +34,6 @@ fn user_row_to_dto(row: &users::UserRow, server_id: &str, ldap_enabled: bool) ->
             is_administrator: row.is_administrator,
             is_disabled: row.is_disabled,
             enable_all_folders: row.enable_all_libraries,
-            may_link: row.may_link,
             ..Default::default()
         },
         primary_image_tag: None,
@@ -240,11 +239,6 @@ pub async fn update_user_policy(
     .map_err(ApiError::Database)?;
     if !updated {
         return Err(ApiError::NotFound);
-    }
-    if let Some(may_link) = req.may_link {
-        users::set_may_link(&state.pool, user_id, may_link)
-            .await
-            .map_err(ApiError::Database)?;
     }
 
     // Always sync the library access whitelist

@@ -423,16 +423,6 @@ pub fn build_router(state: AppState) -> Router {
                 .post(display_preferences::update_display_preferences),
         )
         // ── TV Shows ─────────────────────────────────────────────
-        // The change feed a linked Rustyfin syncs from (roadmap 16b.2r).
-        .route("/Link/Catalog", get(link_catalog::catalog))
-        // Linked servers, for the admin (roadmap 16b).
-        .route("/Rustyfin/Links", get(links::list))
-        .route("/Rustyfin/Links/{id}/Sync", post(links::sync_now))
-        // A linked copy's transcode, from the friend's server (roadmap 16b).
-        .route(
-            "/LinkRelay/{link_id}/{*path}",
-            get(link_relay::relay_media),
-        )
         .route("/Shows/NextUp", get(shows::get_next_up))
         .route("/Shows/Upcoming", get(shows::get_upcoming))
         .route("/Shows/{seriesId}/Seasons", get(shows::get_seasons))
@@ -550,6 +540,8 @@ pub fn build_router(state: AppState) -> Router {
             "/Collections/{collectionId}/Items",
             post(collections::add_collection_items).delete(collections::remove_collection_items),
         )
+        // ── Rustyfin's own API, apart from Jellyfin's ─────────────
+        .nest(crate::api_v1::PREFIX, crate::api_v1::router())
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler))
         // ── State ───────────────────────────────────────────────

@@ -1,6 +1,6 @@
-//! `GET /Link/Catalog`: the change feed a linked Rustyfin syncs from (roadmap
+//! `GET /api/v1/catalog`: the change feed a linked Rustyfin syncs from (roadmap
 //! 16b.2r). The caller is an ordinary user, signed in the usual way (forward
-//! auth), whom the admin lets link; it sees what that user can see.
+//! auth), whom the admin lets link (`may_link`); it sees what that user can see.
 
 use axum::Json;
 use axum::extract::{Query, State};
@@ -26,22 +26,19 @@ pub struct CatalogQuery {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct Changed {
     id: Uuid,
-    #[serde(rename = "Type")]
+    #[serde(rename = "type")]
     item_type: String,
     library_id: Uuid,
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct Removed {
     id: Uuid,
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct CatalogPage {
     /// Changed (or, with no `since`, all) items; details from `/Items?Ids=`.
     items: Vec<Changed>,
@@ -54,7 +51,7 @@ pub struct CatalogPage {
     next: Option<String>,
 }
 
-/// `GET /Link/Catalog?since=&after=&limit=`
+/// `GET /api/v1/catalog?since=&after=&limit=`
 pub async fn catalog(
     State(state): State<AppState>,
     auth: AuthenticatedUser,

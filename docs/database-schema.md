@@ -45,7 +45,7 @@ Stores user accounts. Users are auto-provisioned via forward auth headers.
 | `created_at` | TIMESTAMPTZ | No | `NOW()` | Row creation time |
 | `updated_at` | TIMESTAMPTZ | No | `NOW()` | Last update time |
 | `configuration` | JSONB | Yes | | The rest of the app's `UserConfiguration` (ordered views, excludes, ...), as sent |
-| `may_link` | BOOLEAN | No | `false` | The admin lets this user link a server to this one (`/Link/Catalog`) |
+| `may_link` | BOOLEAN | No | `false` | The admin lets this user link a server to this one (`/api/v1/catalog`) |
 
 **Unique constraints**: `username`, `remote_user_id`
 
@@ -151,7 +151,7 @@ rows with `link_id`; a copy of a film the server holds is a `Version` of it (`ow
 
 ### `media_removals`
 
-Items removed, for the change feed (`/Link/Catalog`); written by a trigger on `media_items` (not for linked copies).
+Items removed, for the change feed (`/api/v1/catalog`); written by a trigger on `media_items` (not for linked copies).
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|

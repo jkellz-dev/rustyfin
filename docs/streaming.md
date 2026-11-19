@@ -26,9 +26,9 @@ friend's `/Videos/{id}/stream?static=true` for that copy, forwarding `Range` and
 status, `Content-Range`, `Content-Length`, `Content-Type`, `ETag` and `Last-Modified`, so seeking works as for a local
 file. `HEAD` answers from the size recorded at the last sync.
 
-When the app cannot play a linked copy as is, `POST /Items/{id}/PlaybackInfo` asks the friend's server for the copy
-with the app's own request (its device profile, start time and stream choices; `EnableDirectPlay: false`), and offers
-the friend's transcode as `/LinkRelay/{link}/videos/{friend's id}/master.m3u8?...`. That route relays the friend's
+When the app cannot play a linked copy as is, `POST /Items/{id}/PlaybackInfo` asks the friend's server for the copy with
+the app's own request (its device profile, start time and stream choices; `EnableDirectPlay: false`), and offers the
+friend's transcode as `/api/v1/links/{link}/relay/videos/{friend's id}/master.m3u8?...`. That route relays the friend's
 playlists and segments for the link's own copies the user may see, adding the link's token itself: every playlist URI
 loses the friend's `api_key` and gets the app's in its place. If the friend's server does not answer, the copy stays
 unplayable for that app and is listed after every copy it can play.

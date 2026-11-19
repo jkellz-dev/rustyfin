@@ -366,11 +366,11 @@ pub async fn refresh_item(item_id: &str) -> Result<(), ApiError> {
 // ── Scheduled Tasks API ──────────────────────────────────
 
 pub async fn get_links() -> Result<Vec<LinkInfo>, ApiError> {
-    get_json("/Rustyfin/Links").await
+    get_json("/api/v1/links").await
 }
 
 pub async fn sync_link(id: &str) -> Result<(), ApiError> {
-    post_empty(&format!("/Rustyfin/Links/{id}/Sync")).await
+    post_empty(&format!("/api/v1/links/{id}/sync")).await
 }
 
 pub async fn get_scheduled_tasks() -> Result<Vec<TaskInfoDto>, ApiError> {
