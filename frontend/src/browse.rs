@@ -350,6 +350,11 @@ pub const SEARCH_KINDS: [(&str, &str); 7] = [
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_search_can_be_narrowed_to_collections() {
+        assert!(SEARCH_KINDS.contains(&("BoxSet", "Collections")));
+    }
     use super::*;
 
     #[test]
