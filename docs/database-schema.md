@@ -152,8 +152,10 @@ rows with `link_id`; a copy of a film the server holds is a `Version` of it (`ow
 
 ### `visible_media_items` (view)
 
-`media_items` without the rows held from a link that is down (`links.offline_since`). Every view of the library reads
-it; scans, syncs and merges read `media_items`. A migration that adds a column to `media_items` must re-create the view.
+`media_items` without the rows held from a link that is down (`links.offline_since`), and without any row held from a
+link on connections that set `rustyfin.local_only` (those serving a server that links this one; `link_scope`). Every
+view of the library reads it; scans, syncs and merges read `media_items`. A migration that adds a column to
+`media_items` must re-create the view.
 
 ### `media_removals`
 

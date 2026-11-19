@@ -24,6 +24,10 @@ pub struct ForwardAuthState {
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
+    /// Serving a server that links this one: `pool` leaves out what links
+    /// hold, and so does everything else (`link_scope`). Set by
+    /// [`build_router`] for its second copy of the routes.
+    pub local_only: bool,
     pub server_id: String,
     pub server_name: String,
     pub base_url: String,
@@ -62,12 +66,25 @@ impl FromRef<AppState> for PgPool {
 /// The router. Rustyfin's own routes (`/api/v1`) match in any case: their
 /// path is put in lower case before routing, which a layer inside the router
 /// would be too late for, so the routes sit behind a fallback that does it.
+///
+/// A server linking this one is served by a second copy of the routes that
+/// sees only this server's own media (`link_scope`).
 pub fn build_router(state: AppState) -> Router {
+    let local_state = AppState {
+        pool: crate::link_scope::local_only_pool(&state.pool),
+        local_only: true,
+        ..state.clone()
+    };
+    let scope = crate::link_scope::LinkScope::new(state.pool.clone(), routes(local_state));
     let routes = routes(state);
     Router::new().fallback_service(
         tower::ServiceBuilder::new()
             .layer(axum::middleware::from_fn(crate::api_v1::lower_case_path))
             .layer(axum::middleware::from_fn(crate::route_case::route_case))
+            .layer(axum::middleware::from_fn_with_state(
+                scope,
+                crate::link_scope::dispatch,
+            ))
             .service(routes),
     )
 }

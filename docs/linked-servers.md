@@ -245,6 +245,17 @@ answer, the link is marked down:
 - Nothing is deleted: watched state, resume points and playlists stay. A link that is down is tried every minute; when
   it answers, its titles come back and users get a second message.
 
+## Who sees linked titles
+
+Only people using your server. A server that links yours sees your own media and nothing you hold from your links: not
+the titles, not the extra copies of titles you have too, not the libraries made for a friend's library. So when you and
+a friend link each other, neither of you gets your own titles handed back, and a friend of a friend sees nothing they
+were not given.
+
+Rustyfin treats a request as a linking server's when its user may link (**Allow linking** on the user's page) or it
+comes from Rustyfin's own link client. Give each server that links yours its own user, with **Allow linking** on; a
+person's account should never have it.
+
 ## Removing a link
 
 Delete its `[[link]]` and restart. At start, Rustyfin removes every link the config no longer names: its copies, any

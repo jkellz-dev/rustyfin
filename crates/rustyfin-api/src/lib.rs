@@ -14,6 +14,7 @@ pub mod cors;
 pub mod error;
 pub mod health;
 pub mod link_notices;
+pub mod link_scope;
 pub mod login_limit;
 pub mod metrics;
 pub mod play_state;

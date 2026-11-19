@@ -236,6 +236,8 @@ async fn visible_libraries(
         .into_iter()
         .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
         .filter(|lib| lib.link_id.is_none_or(|l| !offline.contains(&l)))
+        // A server linking this one: not the libraries made for its links.
+        .filter(|lib| !state.local_only || lib.link_id.is_none())
         .collect())
 }
 

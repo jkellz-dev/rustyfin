@@ -1516,6 +1516,8 @@ Design, settled before any code:
 - [x] A mapping that fails is skipped with an error recorded on the link; the rest syncs, and nothing is removed
       while any mapping fails
 - [x] Link errors and last sync shown in the admin (Links page; `GET /api/v1/links`, `POST /api/v1/links/{id}/sync`)
+- [x] A server linking this one sees only this server's own media, never what it links (owner, 2026-11-19): no
+      titles handed back between friends who link each other, nothing passed on to a friend of a friend
 - [x] A link removed from the config is removed at start, with its copies, its own libraries and the artwork
       titles borrowed from it; a link still named in the config stays even if its settings are broken
 - [x] Watched history of a removed link's titles is kept (owner, 2026-11-19) and given back when the title turns up

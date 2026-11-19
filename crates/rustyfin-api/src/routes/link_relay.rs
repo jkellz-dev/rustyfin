@@ -267,6 +267,10 @@ pub async fn relay_media(
     RawQuery(query): RawQuery,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    // A server linking this one is never relayed on to this one's friends.
+    if state.local_only {
+        return Err(ApiError::NotFound);
+    }
     let mut parts = path.split('/');
     let kind = parts.next().unwrap_or_default().to_ascii_lowercase();
     let remote = parts.next().unwrap_or_default();
