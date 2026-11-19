@@ -1547,8 +1547,9 @@ Design, settled before any code:
 - [x] A linked copy is a `media_items` row with `link_id`, `remote_id` and `remote_etag` and no path (changed from
       separate tables, 2026-11-18: every browse route, count, search and watched state then works on linked films
       with no new code, and the scan's pruning never touches rows without paths). Ids are local UUIDs.
-- [ ] Sync job: first full pull, then the change feed on a schedule and on demand; tombstones remove items; progress
-      and errors on the dashboard; metrics per link (items, lag, failures, latency)
+- [x] Sync job for a Rustyfin: first full pull, then the change feed on a schedule and on demand; removals remove
+      copies; the cursor is kept only after a sync that worked; a refused cursor starts over
+- [ ] Metrics per link (items, lag, failures, latency)
 - [ ] Health: a link that is down marks its copies unavailable. An item with no reachable copy is hidden, or shown
       as offline (open question).
 

@@ -22,12 +22,12 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-pub use jellyfin::JellyfinClient;
+pub use jellyfin::{Changed, Feed, JellyfinClient};
 pub use rustyfin_db::repo::links::{LINK_SCHEME, parse_image_path};
 pub use sync::items_from_jellyfin;
 
-/// What the friend runs. A Rustyfin speaks the Jellyfin API too; its own,
-/// faster sync is roadmap 16b.2r.
+/// What the friend runs. A Rustyfin is signed in to through its forward-auth
+/// proxy, with no password, and synced from its change feed (roadmap 16b.2r).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkKind {
@@ -53,7 +53,8 @@ pub struct LinkSettings {
     /// The friend's server, e.g. `https://jellyfin.example.ts.net`.
     pub url: String,
     /// The user the friend made for the link. It should see only the
-    /// libraries they share; an administrator's key is never needed.
+    /// libraries they share; an administrator's key is never needed. Empty for
+    /// a Rustyfin: its proxy says who this server is.
     pub user: String,
     pub password: String,
     /// Which of the friend's libraries go into which local library.

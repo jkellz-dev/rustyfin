@@ -1,5 +1,6 @@
 //! A link's sync: list the friend's films with their tags (cheap), fetch the
-//! details of the new and changed ones, remove the ones gone, then merge.
+//! details of the new and changed ones, remove the ones gone, then merge. A
+//! Rustyfin friend says what changed itself (its change feed).
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,6 +18,9 @@ use super::{Link, SyncReport};
 const DETAIL_BATCH: usize = 100;
 
 pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport> {
+    if link.settings.kind == super::LinkKind::Rustyfin {
+        return sync_rustyfin(pool, link).await;
+    }
     let client = &link.client;
     // Signing in and listing the friend's libraries must work, or nothing can.
     let remote_libraries = client.libraries().await?;
@@ -86,45 +90,13 @@ async fn sync_library(
     progress: &mut Progress,
 ) -> anyhow::Result<()> {
     let client = &link.client;
-    let Some((remote_id, remote_name, collection)) = remote_libraries
-        .iter()
-        .find(|(_, name, _)| name.eq_ignore_ascii_case(map.remote.trim()))
-    else {
-        let seen: Vec<&str> = remote_libraries
-            .iter()
-            .map(|(_, n, _)| n.as_str())
-            .collect();
-        bail!(
-            "{} shares no library named \"{}\" with its link user (it shares: {})",
-            link.settings.name,
-            map.remote,
-            seen.join(", ")
-        );
-    };
-    let shows = collection == "tvshows";
-    let local_library = match &map.local {
-        Some(local) => {
-            rustyfin_db::repo::libraries::find_by_name(pool, local.trim())
-                .await?
-                .with_context(|| format!("there is no local library named \"{local}\""))?
-                .id
-        }
-        None => {
-            links::ensure_library(
-                pool,
-                link.id,
-                &format!("{remote_name} · {}", link.settings.name),
-                if shows { "tvshows" } else { "movies" },
-            )
-            .await?
-        }
-    };
+    let (remote_id, local_library, shows) = target(pool, link, map, remote_libraries).await?;
     let types = if shows {
         "Series,Season,Episode"
     } else {
         "Movie,Video"
     };
-    let tags = client.item_tags(remote_id, types).await?;
+    let tags = client.item_tags(&remote_id, types).await?;
     let mut changed: Vec<String> = Vec::new();
     for (id, tag) in &tags {
         let current = tag.is_some()
@@ -158,6 +130,159 @@ async fn sync_library(
         }
     }
     Ok(())
+}
+
+/// Where a `[[link.libraries]]` goes: the friend's library id, the local
+/// library (made for the link when there is no `local`), and whether it holds
+/// shows.
+async fn target(
+    pool: &PgPool,
+    link: &Link,
+    map: &super::LibraryMap,
+    remote_libraries: &[(String, String, String)],
+) -> anyhow::Result<(String, Uuid, bool)> {
+    let Some((remote_id, remote_name, collection)) = remote_libraries
+        .iter()
+        .find(|(_, name, _)| name.eq_ignore_ascii_case(map.remote.trim()))
+    else {
+        let seen: Vec<&str> = remote_libraries
+            .iter()
+            .map(|(_, n, _)| n.as_str())
+            .collect();
+        bail!(
+            "{} shares no library named \"{}\" with its link user (it shares: {})",
+            link.settings.name,
+            map.remote,
+            seen.join(", ")
+        );
+    };
+    let shows = collection == "tvshows";
+    let local_library = match &map.local {
+        Some(local) => {
+            rustyfin_db::repo::libraries::find_by_name(pool, local.trim())
+                .await?
+                .with_context(|| format!("there is no local library named \"{local}\""))?
+                .id
+        }
+        None => {
+            links::ensure_library(
+                pool,
+                link.id,
+                &format!("{remote_name} · {}", link.settings.name),
+                if shows { "tvshows" } else { "movies" },
+            )
+            .await?
+        }
+    };
+    Ok((remote_id.clone(), local_library, shows))
+}
+
+/// An id as one form: no dashes, lower case (a Rustyfin writes its ids both
+/// ways).
+fn plain(id: &str) -> String {
+    id.replace('-', "").to_ascii_lowercase()
+}
+
+/// A Rustyfin friend (roadmap 16b.2r): what changed since the last sync comes
+/// from its change feed (`/api/v1/catalog`), so a quiet sync is one call and a
+/// busy one fetches only what changed. The first sync (or one after the
+/// friend refused the cursor) takes everything and removes what it lacks.
+async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport> {
+    let client = &link.client;
+    let remote_libraries = client.libraries().await?;
+    let mut report = SyncReport::default();
+    // The friend's library -> (local library, whether it holds shows).
+    let mut targets: HashMap<String, (Uuid, bool)> = HashMap::new();
+    for map in &link.settings.libraries {
+        match target(pool, link, map, &remote_libraries).await {
+            Ok((remote, local, shows)) => {
+                targets.insert(plain(&remote), (local, shows));
+            }
+            Err(e) => report.errors.push(format!("{}: {e:#}", map.remote)),
+        }
+    }
+    let mut since = links::catalog_cursor(pool, link.id).await?;
+    let feed = match client.catalog(since.as_deref()).await? {
+        Some(feed) => feed,
+        None => {
+            since = None;
+            client
+                .catalog(None)
+                .await?
+                .with_context(|| format!("{} refused its own feed", link.settings.name))?
+        }
+    };
+    let full = since.is_none();
+    let stored = links::stored_copies(pool, link.id).await?;
+    // What to fetch, per local library.
+    let mut wanted: HashMap<Uuid, Vec<String>> = HashMap::new();
+    for changed in &feed.changed {
+        let Some((local, shows)) = targets.get(&plain(&changed.library)) else {
+            continue;
+        };
+        let fits = if *shows {
+            matches!(changed.item_type.as_str(), "Series" | "Season" | "Episode")
+        } else {
+            matches!(changed.item_type.as_str(), "Movie" | "Video")
+        };
+        if fits {
+            wanted.entry(*local).or_default().push(changed.id.clone());
+        }
+    }
+    let mut kept: HashSet<String> = HashSet::new();
+    for (local, ids) in &wanted {
+        for batch in ids.chunks(DETAIL_BATCH) {
+            for item in client.items_by_id(batch).await? {
+                let Some(item_id) = item["Id"].as_str().map(plain) else {
+                    continue;
+                };
+                let copies = items_from_jellyfin(&item, link.id, &link.settings.name, *local);
+                let written: HashSet<String> = copies.iter().map(|c| c.remote_id.clone()).collect();
+                for copy in copies {
+                    let (_, new) = links::upsert_item(pool, &copy).await?;
+                    if new {
+                        report.added += 1;
+                    } else {
+                        report.updated += 1;
+                    }
+                }
+                // A version the friend no longer keeps of an item it does.
+                let stale: Vec<String> = stored
+                    .keys()
+                    .filter(|r| plain(links::remote_item(r)) == item_id && !written.contains(*r))
+                    .cloned()
+                    .collect();
+                report.removed += links::delete_copies(pool, link.id, &stale).await?;
+                kept.extend(written);
+            }
+        }
+    }
+    let gone: Vec<String> = if full {
+        // A mapping that failed may only be out of sight for now: remove nothing.
+        if report.errors.is_empty() {
+            stored
+                .keys()
+                .filter(|r| !kept.contains(*r))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
+    } else {
+        let removed: HashSet<String> = feed.removed.iter().map(|r| plain(r)).collect();
+        stored
+            .keys()
+            .filter(|r| removed.contains(&plain(links::remote_item(r))))
+            .cloned()
+            .collect()
+    };
+    report.removed += links::delete_copies(pool, link.id, &gone).await?;
+    // With a mapping failing, its changes come again next time.
+    if report.errors.is_empty() {
+        links::set_catalog_cursor(pool, link.id, &feed.cursor).await?;
+    }
+    report.merged = links::merge(pool).await?;
+    Ok(report)
 }
 
 /// A Jellyfin item (`/Items` with ProviderIds, MediaSources...) as linked

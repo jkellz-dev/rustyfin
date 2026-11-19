@@ -33,9 +33,12 @@ pub struct LinkConfig {
     pub name: String,
     pub kind: rustyfin_core::link::LinkKind,
     pub url: String,
+    /// The link user (Jellyfin). A Rustyfin needs none: its forward-auth
+    /// proxy says who this server is.
+    #[serde(default)]
     pub user: String,
     /// The link user's password, or `password_file` naming a file that holds
-    /// it (a mounted secret).
+    /// it (a mounted secret). Jellyfin only.
     #[serde(default)]
     pub password: Option<String>,
     #[serde(default)]
@@ -66,8 +69,15 @@ impl LinkConfig {
                 .map_err(|e| anyhow::anyhow!("link {}: cannot read {file}: {e}", self.name))?
                 .trim_end_matches(['\r', '\n'])
                 .to_string(),
+            (None, None) if self.kind == rustyfin_core::link::LinkKind::Rustyfin => String::new(),
             _ => anyhow::bail!("link {}: set one of password and password_file", self.name),
         };
+        if self.kind == rustyfin_core::link::LinkKind::Jellyfin && self.user.trim().is_empty() {
+            anyhow::bail!(
+                "link {}: name the user the friend made for the link",
+                self.name
+            );
+        }
         if self.libraries.is_empty() {
             anyhow::bail!("link {}: name at least one library to merge", self.name);
         }

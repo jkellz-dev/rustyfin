@@ -1,5 +1,7 @@
 //! The Jellyfin API as a link uses it: sign in as the link user, list what it
-//! can see, fetch items, and relay streams and images.
+//! can see, fetch items, and relay streams and images. A Rustyfin is signed in
+//! to the same way, through the friend's forward-auth proxy (which names the
+//! user, so no password is sent), and adds its change feed.
 
 use anyhow::{Context, bail};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
@@ -11,6 +13,23 @@ use uuid::Uuid;
 struct Session {
     token: String,
     user_id: String,
+}
+
+/// What changed on a Rustyfin since a cursor (its `/api/v1/catalog`).
+#[derive(Debug, Default)]
+pub struct Feed {
+    /// The cursor for next time.
+    pub cursor: String,
+    pub changed: Vec<Changed>,
+    /// Ids of items removed.
+    pub removed: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct Changed {
+    pub id: String,
+    pub item_type: String,
+    pub library: String,
 }
 
 pub struct JellyfinClient {
@@ -104,6 +123,80 @@ impl JellyfinClient {
     /// token was revoked. `{user}` in the path is the link user's id, and
     /// `userId` is added to the query.
     pub async fn get_json(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<Value> {
+        let response = self.get(path, query).await?;
+        if !response.status().is_success() {
+            bail!("{} answered {path} with {}", self.base, response.status());
+        }
+        response
+            .json()
+            .await
+            .with_context(|| format!("{} answered {path} with something else", self.base))
+    }
+
+    /// A Rustyfin's change feed (`/api/v1/catalog`, roadmap 16b.2r) since
+    /// `since` (everything when `None`), every page read. `None` when the
+    /// friend refuses the cursor: the caller starts over.
+    pub async fn catalog(&self, since: Option<&str>) -> anyhow::Result<Option<Feed>> {
+        const PAGE: usize = 1000;
+        let mut feed = Feed::default();
+        let mut cursor: Option<String> = None;
+        let mut after: Option<String> = None;
+        loop {
+            let mut query = vec![("limit", PAGE.to_string())];
+            if let Some(since) = since {
+                query.push(("since", since.to_string()));
+            }
+            if let Some(after) = &after {
+                query.push(("after", after.clone()));
+            }
+            let response = self.get("/api/v1/catalog", &query).await?;
+            let status = response.status();
+            if status == reqwest::StatusCode::BAD_REQUEST && since.is_some() && after.is_none() {
+                return Ok(None);
+            }
+            if !status.is_success() {
+                bail!("{} answered /api/v1/catalog with {status}", self.base);
+            }
+            let page: Value = response.json().await.with_context(|| {
+                format!("{} answered /api/v1/catalog with something else", self.base)
+            })?;
+            if cursor.is_none() {
+                cursor = page["cursor"].as_str().map(str::to_string);
+            }
+            for item in items(&page) {
+                if let (Some(id), Some(kind), Some(library)) = (
+                    item["id"].as_str(),
+                    item["type"].as_str(),
+                    item["library_id"].as_str(),
+                ) {
+                    feed.changed.push(Changed {
+                        id: id.to_string(),
+                        item_type: kind.to_string(),
+                        library: library.to_string(),
+                    });
+                }
+            }
+            if after.is_none()
+                && let Some(removed) = page["removed"].as_array()
+            {
+                feed.removed.extend(
+                    removed
+                        .iter()
+                        .filter_map(|r| r["id"].as_str().map(str::to_string)),
+                );
+            }
+            match (page["more"].as_bool(), page["next"].as_str()) {
+                (Some(true), Some(next)) => after = Some(next.to_string()),
+                _ => break,
+            }
+        }
+        feed.cursor = cursor.with_context(|| format!("{} gave no cursor", self.base))?;
+        Ok(Some(feed))
+    }
+
+    /// GET a route as the link user (see [`Self::get_json`]); the response
+    /// as it came, whatever its status but a second 401.
+    async fn get(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<reqwest::Response> {
         for attempt in 0..2 {
             let session = self.session().await?;
             let mut q: Vec<(&str, String)> = query.to_vec();
@@ -122,13 +215,7 @@ impl JellyfinClient {
                 *self.session.write().await = None;
                 continue;
             }
-            if !response.status().is_success() {
-                bail!("{} answered {path} with {}", self.base, response.status());
-            }
-            return response
-                .json()
-                .await
-                .with_context(|| format!("{} answered {path} with something else", self.base));
+            return Ok(response);
         }
         bail!("could not sign in to {} as {}", self.base, self.user)
     }

@@ -27,7 +27,8 @@ ordinary film with more than one version.
 | Direct play of a friend's copy, with seeking; transcoding by the friend's server | Music |
 | Posters, backdrops, logos and thumbnails | A friend's external subtitle files, chapters, cast |
 | Every version the friend keeps of a film | |
-| Several links, one per friend; their state in the admin's Links page | A faster Rustyfin-to-Rustyfin sync (a Rustyfin is linked through its Jellyfin API) |
+| Several links, one per friend; their state in the admin's Links page | |
+| A Rustyfin through forward auth, synced from its change feed | |
 
 An app that cannot play a friend's copy as is gets it converted by the friend's server, which has the file; your
 server passes the stream on. Your server never converts a friend's copy itself. The [roadmap](../roadmap.md) (16b)
@@ -83,8 +84,8 @@ remote = "Homemade Shorts"             # "Homemade Shorts · Alex"
 | `name` | yes | The link's name, unique; shown to your users beside the friend's copies |
 | `kind` | yes | `jellyfin` or `rustyfin` |
 | `url` | yes | The friend's server as your server reaches it, with `https://` or `http://` |
-| `user` | yes | The user your friend made for the link |
-| `password` / `password_file` | one of them | The user's password, or a file holding it (a trailing newline is ignored) |
+| `user` | Jellyfin | The user your friend made for the link (not for a Rustyfin) |
+| `password` / `password_file` | Jellyfin: one of them | The user's password, or a file holding it (a trailing newline is ignored) |
 | `libraries` | at least one | `remote` (the friend's library) merges into `local` (yours); with no `local`, it gets a library of its own |
 
 Prefer `password_file` with a secret mounted into the container (a Docker or Kubernetes secret) over writing the
@@ -178,20 +179,38 @@ menu lists every copy, the friend's named with the link's name. A copy the app c
 One signed-in device named "Rustyfin link" for the link user, and one stream (or transcode) per title playing through
 the link. Your users' names and what they watch stay on your server.
 
-## Letting a Rustyfin link to yours
+## Linking two Rustyfin servers
 
-The faster Rustyfin-to-Rustyfin sync is being built (roadmap 16b.2r). What is in already, on the server being linked
-to:
+A Rustyfin needs no password: your server reaches your friend's through their forward-auth proxy, which says who it is,
+like it does for people. Your friend lets that user link, and your server syncs from their change feed instead of
+listing everything each time.
 
-- **Who may link.** A linking server signs in through your forward-auth proxy like anyone, as an ordinary user: the
-  same one that person uses themselves. With `PATCH /api/v1/users/{id}/permissions` and `{"may_link": true}` you let
-  that user link ([Rustyfin API](rustyfin-api.md)). It is off for everyone until you turn it on. A link sees what that
-  user can see.
-- **The change feed.** `GET /api/v1/catalog` lists what changed in those libraries since a cursor: changed items (id,
-  type, library) and removed ones. Without `since` it lists everything. Pages of up to `limit` items (1000 by default)
-  say `more` and give a `next` to pass as `after`; keep the first page's `cursor` and pass it as `since` next time. The
-  details come from `/Items?Ids=` as usual. A user not allowed to link gets 403. Only your own items are offered,
-  never copies you hold from another link.
+**Your friend's side.** The user your server arrives as is an ordinary user: the same one you use to sign in to their
+server, not a special account. In their admin (or with `PATCH /api/v1/users/{id}/permissions` and `{"may_link": true}`)
+they let it link. It is off for everyone until they turn it on. Your server sees what that user can see.
+
+**Your side.** No `user` or password:
+
+```toml
+[[link]]
+name = "Alex"
+kind = "rustyfin"
+url = "https://media.alex.example"
+
+[[link.libraries]]
+remote = "Films"
+local = "Movies"
+```
+
+Your server has to arrive at their proxy as that user. Over Tailscale that is the tailnet's identity; the other ways
+(an app capability for a tagged node, an OAuth 2.0 client-credentials token) are on the roadmap (16b.2r).
+
+**The change feed.** `GET /api/v1/catalog` lists what changed in those libraries since a cursor: changed items (id,
+type, library) and removed ones; without `since`, everything. Pages of up to `limit` items (1000 by default) say `more`
+and give a `next` to pass as `after`; the first page's `cursor` is the `since` for next time. Details come from
+`/Items?Ids=` as usual. A user not allowed to link gets 403, and the sync says so. Only your friend's own items are
+offered, never copies they hold from another link. The first sync takes everything; after that a quiet sync is one
+call, and a busy one fetches only what changed. If the friend refuses the cursor, the next sync starts over.
 
 ## Removing a link
 

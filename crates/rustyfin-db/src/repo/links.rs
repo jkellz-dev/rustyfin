@@ -95,6 +95,29 @@ pub async fn remove_unconfigured(
     Ok(removed)
 }
 
+/// Where a Rustyfin link's change feed was read up to; `None` before the
+/// first sync that worked.
+pub async fn catalog_cursor(pool: &PgPool, link_id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT catalog_cursor FROM links WHERE id = $1")
+        .bind(link_id)
+        .fetch_optional(pool)
+        .await
+        .map(Option::flatten)
+}
+
+pub async fn set_catalog_cursor(
+    pool: &PgPool,
+    link_id: Uuid,
+    cursor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE links SET catalog_cursor = $2 WHERE id = $1")
+        .bind(link_id)
+        .bind(cursor)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Record how a sync ended: `error` is None when it worked.
 pub async fn record_sync(pool: &PgPool, id: Uuid, error: Option<&str>) -> Result<(), sqlx::Error> {
     sqlx::query(

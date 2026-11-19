@@ -205,8 +205,8 @@ the friend sets up, is [Linked Servers](linked-servers.md).
 | `name` | `String` | (required) | Unique; shown beside the friend's copies ("2160p · Alex") |
 | `kind` | `String` | (required) | `jellyfin` or `rustyfin` |
 | `url` | `String` | (required) | The friend's server, as this server reaches it |
-| `user` | `String` | (required) | The user the friend made for the link |
-| `password` | `String` | --- | Its password; or use `password_file` |
+| `user` | `String` | (Jellyfin: required) | The user the friend made for the link; a Rustyfin needs none |
+| `password` | `String` | --- | Its password; or use `password_file` (Jellyfin only) |
 | `password_file` | `String` | --- | A file holding the password (a mounted secret); a trailing newline is ignored |
 | `libraries` | array of tables | (at least one) | `remote` (the friend's library name) merges into `local` (yours); with no `local`, it gets a library of its own |
 
