@@ -1741,6 +1741,16 @@ async fn a_copy_that_plays_as_is_can_be_preferred_over_a_better_one() {
             .execute(&app.pool)
             .await
             .unwrap();
+        // With an audio track the client plays (one without none never
+        // matches a profile's AudioCodec).
+        sqlx::query(
+            "INSERT INTO media_streams (item_id, stream_index, stream_type, codec, channels, is_default) \
+             VALUES ($1, 1, 'Audio', 'aac', 2, true)",
+        )
+        .bind(local)
+        .execute(&app.pool)
+        .await
+        .unwrap();
         let remote: Shared = Default::default();
         remote.lock().unwrap().films = vec![film("r100", "Shared Film", "100", "e1", 3840, 2160)];
         let url = fake_jellyfin(remote).await;
