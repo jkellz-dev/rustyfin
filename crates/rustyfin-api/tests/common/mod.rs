@@ -396,6 +396,28 @@ impl TestApp {
         (status, body)
     }
 
+    /// Send a PATCH request with a JSON body. Returns `(status, body_json)`.
+    pub async fn patch(&self, path: &str, body: &Value, token: &str) -> (StatusCode, Value) {
+        let request = Request::builder()
+            .method("PATCH")
+            .uri(path)
+            .header("Content-Type", "application/json")
+            .header("X-Emby-Token", token)
+            .body(Body::from(serde_json::to_vec(body).unwrap()))
+            .unwrap();
+        let response = self.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        let body: Value = if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+        };
+        (status, body)
+    }
+
     /// Send a POST request with no body and no auth token. Returns `(status, body_json)`.
     pub async fn post_no_auth(&self, path: &str) -> (StatusCode, Value) {
         let request = Request::builder()

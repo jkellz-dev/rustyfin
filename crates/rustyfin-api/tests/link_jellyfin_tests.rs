@@ -1170,7 +1170,9 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
         .as_str()
         .unwrap_or_else(|| panic!("{info}"));
     assert!(
-        tc.starts_with(&format!("/LinkRelay/{link}/videos/r200/master.m3u8?")),
+        tc.starts_with(&format!(
+            "/api/v1/links/{link}/relay/videos/r200/master.m3u8?"
+        )),
         "{tc}"
     );
     assert!(
@@ -1203,7 +1205,7 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
         variant_line.contains(&format!("api_key={token}")),
         "{variant_line}"
     );
-    let variant_url = format!("/LinkRelay/{link}/videos/r200/{variant_line}");
+    let variant_url = format!("/api/v1/links/{link}/relay/videos/r200/{variant_line}");
     let (status, _, variant) = app.get_raw(&variant_url, &token).await;
     assert_eq!(status, StatusCode::OK, "{variant}");
     assert!(!variant.contains("linksecret"), "{variant}");
@@ -1219,7 +1221,7 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
         .unwrap_or_else(|| panic!("{variant}"));
     let (status, _, bytes) = app
         .get_bytes(
-            &format!("/LinkRelay/{link}/videos/r200/{segment_line}"),
+            &format!("/api/v1/links/{link}/relay/videos/r200/{segment_line}"),
             &token,
         )
         .await;
@@ -1228,18 +1230,21 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
 
     // The relay reaches only the link's copies' media, nothing else there.
     let (status, _, _) = app
-        .get_raw(&format!("/LinkRelay/{link}/Users"), &token)
+        .get_raw(&format!("/api/v1/links/{link}/relay/Users"), &token)
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _, _) = app
         .get_raw(
-            &format!("/LinkRelay/{link}/videos/unknown/master.m3u8"),
+            &format!("/api/v1/links/{link}/relay/videos/unknown/master.m3u8"),
             &token,
         )
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _, _) = app
-        .get_raw(&format!("/LinkRelay/{link}/videos/r200/master.m3u8"), "")
+        .get_raw(
+            &format!("/api/v1/links/{link}/relay/videos/r200/master.m3u8"),
+            "",
+        )
         .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     app.cleanup().await;
@@ -1265,21 +1270,21 @@ async fn the_admin_sees_each_link_and_can_sync_it_now() {
         .await
         .unwrap();
 
-    let (status, _) = app.get("/Rustyfin/Links", &viewer_token).await;
+    let (status, _) = app.get("/api/v1/links", &viewer_token).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
-    let (status, list) = app.get("/Rustyfin/Links", &admin_token).await;
+    let (status, list) = app.get("/api/v1/links", &admin_token).await;
     assert_eq!(status, StatusCode::OK, "{list}");
     let entry = &list[0];
-    assert_eq!(entry["Name"], "Alex", "{list}");
-    assert_eq!(entry["Kind"], "jellyfin", "{list}");
-    assert!(entry["LastSyncAt"].is_null(), "never synced yet: {list}");
-    assert_eq!(entry["Configured"], true, "{list}");
+    assert_eq!(entry["name"], "Alex", "{list}");
+    assert_eq!(entry["kind"], "jellyfin", "{list}");
+    assert!(entry["last_sync_at"].is_null(), "never synced yet: {list}");
+    assert_eq!(entry["configured"], true, "{list}");
 
     // Sync now: answered at once, done in the background.
     let (status, _) = app
         .post(
-            &format!("/Rustyfin/Links/{link}/Sync"),
+            &format!("/api/v1/links/{link}/sync"),
             &json!({}),
             &admin_token,
         )
@@ -1287,8 +1292,8 @@ async fn the_admin_sees_each_link_and_can_sync_it_now() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let mut synced = Value::Null;
     for _ in 0..50 {
-        let (_, list) = app.get("/Rustyfin/Links", &admin_token).await;
-        if list[0]["LastSyncAt"].is_string() && list[0]["Syncing"] == false {
+        let (_, list) = app.get("/api/v1/links", &admin_token).await;
+        if list[0]["last_sync_at"].is_string() && list[0]["syncing"] == false {
             synced = list[0].clone();
             break;
         }
@@ -1296,13 +1301,13 @@ async fn the_admin_sees_each_link_and_can_sync_it_now() {
     }
     assert!(synced.is_object(), "the sync finished");
     // "Shared Film" merged into the local film: one title of its own, two copies.
-    assert_eq!(synced["Titles"], 1, "{synced}");
-    assert_eq!(synced["Copies"], 2, "{synced}");
-    assert!(synced["LastError"].is_null(), "{synced}");
+    assert_eq!(synced["titles"], 1, "{synced}");
+    assert_eq!(synced["copies"], 2, "{synced}");
+    assert!(synced["last_error"].is_null(), "{synced}");
 
     let (status, _) = app
         .post(
-            &format!("/Rustyfin/Links/{}/Sync", Uuid::new_v4()),
+            &format!("/api/v1/links/{}/sync", Uuid::new_v4()),
             &json!({}),
             &admin_token,
         )
@@ -1310,7 +1315,7 @@ async fn the_admin_sees_each_link_and_can_sync_it_now() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _) = app
         .post(
-            &format!("/Rustyfin/Links/{link}/Sync"),
+            &format!("/api/v1/links/{link}/sync"),
             &json!({}),
             &viewer_token,
         )
