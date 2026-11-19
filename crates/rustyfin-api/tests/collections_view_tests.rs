@@ -144,3 +144,85 @@ async fn the_view_only_shows_collections_from_libraries_the_user_may_see() {
     assert!(boxsets_view(&views).is_none(), "{views}");
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-19: "I was searching in the collections library using the
+/// admin. All in all I'm not seeing collections in search results." A
+/// collection is found by its name from anywhere, by its kind
+/// (`IncludeItemTypes=BoxSet`), and inside the Collections view, whose id is
+/// no library's (the admin searches "the library the page is in").
+#[tokio::test]
+async fn collections_are_found_by_search_also_inside_the_collections_view() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let tree = Tree::new();
+    let set = r#"<set tmdbcolid="8091"><name>Alien Collection</name></set>"#;
+    tree.movie("Alien (1979)", Some(set));
+    tree.movie("Aliens (1986)", Some(set));
+    tree.movie("Heat (1995)", None);
+    let lib = libraries::create(&app.pool, "Movies", "movies", &[tree.root()])
+        .await
+        .unwrap()
+        .id;
+    LibraryScanner::new(app.pool.clone(), None)
+        .scan(lib, &[tree.root()])
+        .await
+        .expect("scan");
+    let (_, views) = app.get("/UserViews", &token).await;
+    let view = boxsets_view(&views).unwrap_or_else(|| panic!("{views}"));
+    let view_id = view["Id"].as_str().unwrap();
+
+    let found = |hints: &serde_json::Value| -> Vec<(String, String)> {
+        hints["SearchHints"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{hints}"))
+            .iter()
+            .map(|h| {
+                (
+                    h["Name"].as_str().unwrap().to_string(),
+                    h["Type"].as_str().unwrap_or_default().to_string(),
+                )
+            })
+            .collect()
+    };
+    let collection = ("Alien Collection".to_string(), "BoxSet".to_string());
+
+    let (status, hints) = app.get("/Search/Hints?SearchTerm=Alien", &token).await;
+    assert_eq!(status, StatusCode::OK, "{hints}");
+    assert!(found(&hints).contains(&collection), "anywhere: {hints}");
+
+    let (_, hints) = app
+        .get(
+            "/Search/Hints?SearchTerm=Alien&IncludeItemTypes=BoxSet",
+            &token,
+        )
+        .await;
+    assert_eq!(found(&hints), vec![collection.clone()], "by kind: {hints}");
+
+    let (_, hints) = app
+        .get(
+            &format!("/Search/Hints?SearchTerm=Alien&ParentId={view_id}"),
+            &token,
+        )
+        .await;
+    assert_eq!(
+        found(&hints),
+        vec![collection.clone()],
+        "in the Collections view: {hints}"
+    );
+
+    // The films' own library still finds the films (and their collection).
+    let (_, hints) = app
+        .get(
+            &format!("/Search/Hints?SearchTerm=Alien&ParentId={lib}"),
+            &token,
+        )
+        .await;
+    let names: Vec<String> = found(&hints).into_iter().map(|f| f.0).collect();
+    assert!(
+        names
+            .iter()
+            .any(|n| n.starts_with("Alien") && !n.contains("Collection")),
+        "{hints}"
+    );
+    app.cleanup().await;
+}
