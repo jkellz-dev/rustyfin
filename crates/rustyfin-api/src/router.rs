@@ -423,6 +423,8 @@ pub fn build_router(state: AppState) -> Router {
                 .post(display_preferences::update_display_preferences),
         )
         // ── TV Shows ─────────────────────────────────────────────
+        // The change feed a linked Rustyfin syncs from (roadmap 16b.2r).
+        .route("/Link/Catalog", get(link_catalog::catalog))
         // Linked servers, for the admin (roadmap 16b).
         .route("/Rustyfin/Links", get(links::list))
         .route("/Rustyfin/Links/{id}/Sync", post(links::sync_now))

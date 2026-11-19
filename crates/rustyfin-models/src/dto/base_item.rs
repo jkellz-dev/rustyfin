@@ -529,6 +529,10 @@ pub struct UpdateUserPolicyRequest {
     pub enable_all_folders: bool,
     #[serde(default)]
     pub enabled_folders: Vec<String>,
+    /// Rustyfin's own: the user may link a server to this one. Left as it is
+    /// when absent (Jellyfin's web client never sends it).
+    #[serde(default)]
+    pub may_link: Option<bool>,
 }
 
 fn default_true() -> bool {

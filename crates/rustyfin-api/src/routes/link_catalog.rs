@@ -1,0 +1,111 @@
+//! `GET /Link/Catalog`: the change feed a linked Rustyfin syncs from (roadmap
+//! 16b.2r). The caller is an ordinary user, signed in the usual way (forward
+//! auth), whom the admin lets link; it sees what that user can see.
+
+use axum::Json;
+use axum::extract::{Query, State};
+use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_db::repo::{catalog, user_library_access, users};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::error::ApiError;
+use crate::router::AppState;
+
+/// Items per page unless the caller asks for fewer (or more, up to `MAX`).
+const DEFAULT_LIMIT: i64 = 1000;
+const MAX_LIMIT: i64 = 5000;
+
+#[derive(Debug, Deserialize)]
+pub struct CatalogQuery {
+    /// The cursor from the last sync's first page; none for everything.
+    since: Option<String>,
+    /// The `Next` of the page before.
+    after: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Changed {
+    id: Uuid,
+    #[serde(rename = "Type")]
+    item_type: String,
+    library_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Removed {
+    id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CatalogPage {
+    /// Changed (or, with no `since`, all) items; details from `/Items?Ids=`.
+    items: Vec<Changed>,
+    /// Removed since `since`; on the first page only.
+    removed: Vec<Removed>,
+    /// Keep the first page's, and pass it as `since` next time.
+    cursor: String,
+    more: bool,
+    /// Pass as `after` for the next page.
+    next: Option<String>,
+}
+
+/// `GET /Link/Catalog?since=&after=&limit=`
+pub async fn catalog(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Query(q): Query<CatalogQuery>,
+) -> Result<Json<CatalogPage>, ApiError> {
+    let user = users::find_by_id(&state.pool, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::Unauthorized)?;
+    if !user.may_link {
+        return Err(ApiError::Forbidden);
+    }
+    let since = q.since.filter(|s| !s.is_empty());
+    if since.as_deref().is_some_and(|s| !catalog::is_snapshot(s)) {
+        return Err(ApiError::BadRequest(
+            "since: not a cursor from this feed".into(),
+        ));
+    }
+    let after = match q.after.filter(|s| !s.is_empty()) {
+        Some(a) => Some(
+            catalog::parse_after(&a)
+                .ok_or_else(|| ApiError::BadRequest("after: not a Next from this feed".into()))?,
+        ),
+        None => None,
+    };
+    let limit = q.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+    let libraries = user_library_access::get_accessible_library_ids(&state.pool, user.id)
+        .await
+        .map_err(ApiError::Database)?;
+    let page = catalog::changes(
+        &state.pool,
+        libraries.as_deref(),
+        since.as_deref(),
+        after.as_ref(),
+        limit,
+    )
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(Json(CatalogPage {
+        more: page.next.is_some(),
+        items: page
+            .changes
+            .into_iter()
+            .map(|c| Changed {
+                id: c.id,
+                item_type: c.item_type,
+                library_id: c.library_id,
+            })
+            .collect(),
+        removed: page.removed.into_iter().map(|id| Removed { id }).collect(),
+        cursor: page.snapshot,
+        next: page.next,
+    }))
+}

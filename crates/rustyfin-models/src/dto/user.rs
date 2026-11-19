@@ -115,6 +115,8 @@ pub struct UserPolicy {
     pub blocked_channels: Vec<String>,
     /// No SyncPlay in Rustyfin, so nobody may create or join groups.
     pub sync_play_access: String,
+    /// Rustyfin's own: the user may link a server to this one (roadmap 16b.2r).
+    pub may_link: bool,
 }
 
 impl Default for UserPolicy {
@@ -162,6 +164,7 @@ impl Default for UserPolicy {
             blocked_media_folders: Vec::new(),
             blocked_channels: Vec::new(),
             sync_play_access: "None".to_string(),
+            may_link: false,
         }
     }
 }

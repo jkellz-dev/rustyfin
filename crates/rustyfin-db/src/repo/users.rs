@@ -25,6 +25,9 @@ pub struct UserRow {
     pub updated_at: DateTime<Utc>,
     /// The rest of the app's `UserConfiguration`, as it was sent.
     pub configuration: Option<serde_json::Value>,
+    /// The admin lets this user link a server to this one (roadmap 16b.2r).
+    #[sqlx(default)]
+    pub may_link: bool,
 }
 
 /// The settings `POST /Users/{userId}/Configuration` saves.
@@ -162,6 +165,16 @@ pub async fn update_policy(
     .bind(id)
     .execute(pool)
     .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// Let a user link a server to this one, or stop them.
+pub async fn set_may_link(pool: &PgPool, id: Uuid, may_link: bool) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("UPDATE users SET may_link = $1, updated_at = NOW() WHERE id = $2")
+        .bind(may_link)
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(result.rows_affected() > 0)
 }
 
