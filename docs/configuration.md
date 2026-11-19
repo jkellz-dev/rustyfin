@@ -146,6 +146,7 @@ Rustyfin creates the user on first sign-in. Headers are only believed from the p
 |-------|------|---------|-------------|
 | `trusted_proxies` | `[String]` | (required) | CIDR ranges the proxy connects from, e.g. `["10.0.0.0/8"]`; checked at startup |
 | `admin_group` | `String` | --- | Users whose groups header contains this value are administrators |
+| `app_capability` | `String` | --- | A Tailscale app capability (e.g. `example.com/cap/rustyfin`) whose grant names the user when a request has no user header: a tagged node, such as a [linked server](linked-servers.md) |
 
 `[auth.forward_auth.headers]` names the headers:
 
@@ -155,6 +156,7 @@ Rustyfin creates the user on first sign-in. Headers are only believed from the p
 | `name` | `Remote-Name` | Display name |
 | `email` | `Remote-Email` | Email |
 | `groups` | `Remote-Groups` | Comma-separated groups |
+| `app_capabilities` | `Tailscale-App-Capabilities` | Granted app capabilities, as JSON (used with `app_capability`) |
 
 ### `[auth.ldap]` (optional)
 

@@ -202,8 +202,10 @@ remote = "Films"
 local = "Movies"
 ```
 
-Your server has to arrive at their proxy as that user. Over Tailscale that is the tailnet's identity; the other ways
-(an app capability for a tagged node, an OAuth 2.0 client-credentials token) are on the roadmap (16b.2r).
+Your server has to arrive at their proxy as that user. Over Tailscale, a node owned by a person is that person; a
+tagged node (the usual way to run a server) is named by an app capability your friend grants it in their tailnet policy
+(see [Authentication](authentication.md), "Tagged nodes"). An OAuth 2.0 client-credentials token for other proxies is
+on the roadmap (16b.2r).
 
 **The change feed.** `GET /api/v1/catalog` lists what changed in those libraries since a cursor: changed items (id,
 type, library) and removed ones; without `since`, everything. Pages of up to `limit` items (1000 by default) say `more`

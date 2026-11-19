@@ -8,6 +8,12 @@ pub struct ForwardAuthHeaders {
     pub name: String,
     pub email: String,
     pub groups: String,
+    /// The header Tailscale Serve forwards granted app capabilities in.
+    pub app_capabilities: String,
+    /// The app capability that names a user when the request carries no user
+    /// header: a tagged Tailscale node, such as a linked server (roadmap
+    /// 16b.2r). `None`: capabilities are ignored.
+    pub app_capability: Option<String>,
 }
 
 impl Default for ForwardAuthHeaders {
@@ -17,6 +23,8 @@ impl Default for ForwardAuthHeaders {
             name: "Remote-Name".to_string(),
             email: "Remote-Email".to_string(),
             groups: "Remote-Groups".to_string(),
+            app_capabilities: "Tailscale-App-Capabilities".to_string(),
+            app_capability: None,
         }
     }
 }
@@ -31,15 +39,19 @@ pub struct ForwardAuthIdentity {
 }
 
 /// Extract forward auth identity from request headers using configurable header names.
-/// Returns None if the user header is missing.
+/// Returns None if the user header is missing (and no configured app
+/// capability names a user).
 pub fn extract_identity(
     headers: &HeaderMap,
     header_config: &ForwardAuthHeaders,
 ) -> Option<ForwardAuthIdentity> {
-    let remote_user = headers
+    let Some(remote_user) = headers
         .get(&header_config.user)
         .and_then(|v| v.to_str().ok())
-        .map(String::from)?;
+        .map(String::from)
+    else {
+        return capability_identity(headers, header_config);
+    };
 
     let display_name = headers
         .get(&header_config.name)
@@ -62,6 +74,33 @@ pub fn extract_identity(
         display_name,
         email,
         groups,
+    })
+}
+
+/// The user a granted app capability names: Tailscale Serve forwards
+/// `{"<capability>": [{"user": "...", "name": "..."}], ...}`; the first grant
+/// with a non-empty `user` counts. The caller has already checked the request
+/// came from a trusted proxy, as for the user header.
+fn capability_identity(
+    headers: &HeaderMap,
+    header_config: &ForwardAuthHeaders,
+) -> Option<ForwardAuthIdentity> {
+    let capability = header_config.app_capability.as_deref()?;
+    let raw = headers
+        .get(&header_config.app_capabilities)?
+        .to_str()
+        .ok()?;
+    let granted: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let grant = granted
+        .get(capability)?
+        .as_array()?
+        .iter()
+        .find(|g| g["user"].as_str().is_some_and(|u| !u.is_empty()))?;
+    Some(ForwardAuthIdentity {
+        remote_user: grant["user"].as_str()?.to_string(),
+        display_name: grant["name"].as_str().map(str::to_string),
+        email: None,
+        groups: Vec::new(),
     })
 }
 

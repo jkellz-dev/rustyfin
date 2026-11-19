@@ -220,6 +220,10 @@ pub struct ForwardAuthConfig {
     /// Configurable header names.
     #[serde(default)]
     pub headers: ForwardAuthHeadersConfig,
+    /// A Tailscale app capability whose grant names the user when a request
+    /// carries no user header (a tagged node, such as a linked server).
+    #[serde(default)]
+    pub app_capability: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -232,6 +236,12 @@ pub struct ForwardAuthHeadersConfig {
     pub email: String,
     #[serde(default = "default_remote_groups")]
     pub groups: String,
+    #[serde(default = "default_app_capabilities")]
+    pub app_capabilities: String,
+}
+
+fn default_app_capabilities() -> String {
+    "Tailscale-App-Capabilities".to_string()
 }
 
 impl Default for ForwardAuthHeadersConfig {
@@ -241,6 +251,7 @@ impl Default for ForwardAuthHeadersConfig {
             name: default_remote_name(),
             email: default_remote_email(),
             groups: default_remote_groups(),
+            app_capabilities: default_app_capabilities(),
         }
     }
 }

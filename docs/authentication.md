@@ -482,6 +482,32 @@ groups = "Remote-Groups"  # Tailscale doesn't provide groups
 Note: Tailscale headers use the identity from your Tailscale network. Admin promotion must be done manually or via a
 separate group system.
 
+#### Tagged nodes: app capabilities
+
+A tagged node (a server, such as another Rustyfin [linking to this one](linked-servers.md)) carries no user login, so
+Tailscale sends no `Tailscale-User-Login` for it. Name its user with an app capability instead. In the tailnet policy,
+grant the node a capability whose value has `user` (and optionally `name`):
+
+```json
+"grants": [{
+  "src": ["tag:rustyfin-jonathan"],
+  "dst": ["tag:rustyfin"],
+  "app": {"example.com/cap/rustyfin": [{"user": "jonathan@example.com", "name": "Jonathan's Rustyfin"}]}
+}]
+```
+
+Have Tailscale Serve forward it (`tailscale serve --accept-app-caps example.com/cap/rustyfin ...`) and name it in
+Rustyfin:
+
+```toml
+[auth.forward_auth]
+app_capability = "example.com/cap/rustyfin"
+```
+
+A request with no user header but that grant signs in as `jonathan@example.com`, the same user Jonathan is when he
+signs in himself; a request that has a user header is that user, whatever it was granted. Only the tailnet's admin can
+write grants. The header is believed only from `trusted_proxies`, like the others.
+
 ### Combined Setups
 
 #### Kanidm LDAPS + oauth2-proxy OIDC

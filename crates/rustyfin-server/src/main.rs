@@ -260,6 +260,8 @@ async fn main() -> anyhow::Result<()> {
                 name: fa.headers.name.clone(),
                 email: fa.headers.email.clone(),
                 groups: fa.headers.groups.clone(),
+                app_capabilities: fa.headers.app_capabilities.clone(),
+                app_capability: fa.app_capability.clone(),
             },
             admin_group: fa.admin_group.clone(),
         }

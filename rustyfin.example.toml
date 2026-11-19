@@ -49,6 +49,7 @@ name = "rustyfin"
 [auth.forward_auth]
 trusted_proxies = ["127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 # admin_group = "rustyfin-admins"              # Users with this group are auto-promoted to admin
+# app_capability = "example.com/cap/rustyfin"  # Tailscale app capability naming the user of a tagged node
 
 # Custom header names (defaults shown):
 # [auth.forward_auth.headers]

@@ -1524,8 +1524,9 @@ Design, settled before any code:
 - [x] **May link**, a permission on an ordinary user (off by default), set with `PATCH /api/v1/users/{id}/permissions`
       (`may_link`); the change feed answers 403 without it, and a link sees what that user can see
 - [ ] The admin's Users page sets **May link**
-- [ ] The identity from a Tailscale app capability (`Tailscale-App-Capabilities`) for tagged nodes, which carry no
-      user login
+- [x] The identity from a Tailscale app capability (`Tailscale-App-Capabilities`) for tagged nodes, which carry no
+      user login (`[auth.forward_auth] app_capability`)
+- [ ] Checked across tailnets (a node shared in from another tailnet) and through the Kubernetes operator's ingress
 - [x] `GET /api/v1/catalog?since=<cursor>`: items changed since a cursor (ids, type, library) and removals, paged; the
       cursor is a Postgres snapshot, so a late-committing transaction is never missed; details come from `/Items?Ids=`
 - [ ] The change feed benchmarked at 250k items; old `media_removals` rows pruned (a cursor older than the oldest kept
