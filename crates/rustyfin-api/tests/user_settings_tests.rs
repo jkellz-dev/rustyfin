@@ -1,6 +1,7 @@
 //! A user's saved app settings act on the server, as in Jellyfin (owner,
 //! 2026-11-19: "apply settings").
 
+#[allow(dead_code)]
 mod common;
 
 use axum::http::StatusCode;
