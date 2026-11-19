@@ -35,9 +35,17 @@ $$;
 DROP TRIGGER IF EXISTS media_streams_changed ON media_streams;
 CREATE TRIGGER media_streams_changed AFTER INSERT OR UPDATE ON media_streams
     FOR EACH ROW EXECUTE FUNCTION media_item_part_changed();
+-- Images belong to an entity (an item, person, studio...): only an item's count.
+CREATE OR REPLACE FUNCTION media_item_image_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE media_items SET change_xid = pg_current_xact_id()
+     WHERE id = NEW.entity_id AND change_xid <> pg_current_xact_id();
+    RETURN NULL;
+END
+$$;
 DROP TRIGGER IF EXISTS images_changed ON images;
 CREATE TRIGGER images_changed AFTER INSERT OR UPDATE ON images
-    FOR EACH ROW WHEN (NEW.item_id IS NOT NULL) EXECUTE FUNCTION media_item_part_changed();
+    FOR EACH ROW WHEN (NEW.entity_id IS NOT NULL) EXECUTE FUNCTION media_item_image_changed();
 
 -- Items removed, for the feed's removals. Copies held from other links are
 -- never offered, so their removal is not recorded either.
