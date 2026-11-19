@@ -41,6 +41,8 @@ pub fn UserDetail(user_id: String) -> View {
     let sign_out_target: Signal<Option<DeviceInfo>> = create_signal(None);
     let toast: Signal<Option<String>> = create_signal(None);
     let error: Signal<Option<String>> = create_signal(None);
+    // Rustyfin's own permissions (roadmap 16b.2r); none until loaded.
+    let may_link: Signal<Option<bool>> = create_signal(None);
 
     let uid = create_signal(user_id.clone());
     let load_page = move || {
@@ -90,9 +92,31 @@ pub fn UserDetail(user_id: String) -> View {
             if let Ok(d) = api::get_devices(&uid).await {
                 devices.set(d.items);
             }
+            if let Ok(p) = api::get_permissions(&uid).await {
+                may_link.set(Some(p.may_link));
+            }
             load_page();
         });
     }
+
+    let toggle_link = {
+        let uid = user_id.clone();
+        move |_| {
+            let Some(current) = may_link.get() else {
+                return;
+            };
+            let uid = uid.clone();
+            spawn_local(async move {
+                match api::set_may_link(&uid, !current).await {
+                    Ok(p) => {
+                        may_link.set(Some(p.may_link));
+                        toast.set(Some(user_view::link_permission(p.may_link).0.to_string()));
+                    }
+                    Err(e) => error.set(Some(e.to_string())),
+                }
+            });
+        }
+    };
 
     let confirm_sign_out = move |_| {
         if let Some(device) = sign_out_target.get_clone() {
@@ -143,6 +167,20 @@ pub fn UserDetail(user_id: String) -> View {
             }
 
             ErrorNotice(error=error)
+
+            // Linking a server (roadmap 16b.2r): off for everyone until an
+            // admin turns it on here.
+            (if let Some(on) = may_link.get() {
+                let (said, action) = user_view::link_permission(on);
+                view! {
+                    div(class="card flex-gap") {
+                        span(class=if on { "badge badge-success" } else { "text-muted" }) { (said) }
+                        button(class="btn btn-secondary btn-sm", on:click=toggle_link.clone()) { (action) }
+                    }
+                }
+            } else {
+                view! {}
+            })
 
             // Time per kind of media
             (if let Some(s) = stats.get_clone() {

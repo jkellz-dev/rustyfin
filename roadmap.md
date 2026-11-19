@@ -1523,7 +1523,7 @@ Design, settled before any code:
 
 - [x] **May link**, a permission on an ordinary user (off by default), set with `PATCH /api/v1/users/{id}/permissions`
       (`may_link`); the change feed answers 403 without it, and a link sees what that user can see
-- [ ] The admin's Users page sets **May link**
+- [x] The admin sets **May link** on the user's page (Allow linking / Stop linking)
 - [x] The identity from a Tailscale app capability (`Tailscale-App-Capabilities`) for tagged nodes, which carry no
       user login (`[auth.forward_auth] app_capability`)
 - [ ] Checked across tailnets (a node shared in from another tailnet) and through the Kubernetes operator's ingress

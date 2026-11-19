@@ -186,8 +186,9 @@ like it does for people. Your friend lets that user link, and your server syncs 
 listing everything each time.
 
 **Your friend's side.** The user your server arrives as is an ordinary user: the same one you use to sign in to their
-server, not a special account. In their admin (or with `PATCH /api/v1/users/{id}/permissions` and `{"may_link": true}`)
-they let it link. It is off for everyone until they turn it on. Your server sees what that user can see.
+server, not a special account. On that user's page in their admin (**Allow linking**), or with
+`PATCH /api/v1/users/{id}/permissions` and `{"may_link": true}`, they let it link. It is off for everyone until they
+turn it on. Your server sees what that user can see.
 
 **Your side.** No `user` or password:
 

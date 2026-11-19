@@ -92,6 +92,7 @@ async fn send_with(
     let builder = match method {
         "POST" => Request::post(&url),
         "DELETE" => Request::delete(&url),
+        "PATCH" => Request::patch(&url),
         _ => Request::get(&url),
     }
     .header("Authorization", &auth_header());
@@ -155,6 +156,14 @@ async fn post_json_resp<T: serde::Serialize, R: serde::de::DeserializeOwned>(
 ) -> Result<R, ApiError> {
     let body = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
     parse(&send("POST", path, Some(body)).await?)
+}
+
+async fn patch_json_resp<T: serde::Serialize, R: serde::de::DeserializeOwned>(
+    path: &str,
+    body: &T,
+) -> Result<R, ApiError> {
+    let body = serde_json::to_string(body).map_err(|_| ApiError::Parse)?;
+    parse(&send("PATCH", path, Some(body)).await?)
 }
 
 async fn delete_path(path: &str) -> Result<(), ApiError> {
@@ -364,6 +373,18 @@ pub async fn refresh_item(item_id: &str) -> Result<(), ApiError> {
 }
 
 // ── Scheduled Tasks API ──────────────────────────────────
+
+pub async fn get_permissions(user_id: &str) -> Result<Permissions, ApiError> {
+    get_json(&format!("/api/v1/users/{user_id}/permissions")).await
+}
+
+pub async fn set_may_link(user_id: &str, may_link: bool) -> Result<Permissions, ApiError> {
+    patch_json_resp(
+        &format!("/api/v1/users/{user_id}/permissions"),
+        &Permissions { may_link },
+    )
+    .await
+}
 
 pub async fn get_links() -> Result<Vec<LinkInfo>, ApiError> {
     get_json("/api/v1/links").await
