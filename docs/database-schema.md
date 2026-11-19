@@ -147,7 +147,13 @@ rows with `link_id`; a copy of a film the server holds is a `Version` of it (`ow
 | `url` | TEXT | No | | The friend's server |
 | `last_sync_at` | TIMESTAMPTZ | Yes | | When the last sync that worked ended |
 | `last_error` | TEXT | Yes | | Why the last sync failed; NULL after one that worked |
+| `offline_since` | TIMESTAMPTZ | Yes | | Since when its server is down; its titles are hidden from the views (`visible_media_items`) |
 | `created_at` | TIMESTAMPTZ | No | `now()` | |
+
+### `visible_media_items` (view)
+
+`media_items` without the rows held from a link that is down (`links.offline_since`). Every view of the library reads
+it; scans, syncs and merges read `media_items`. A migration that adds a column to `media_items` must re-create the view.
 
 ### `media_removals`
 

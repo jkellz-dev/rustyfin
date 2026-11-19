@@ -101,7 +101,7 @@ pub async fn list_extras(
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     let types: Vec<String> = extra_types.iter().map(|t| t.to_string()).collect();
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE owner_id = $1 AND extra_type = ANY($2) \
+        "SELECT * FROM visible_media_items WHERE owner_id = $1 AND extra_type = ANY($2) \
          ORDER BY sort_name, name",
     )
     .bind(owner)
@@ -117,7 +117,7 @@ pub async fn list_versions(
     owners: &[Uuid],
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE owner_id = ANY($1) AND extra_type = 'Version' \
+        "SELECT * FROM visible_media_items WHERE owner_id = ANY($1) AND extra_type = 'Version' \
          ORDER BY path",
     )
     .bind(owners)
@@ -135,7 +135,7 @@ pub async fn count_extras(
         "SELECT owner_id, \
                 COUNT(*) FILTER (WHERE extra_type = 'Trailer'), \
                 COUNT(*) FILTER (WHERE extra_type NOT IN ('Trailer', 'ThemeVideo', 'ThemeSong', 'Version')) \
-         FROM media_items WHERE owner_id = ANY($1) GROUP BY owner_id",
+         FROM visible_media_items WHERE owner_id = ANY($1) GROUP BY owner_id",
     )
     .bind(owners)
     .fetch_all(pool)
@@ -144,7 +144,7 @@ pub async fn count_extras(
 }
 /// Find a media item by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE id = $1")
+    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM visible_media_items WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -163,11 +163,11 @@ pub async fn list_ancestors(pool: &PgPool, id: Uuid) -> Result<Vec<MediaItemRow>
         r#"
         WITH RECURSIVE chain AS (
             SELECT m.*, 1 AS depth
-            FROM media_items m
-            WHERE m.id = (SELECT parent_id FROM media_items WHERE id = $1)
+            FROM visible_media_items m
+            WHERE m.id = (SELECT parent_id FROM visible_media_items WHERE id = $1)
           UNION ALL
             SELECT p.*, c.depth + 1
-            FROM media_items p
+            FROM visible_media_items p
             JOIN chain c ON p.id = c.parent_id
             WHERE c.depth < $2
         )
@@ -202,7 +202,7 @@ pub async fn list_by_parents(
         return Ok(Vec::new());
     }
     let rows = sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE parent_id = ANY($1) \
+        "SELECT * FROM visible_media_items WHERE parent_id = ANY($1) \
          AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) \
          ORDER BY parent_index_number NULLS LAST, index_number NULLS LAST, sort_name, name",
     )
@@ -233,7 +233,7 @@ pub async fn list_by_parent(
     start_index: i64,
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    let mut query = String::from("SELECT * FROM media_items WHERE 1=1");
+    let mut query = String::from("SELECT * FROM visible_media_items WHERE 1=1");
     let mut param_index = 1;
 
     if parent_id.is_some() {
@@ -278,9 +278,9 @@ pub async fn list_by_parent(
 pub async fn cumulative_runtime_ticks(pool: &PgPool, id: Uuid) -> Result<Option<i64>, sqlx::Error> {
     let row: (Option<i64>,) = sqlx::query_as(
         "WITH RECURSIVE tree AS ( \
-             SELECT id, runtime_ticks, 1 AS depth FROM media_items WHERE parent_id = $1 \
+             SELECT id, runtime_ticks, 1 AS depth FROM visible_media_items WHERE parent_id = $1 \
              UNION ALL \
-             SELECT c.id, c.runtime_ticks, t.depth + 1 FROM media_items c \
+             SELECT c.id, c.runtime_ticks, t.depth + 1 FROM visible_media_items c \
              JOIN tree t ON c.parent_id = t.id WHERE t.depth < 4 \
          ) SELECT SUM(runtime_ticks)::bigint FROM tree",
     )
@@ -299,13 +299,13 @@ pub async fn count_by_parent(
     // Simplified count query
     let row: (i64,) = if let Some(pid) = parent_id {
         if item_types.is_empty() {
-            sqlx::query_as("SELECT COUNT(*) FROM media_items WHERE parent_id = $1")
+            sqlx::query_as("SELECT COUNT(*) FROM visible_media_items WHERE parent_id = $1")
                 .bind(pid)
                 .fetch_one(pool)
                 .await?
         } else {
             sqlx::query_as(
-                "SELECT COUNT(*) FROM media_items WHERE parent_id = $1 AND item_type = ANY($2)",
+                "SELECT COUNT(*) FROM visible_media_items WHERE parent_id = $1 AND item_type = ANY($2)",
             )
             .bind(pid)
             .bind(item_types)
@@ -313,12 +313,12 @@ pub async fn count_by_parent(
             .await?
         }
     } else if item_types.is_empty() {
-        sqlx::query_as("SELECT COUNT(*) FROM media_items WHERE parent_id IS NULL")
+        sqlx::query_as("SELECT COUNT(*) FROM visible_media_items WHERE parent_id IS NULL")
             .fetch_one(pool)
             .await?
     } else {
         sqlx::query_as(
-            "SELECT COUNT(*) FROM media_items WHERE parent_id IS NULL AND item_type = ANY($1)",
+            "SELECT COUNT(*) FROM visible_media_items WHERE parent_id IS NULL AND item_type = ANY($1)",
         )
         .bind(item_types)
         .fetch_one(pool)
@@ -335,7 +335,7 @@ pub async fn list_by_library(
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE library_id = $1 ORDER BY sort_name, name LIMIT $2 OFFSET $3",
+        "SELECT * FROM visible_media_items WHERE library_id = $1 ORDER BY sort_name, name LIMIT $2 OFFSET $3",
     )
     .bind(library_id)
     .bind(limit)
@@ -354,7 +354,7 @@ pub async fn list_top_level_by_library(
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     if item_types.is_empty() {
         sqlx::query_as::<_, MediaItemRow>(
-            "SELECT * FROM media_items WHERE library_id = $1 AND parent_id IS NULL \
+            "SELECT * FROM visible_media_items WHERE library_id = $1 AND parent_id IS NULL \
              ORDER BY sort_name, name LIMIT $2 OFFSET $3",
         )
         .bind(library_id)
@@ -364,7 +364,7 @@ pub async fn list_top_level_by_library(
         .await
     } else {
         sqlx::query_as::<_, MediaItemRow>(
-            "SELECT * FROM media_items WHERE library_id = $1 AND parent_id IS NULL \
+            "SELECT * FROM visible_media_items WHERE library_id = $1 AND parent_id IS NULL \
              AND item_type = ANY($2) ORDER BY sort_name, name LIMIT $3 OFFSET $4",
         )
         .bind(library_id)
@@ -384,14 +384,14 @@ pub async fn count_top_level_by_library(
 ) -> Result<i64, sqlx::Error> {
     let row: (i64,) = if item_types.is_empty() {
         sqlx::query_as(
-            "SELECT COUNT(*) FROM media_items WHERE library_id = $1 AND parent_id IS NULL",
+            "SELECT COUNT(*) FROM visible_media_items WHERE library_id = $1 AND parent_id IS NULL",
         )
         .bind(library_id)
         .fetch_one(pool)
         .await?
     } else {
         sqlx::query_as(
-            "SELECT COUNT(*) FROM media_items WHERE library_id = $1 AND parent_id IS NULL \
+            "SELECT COUNT(*) FROM visible_media_items WHERE library_id = $1 AND parent_id IS NULL \
              AND item_type = ANY($2)",
         )
         .bind(library_id)
@@ -412,7 +412,7 @@ pub async fn latest_by_library(
     // What was added: media, not the containers a scan makes or the
     // collections built from NFOs (Jellyfin's Latest leaves those out too).
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE ($1::uuid IS NULL OR library_id = $1) \
+        "SELECT * FROM visible_media_items WHERE ($1::uuid IS NULL OR library_id = $1) \
          AND item_type NOT IN ('BoxSet', 'Folder', 'CollectionFolder', 'Playlist', 'Season', \
                                'UserRootFolder') \
          AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) \
@@ -518,7 +518,7 @@ pub async fn find_by_name_and_type(
     item_type: &str,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE LOWER(name) = LOWER($1) AND item_type = $2 LIMIT 1",
+        "SELECT * FROM visible_media_items WHERE LOWER(name) = LOWER($1) AND item_type = $2 LIMIT 1",
     )
     .bind(name)
     .bind(item_type)
@@ -756,7 +756,7 @@ pub async fn count_children_batch(
     parent_ids: &[Uuid],
 ) -> Result<HashMap<Uuid, i64>, sqlx::Error> {
     let rows: Vec<(Uuid, i64)> = sqlx::query_as(
-        "SELECT parent_id, COUNT(*) FROM media_items WHERE parent_id = ANY($1) GROUP BY parent_id",
+        "SELECT parent_id, COUNT(*) FROM visible_media_items WHERE parent_id = ANY($1) GROUP BY parent_id",
     )
     .bind(parent_ids)
     .fetch_all(pool)
@@ -837,7 +837,7 @@ pub async fn count_by_type(
     libraries: Option<&[Uuid]>,
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT t.item_type, COUNT(*) FROM media_items t \
+        "SELECT t.item_type, COUNT(*) FROM visible_media_items t \
              WHERE ($1::uuid[] IS NULL OR t.library_id IS NULL OR t.library_id = ANY($1)) \
              AND t.owner_id IS NULL AND NOT {} \
              GROUP BY t.item_type",
@@ -850,7 +850,7 @@ pub async fn count_by_type(
 
 /// How many items there are, of every kind.
 pub async fn count_all(pool: &PgPool) -> Result<i64, sqlx::Error> {
-    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM media_items")
+    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM visible_media_items")
         .fetch_one(pool)
         .await?;
     Ok(row.0)
@@ -863,7 +863,7 @@ pub async fn distinct_genres(
 ) -> Result<Vec<String>, sqlx::Error> {
     if let Some(pid) = parent_id {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT unnest(genres) AS genre FROM media_items WHERE library_id = $1 ORDER BY genre",
+            "SELECT DISTINCT unnest(genres) AS genre FROM visible_media_items WHERE library_id = $1 ORDER BY genre",
         )
         .bind(pid)
         .fetch_all(pool)
@@ -871,7 +871,7 @@ pub async fn distinct_genres(
         Ok(rows.into_iter().map(|(g,)| g).collect())
     } else {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT unnest(genres) AS genre FROM media_items ORDER BY genre",
+            "SELECT DISTINCT unnest(genres) AS genre FROM visible_media_items ORDER BY genre",
         )
         .fetch_all(pool)
         .await?;
@@ -886,7 +886,7 @@ pub async fn distinct_years(
 ) -> Result<Vec<i32>, sqlx::Error> {
     if let Some(pid) = parent_id {
         let rows: Vec<(i32,)> = sqlx::query_as(
-            "SELECT DISTINCT production_year FROM media_items WHERE library_id = $1 AND production_year IS NOT NULL ORDER BY production_year",
+            "SELECT DISTINCT production_year FROM visible_media_items WHERE library_id = $1 AND production_year IS NOT NULL ORDER BY production_year",
         )
         .bind(pid)
         .fetch_all(pool)
@@ -894,7 +894,7 @@ pub async fn distinct_years(
         Ok(rows.into_iter().map(|(y,)| y).collect())
     } else {
         let rows: Vec<(i32,)> = sqlx::query_as(
-            "SELECT DISTINCT production_year FROM media_items WHERE production_year IS NOT NULL ORDER BY production_year",
+            "SELECT DISTINCT production_year FROM visible_media_items WHERE production_year IS NOT NULL ORDER BY production_year",
         )
         .fetch_all(pool)
         .await?;
@@ -913,7 +913,7 @@ pub async fn count_items_by_years(
     let rows: Vec<(i32, String, i64)> = sqlx::query_as(
         r#"
         SELECT production_year, item_type, COUNT(*) as cnt
-        FROM media_items
+        FROM visible_media_items
         WHERE production_year = ANY($1)
           AND ($2::uuid IS NULL OR library_id = $2)
         GROUP BY production_year, item_type
@@ -939,7 +939,7 @@ pub async fn count_items_by_year(
     sqlx::query_as(
         r#"
         SELECT item_type, COUNT(*) as cnt
-        FROM media_items
+        FROM visible_media_items
         WHERE production_year = $1
           AND ($2::uuid IS NULL OR library_id = $2)
         GROUP BY item_type
@@ -958,7 +958,7 @@ pub async fn distinct_official_ratings(
 ) -> Result<Vec<String>, sqlx::Error> {
     if let Some(pid) = parent_id {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT official_rating FROM media_items WHERE library_id = $1 AND official_rating IS NOT NULL ORDER BY official_rating",
+            "SELECT DISTINCT official_rating FROM visible_media_items WHERE library_id = $1 AND official_rating IS NOT NULL ORDER BY official_rating",
         )
         .bind(pid)
         .fetch_all(pool)
@@ -966,7 +966,7 @@ pub async fn distinct_official_ratings(
         Ok(rows.into_iter().map(|(r,)| r).collect())
     } else {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT official_rating FROM media_items WHERE official_rating IS NOT NULL ORDER BY official_rating",
+            "SELECT DISTINCT official_rating FROM visible_media_items WHERE official_rating IS NOT NULL ORDER BY official_rating",
         )
         .fetch_all(pool)
         .await?;
@@ -981,17 +981,18 @@ pub async fn distinct_tags(
 ) -> Result<Vec<String>, sqlx::Error> {
     if let Some(pid) = parent_id {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT unnest(tags) AS tag FROM media_items WHERE library_id = $1 ORDER BY tag",
+            "SELECT DISTINCT unnest(tags) AS tag FROM visible_media_items WHERE library_id = $1 ORDER BY tag",
         )
         .bind(pid)
         .fetch_all(pool)
         .await?;
         Ok(rows.into_iter().map(|(t,)| t).collect())
     } else {
-        let rows: Vec<(String,)> =
-            sqlx::query_as("SELECT DISTINCT unnest(tags) AS tag FROM media_items ORDER BY tag")
-                .fetch_all(pool)
-                .await?;
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT unnest(tags) AS tag FROM visible_media_items ORDER BY tag",
+        )
+        .fetch_all(pool)
+        .await?;
         Ok(rows.into_iter().map(|(t,)| t).collect())
     }
 }
@@ -1006,7 +1007,7 @@ pub async fn get_active_series(
     let rows: Vec<(Uuid, DateTime<Utc>)> = sqlx::query_as(
         r#"
         SELECT m.series_id, MAX(ud.last_played_date) AS last_activity
-        FROM media_items m
+        FROM visible_media_items m
         JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
         WHERE m.item_type = 'Episode'
           AND m.series_id IS NOT NULL
@@ -1036,14 +1037,14 @@ pub async fn series_never_started(
     let rows: Vec<(Uuid,)> = sqlx::query_as(
         r#"
         SELECT s.id
-        FROM media_items s
+        FROM visible_media_items s
         WHERE s.item_type = 'Series'
           AND ($2::uuid IS NULL OR s.library_id = $2)
           AND EXISTS (
-            SELECT 1 FROM media_items e WHERE e.series_id = s.id AND e.item_type = 'Episode'
+            SELECT 1 FROM visible_media_items e WHERE e.series_id = s.id AND e.item_type = 'Episode'
           )
           AND NOT EXISTS (
-            SELECT 1 FROM media_items e
+            SELECT 1 FROM visible_media_items e
             JOIN user_data ud ON (ud.item_id = e.id AND ud.user_id = $1)
             WHERE e.series_id = s.id AND (ud.played OR ud.playback_position_ticks > 0)
           )
@@ -1060,11 +1061,20 @@ pub async fn series_never_started(
 }
 
 /// The rows for `ids`, in no particular order.
+/// Of these ids, those the views may show (not held from a link that is
+/// down), for lists that come from elsewhere (the search index).
+pub async fn visible_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar("SELECT id FROM visible_media_items WHERE id = ANY($1)")
+        .bind(ids)
+        .fetch_all(pool)
+        .await
+}
+
 pub async fn find_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE id = ANY($1)")
+    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM visible_media_items WHERE id = ANY($1)")
         .bind(ids)
         .fetch_all(pool)
         .await
@@ -1122,12 +1132,12 @@ pub async fn runtime_totals(
     }
     let rows: Vec<(Uuid, i64)> = sqlx::query_as(
         "WITH RECURSIVE below(root, id, depth) AS ( \
-             SELECT id, id, 0 FROM media_items WHERE id = ANY($1) \
+             SELECT id, id, 0 FROM visible_media_items WHERE id = ANY($1) \
              UNION ALL \
-             SELECT below.root, m.id, below.depth + 1 FROM media_items m \
+             SELECT below.root, m.id, below.depth + 1 FROM visible_media_items m \
              JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
          SELECT below.root, SUM(m.runtime_ticks)::BIGINT FROM below \
-         JOIN media_items m ON m.id = below.id \
+         JOIN visible_media_items m ON m.id = below.id \
          WHERE below.depth > 0 AND m.item_type = 'Audio' AND m.runtime_ticks IS NOT NULL \
          GROUP BY below.root",
     )
@@ -1146,7 +1156,7 @@ pub async fn find_artists_by_names(
         return Ok(Vec::new());
     }
     sqlx::query_as(
-        "SELECT id, name, library_id FROM media_items \
+        "SELECT id, name, library_id FROM visible_media_items \
          WHERE item_type = 'MusicArtist' AND name = ANY($1)",
     )
     .bind(names)
@@ -1163,7 +1173,7 @@ pub async fn get_last_watched_episode(
     sqlx::query_as::<_, MediaItemRow>(
         r#"
         SELECT m.*
-        FROM media_items m
+        FROM visible_media_items m
         JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
         WHERE m.series_id = $2
           AND m.item_type = 'Episode'
@@ -1190,7 +1200,7 @@ pub async fn get_next_episode(
     sqlx::query_as::<_, MediaItemRow>(
         r#"
         SELECT m.*
-        FROM media_items m
+        FROM visible_media_items m
         LEFT JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
         WHERE m.series_id = $2
           AND m.item_type = 'Episode'
@@ -1233,7 +1243,7 @@ pub async fn get_next_episodes(
         last_played AS (
             SELECT DISTINCT ON (m.series_id)
                    m.series_id, m.parent_index_number AS season, m.index_number AS episode
-            FROM media_items m
+            FROM visible_media_items m
             JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
             WHERE m.series_id = ANY($2)
               AND m.item_type = 'Episode'
@@ -1247,7 +1257,7 @@ pub async fn get_next_episodes(
         LEFT JOIN last_played l ON l.series_id = w.series_id
         CROSS JOIN LATERAL (
             SELECT m.*
-            FROM media_items m
+            FROM visible_media_items m
             LEFT JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
             WHERE m.series_id = w.series_id
               AND m.item_type = 'Episode'
@@ -1282,7 +1292,7 @@ pub async fn get_random_items(
     sqlx::query_as::<_, MediaItemRow>(
         r#"
         SELECT m.*
-        FROM media_items m
+        FROM visible_media_items m
         LEFT JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
         WHERE m.is_folder = false
           AND (ud.played IS NULL OR ud.played = false)
@@ -1309,7 +1319,7 @@ pub async fn search_by_name(
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     let pattern = format!("%{query}%");
     sqlx::query_as::<_, MediaItemRow>(
-        "SELECT * FROM media_items WHERE name ILIKE $1 AND owner_id IS NULL ORDER BY name LIMIT $2",
+        "SELECT * FROM visible_media_items WHERE name ILIKE $1 AND owner_id IS NULL ORDER BY name LIMIT $2",
     )
     .bind(&pattern)
     .bind(limit)
@@ -1345,10 +1355,10 @@ pub async fn find_similar(
     sqlx::query_as::<_, MediaItemRow>(
         r#"
         WITH source AS (
-            SELECT genres, studios, tags FROM media_items WHERE id = $1
+            SELECT genres, studios, tags FROM visible_media_items WHERE id = $1
         )
         SELECT m.*
-        FROM media_items m, source s
+        FROM visible_media_items m, source s
         WHERE m.id != $1
           AND m.item_type = $2
           AND m.is_folder = false
@@ -1391,7 +1401,7 @@ pub async fn count_items_with_genre(
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
     if let Some(pid) = parent_id {
         sqlx::query_as(
-            r#"SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(genres) AND library_id = $2 GROUP BY item_type"#,
+            r#"SELECT item_type, COUNT(*) AS cnt FROM visible_media_items WHERE $1 = ANY(genres) AND library_id = $2 GROUP BY item_type"#,
         )
         .bind(genre)
         .bind(pid)
@@ -1399,7 +1409,7 @@ pub async fn count_items_with_genre(
         .await
     } else {
         sqlx::query_as(
-            r#"SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(genres) GROUP BY item_type"#,
+            r#"SELECT item_type, COUNT(*) AS cnt FROM visible_media_items WHERE $1 = ANY(genres) GROUP BY item_type"#,
         )
         .bind(genre)
         .fetch_all(pool)
@@ -1416,7 +1426,7 @@ pub async fn distinct_genres_by_item_types(
     let rows: Vec<(String,)> = sqlx::query_as(
         r#"
         SELECT DISTINCT unnest(genres) AS genre
-        FROM media_items
+        FROM visible_media_items
         WHERE item_type = ANY($1)
           AND ($2::uuid IS NULL OR library_id = $2)
         ORDER BY genre
@@ -1439,7 +1449,7 @@ pub async fn count_items_with_genre_by_types(
     sqlx::query_as(
         r#"
         SELECT item_type, COUNT(*) as cnt
-        FROM media_items
+        FROM visible_media_items
         WHERE $1 = ANY(genres)
           AND item_type = ANY($2)
           AND ($3::uuid IS NULL OR library_id = $3)
@@ -1460,7 +1470,7 @@ pub async fn distinct_studios(
 ) -> Result<Vec<String>, sqlx::Error> {
     if let Some(pid) = parent_id {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT unnest(studios) AS studio FROM media_items WHERE library_id = $1 ORDER BY studio",
+            "SELECT DISTINCT unnest(studios) AS studio FROM visible_media_items WHERE library_id = $1 ORDER BY studio",
         )
         .bind(pid)
         .fetch_all(pool)
@@ -1468,7 +1478,7 @@ pub async fn distinct_studios(
         Ok(rows.into_iter().map(|(s,)| s).collect())
     } else {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT unnest(studios) AS studio FROM media_items ORDER BY studio",
+            "SELECT DISTINCT unnest(studios) AS studio FROM visible_media_items ORDER BY studio",
         )
         .fetch_all(pool)
         .await?;
@@ -1484,7 +1494,7 @@ pub async fn count_items_with_studio(
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
     if let Some(pid) = parent_id {
         sqlx::query_as(
-            "SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(studios) AND library_id = $2 GROUP BY item_type",
+            "SELECT item_type, COUNT(*) AS cnt FROM visible_media_items WHERE $1 = ANY(studios) AND library_id = $2 GROUP BY item_type",
         )
         .bind(studio)
         .bind(pid)
@@ -1492,7 +1502,7 @@ pub async fn count_items_with_studio(
         .await
     } else {
         sqlx::query_as(
-            "SELECT item_type, COUNT(*) AS cnt FROM media_items WHERE $1 = ANY(studios) GROUP BY item_type",
+            "SELECT item_type, COUNT(*) AS cnt FROM visible_media_items WHERE $1 = ANY(studios) GROUP BY item_type",
         )
         .bind(studio)
         .fetch_all(pool)
@@ -1510,7 +1520,7 @@ pub async fn get_active_series_or_movies(
     let rows: Vec<(Uuid,)> = sqlx::query_as(
         r#"
         SELECT m.id
-        FROM media_items m
+        FROM visible_media_items m
         JOIN user_data ud ON (ud.item_id = m.id AND ud.user_id = $1)
         WHERE m.item_type = $2
           AND ud.last_played_date IS NOT NULL
@@ -1571,7 +1581,7 @@ fn push_artist_where(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, f: &ArtistFilt
     qb.push(" WHERE mi.item_type = 'MusicArtist'");
     if f.album_artists_only {
         qb.push(
-            " AND mi.id IN (SELECT DISTINCT parent_id FROM media_items \
+            " AND mi.id IN (SELECT DISTINCT parent_id FROM visible_media_items \
              WHERE item_type = 'MusicAlbum' AND parent_id IS NOT NULL)",
         );
     }
@@ -1599,10 +1609,10 @@ pub async fn list_artists(
     start_index: i64,
     limit: i64,
 ) -> Result<(Vec<MediaItemRow>, i64), sqlx::Error> {
-    let mut count = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM media_items mi");
+    let mut count = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM visible_media_items mi");
     push_artist_where(&mut count, filter);
     let total: (i64,) = count.build_query_as().fetch_one(pool).await?;
-    let mut list = sqlx::QueryBuilder::new("SELECT mi.* FROM media_items mi");
+    let mut list = sqlx::QueryBuilder::new("SELECT mi.* FROM visible_media_items mi");
     push_artist_where(&mut list, filter);
     list.push(" ORDER BY mi.sort_name, mi.name LIMIT ");
     list.push_bind(limit);
@@ -1618,7 +1628,7 @@ pub async fn list_artists(
 /// Count albums belonging to an artist.
 pub async fn count_albums_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i32, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM media_items WHERE parent_id = $1 AND item_type = 'MusicAlbum'",
+        "SELECT COUNT(*) FROM visible_media_items WHERE parent_id = $1 AND item_type = 'MusicAlbum'",
     )
     .bind(artist_id)
     .fetch_one(pool)
@@ -1638,9 +1648,9 @@ pub async fn count_albums_and_songs_by_artists(
     let rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
         r#"
         SELECT a.id,
-               (SELECT COUNT(*) FROM media_items m
+               (SELECT COUNT(*) FROM visible_media_items m
                  WHERE m.parent_id = a.id AND m.item_type = 'MusicAlbum'),
-               (SELECT COUNT(*) FROM media_items m
+               (SELECT COUNT(*) FROM visible_media_items m
                  WHERE m.series_id = a.id AND m.item_type = 'Audio')
         FROM unnest($1::uuid[]) AS a(id)
         "#,
@@ -1657,7 +1667,7 @@ pub async fn count_albums_and_songs_by_artists(
 /// Count songs belonging to an artist (via series_id).
 pub async fn count_songs_by_artist(pool: &PgPool, artist_id: Uuid) -> Result<i32, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM media_items WHERE item_type = 'Audio' AND series_id = $1",
+        "SELECT COUNT(*) FROM visible_media_items WHERE item_type = 'Audio' AND series_id = $1",
     )
     .bind(artist_id)
     .fetch_one(pool)
@@ -1674,7 +1684,7 @@ pub async fn upcoming_episodes(
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>(
         r#"
-        SELECT * FROM media_items
+        SELECT * FROM visible_media_items
         WHERE item_type = 'Episode'
           AND premiere_date IS NOT NULL
           AND premiere_date >= CURRENT_DATE
@@ -1697,7 +1707,7 @@ pub async fn count_upcoming_episodes(
 ) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
         r#"
-        SELECT COUNT(*) FROM media_items
+        SELECT COUNT(*) FROM visible_media_items
         WHERE item_type = 'Episode'
           AND premiere_date IS NOT NULL
           AND premiere_date >= CURRENT_DATE
@@ -1861,7 +1871,7 @@ impl ItemQuery {
     /// Execute the query and return matching items.
     pub async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
         let mut qb: QueryBuilder<sqlx::Postgres> =
-            QueryBuilder::new("SELECT mi.* FROM media_items mi");
+            QueryBuilder::new("SELECT mi.* FROM visible_media_items mi");
 
         // JOINs
         if self.needs_user_data_join()
@@ -1887,7 +1897,7 @@ impl ItemQuery {
     /// Count matching items (for TotalRecordCount).
     pub async fn count(&self, pool: &PgPool) -> Result<i64, sqlx::Error> {
         let mut qb: QueryBuilder<sqlx::Postgres> =
-            QueryBuilder::new("SELECT COUNT(*) FROM media_items mi");
+            QueryBuilder::new("SELECT COUNT(*) FROM visible_media_items mi");
 
         if self.needs_user_data_join()
             && let Some(user_id) = self.user_id
@@ -1926,11 +1936,11 @@ impl ItemQuery {
                 // Everything below the parent, however deep (series -> season -> episode).
                 qb.push(
                     " AND mi.id IN (WITH RECURSIVE below(id, depth) AS (\
-                     SELECT id, 1 FROM media_items WHERE parent_id = ",
+                     SELECT id, 1 FROM visible_media_items WHERE parent_id = ",
                 );
                 qb.push_bind(parent_id);
                 qb.push(
-                    " UNION ALL SELECT m.id, below.depth + 1 FROM media_items m \
+                    " UNION ALL SELECT m.id, below.depth + 1 FROM visible_media_items m \
                      JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
                      SELECT id FROM below)",
                 );
@@ -2006,11 +2016,11 @@ impl ItemQuery {
         // Artist filter: albums below the artist, their tracks, and tracks
         // whose artists name it.
         if !self.artist_ids.is_empty() {
-            qb.push(" AND EXISTS (SELECT 1 FROM media_items a WHERE a.id = ANY(");
+            qb.push(" AND EXISTS (SELECT 1 FROM visible_media_items a WHERE a.id = ANY(");
             qb.push_bind(&self.artist_ids);
             qb.push(
                 ") AND (mi.parent_id = a.id \
-                   OR mi.parent_id IN (SELECT al.id FROM media_items al WHERE al.parent_id = a.id) \
+                   OR mi.parent_id IN (SELECT al.id FROM visible_media_items al WHERE al.parent_id = a.id) \
                    OR a.name = ANY(mi.artists)))",
             );
         }
@@ -2020,7 +2030,7 @@ impl ItemQuery {
             qb.push(" AND (mi.parent_id = ANY(");
             qb.push_bind(&self.album_ids);
             qb.push(
-                ") OR mi.parent_id IN (SELECT d.id FROM media_items d WHERE d.parent_id = ANY(",
+                ") OR mi.parent_id IN (SELECT d.id FROM visible_media_items d WHERE d.parent_id = ANY(",
             );
             qb.push_bind(&self.album_ids);
             qb.push(")))");
@@ -2134,7 +2144,7 @@ pub async fn genre_image(
     library: Option<Uuid>,
 ) -> Result<Option<crate::repo::images::ImageRow>, sqlx::Error> {
     sqlx::query_as::<_, crate::repo::images::ImageRow>(
-        "SELECT i.* FROM images i JOIN media_items m ON m.id = i.entity_id \
+        "SELECT i.* FROM images i JOIN visible_media_items m ON m.id = i.entity_id \
          WHERE $1 = ANY(m.genres) AND ($2::uuid IS NULL OR m.library_id = $2) \
            AND m.item_type IN ('Movie', 'Series', 'MusicAlbum', 'MusicArtist') \
            AND i.image_type IN ('Backdrop', 'Primary') AND i.image_index = 0 \

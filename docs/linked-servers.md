@@ -230,6 +230,19 @@ and give a `next` to pass as `after`; the first page's `cursor` is the `since` f
 offered, never copies they hold from another link. The first sync takes everything; after that a quiet sync is one
 call, and a busy one fetches only what changed. If the friend refuses the cursor, the next sync starts over.
 
+## When a friend's server is down
+
+When a sync cannot reach your friend's server (or it refuses the link), or a stream through it fails and it does not
+answer, the link is marked down:
+
+- Titles only that friend has leave every view: lists, search, Latest, Continue Watching, Next Up, and a library made
+  for one of their libraries. The friend's copy of a title you hold leaves its versions. A title another friend also
+  holds stays, with that friend's copy standing in.
+- Users who can see those titles get a message in their apps ("Alex's server can't be reached. Its titles are hidden
+  until it is back."), the activity log says so, and the Links page shows the link as **Offline**.
+- Nothing is deleted: watched state, resume points and playlists stay. A link that is down is tried every minute; when
+  it answers, its titles come back and users get a second message.
+
 ## Removing a link
 
 Delete its `[[link]]` and restart. At start, Rustyfin removes every link the config no longer names: its copies, any

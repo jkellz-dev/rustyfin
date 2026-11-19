@@ -56,7 +56,7 @@ pub(crate) async fn stream(
             forward,
         )
         .await
-        .map_err(|e| unreachable(&link.settings.name, &e))?;
+        .map_err(|e| unreachable(&state, &link, &e))?;
     let status = response.status();
     if status == StatusCode::NOT_FOUND {
         return Err(ApiError::NotFound);
@@ -136,7 +136,7 @@ pub(crate) async fn image(
         .client
         .relay(&path, &query, HeaderMap::new())
         .await
-        .map_err(|e| unreachable(&link.settings.name, &e))?;
+        .map_err(|e| unreachable(&state, &link, &e))?;
     if !response.status().is_success() {
         return Err(ApiError::NotFound);
     }
@@ -154,9 +154,17 @@ pub(crate) async fn image(
         .unwrap())
 }
 
-fn unreachable(link: &str, e: &impl std::fmt::Display) -> ApiError {
-    tracing::warn!("Link {link}: {e:#}");
-    ApiError::Internal(format!("The linked server {link} is unreachable"))
+fn unreachable(
+    state: &AppState,
+    link: &rustyfin_core::link::Link,
+    e: &impl std::fmt::Display,
+) -> ApiError {
+    let name = &link.settings.name;
+    tracing::warn!("Link {name}: {e:#}");
+    // Is it down? Then its titles leave the views until it is back.
+    let (links, pool, id) = (state.links.clone(), state.pool.clone(), link.id);
+    tokio::spawn(async move { links.check(&pool, id).await });
+    ApiError::Internal(format!("The linked server {name} is unreachable"))
 }
 
 /// For each linked copy in `info` this client cannot play as is, ask the
@@ -289,7 +297,7 @@ pub async fn relay_media(
         .client
         .relay_url(&path_and_query, forward)
         .await
-        .map_err(|e| unreachable(&link.settings.name, &e))?;
+        .map_err(|e| unreachable(&state, &link, &e))?;
     let status = response.status();
     if status == StatusCode::NOT_FOUND {
         return Err(ApiError::NotFound);
@@ -304,7 +312,7 @@ pub async fn relay_media(
         let text = response
             .text()
             .await
-            .map_err(|e| unreachable(&link.settings.name, &e))?;
+            .map_err(|e| unreachable(&state, &link, &e))?;
         return Ok(Response::builder()
             .status(status)
             .header(header::CONTENT_TYPE, "application/vnd.apple.mpegurl")

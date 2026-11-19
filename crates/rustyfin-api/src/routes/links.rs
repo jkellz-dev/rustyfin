@@ -23,6 +23,8 @@ pub struct LinkInfo {
     pub last_sync_at: Option<DateTime<Utc>>,
     /// Why the last sync (or some of its libraries) failed.
     pub last_error: Option<String>,
+    /// Since when its server is down (its titles are hidden); null while up.
+    pub offline_since: Option<DateTime<Utc>>,
     pub syncing: bool,
     /// In the config file; a link taken out of it no longer syncs.
     pub configured: bool,
@@ -54,6 +56,7 @@ pub async fn list(
             url: row.url,
             last_sync_at: row.last_sync_at,
             last_error: row.last_error,
+            offline_since: row.offline_since,
             titles,
             copies,
         });

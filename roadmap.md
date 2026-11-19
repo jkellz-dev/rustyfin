@@ -1551,8 +1551,9 @@ Design, settled before any code:
 - [x] Sync job for a Rustyfin: first full pull, then the change feed on a schedule and on demand; removals remove
       copies; the cursor is kept only after a sync that worked; a refused cursor starts over
 - [ ] Metrics per link (items, lag, failures, latency)
-- [ ] Health: a link that is down marks its copies unavailable. An item with no reachable copy is hidden, or shown
-      as offline (open question).
+- [x] Health: a link that is down has its titles left out of every view (owner, 2026-11-19: "Their titles should be
+      omitted from the views"), a title another link holds is handed to that copy, users are told in their apps, and
+      it is tried every minute until it is back
 
 #### 16b.4 Merging
 

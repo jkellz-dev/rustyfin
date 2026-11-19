@@ -114,10 +114,27 @@ pub struct Link {
     syncing: tokio::sync::Mutex<()>,
 }
 
+/// A link's server went down or came back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkEvent {
+    pub link_id: Uuid,
+    pub name: String,
+    pub online: bool,
+}
+
 /// The configured links, by id.
-#[derive(Default)]
 pub struct Links {
     links: RwLock<HashMap<Uuid, Arc<Link>>>,
+    events: tokio::sync::broadcast::Sender<LinkEvent>,
+}
+
+impl Default for Links {
+    fn default() -> Self {
+        Self {
+            links: RwLock::default(),
+            events: tokio::sync::broadcast::channel(16).0,
+        }
+    }
 }
 
 impl Links {
@@ -137,6 +154,97 @@ impl Links {
         });
         self.links.write().await.insert(id, link);
         Ok(id)
+    }
+
+    /// Links going down and coming back, for telling users.
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<LinkEvent> {
+        self.events.subscribe()
+    }
+
+    /// Record that a link's server is up or down. On a change: titles it
+    /// stood for move to a copy that is up (going down) or the shows are
+    /// placed again (coming back), the activity log says so, and
+    /// subscribers hear of it.
+    async fn mark(&self, pool: &PgPool, link: &Link, online: bool) {
+        let changed = match rustyfin_db::repo::links::set_offline(pool, link.id, !online).await {
+            Ok(changed) => changed,
+            Err(e) => {
+                tracing::warn!(
+                    "Link {}: could not record its state: {e}",
+                    link.settings.name
+                );
+                return;
+            }
+        };
+        if !changed {
+            return;
+        }
+        let name = &link.settings.name;
+        let moved = if online {
+            rustyfin_db::repo::links::merge(pool).await
+        } else {
+            rustyfin_db::repo::links::rehome(pool, link.id).await
+        };
+        if let Err(e) = moved {
+            tracing::warn!("Link {name}: could not rearrange its copies: {e}");
+        }
+        let (text, severity) = if online {
+            (format!("Linked server {name} is back"), "Information")
+        } else {
+            (
+                format!("Linked server {name} is down; its titles are hidden"),
+                "Warning",
+            )
+        };
+        if online {
+            tracing::info!("{text}");
+        } else {
+            tracing::warn!("{text}");
+        }
+        let _ = rustyfin_db::repo::activity_log::insert(
+            pool,
+            &text,
+            None,
+            "LinkedServerStatus",
+            severity,
+            None,
+            None,
+        )
+        .await;
+        let _ = self.events.send(LinkEvent {
+            link_id: link.id,
+            name: name.clone(),
+            online,
+        });
+    }
+
+    /// Check a link that just failed to answer (a stream, say): mark it down
+    /// if it does not answer now. Skipped while it syncs.
+    pub async fn check(&self, pool: &PgPool, id: Uuid) {
+        let Some(link) = self.get(id).await else {
+            return;
+        };
+        let Ok(_one) = link.syncing.try_lock() else {
+            return;
+        };
+        if link.client.libraries().await.is_err() {
+            self.mark(pool, &link, false).await;
+        }
+    }
+
+    /// Sync each link whose server is down, which brings back those that
+    /// answer again. Returns how many came back.
+    pub async fn recheck_offline(&self, pool: &PgPool) -> usize {
+        let Ok(offline) = rustyfin_db::repo::links::offline_ids(pool).await else {
+            return 0;
+        };
+        let mut back = 0;
+        for id in offline {
+            if self.get(id).await.is_some() && self.sync(pool, id).await.is_ok() {
+                back += 1;
+            }
+        }
+        back
     }
 
     pub async fn get(&self, id: Uuid) -> Option<Arc<Link>> {
@@ -163,7 +271,18 @@ impl Links {
             .ok_or_else(|| anyhow::anyhow!("no link {id}"))?;
         let _one = link.syncing.lock().await;
         let started = std::time::Instant::now();
-        let result = sync::sync_link(pool, &link).await;
+        // Is the friend's server there at all? Its titles leave the views
+        // while it is not (owner, 2026-11-19).
+        let result = match link.client.libraries().await {
+            Err(e) => {
+                self.mark(pool, &link, false).await;
+                Err(e)
+            }
+            Ok(_) => {
+                self.mark(pool, &link, true).await;
+                sync::sync_link(pool, &link).await
+            }
+        };
         let error = match &result {
             Err(e) => Some(format!("{e:#}")),
             Ok(r) if !r.errors.is_empty() => Some(r.errors.join("; ")),

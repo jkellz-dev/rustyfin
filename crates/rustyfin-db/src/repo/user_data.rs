@@ -66,16 +66,16 @@ pub async fn folder_progress(
     }
     let rows = sqlx::query_as::<_, (Uuid, i64, i64)>(
         "WITH RECURSIVE below(root, id, depth) AS ( \
-             SELECT id, id, 0 FROM media_items WHERE id = ANY($2) \
+             SELECT id, id, 0 FROM visible_media_items WHERE id = ANY($2) \
              UNION ALL \
-             SELECT below.root, m.id, below.depth + 1 FROM media_items m \
+             SELECT below.root, m.id, below.depth + 1 FROM visible_media_items m \
              JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
          SELECT b.root, COUNT(*), \
                 COUNT(*) FILTER (WHERE NOT COALESCE(ud.played, false)) \
          FROM (SELECT root, id FROM below WHERE depth > 0 \
                UNION SELECT collection_id, item_id FROM collection_items \
                      WHERE collection_id = ANY($2)) b \
-         JOIN media_items m ON m.id = b.id \
+         JOIN visible_media_items m ON m.id = b.id \
          LEFT JOIN user_data ud ON ud.item_id = m.id AND ud.user_id = $1 \
          WHERE m.item_type IN ('Movie', 'Episode', 'Audio', 'Video', 'MusicVideo', 'Trailer') \
          GROUP BY b.root",

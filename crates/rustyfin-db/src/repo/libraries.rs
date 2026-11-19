@@ -17,6 +17,9 @@ pub struct LibraryRow {
     /// When its last scan finished (absent from queries that name columns).
     #[sqlx(default)]
     pub last_scanned_at: Option<DateTime<Utc>>,
+    /// The link whose library this is, for one made for a friend's library.
+    #[sqlx(default)]
+    pub link_id: Option<Uuid>,
 }
 
 /// One library on the dashboard: its media count and last finished scan.
@@ -34,7 +37,7 @@ pub struct LibraryStatRow {
 pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
     sqlx::query_as::<_, LibraryStatRow>(
         "SELECT l.id, l.name, l.library_type, l.last_scanned_at, \
-                (SELECT COUNT(*) FROM media_items m WHERE m.library_id = l.id \
+                (SELECT COUNT(*) FROM visible_media_items m WHERE m.library_id = l.id \
                    AND m.item_type IN ('Movie', 'Episode', 'Audio', 'MusicVideo', 'Video')) \
                   AS item_count \
          FROM libraries l ORDER BY l.name",

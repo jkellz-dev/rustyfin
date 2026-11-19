@@ -233,7 +233,7 @@ pub async fn count_items_by_person(
     sqlx::query_as(
         r#"
         SELECT mi.item_type, COUNT(*) AS cnt
-        FROM media_items mi
+        FROM visible_media_items mi
         JOIN media_item_people mip ON mip.item_id = mi.id
         WHERE mip.person_id = $1
         GROUP BY mi.item_type

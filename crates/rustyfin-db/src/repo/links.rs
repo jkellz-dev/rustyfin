@@ -21,6 +21,8 @@ pub struct LinkRow {
     pub url: String,
     pub last_sync_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
+    /// Since when its server is down; `None` while it is up.
+    pub offline_since: Option<DateTime<Utc>>,
 }
 
 /// The link of this name, made or brought up to date.
@@ -39,7 +41,7 @@ pub async fn upsert(pool: &PgPool, name: &str, kind: &str, url: &str) -> Result<
 
 pub async fn list(pool: &PgPool) -> Result<Vec<LinkRow>, sqlx::Error> {
     sqlx::query_as::<_, LinkRow>(
-        "SELECT id, name, kind, url, last_sync_at, last_error FROM links ORDER BY name",
+        "SELECT id, name, kind, url, last_sync_at, last_error, offline_since FROM links ORDER BY name",
     )
     .fetch_all(pool)
     .await
@@ -116,6 +118,54 @@ pub async fn set_catalog_cursor(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Mark a link's server down (`offline`) or up. True when that changed.
+pub async fn set_offline(pool: &PgPool, id: Uuid, offline: bool) -> Result<bool, sqlx::Error> {
+    let done = sqlx::query(
+        "UPDATE links SET offline_since = CASE WHEN $2 THEN now() END \
+         WHERE id = $1 AND (offline_since IS NOT NULL) <> $2",
+    )
+    .bind(id)
+    .bind(offline)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Links whose server is down.
+pub async fn offline_ids(pool: &PgPool) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar("SELECT id FROM links WHERE offline_since IS NOT NULL")
+        .fetch_all(pool)
+        .await
+}
+
+/// After a link went down: a title it stood for (its copy holding the
+/// others as versions) is handed to a copy from a link that is up, so it
+/// stays in the views. Its copies are let go and merged again, now
+/// preferring links that are up.
+pub async fn rehome(pool: &PgPool, link_id: Uuid) -> Result<u64, sqlx::Error> {
+    sqlx::query(
+        "UPDATE media_items v SET owner_id = NULL, extra_type = NULL \
+         FROM media_items r \
+         WHERE v.owner_id = r.id AND v.extra_type = 'Version' AND v.link_id IS NOT NULL \
+           AND r.link_id = $1 AND r.owner_id IS NULL AND r.item_type IN ('Movie', 'Series')",
+    )
+    .bind(link_id)
+    .execute(pool)
+    .await?;
+    merge(pool).await
+}
+
+/// The libraries holding a link's copies, and any of its own.
+pub async fn libraries_of(pool: &PgPool, link_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT DISTINCT library_id FROM media_items WHERE link_id = $1 AND library_id IS NOT NULL \
+         UNION SELECT id FROM libraries WHERE link_id = $1",
+    )
+    .bind(link_id)
+    .fetch_all(pool)
+    .await
 }
 
 /// Record how a sync ended: `error` is None when it worked.
@@ -421,6 +471,7 @@ pub async fn delete_copies(
 /// a wrong merge would hide a title. Returns how many copies it merged.
 pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let mut merged = 0;
+    let offline = offline_ids(pool).await?;
     for (item_type, keys) in [
         ("Movie", &["Tmdb", "Imdb"][..]),
         ("Series", &["Tvdb", "Tmdb", "Imdb"][..]),
@@ -458,13 +509,14 @@ pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
                   AND EXISTS (SELECT 1 FROM unnest($2::text[]) k
                               WHERE l.external_ids->>k IS NOT NULL
                                 AND o.external_ids->>k = l.external_ids->>k)
-                ORDER BY (o.remote_id LIKE '%/%'), o.id LIMIT 1
+                ORDER BY (o.link_id = ANY($3)), (o.remote_id LIKE '%/%'), o.id LIMIT 1
             ) first ON first.id <> l.id
             WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = $1
             "#,
         )
         .bind(item_type)
         .bind(&keys)
+        .bind(&offline)
         .fetch_all(pool)
         .await?;
         merged += make_versions(pool, &linked).await?;
@@ -485,6 +537,8 @@ pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
 /// episode they belong to lists them as its copies. Returns how many rows
 /// changed place.
 pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    // Copies from a link that is down go after the others.
+    let offline: std::collections::HashSet<Uuid> = offline_ids(pool).await?.into_iter().collect();
     // Linked series: (link, remote id) -> the series it stands for, and names.
     let series: Vec<(Uuid, String, Uuid, Option<Uuid>)> = sqlx::query_as(
         "SELECT link_id, remote_id, id, owner_id FROM media_items \
@@ -541,7 +595,7 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
         }
     }
     for ((series, index), mut members) in groups {
-        members.sort_by_key(|m| m.0);
+        members.sort_by_key(|m| (offline.contains(&m.1), m.0));
         let first = match local_by_key.get(&(series, index)) {
             Some(local) => *local,
             None => {
@@ -582,14 +636,14 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
             local_eps.entry((parent, index)).or_insert(id);
         }
     }
-    let mut ep_groups: HashMap<(Uuid, i32), Vec<(bool, Uuid)>> = HashMap::new();
+    let mut ep_groups: HashMap<(Uuid, i32), Vec<(bool, bool, Uuid)>> = HashMap::new();
     for (id, link, remote, index, remote_season, remote_series) in episodes {
         let season = remote_season.and_then(|s| effective_season.get(&(link, s)).copied());
         match (season, index) {
             (Some((season, _)), Some(index)) => ep_groups
                 .entry((season, index))
                 .or_default()
-                .push((remote.contains('/'), id)),
+                .push((offline.contains(&link), remote.contains('/'), id)),
             (Some((season, series)), None) => places.push(Place::episode(
                 id,
                 season,
@@ -609,13 +663,14 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
     }
     let series_of_season: HashMap<Uuid, Uuid> = effective_season.values().copied().collect();
     for ((season, index), mut members) in ep_groups {
-        // A film's main copy before its other versions, then the lowest id.
+        // Up before down, a film's main copy before its other versions, then
+        // the lowest id.
         members.sort();
         let series = series_of_season[&season];
         let first = match local_eps.get(&(season, index)) {
             Some(local) => *local,
             None => {
-                let id = members[0].1;
+                let id = members[0].2;
                 places.push(Place::episode(
                     id,
                     season,
@@ -626,7 +681,7 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
                 id
             }
         };
-        for (_, id) in members {
+        for (_, _, id) in members {
             if id != first {
                 places.push(Place::version(id, first));
             }

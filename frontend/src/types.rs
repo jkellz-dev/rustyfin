@@ -536,6 +536,8 @@ pub struct LinkInfo {
     pub titles: i64,
     #[serde(default)]
     pub copies: i64,
+    #[serde(default)]
+    pub offline_since: Option<String>,
 }
 
 /// Rustyfin's own permissions of a user (`/api/v1/users/{id}/permissions`).

@@ -13,6 +13,7 @@ pub mod api_v1;
 pub mod cors;
 pub mod error;
 pub mod health;
+pub mod link_notices;
 pub mod login_limit;
 pub mod metrics;
 pub mod play_state;

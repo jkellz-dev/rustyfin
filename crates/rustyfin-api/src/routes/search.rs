@@ -67,10 +67,18 @@ pub async fn search_hints(
     let hidden = rustyfin_db::repo::collections::hidden_among(&state.pool, &boxsets)
         .await
         .map_err(ApiError::Database)?;
+    // Titles of a linked server that is down are not shown.
+    let hit_ids: Vec<Uuid> = hits.iter().map(|h| h.id).collect();
+    let shown: std::collections::HashSet<Uuid> =
+        rustyfin_db::repo::media_items::visible_ids(&state.pool, &hit_ids)
+            .await
+            .map_err(ApiError::Database)?
+            .into_iter()
+            .collect();
     // Filter by library access, and to the library asked for.
     let hits: Vec<_> = hits
         .into_iter()
-        .filter(|hit| !hidden.contains(&hit.id))
+        .filter(|hit| !hidden.contains(&hit.id) && shown.contains(&hit.id))
         .filter(|hit| {
             accessible
                 .as_ref()

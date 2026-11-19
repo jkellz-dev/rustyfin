@@ -6,6 +6,8 @@ use crate::types::LinkInfo;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinkState {
     Syncing,
+    /// Its server is down: its titles are hidden from users.
+    Offline,
     /// Not in the config file any more: it no longer syncs.
     Unconfigured,
     /// The last sync failed, or some of its libraries did.
@@ -17,6 +19,8 @@ pub enum LinkState {
 pub fn link_state(link: &LinkInfo) -> LinkState {
     if link.syncing {
         LinkState::Syncing
+    } else if link.offline_since.is_some() {
+        LinkState::Offline
     } else if !link.configured {
         LinkState::Unconfigured
     } else if let Some(e) = &link.last_error {
@@ -32,6 +36,7 @@ pub fn link_state(link: &LinkInfo) -> LinkState {
 pub fn badge(state: &LinkState) -> (&'static str, &'static str) {
     match state {
         LinkState::Syncing => ("badge badge-running", "Syncing"),
+        LinkState::Offline => ("badge badge-error", "Offline (titles hidden)"),
         LinkState::Unconfigured => ("badge badge-warning", "Not configured"),
         LinkState::Failed(_) => ("badge badge-error", "Failed"),
         LinkState::Never => ("badge badge-idle", "Not synced yet"),
@@ -55,6 +60,7 @@ mod tests {
             configured: true,
             titles: 3,
             copies: 5,
+            offline_since: None,
         }
     }
 
@@ -75,6 +81,15 @@ mod tests {
             LinkState::Syncing,
             "syncing wins over an old error"
         );
+        let mut down = link();
+        down.last_error = Some("could not reach".into());
+        down.offline_since = Some("2026-11-19T02:00:00Z".into());
+        assert_eq!(
+            link_state(&down),
+            LinkState::Offline,
+            "down says more than failed"
+        );
+        assert_eq!(badge(&LinkState::Offline).1, "Offline (titles hidden)");
         let mut gone = link();
         gone.configured = false;
         gone.syncing = false;

@@ -336,6 +336,16 @@ async fn main() -> anyhow::Result<()> {
                 tokio::time::sleep(LINK_SYNC_INTERVAL).await;
             }
         });
+        // A link that is down is tried every minute, so its titles come
+        // back soon after its server does.
+        let links = links.clone();
+        let pool = db_pool.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                links.recheck_offline(&pool).await;
+            }
+        });
     }
 
     let state = AppState {
@@ -385,6 +395,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Build router with all API routes
+    rustyfin_api::link_notices::spawn(state.clone());
     let app = build_router(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);

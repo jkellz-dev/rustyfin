@@ -202,9 +202,14 @@ async fn visible_libraries(
     let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
         .await
         .map_err(ApiError::Database)?;
+    // A library made for a friend's, while their server is down: hidden.
+    let offline = rustyfin_db::repo::links::offline_ids(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
     Ok(libs
         .into_iter()
         .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
+        .filter(|lib| lib.link_id.is_none_or(|l| !offline.contains(&l)))
         .collect())
 }
 
