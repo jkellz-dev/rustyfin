@@ -968,7 +968,12 @@ pub async fn get_items(
 
     // The root folder's children are the libraries.
     if query.parent_id == Some(super::libraries::root_folder_id(&state.server_id)) {
-        return super::libraries::get_user_views(State(state), auth).await;
+        return super::libraries::get_user_views(
+            State(state),
+            auth,
+            axum::extract::Query(super::libraries::ViewsQuery::default()),
+        )
+        .await;
     }
 
     // Determine if parent_id is a library
