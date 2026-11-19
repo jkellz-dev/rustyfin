@@ -636,7 +636,7 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
             local_eps.entry((parent, index)).or_insert(id);
         }
     }
-    let mut ep_groups: HashMap<(Uuid, i32), Vec<(bool, bool, Uuid)>> = HashMap::new();
+    let mut ep_groups: HashMap<(Uuid, i32), Vec<EpisodeMember>> = HashMap::new();
     for (id, link, remote, index, remote_season, remote_series) in episodes {
         let season = remote_season.and_then(|s| effective_season.get(&(link, s)).copied());
         match (season, index) {
@@ -692,6 +692,9 @@ pub async fn place_shows(pool: &PgPool) -> Result<u64, sqlx::Error> {
 
 /// A linked season: id, link, remote id, number, the friend's series id.
 type LinkedSeasonRow = (Uuid, Uuid, String, Option<i32>, Option<String>);
+/// A linked episode in a (season, number) group, in the order the first is
+/// picked: from a link that is down, another version of the friend's, id.
+type EpisodeMember = (bool, bool, Uuid);
 /// A linked season in a (series, number) group: id, link, remote id.
 type SeasonMember = (Uuid, Uuid, String);
 /// A linked episode: id, link, remote id, number, the friend's season and
