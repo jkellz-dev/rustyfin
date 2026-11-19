@@ -103,23 +103,17 @@ impl TestApp {
 
         drop(setup_pool);
 
-        // Build the main pool with search_path set on every connection.
-        let schema_clone = schema.clone();
+        // Build the main pool with search_path set on every connection. It is
+        // a connection option, not an after-connect hook, so pools made from
+        // this one's options (link_scope's local-only pool) use the schema too.
+        let options = database_url
+            .parse::<sqlx::postgres::PgConnectOptions>()
+            .expect("database url")
+            .options([("search_path", schema.as_str())]);
         let pool = PgPoolOptions::new()
             .max_connections(5)
             .acquire_timeout(acquire_timeout.unwrap_or(std::time::Duration::from_secs(30)))
-            .after_connect(move |conn, _meta| {
-                let schema = schema_clone.clone();
-                Box::pin(async move {
-                    conn.execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                        "SET search_path TO \"{}\"",
-                        schema
-                    ))))
-                    .await?;
-                    Ok(())
-                })
-            })
-            .connect(&database_url)
+            .connect_with(options)
             .await
             .expect("failed to connect to test database with schema");
 
@@ -150,6 +144,7 @@ impl TestApp {
         let links = Arc::new(rustyfin_core::link::Links::default());
         let state = AppState {
             pool: pool.clone(),
+            local_only: false,
             server_id: "test-server-id".to_string(),
             server_name: "Rustyfin Test".to_string(),
             base_url: "http://localhost:8096".to_string(),

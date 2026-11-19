@@ -1801,3 +1801,121 @@ async fn a_copy_that_plays_as_is_can_be_preferred_over_a_better_one() {
         app.cleanup().await;
     }
 }
+
+/// Owner, 2026-11-19: "Only users who are directly using my instance of
+/// rustyfin should see linked libraries." A server linking this one (a user
+/// allowed to link, or Rustyfin's link client) sees this server's own media
+/// only: never what this server holds from its own links, so two friends who
+/// link each other never hand each other's titles back.
+#[tokio::test]
+async fn a_linking_server_never_sees_what_this_server_links() {
+    let app = common::TestApp::new().await;
+    let (person, person_token) = app.create_user("viewer", false).await;
+    let (friend, friend_token) = app.create_user("friend-server", false).await;
+    sqlx::query("UPDATE users SET may_link = true WHERE id = $1")
+        .bind(friend)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let (_, client_token) = app.create_user("other-server", false).await;
+    sqlx::query("UPDATE sessions SET device_name = 'Rustyfin link' WHERE access_token = $1")
+        .bind(&client_token)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let (_tree, _lib, local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    {
+        let mut r = remote.lock().unwrap();
+        r.films = vec![
+            film("r100", "Shared Film", "100", "e1", 3840, 2160),
+            film("r200", "Only Theirs", "200", "e1", 1920, 1080),
+        ];
+        r.videos = vec![video("v1", "Beach")];
+    }
+    let url = fake_jellyfin(remote).await;
+    let mut s = settings(&url, "secret");
+    s.libraries.push(LibraryMap {
+        remote: "Home Videos".into(),
+        local: None,
+    });
+    let link = app.links.register(&app.pool, s).await.unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+
+    // Someone using this server sees it all.
+    let movies = |uid: Uuid| format!("/Users/{uid}/Items?Recursive=true&IncludeItemTypes=Movie");
+    let (_, list) = app.get(&movies(person), &person_token).await;
+    // (The friend's home video is a Movie too, in a library of its own.)
+    assert_eq!(
+        names(&list),
+        vec!["Beach", "Only Theirs", "Shared Film"],
+        "{list}"
+    );
+    let (_, info) = app
+        .get(&format!("/Items/{local}/PlaybackInfo"), &person_token)
+        .await;
+    assert_eq!(
+        info["MediaSources"].as_array().map(Vec::len),
+        Some(2),
+        "{info}"
+    );
+
+    let other: Uuid = sqlx::query_scalar("SELECT user_id FROM sessions WHERE access_token = $1")
+        .bind(&client_token)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    for (uid, token) in [(friend, &friend_token), (other, &client_token)] {
+        let (status, list) = app.get(&movies(uid), token).await;
+        assert_eq!(status, StatusCode::OK, "{list}");
+        assert_eq!(
+            names(&list),
+            vec!["Shared Film"],
+            "only this server's own: {list}"
+        );
+        let (_, views) = app.get("/UserViews", token).await;
+        let views: Vec<&str> = views["Items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{views}"))
+            .iter()
+            .filter_map(|v| v["Name"].as_str())
+            .collect();
+        assert!(!views.contains(&"Home Videos · Alex"), "{views:?}");
+        assert!(views.contains(&"Movies"), "{views:?}");
+        let (_, info) = app
+            .get(&format!("/Items/{local}/PlaybackInfo"), token)
+            .await;
+        assert_eq!(
+            info["MediaSources"].as_array().map(Vec::len),
+            Some(1),
+            "not the friend's copy: {info}"
+        );
+        let (status, _) = app.get(&format!("/Items/{theirs}"), token).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (_, hints) = app.get("/Search/Hints?SearchTerm=Only", token).await;
+        assert_eq!(
+            hints["SearchHints"].as_array().map(Vec::len),
+            Some(0),
+            "{hints}"
+        );
+        let (status, _) = app
+            .get(
+                &format!("/api/v1/links/{link}/relay/videos/r200/stream"),
+                token,
+            )
+            .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+    // Still all there for the person.
+    let (_, list) = app.get(&movies(person), &person_token).await;
+    assert_eq!(
+        names(&list),
+        vec!["Beach", "Only Theirs", "Shared Film"],
+        "{list}"
+    );
+    app.cleanup().await;
+}
