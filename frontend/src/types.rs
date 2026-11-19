@@ -537,3 +537,9 @@ pub struct LinkInfo {
     #[serde(default)]
     pub copies: i64,
 }
+
+/// Rustyfin's own permissions of a user (`/api/v1/users/{id}/permissions`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Permissions {
+    pub may_link: bool,
+}

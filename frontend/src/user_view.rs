@@ -260,8 +260,26 @@ pub fn sort_and_filter(
     picked
 }
 
+/// The user page's linking line: what it says and what its button does
+/// (roadmap 16b.2r; `/api/v1/users/{id}/permissions`).
+pub fn link_permission(_may_link: bool) -> (&'static str, &'static str) {
+    todo!()
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_linking_line_says_what_the_user_may_do() {
+        assert_eq!(
+            link_permission(false),
+            ("May not link a server to this one", "Allow linking")
+        );
+        assert_eq!(
+            link_permission(true),
+            ("May link a server to this one", "Stop linking")
+        );
+    }
     use super::*;
 
     #[test]
