@@ -214,3 +214,29 @@ async fn the_change_feed_carries_only_what_changed_where_the_user_can_see() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     app.cleanup().await;
 }
+
+/// Rustyfin's own routes are written in lower case but match in any case
+/// (owner, 2026-11-19), like Jellyfin's ASP.NET routes; what a route passes
+/// on (a relayed path, an id) keeps its case.
+#[tokio::test]
+async fn own_routes_match_in_any_case() {
+    let app = common::TestApp::new().await;
+    let (admin, admin_token) = app.create_user("admin", true).await;
+    let (status, list) = app.get("/API/V1/Links", &admin_token).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert!(list.is_array(), "{list}");
+    let (status, mine) = app
+        .get(&format!("/Api/v1/Users/{admin}/Permissions"), &admin_token)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{mine}");
+    assert_eq!(mine["may_link"], false, "{mine}");
+    let upper = admin.to_string().to_uppercase();
+    let (status, _) = app
+        .get(&format!("/api/v1/users/{upper}/permissions"), &admin_token)
+        .await;
+    assert_eq!(status, StatusCode::OK, "an id in capitals is the same id");
+    // A route that is not there is still not there.
+    let (status, _) = app.get("/API/V1/Nothing", &admin_token).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    app.cleanup().await;
+}
