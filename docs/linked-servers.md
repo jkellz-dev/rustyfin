@@ -184,12 +184,12 @@ The faster Rustyfin-to-Rustyfin sync is being built (roadmap 16b.2r). What is in
 to:
 
 - **Who may link.** A linking server signs in through your forward-auth proxy like anyone, as an ordinary user: the
-  same one that person uses themselves. In the admin, or with `POST /Users/{id}/Policy` and `"MayLink": true`, you let
-  that user link. It is off for everyone until you turn it on, and a Policy edit that does not mention it (Jellyfin's
-  web client sends none) leaves it as it is. A link sees what that user can see.
+  same one that person uses themselves. With `PATCH /api/v1/users/{id}/permissions` and `{"may_link": true}` you let
+  that user link ([Rustyfin API](rustyfin-api.md)). It is off for everyone until you turn it on. A link sees what that
+  user can see.
 - **The change feed.** `GET /api/v1/catalog` lists what changed in those libraries since a cursor: changed items (id,
   type, library) and removed ones. Without `since` it lists everything. Pages of up to `limit` items (1000 by default)
-  say `More` and give a `Next` to pass as `after`; keep the first page's `Cursor` and pass it as `since` next time. The
+  say `more` and give a `next` to pass as `after`; keep the first page's `cursor` and pass it as `since` next time. The
   details come from `/Items?Ids=` as usual. A user not allowed to link gets 403. Only your own items are offered,
   never copies you hold from another link.
 
