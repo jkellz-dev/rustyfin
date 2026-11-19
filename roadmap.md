@@ -1541,8 +1541,8 @@ Design, settled before any code:
 
 - [x] Link config in the TOML file (`[[link]]`): name, kind (`jellyfin` or `rustyfin`), URL, the link user and its
       password (or `password_file`), and which of the friend's libraries map to which local library
-- [ ] Outbound identity for `rustyfin` links: none (Tailscale) or an OAuth 2.0 client-credentials token fetched from
-      the issuer in `[[link]]` (client id, `client_secret_file`), refreshed before it expires
+- [x] Outbound identity for `rustyfin` links: none (Tailscale) or an OAuth 2.0 client-credentials token fetched from
+      the issuer in `[link.oidc]` (client id, `client_secret_file`), refreshed before it expires
 - [ ] The kind can be detected (`/System/Info/Public` names the product), so a friend who moves from Jellyfin to
       Rustyfin can switch to the faster sync without re-mapping
 - [x] A linked copy is a `media_items` row with `link_id`, `remote_id` and `remote_etag` and no path (changed from

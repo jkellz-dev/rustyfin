@@ -40,6 +40,8 @@ pub struct JellyfinClient {
     /// The link's id, as the device the friend sees signed in.
     device_id: String,
     session: RwLock<Option<Session>>,
+    /// A token for the friend's proxy, when it takes OIDC tokens.
+    oidc: Option<super::oidc::TokenSource>,
 }
 
 /// How long a catalogue call may take. Streams have no overall limit.
@@ -58,7 +60,54 @@ impl JellyfinClient {
             password: password.to_string(),
             device_id: link_id.simple().to_string(),
             session: RwLock::new(None),
+            oidc: None,
         })
+    }
+
+    /// Fetch a client-credentials token for every request (the friend's
+    /// proxy takes OIDC tokens).
+    pub fn with_oidc(mut self, oidc: Option<super::OidcSettings>) -> Self {
+        self.oidc = oidc.map(|o| super::oidc::TokenSource::new(self.http.clone(), o));
+        self
+    }
+
+    /// The headers that sign a request. Without a proxy token, Jellyfin's
+    /// `Authorization: MediaBrowser ...`. With one, `Authorization: Bearer`
+    /// is the proxy's, so the MediaBrowser part goes in
+    /// `X-Emby-Authorization` and the session token in `X-Emby-Token`.
+    async fn auth_headers(&self, token: Option<&str>) -> anyhow::Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+        match &self.oidc {
+            None => {
+                headers.insert(
+                    AUTHORIZATION,
+                    HeaderValue::from_str(&self.authorization(token))?,
+                );
+            }
+            Some(oidc) => {
+                let bearer = oidc.token().await?;
+                headers.insert(
+                    AUTHORIZATION,
+                    HeaderValue::from_str(&format!("Bearer {bearer}"))?,
+                );
+                headers.insert(
+                    "X-Emby-Authorization",
+                    HeaderValue::from_str(&self.authorization(None))?,
+                );
+                if let Some(token) = token {
+                    headers.insert("X-Emby-Token", HeaderValue::from_str(token)?);
+                }
+            }
+        }
+        Ok(headers)
+    }
+
+    /// After a 401: sign in again, with a new proxy token too.
+    async fn forget_session(&self) {
+        *self.session.write().await = None;
+        if let Some(oidc) = &self.oidc {
+            oidc.forget().await;
+        }
     }
 
     pub fn base(&self) -> &str {
@@ -81,7 +130,7 @@ impl JellyfinClient {
         let response = self
             .http
             .post(format!("{}/Users/AuthenticateByName", self.base))
-            .header(AUTHORIZATION, self.authorization(None))
+            .headers(self.auth_headers(None).await?)
             .timeout(CALL_TIMEOUT)
             .json(&json!({"Username": self.user, "Pw": self.password}))
             .send()
@@ -206,14 +255,14 @@ impl JellyfinClient {
             let response = self
                 .http
                 .get(&url)
-                .header(AUTHORIZATION, self.authorization(Some(&session.token)))
+                .headers(self.auth_headers(Some(&session.token)).await?)
                 .query(&q)
                 .timeout(CALL_TIMEOUT)
                 .send()
                 .await
                 .with_context(|| format!("could not reach {}", self.base))?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
-                *self.session.write().await = None;
+                self.forget_session().await;
                 continue;
             }
             return Ok(response);
@@ -229,7 +278,7 @@ impl JellyfinClient {
             let response = self
                 .http
                 .post(format!("{}{}", self.base, path))
-                .header(AUTHORIZATION, self.authorization(Some(&session.token)))
+                .headers(self.auth_headers(Some(&session.token)).await?)
                 .query(&[("userId", session.user_id.as_str())])
                 .timeout(CALL_TIMEOUT)
                 .json(body)
@@ -237,7 +286,7 @@ impl JellyfinClient {
                 .await
                 .with_context(|| format!("could not reach {}", self.base))?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
-                *self.session.write().await = None;
+                self.forget_session().await;
                 continue;
             }
             if !response.status().is_success() {
@@ -261,10 +310,7 @@ impl JellyfinClient {
         for attempt in 0..2 {
             let session = self.session().await?;
             let mut headers = forward.clone();
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&self.authorization(Some(&session.token)))?,
-            );
+            headers.extend(self.auth_headers(Some(&session.token)).await?);
             let response = self
                 .http
                 .get(format!("{}{}", self.base, path_and_query))
@@ -273,7 +319,7 @@ impl JellyfinClient {
                 .await
                 .with_context(|| format!("could not reach {}", self.base))?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
-                *self.session.write().await = None;
+                self.forget_session().await;
                 continue;
             }
             return Ok(response);
@@ -365,10 +411,7 @@ impl JellyfinClient {
         for attempt in 0..2 {
             let session = self.session().await?;
             let mut headers = forward.clone();
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&self.authorization(Some(&session.token)))?,
-            );
+            headers.extend(self.auth_headers(Some(&session.token)).await?);
             let response = self
                 .http
                 .get(format!("{}{}", self.base, path))
@@ -378,7 +421,7 @@ impl JellyfinClient {
                 .await
                 .with_context(|| format!("could not reach {}", self.base))?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
-                *self.session.write().await = None;
+                self.forget_session().await;
                 continue;
             }
             return Ok(response);

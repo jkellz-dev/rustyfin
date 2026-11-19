@@ -45,6 +45,52 @@ pub struct LinkConfig {
     pub password_file: Option<String>,
     #[serde(default)]
     pub libraries: Vec<rustyfin_core::link::LibraryMap>,
+    /// A client-credentials token for the friend's proxy (`[link.oidc]`).
+    #[serde(default)]
+    pub oidc: Option<LinkOidcConfig>,
+}
+
+/// `[link.oidc]`: the friend's proxy takes OIDC tokens; this server fetches
+/// one from the friend's identity provider (OAuth 2.0 client credentials).
+#[derive(Clone, Deserialize)]
+pub struct LinkOidcConfig {
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub token_url: Option<String>,
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub client_secret_file: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
+    pub audience: Option<String>,
+}
+
+impl LinkOidcConfig {
+    fn settings(&self, link: &str) -> anyhow::Result<rustyfin_core::link::OidcSettings> {
+        if self.issuer.is_none() && self.token_url.is_none() {
+            anyhow::bail!("link {link}: [link.oidc] needs issuer or token_url");
+        }
+        let client_secret = match (&self.client_secret, &self.client_secret_file) {
+            (Some(s), None) => s.clone(),
+            (None, Some(file)) => std::fs::read_to_string(file)
+                .map_err(|e| anyhow::anyhow!("link {link}: cannot read {file}: {e}"))?
+                .trim_end_matches(['\r', '\n'])
+                .to_string(),
+            _ => anyhow::bail!("link {link}: set one of client_secret and client_secret_file"),
+        };
+        Ok(rustyfin_core::link::OidcSettings {
+            issuer: self.issuer.clone(),
+            token_url: self.token_url.clone(),
+            client_id: self.client_id.clone(),
+            client_secret,
+            scope: self.scope.clone(),
+            audience: self.audience.clone(),
+        })
+    }
 }
 
 impl std::fmt::Debug for LinkConfig {
@@ -88,6 +134,11 @@ impl LinkConfig {
             user: self.user.clone(),
             password,
             libraries: self.libraries.clone(),
+            oidc: self
+                .oidc
+                .as_ref()
+                .map(|o| o.settings(&self.name))
+                .transpose()?,
         })
     }
 }

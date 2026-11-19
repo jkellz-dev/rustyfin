@@ -228,6 +228,18 @@ local = "Movies"
 Links sync 30 seconds after start and then every 15 minutes. Environment variables cannot set `[[link]]` tables; use
 `password_file` for the secret. A link that is missing its password or libraries is skipped with an error in the log.
 
+`[link.oidc]` (optional): your friend's proxy takes OIDC tokens (oauth2-proxy and the like). Rustyfin fetches one with
+the OAuth 2.0 client-credentials grant and sends it as `Authorization: Bearer`; it never checks a token itself.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `issuer` | `String` | --- | The identity provider; the token endpoint comes from its `/.well-known/openid-configuration` |
+| `token_url` | `String` | --- | Or the token endpoint itself (one of `issuer` and `token_url` is required) |
+| `client_id` | `String` | (required) | The client your friend registered for your server |
+| `client_secret` | `String` | --- | Its secret; or use `client_secret_file` (a mounted secret; a trailing newline is ignored) |
+| `scope` | `String` | --- | Space-separated scopes, if the provider wants any |
+| `audience` | `String` | --- | Sent only when given (Auth0, Keycloak audience mappers) |
+
 ## Docker Compose
 
 A `docker-compose.yml` is provided for development:

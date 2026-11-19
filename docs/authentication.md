@@ -34,10 +34,9 @@ A [linked server](linked-servers.md) does not change how people sign in to Rusty
 to a friend's Jellyfin, as the user the friend made for the link, with the password from `[[link]]` (or the file it
 names). That user should see only the shared libraries; an administrator's API key is never needed.
 
-A link between two Rustyfin servers will add no way in. It reaches the friend's Rustyfin through their forward-auth
-proxy, as an ordinary user that the friend's admin allows to link. Rustyfin only ever *fetches* a credential for it
-(none over Tailscale, an OAuth 2.0 client-credentials token otherwise) and never checks one. Until it lands, a Rustyfin
-is linked through its Jellyfin API like a Jellyfin.
+A link between two Rustyfin servers adds no way in. It reaches the friend's Rustyfin through their forward-auth proxy,
+as an ordinary user that the friend's admin allows to link. Rustyfin only ever *fetches* a credential for it (none over
+Tailscale, an OAuth 2.0 client-credentials token from `[link.oidc]` otherwise) and never checks one.
 
 ## Forward Auth
 

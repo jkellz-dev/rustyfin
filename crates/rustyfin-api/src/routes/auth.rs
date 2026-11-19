@@ -28,12 +28,19 @@ pub async fn authenticate_by_name(
     headers: HeaderMap,
     Json(body): Json<AuthenticateByNameRequest>,
 ) -> Result<Json<AuthenticationResult>, ApiError> {
-    // Extract device info from MediaBrowser auth header
-    let mb_auth = headers
-        .get("Authorization")
-        .or_else(|| headers.get("X-Emby-Authorization"))
-        .and_then(|v| v.to_str().ok())
-        .map(parse_mediabrowser_header)
+    // Extract device info from MediaBrowser auth header. A proxy may own
+    // `Authorization` (`Bearer`, a linked server's OIDC token): then the
+    // MediaBrowser part is in `X-Emby-Authorization`.
+    let mediabrowser = |v: &&str| v.starts_with("MediaBrowser ") || v.starts_with("Emby ");
+    let values: Vec<&str> = ["Authorization", "X-Emby-Authorization"]
+        .iter()
+        .filter_map(|h| headers.get(*h).and_then(|v| v.to_str().ok()))
+        .collect();
+    let mb_auth = values
+        .iter()
+        .find(mediabrowser)
+        .or(values.first())
+        .map(|v| parse_mediabrowser_header(v))
         .unwrap_or_default();
 
     tracing::debug!(

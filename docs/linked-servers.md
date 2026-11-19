@@ -204,8 +204,23 @@ local = "Movies"
 
 Your server has to arrive at their proxy as that user. Over Tailscale, a node owned by a person is that person; a
 tagged node (the usual way to run a server) is named by an app capability your friend grants it in their tailnet policy
-(see [Authentication](authentication.md), "Tagged nodes"). An OAuth 2.0 client-credentials token for other proxies is
-on the roadmap (16b.2r).
+(see [Authentication](authentication.md), "Tagged nodes").
+
+Behind a proxy that takes OIDC tokens (oauth2-proxy and the like), your friend registers your server as a client at
+their identity provider, and the provider names it as the user your server arrives as. Add `[link.oidc]`:
+
+```toml
+[link.oidc]
+issuer = "https://id.alex.example"           # or token_url = "https://id.alex.example/token"
+client_id = "jonathans-rustyfin"
+client_secret_file = "/run/secrets/alex-link-client-secret"
+scope = "rustyfin"                            # if their provider wants one
+```
+
+Your server fetches a token with the OAuth 2.0 client-credentials grant (the id and secret by HTTP Basic), sends it as
+`Authorization: Bearer` on every request, reuses it until a minute before it expires, and fetches a new one if the proxy
+refuses it. It never checks a token; the proxy does. A refused secret shows in the Links page as "the token endpoint
+... answered 401".
 
 **The change feed.** `GET /api/v1/catalog` lists what changed in those libraries since a cursor: changed items (id,
 type, library) and removed ones; without `since`, everything. Pages of up to `limit` items (1000 by default) say `more`

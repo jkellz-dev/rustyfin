@@ -12,6 +12,7 @@
 //! `docs/linked-servers.md`.
 
 mod jellyfin;
+mod oidc;
 mod sync;
 
 use std::collections::HashMap;
@@ -23,6 +24,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub use jellyfin::{Changed, Feed, JellyfinClient};
+pub use oidc::OidcSettings;
 pub use rustyfin_db::repo::links::{LINK_SCHEME, parse_image_path};
 pub use sync::items_from_jellyfin;
 
@@ -60,6 +62,10 @@ pub struct LinkSettings {
     /// Which of the friend's libraries go into which local library.
     #[serde(default)]
     pub libraries: Vec<LibraryMap>,
+    /// A client-credentials token to fetch for the friend's proxy, when it
+    /// takes OIDC tokens (`[link.oidc]`).
+    #[serde(default)]
+    pub oidc: Option<OidcSettings>,
 }
 
 impl std::fmt::Debug for LinkSettings {
@@ -71,6 +77,7 @@ impl std::fmt::Debug for LinkSettings {
             .field("user", &self.user)
             .field("password", &"<hidden>")
             .field("libraries", &self.libraries)
+            .field("oidc", &self.oidc)
             .finish()
     }
 }
@@ -120,7 +127,8 @@ impl Links {
         let id =
             rustyfin_db::repo::links::upsert(pool, &settings.name, settings.kind.as_str(), &url)
                 .await?;
-        let client = JellyfinClient::new(&url, &settings.user, &settings.password, id)?;
+        let client = JellyfinClient::new(&url, &settings.user, &settings.password, id)?
+            .with_oidc(settings.oidc.clone());
         let link = Arc::new(Link {
             id,
             settings,
