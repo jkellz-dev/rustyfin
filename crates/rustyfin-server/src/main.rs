@@ -327,23 +327,23 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => tracing::error!("Could not remove links no longer in the config: {e}"),
     }
     if !config.links.is_empty() {
-        let links = links.clone();
+        let syncing = links.clone();
         let pool = db_pool.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             loop {
-                links.sync_all(&pool).await;
+                syncing.sync_all(&pool).await;
                 tokio::time::sleep(LINK_SYNC_INTERVAL).await;
             }
         });
         // A link that is down is tried every minute, so its titles come
         // back soon after its server does.
-        let links = links.clone();
+        let rechecking = links.clone();
         let pool = db_pool.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                links.recheck_offline(&pool).await;
+                rechecking.recheck_offline(&pool).await;
             }
         });
     }
