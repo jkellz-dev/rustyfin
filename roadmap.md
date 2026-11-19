@@ -1600,6 +1600,17 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
 
 ---
 
+## Known Bugs
+
+To fix once the Phase 16b link work is done (owner, 2026-11-19).
+
+- [ ] **Searching in collections finds nothing.** Owner: "Searching in collections fails completely and never finds
+      anything." Not yet reproduced or narrowed down: which client, whether it is the search box inside one
+      collection, or collections in search results, and which request it sends (`/Items?ParentId=<collection>&
+      SearchTerm=`, `/Search/Hints`, or `IncludeItemTypes=BoxSet`). First step: reproduce it with a test, then fix
+
+---
+
 ## Phase 17 — Deployment Targets (owner, 2026-11-18)
 
 ### 17a. Synology NAS
