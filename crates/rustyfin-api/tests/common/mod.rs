@@ -42,23 +42,30 @@ pub struct TestApp {
 impl TestApp {
     /// Create a new test app with a random Postgres schema and all migrations applied.
     pub async fn new() -> Self {
-        Self::build(None, None).await
+        Self::build(None, None, false).await
+    }
+
+    /// A test app behind forward auth: `Remote-User` (and the other default
+    /// headers) from loopback names the user, as a proxy in front would.
+    pub async fn with_forward_auth() -> Self {
+        Self::build(None, None, true).await
     }
 
     /// A test app whose people headshots come from `dir`.
     pub async fn with_people_cache_dir(dir: PathBuf) -> Self {
-        Self::build(Some(dir), None).await
+        Self::build(Some(dir), None, false).await
     }
 
     /// A test app whose database pool gives up waiting for a connection after
     /// `timeout` (sqlx's default is 30 s).
     pub async fn with_acquire_timeout(timeout: std::time::Duration) -> Self {
-        Self::build(None, Some(timeout)).await
+        Self::build(None, Some(timeout), false).await
     }
 
     async fn build(
         people_cache_dir: Option<PathBuf>,
         acquire_timeout: Option<std::time::Duration>,
+        forward_auth: bool,
     ) -> Self {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://rustyfin:rustyfin@localhost:5432/rustyfin".to_string());
@@ -136,7 +143,13 @@ impl TestApp {
             tmdb_api_key: None,
             session_manager: session_manager.clone(),
             search_service,
-            forward_auth_config: None,
+            forward_auth_config: forward_auth.then(|| rustyfin_api::router::ForwardAuthState {
+                trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies::new(vec![
+                    "127.0.0.0/8".parse().unwrap(),
+                ]),
+                headers: Default::default(),
+                admin_group: None,
+            }),
             ldap_config: None,
             transcode_manager,
             image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
