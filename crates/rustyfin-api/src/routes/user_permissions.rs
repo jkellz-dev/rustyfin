@@ -63,5 +63,9 @@ pub async fn patch(
     {
         return Err(ApiError::NotFound);
     }
+    if change.may_link.is_some() {
+        // Requests from that user's sessions are scoped anew.
+        crate::link_scope::forget();
+    }
     Ok(Json(current(&state, id).await?))
 }

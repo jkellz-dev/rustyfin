@@ -14,8 +14,7 @@
 //! library are left out too, and the relay to friends answers 404.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::{LazyLock, Mutex};
 
 use axum::Router;
 use axum::extract::{Request, State};
@@ -28,8 +27,19 @@ use tower::ServiceExt;
 /// The device name Rustyfin's link client signs in with.
 pub const LINK_DEVICE: &str = "Rustyfin link";
 
-/// How long whether a token is a linking server's is remembered.
-const REMEMBER: Duration = Duration::from_secs(60);
+/// Whether a token is a linking server's, once looked up. A session's user
+/// and device never change; a user's `may_link` does, and [`forget`] is
+/// called when it is set. No expiry, so the answer for a request never
+/// depends on timing.
+static SEEN: LazyLock<Mutex<HashMap<String, bool>>> = LazyLock::new(Mutex::default);
+
+/// Tokens remembered at most; past it the memory starts again.
+const MAX_SEEN: usize = 10_000;
+
+/// Forget what is remembered (a user's `may_link` changed).
+pub fn forget() {
+    SEEN.lock().unwrap().clear();
+}
 
 /// A pool like `pool` whose connections leave out what links hold.
 pub fn local_only_pool(pool: &PgPool) -> PgPool {
@@ -48,24 +58,16 @@ pub fn local_only_pool(pool: &PgPool) -> PgPool {
 pub struct LinkScope {
     pub pool: PgPool,
     pub local_routes: Router,
-    seen: Arc<Mutex<HashMap<String, (bool, Instant)>>>,
 }
 
 impl LinkScope {
     pub fn new(pool: PgPool, local_routes: Router) -> Self {
-        Self {
-            pool,
-            local_routes,
-            seen: Arc::default(),
-        }
+        Self { pool, local_routes }
     }
 
-    /// Whether `token` is a linking server's (remembered a minute).
+    /// Whether `token` is a linking server's (remembered, see [`SEEN`]).
     async fn is_linking(&self, token: &str) -> bool {
-        let now = Instant::now();
-        if let Some((linking, at)) = self.seen.lock().unwrap().get(token)
-            && now.duration_since(*at) < REMEMBER
-        {
+        if let Some(linking) = SEEN.lock().unwrap().get(token) {
             return *linking;
         }
         let linking = match rustyfin_auth::session::resolve_token(&self.pool, token).await {
@@ -73,11 +75,11 @@ impl LinkScope {
             // Unknown or failing: the routes answer as they would.
             Err(_) => return false,
         };
-        let mut seen = self.seen.lock().unwrap();
-        if seen.len() > 10_000 {
-            seen.retain(|_, (_, at)| now.duration_since(*at) < REMEMBER);
+        let mut seen = SEEN.lock().unwrap();
+        if seen.len() >= MAX_SEEN {
+            seen.clear();
         }
-        seen.insert(token.to_string(), (linking, now));
+        seen.insert(token.to_string(), linking);
         linking
     }
 }
