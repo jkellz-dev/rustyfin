@@ -64,6 +64,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new().fallback_service(
         tower::ServiceBuilder::new()
             .layer(axum::middleware::from_fn(crate::api_v1::lower_case_path))
+            .layer(axum::middleware::from_fn(crate::route_case::route_case))
             .service(routes),
     )
 }

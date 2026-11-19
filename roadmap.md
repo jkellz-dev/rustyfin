@@ -1609,6 +1609,10 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
 
 To fix once the Phase 16b link work is done (owner, 2026-11-19).
 
+- [x] **Routes matched only in the case they are written in.** Owner, 2026-11-19: "all routes must be case
+      insensitive". Jellyfin's ASP.NET routes match in any case and clients rely on it; a request's path now takes its
+      route's case before routing (`route_case`), as `/api/v1` already did
+
 - [ ] **Searching in collections finds nothing.** Owner: "Searching in collections fails completely and never finds
       anything." Not yet reproduced or narrowed down: which client, whether it is the search box inside one
       collection, or collections in search results, and which request it sends (`/Items?ParentId=<collection>&
