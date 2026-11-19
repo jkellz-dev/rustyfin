@@ -166,6 +166,12 @@ Items removed, for the change feed (`/api/v1/catalog`); written by a trigger on 
 | `removed_xid` | XID8 | No | `pg_current_xact_id()` | The transaction that removed it |
 | `removed_at` | TIMESTAMPTZ | No | `NOW()` | |
 
+### `parked_user_data`
+
+What users had of a removed link's titles (watched, resume point, favourite, rating), kept by provider ids and given
+back (`links::restore_parked`, after every merge) when the same title turns up again; the row goes once given back.
+An episode is kept by its show's ids and its season and episode numbers.
+
 ### `media_streams`
 
 Video, audio, and subtitle tracks within a media item.

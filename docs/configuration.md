@@ -137,6 +137,12 @@ Without the section, the defaults below apply.
 | `segment_duration` | integer | `6` | HLS segment length in seconds |
 | `threads_per_job` | integer | `0` | ffmpeg threads per transcode (`0`: ffmpeg decides) |
 
+### `[playback]` (optional)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `prefer_direct_play` | `bool` | `false` | Of a title's copies (versions, and copies on [linked servers](linked-servers.md)), offer first those the app can play as is over better ones that would have to be converted. Off: the best copy comes first, converted if need be |
+
 ### `[auth.forward_auth]`
 
 Sign-in by a reverse proxy (Tailscale, Authelia, Authentik, ...) that puts the user's identity in request headers.

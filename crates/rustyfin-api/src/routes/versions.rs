@@ -189,9 +189,36 @@ pub(crate) async fn attach_versions(
     }
 }
 
+/// Each copy's quality, by its id (simple form).
+pub(crate) type Ranks = std::collections::HashMap<String, Quality>;
+
+/// Put a title's media sources in the order apps should pick from: copies
+/// that can play here before those that cannot (a linked one no one will
+/// convert); with `prefer_direct_play`, copies that play as is (direct play
+/// or direct stream) before those that would be converted; then best first.
+/// Stable, so on a tie the film's own file stays first.
+pub(crate) fn order_sources(
+    info: &mut PlaybackInfoResponse,
+    ranks: &Ranks,
+    prefer_direct_play: bool,
+) {
+    let rank = |id: &str| {
+        Uuid::parse_str(id)
+            .ok()
+            .and_then(|u| ranks.get(&u.simple().to_string()).copied())
+            .unwrap_or_default()
+    };
+    info.media_sources.sort_by_cached_key(|s| {
+        let as_is = s.supports_direct_play || s.supports_direct_stream;
+        let playable = as_is || s.supports_transcoding;
+        std::cmp::Reverse((playable, prefer_direct_play && as_is, rank(&s.id)))
+    });
+}
+
 /// PlaybackInfo for a film with versions: one media source per version, the
 /// best first and each named by its label; only the one asked for when the
-/// request names a `MediaSourceId` (as Jellyfin).
+/// request names a `MediaSourceId` (as Jellyfin). Returns each copy's
+/// quality, to order the sources again once more of them can play.
 pub(crate) async fn add_playback_versions(
     state: &AppState,
     item: &media_items::MediaItemRow,
@@ -199,7 +226,7 @@ pub(crate) async fn add_playback_versions(
     request: Option<&PlaybackInfoRequest>,
     profile: Option<&DeviceProfile>,
     reveal_path: bool,
-) -> Result<(), ApiError> {
+) -> Result<Ranks, ApiError> {
     if item.link_id.is_some() {
         info.media_sources.iter_mut().for_each(mark_linked);
         for source in &mut info.media_sources {
@@ -207,13 +234,13 @@ pub(crate) async fn add_playback_versions(
         }
     }
     if !matches!(item.item_type.as_str(), "Movie" | "Episode") || item.owner_id.is_some() {
-        return Ok(());
+        return Ok(Ranks::new());
     }
     let versions = media_items::list_versions(&state.pool, &[item.id])
         .await
         .map_err(ApiError::Database)?;
     if versions.is_empty() {
-        return Ok(());
+        return Ok(Ranks::new());
     }
     for source in &mut info.media_sources {
         source.name = source_name(item).or(source.name.take());
@@ -222,7 +249,7 @@ pub(crate) async fn add_playback_versions(
     ids.extend(versions.iter().map(|v| v.id));
     let all_streams = streams_by_item(&state.pool, &ids).await;
     let none = Vec::new();
-    let mut ranks: std::collections::HashMap<String, Quality> = std::collections::HashMap::new();
+    let mut ranks = Ranks::new();
     ranks.insert(
         item.id.simple().to_string(),
         quality(item, all_streams.get(&item.id).unwrap_or(&none)),
@@ -246,19 +273,7 @@ pub(crate) async fn add_playback_versions(
             info.media_sources.push(source);
         }
     }
-    // Best first; stable, so on a tie the film's own file stays first. A
-    // copy that cannot play here at all (a linked one this client cannot
-    // play as is) goes after every copy that can.
-    let rank = |id: &str| {
-        Uuid::parse_str(id)
-            .ok()
-            .and_then(|u| ranks.get(&u.simple().to_string()).copied())
-            .unwrap_or_default()
-    };
-    info.media_sources.sort_by_cached_key(|s| {
-        let playable = s.supports_direct_play || s.supports_direct_stream || s.supports_transcoding;
-        std::cmp::Reverse((playable, rank(&s.id)))
-    });
+    order_sources(info, &ranks, state.prefer_direct_play);
     if let Some(wanted) = request
         .and_then(|r| r.media_source_id.as_deref())
         .and_then(|s| Uuid::parse_str(s.trim()).ok())
@@ -273,5 +288,5 @@ pub(crate) async fn add_playback_versions(
             info.media_sources = chosen;
         }
     }
-    Ok(())
+    Ok(ranks)
 }

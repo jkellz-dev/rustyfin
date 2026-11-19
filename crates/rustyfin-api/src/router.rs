@@ -47,6 +47,9 @@ pub struct AppState {
     pub login_limiter: Arc<crate::login_limit::LoginLimiter>,
     /// Linked servers, whose copies this server relays (roadmap 16b).
     pub links: Arc<rustyfin_core::link::Links>,
+    /// `[playback] prefer_direct_play`: of a title's copies, those the app
+    /// can play as is come before better ones that would be converted.
+    pub prefer_direct_play: bool,
 }
 
 impl FromRef<AppState> for PgPool {

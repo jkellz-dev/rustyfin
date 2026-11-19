@@ -64,8 +64,11 @@ pub async fn counts(pool: &PgPool) -> Result<HashMap<Uuid, (i64, i64)>, sqlx::Er
 /// Remove every link whose name is not in `configured` (the config file's
 /// `[[link]]` names, broken ones included): its copies, the libraries of its
 /// own and everything in them, and the artwork local titles borrowed from
-/// it. Watched state of titles only it had goes with them; local titles stay
-/// (with the details they borrowed). Returns (name, copies removed) per link.
+/// it. Local titles stay (with the details they borrowed). A title another
+/// link holds is handed to that copy first, and what users had of the
+/// link's own titles (watched, resume points, favourites) is kept aside and
+/// given back when the title turns up again (owner, 2026-11-19: "Keep watched
+/// history"). Returns (name, copies removed) per link.
 pub async fn remove_unconfigured(
     pool: &PgPool,
     configured: &[String],
@@ -83,6 +86,10 @@ pub async fn remove_unconfigured(
         .bind(id)
         .fetch_one(pool)
         .await?;
+        // Treated as down first, so its titles move to another link's copy.
+        set_offline(pool, id, true).await?;
+        rehome(pool, id).await?;
+        park_user_data(pool, id).await?;
         sqlx::query("DELETE FROM images WHERE path LIKE $1")
             .bind(format!("{LINK_SCHEME}{id}/%"))
             .execute(pool)
@@ -94,7 +101,78 @@ pub async fn remove_unconfigured(
             .await?;
         removed.push((name, copies));
     }
+    // A title another link held is back under that copy: give its watched
+    // state back now.
+    if !removed.is_empty() {
+        restore_parked(pool).await?;
+    }
     Ok(removed)
+}
+
+/// Keep aside what users had of a link's titles (anything but an untouched
+/// row), by provider ids, before its rows go.
+async fn park_user_data(pool: &PgPool, link_id: Uuid) -> Result<u64, sqlx::Error> {
+    let done = sqlx::query(
+        "INSERT INTO parked_user_data (user_id, item_type, external_ids, season_number, \
+             episode_number, name, playback_position_ticks, play_count, is_favorite, played, \
+             rating, last_played_date, audio_stream_index, subtitle_stream_index) \
+         SELECT ud.user_id, m.item_type, \
+                COALESCE(CASE WHEN m.item_type = 'Episode' THEN s.external_ids ELSE m.external_ids END, '{}'), \
+                m.parent_index_number, m.index_number, m.name, ud.playback_position_ticks, \
+                ud.play_count, ud.is_favorite, ud.played, ud.rating, ud.last_played_date, \
+                ud.audio_stream_index, ud.subtitle_stream_index \
+         FROM user_data ud \
+         JOIN media_items m ON m.id = ud.item_id \
+         LEFT JOIN media_items s ON s.id = m.series_id \
+         WHERE m.link_id = $1 AND m.item_type IN ('Movie', 'Series', 'Episode') \
+           AND (ud.played OR ud.playback_position_ticks > 0 OR ud.is_favorite \
+                OR ud.play_count > 0 OR ud.rating IS NOT NULL)",
+    )
+    .bind(link_id)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected())
+}
+
+/// Give back kept-aside watched state to titles that turned up again: a film
+/// or show with one of its provider ids, an episode by its series' ids and
+/// its season and episode numbers. What a user has of the title now wins.
+/// Returns how many rows were given back.
+pub async fn restore_parked(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    let done = sqlx::query(
+        r#"
+        WITH found AS (
+            SELECT DISTINCT ON (p.id) p.id AS parked, p.user_id, m.id AS item_id,
+                   p.playback_position_ticks, p.play_count, p.is_favorite, p.played, p.rating,
+                   p.last_played_date, p.audio_stream_index, p.subtitle_stream_index
+            FROM parked_user_data p
+            JOIN visible_media_items m
+              ON m.item_type = p.item_type AND m.owner_id IS NULL
+            LEFT JOIN media_items s ON s.id = m.series_id
+            WHERE EXISTS (
+                SELECT 1 FROM unnest(ARRAY['Tmdb', 'Imdb', 'Tvdb']) k
+                WHERE p.external_ids->>k IS NOT NULL
+                  AND (CASE WHEN p.item_type = 'Episode' THEN s.external_ids ELSE m.external_ids END)->>k
+                      = p.external_ids->>k)
+              AND (p.item_type <> 'Episode'
+                   OR (m.parent_index_number = p.season_number AND m.index_number = p.episode_number))
+            ORDER BY p.id, m.link_id NULLS FIRST, m.id
+        ),
+        given AS (
+            INSERT INTO user_data (user_id, item_id, playback_position_ticks, play_count,
+                                   is_favorite, played, rating, last_played_date,
+                                   audio_stream_index, subtitle_stream_index)
+            SELECT user_id, item_id, playback_position_ticks, play_count, is_favorite, played,
+                   rating, last_played_date, audio_stream_index, subtitle_stream_index
+            FROM found
+            ON CONFLICT (user_id, item_id) DO NOTHING
+        )
+        DELETE FROM parked_user_data p USING found f WHERE p.id = f.parked
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected())
 }
 
 /// Where a Rustyfin link's change feed was read up to; `None` before the
@@ -523,6 +601,7 @@ pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
     }
     place_shows(pool).await?;
     borrow(pool).await?;
+    restore_parked(pool).await?;
     Ok(merged)
 }
 

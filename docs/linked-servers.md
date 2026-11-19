@@ -170,7 +170,9 @@ All copies of a film or episode, yours and your friends', are ranked by:
 4. audio channels;
 5. lossless audio over lossy.
 
-The best copy is listed first and plays when an app does not pick one; on a tie, your own copy wins. An app's version
+The best copy is listed first and plays when an app does not pick one; on a tie, your own copy wins. With
+`[playback] prefer_direct_play = true`, a copy the app can play as is comes before a better one that would have to be
+converted. An app's version
 menu lists every copy, the friend's named with the link's name. A copy the app can play neither as is nor converted
 (the friend's server is down) is listed after every copy it can play.
 
@@ -252,6 +254,9 @@ library of its own and what is in it, and the artwork your titles borrowed from 
 WARN  rustyfin_server: Link Alex is no longer in the config: removed it and its 412 copies
 ```
 
-Watched state and resume points of titles only that friend had go with them. Your own titles stay, with any overview,
-genres or provider ids they borrowed. A link still named in the config stays even if its settings are broken (a
-missing password file, say), so a typo never wipes it; fix the setting and it syncs again.
+Watched history stays. What your users had of that friend's titles (watched, resume points, favourites, ratings) is
+kept aside and given back when the same title turns up again, on your server or through another link, matched by its
+provider ids (an episode by its show's ids and its season and episode numbers). A title another friend also holds stays
+listed, with their copy. Your own titles stay, with any overview, genres or provider ids they borrowed. A link still
+named in the config stays even if its settings are broken (a missing password file, say), so a typo never wipes it; fix
+the setting and it syncs again.

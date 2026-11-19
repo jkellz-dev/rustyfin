@@ -42,6 +42,10 @@ name = "rustyfin"
 # segment_duration = 6                         # HLS segment duration in seconds
 # threads_per_job = 0                          # Threads per ffmpeg process (0 = auto)
 
+# ── Playback ──────────────────────────────────────────────
+# [playback]
+# prefer_direct_play = false   # true: a copy the app plays as is before a better one needing conversion
+
 # ── Authentication ────────────────────────────────────────
 # At least one of [auth.forward_auth] or [auth.ldap] must be configured.
 
