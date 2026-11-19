@@ -3,7 +3,7 @@
 Rustyfin answers the Jellyfin API so Jellyfin apps work unchanged ([API Reference](api-reference.md)). What Rustyfin
 adds of its own lives apart from it, under `/api/v1`, so the two never mix:
 
-- Paths are lower case (`/api/v1/links/{id}/sync`).
+- Paths are lower case (`/api/v1/links/{id}/sync`); every new route must be.
 - JSON bodies and answers use snake_case keys (`last_sync_at`), and so do query keys (`?since=`). The Jellyfin routes'
   fix-up of camelCase query keys is not applied here.
 - Requests sign in as on the Jellyfin routes: a session token (`Authorization: MediaBrowser Token="..."`,
@@ -21,5 +21,8 @@ adds of its own lives apart from it, under `/api/v1`, so the two never mix:
 | GET | `/api/v1/catalog` | Users allowed to link | The change feed a linked Rustyfin syncs from: `since`, `after`, `limit`; answers `items` (`id`, `type`, `library_id`), `removed`, `cursor`, `more`, `next` |
 | GET | `/api/v1/users/{id}/permissions` | The user, administrators | `{"may_link": false}` |
 | PATCH | `/api/v1/users/{id}/permissions` | Administrators | Change what is sent (`{"may_link": true}`); answers the result |
+
+`/api` is not a Jellyfin path: none of Jellyfin 10.10.7's 309 API paths starts with it (its own docs are at
+`/api-docs`). If a Jellyfin release ever takes it, this API moves to `/rfapi/v1`.
 
 Version 1 keeps its shapes; a change that would break a caller comes as `/api/v2`.
