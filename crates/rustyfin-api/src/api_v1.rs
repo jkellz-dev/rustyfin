@@ -98,15 +98,22 @@ pub fn router() -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
+    /// The paths of every `.route(` in this file (rustfmt may put the path
+    /// on the next line).
+    fn route_paths() -> Vec<&'static str> {
+        let source: &'static str = include_str!("api_v1.rs");
+        let marker = concat!(".route", "(");
+        source
+            .split(marker)
+            .skip(1)
+            .filter_map(|rest| rest.trim_start().strip_prefix('"')?.split('"').next())
+            .collect()
+    }
+
     /// Owner, 2026-11-19: "new endpoints must be lowercase".
     #[test]
     fn every_route_here_is_lower_case() {
-        let source = include_str!("api_v1.rs");
-        let paths: Vec<&str> = source
-            .split(".route(\"")
-            .skip(1)
-            .filter_map(|rest| rest.split('"').next())
-            .collect();
+        let paths = route_paths();
         assert!(paths.len() >= 5, "{paths:?}");
         for path in paths {
             let fixed: String = path
@@ -121,12 +128,7 @@ mod tests {
 
     #[test]
     fn every_word_in_the_routes_is_known_to_match_case() {
-        let source = include_str!("api_v1.rs");
-        for path in source
-            .split(".route(\"")
-            .skip(1)
-            .filter_map(|r| r.split('"').next())
-        {
+        for path in route_paths() {
             for word in path
                 .split('/')
                 .filter(|w| !w.is_empty() && !w.starts_with('{'))
