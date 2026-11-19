@@ -1,6 +1,7 @@
 //! The friend's side of a Rustyfin-to-Rustyfin link (roadmap 16b.2r): an
 //! ordinary user the admin lets link, and the change feed it syncs from.
 
+#[allow(dead_code)]
 mod common;
 
 use axum::http::StatusCode;
