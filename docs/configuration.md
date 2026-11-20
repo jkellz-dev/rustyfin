@@ -182,7 +182,8 @@ Password sign-in for apps that ask for one, checked by binding to an LDAPS serve
 ### `[tasks]`
 
 Scheduled maintenance. Schedules are named in `[tasks.schedules.<name>]` (a 7-field cron: seconds first, then minute,
-hour, day, month, weekday, year) and each task refers to one by name.
+hour, day, month, weekday, year) and each task refers to one by name. `daily` and `weekly` are built in: a schedule
+of the same name replaces one, and the rest are kept.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

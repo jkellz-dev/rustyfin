@@ -376,7 +376,12 @@ pub struct TasksConfig {
     pub run_on_startup: bool,
     #[serde(default = "default_jitter_seconds")]
     pub jitter_seconds: u64,
-    #[serde(default)]
+    /// Named schedules. `daily` and `weekly` are built in; one of the same
+    /// name here replaces it, and the rest are kept.
+    #[serde(
+        default = "default_schedules",
+        deserialize_with = "schedules_over_defaults"
+    )]
     pub schedules: HashMap<String, ScheduleEntry>,
     #[serde(default)]
     pub library_scan: LibraryScanConfig,
@@ -394,28 +399,35 @@ pub struct TasksConfig {
     pub image_cache_prune: ImageCachePruneConfig,
 }
 
+/// The built-in schedules: `daily` at 03:00, `weekly` at 04:00 on Sundays.
+fn default_schedules() -> HashMap<String, ScheduleEntry> {
+    let entry = |cron: &str| ScheduleEntry {
+        cron: cron.to_string(),
+        jitter_seconds: None,
+    };
+    HashMap::from([
+        ("daily".to_string(), entry("0 0 3 * * * *")),
+        ("weekly".to_string(), entry("0 0 4 * * 7 *")),
+    ])
+}
+
+/// The configured schedules over the built-in ones.
+fn schedules_over_defaults<'de, D>(d: D) -> Result<HashMap<String, ScheduleEntry>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let mut schedules = default_schedules();
+    schedules.extend(HashMap::<String, ScheduleEntry>::deserialize(d)?);
+    Ok(schedules)
+}
+
 impl Default for TasksConfig {
     fn default() -> Self {
-        let mut schedules = HashMap::new();
-        schedules.insert(
-            "daily".to_string(),
-            ScheduleEntry {
-                cron: "0 0 3 * * * *".to_string(),
-                jitter_seconds: None,
-            },
-        );
-        schedules.insert(
-            "weekly".to_string(),
-            ScheduleEntry {
-                cron: "0 0 4 * * 7 *".to_string(),
-                jitter_seconds: None,
-            },
-        );
         Self {
             enabled: true,
             run_on_startup: true,
             jitter_seconds: 300,
-            schedules,
+            schedules: default_schedules(),
             library_scan: LibraryScanConfig::default(),
             search_reindex: SearchReindexConfig::default(),
             activity_log_prune: ActivityLogPruneConfig::default(),
