@@ -2008,7 +2008,8 @@ async fn each_link_has_its_own_metrics() {
         "the 503: {body}"
     );
     assert_eq!(m("rustyfin_link_up", &[]), Some(0.0), "{body}");
-    assert_eq!(m("rustyfin_link_titles", &[]), Some(2.0), "{body}");
+    // "Shared Film" is a copy of the local film, not a title of its own.
+    assert_eq!(m("rustyfin_link_titles", &[]), Some(1.0), "{body}");
     assert_eq!(m("rustyfin_link_copies", &[]), Some(2.0), "{body}");
     assert!(
         m("rustyfin_link_last_sync_timestamp_seconds", &[]).is_some_and(|t| t > 1.7e9),
