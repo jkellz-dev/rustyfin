@@ -37,6 +37,8 @@ pub struct TestApp {
     pub scan_board: rustyfin_core::library::progress::ScanBoard,
     /// Linked servers (roadmap 16b), empty until a test registers one.
     pub links: Arc<rustyfin_core::link::Links>,
+    /// Search; with Meilisearch in [`TestApp::with_meilisearch`].
+    pub search: Arc<SearchService>,
 }
 
 impl TestApp {
@@ -53,7 +55,14 @@ impl TestApp {
 
     /// A test app with `[playback] prefer_direct_play = true`.
     pub async fn with_prefer_direct_play() -> Self {
-        Self::build_with(None, None, false, true).await
+        Self::build_with(None, None, false, true, false).await
+    }
+
+    /// A test app searching with the Meilisearch at `MEILI_URL` (key
+    /// `MEILI_KEY`, if any), in an index of its own. The index is built by
+    /// `app.search.sync()`, which tests call when they want it.
+    pub async fn with_meilisearch() -> Self {
+        Self::build_with(None, None, false, false, true).await
     }
 
     /// A test app whose people headshots come from `dir`.
@@ -72,7 +81,14 @@ impl TestApp {
         acquire_timeout: Option<std::time::Duration>,
         forward_auth: bool,
     ) -> Self {
-        Self::build_with(people_cache_dir, acquire_timeout, forward_auth, false).await
+        Self::build_with(
+            people_cache_dir,
+            acquire_timeout,
+            forward_auth,
+            false,
+            false,
+        )
+        .await
     }
 
     async fn build_with(
@@ -80,6 +96,7 @@ impl TestApp {
         acquire_timeout: Option<std::time::Duration>,
         forward_auth: bool,
         prefer_direct_play: bool,
+        meilisearch: bool,
     ) -> Self {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://rustyfin:rustyfin@localhost:5432/rustyfin".to_string());
@@ -126,7 +143,15 @@ impl TestApp {
 
         // Build AppState with minimal config.
         let session_manager = Arc::new(SessionManager::new(pool.clone()));
-        let search_service = Arc::new(SearchService::new(pool.clone(), None, None));
+        let search_service = Arc::new(if meilisearch {
+            let url = std::env::var("MEILI_URL")
+                .expect("MEILI_URL: these tests need a Meilisearch (CI and the builder start one)");
+            let key = std::env::var("MEILI_KEY").ok();
+            SearchService::with_index(pool.clone(), Some(&url), key.as_deref(), &schema)
+        } else {
+            SearchService::new(pool.clone(), None, None)
+        });
+        let search = search_service.clone();
         let transcode_manager = Arc::new(TranscodeManager::new(
             "ffmpeg".to_string(),
             None,
@@ -188,6 +213,7 @@ impl TestApp {
             scan_in_flight,
             scan_board,
             links,
+            search,
         }
     }
 
@@ -493,6 +519,7 @@ impl TestApp {
 
     /// Drop the test schema and all its objects.
     pub async fn cleanup(&self) {
+        self.search.drop_indexes().await;
         let _ = self
             .pool
             .execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
