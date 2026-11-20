@@ -93,7 +93,8 @@ pub async fn changes(
         (Some(since), None) => {
             sqlx::query_scalar(
                 "SELECT DISTINCT r.item_id FROM media_removals r \
-                 WHERE r.removed_xid >= pg_snapshot_xmin($2::text::pg_snapshot) \
+                 WHERE r.link_id IS NULL \
+                   AND r.removed_xid >= pg_snapshot_xmin($2::text::pg_snapshot) \
                    AND NOT pg_visible_in_snapshot(r.removed_xid, $2::text::pg_snapshot) \
                    AND ($1::uuid[] IS NULL OR r.library_id = ANY($1)) \
                    AND NOT EXISTS (SELECT 1 FROM media_items m WHERE m.id = r.item_id)",

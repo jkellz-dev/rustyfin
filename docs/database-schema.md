@@ -159,7 +159,8 @@ view of the library reads it; scans, syncs and merges read `media_items`. A migr
 
 ### `media_removals`
 
-Items removed, for the change feed (`/api/v1/catalog`); written by a trigger on `media_items` (not for linked copies).
+Items removed, for the change feed (`/api/v1/catalog`, which leaves out linked copies) and the search index; written
+by a trigger on `media_items`.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -167,6 +168,18 @@ Items removed, for the change feed (`/api/v1/catalog`); written by a trigger on 
 | `library_id` | UUID | Yes | | Its library, so a feed shows only removals the user could see |
 | `removed_xid` | XID8 | No | `pg_current_xact_id()` | The transaction that removed it |
 | `removed_at` | TIMESTAMPTZ | No | `NOW()` | |
+| `link_id` | UUID | Yes | | The link it was a copy from, if any |
+
+### `search_sync`
+
+Where each Meilisearch index was brought up to (`rustyfin_db::repo::search_feed`): the changes since are those this
+snapshot did not see. No row: the next sync builds the index whole.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `index_uid` | TEXT | No | | The index (`media_items`) |
+| `cursor` | TEXT | No | | A `pg_snapshot` in text form |
+| `updated_at` | TIMESTAMPTZ | No | `now()` | |
 
 ### `parked_user_data`
 

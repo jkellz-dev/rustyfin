@@ -1763,6 +1763,10 @@ pub struct ItemQuery {
 
     // Search
     pub search_term: Option<String>,
+    /// Meilisearch's best matches for `search_term`, best first: these ids
+    /// instead of matching the name, in this order unless sorted otherwise.
+    /// `None`: the name is matched here.
+    pub ranked_ids: Option<Vec<Uuid>>,
 
     // Sorting
     pub sort_by: Vec<String>,
@@ -1801,6 +1805,7 @@ impl Default for ItemQuery {
             is_played: None,
             is_resumable: false,
             search_term: None,
+            ranked_ids: None,
             sort_by: Vec::new(),
             sort_order: Vec::new(),
             start_index: 0,
@@ -2055,8 +2060,12 @@ impl ItemQuery {
             self.name_starts_with_or_greater.as_deref(),
         );
 
-        // Search term
-        if let Some(ref term) = self.search_term {
+        // Search term: Meilisearch's matches, or the name here.
+        if let Some(ref ids) = self.ranked_ids {
+            qb.push(" AND mi.id = ANY(");
+            qb.push_bind(ids.clone());
+            qb.push(")");
+        } else if let Some(ref term) = self.search_term {
             qb.push(" AND mi.name ILIKE ");
             qb.push_bind(format!("%{term}%"));
         }
@@ -2093,6 +2102,13 @@ impl ItemQuery {
         // (whose episode sort names start with the numbers). Unnumbered items
         // (films, shows) are unaffected.
         if self.sort_by.is_empty() {
+            // A search the app does not sort: best match first.
+            if let Some(ref ids) = self.ranked_ids {
+                qb.push(" ORDER BY array_position(");
+                qb.push_bind(ids.clone());
+                qb.push(", mi.id), mi.sort_name, mi.name");
+                return;
+            }
             qb.push(
                 " ORDER BY mi.parent_index_number NULLS LAST, mi.index_number NULLS LAST, \
                  mi.sort_name, mi.name",

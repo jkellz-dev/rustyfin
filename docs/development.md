@@ -54,7 +54,7 @@ docker compose logs -f       # Follow logs
 Services:
 
 - **PostgreSQL 17** on `localhost:5432` (user: `rustyfin`, password: `rustyfin`, db: `rustyfin`)
-- **Meilisearch v1.12** on `localhost:7700` (key: `rustyfin-dev-key`)
+- **Meilisearch v1.57** on `localhost:7700` (key: `rustyfin-dev-key`)
 
 ### Manual PostgreSQL
 

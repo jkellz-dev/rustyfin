@@ -419,8 +419,10 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
         )
         .await;
 
-        if let Err(e) = search_service.reindex_all().await {
-            tracing::error!("Search reindex failed: {e}");
+        // What the scans changed, into the search index now rather than at
+        // the next periodic sync.
+        if let Err(e) = search_service.sync().await {
+            tracing::error!("Search index sync failed: {e}");
         }
     });
 }

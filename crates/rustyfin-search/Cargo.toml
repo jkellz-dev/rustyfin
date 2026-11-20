@@ -15,8 +15,4 @@ tracing.workspace = true
 thiserror.workspace = true
 sqlx.workspace = true
 
-meilisearch-sdk = { version = "0.33", optional = true }
-
-[features]
-default = []
-meilisearch = ["dep:meilisearch-sdk"]
+meilisearch-sdk = "0.33"

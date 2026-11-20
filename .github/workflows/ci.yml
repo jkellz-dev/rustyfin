@@ -113,8 +113,17 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      # The search tests run against a real Meilisearch (search_ranked_tests).
+      meilisearch:
+        image: getmeili/meilisearch:v1.57
+        env:
+          MEILI_NO_ANALYTICS: "true"
+          MEILI_ENV: development
+        ports:
+          - 7700:7700
     env:
       DATABASE_URL: postgres://rustyfin:rustyfin@localhost:5432/rustyfin_test
+      MEILI_URL: http://localhost:7700
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
