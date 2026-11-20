@@ -1919,3 +1919,104 @@ async fn a_linking_server_never_sees_what_this_server_links() {
     );
     app.cleanup().await;
 }
+
+/// One metrics sample: the value of the first `name` line carrying `labels`.
+fn metric(body: &str, name: &str, labels: &[&str]) -> Option<f64> {
+    body.lines()
+        .filter(|l| l.starts_with(&format!("{name}{{")))
+        .find(|l| labels.iter().all(|want| l.contains(want)))
+        .and_then(|l| l.rsplit(' ').next())
+        .and_then(|v| v.parse().ok())
+}
+
+/// Roadmap 16b.3 (owner, 2026-11-20: "Then do per link metrics"): each link
+/// has its own series: syncs and how long they took, its requests' latency
+/// and failures, whether it is up, its titles and copies, and how long ago it
+/// last synced.
+#[tokio::test]
+async fn each_link_has_its_own_metrics() {
+    use tower::ServiceExt;
+    let app = common::TestApp::new().await;
+    let (_tree, _lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    remote.lock().unwrap().films = vec![
+        film("r100", "Shared Film", "100", "e1", 3840, 2160),
+        film("r200", "Only Theirs", "200", "e1", 1920, 1080),
+    ];
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(
+            &app.pool,
+            LinkSettings {
+                name: "Metered".into(),
+                ..settings(&url, "secret")
+            },
+        )
+        .await
+        .unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+    remote.lock().unwrap().down = true;
+    app.links.sync(&app.pool, link).await.unwrap_err();
+
+    let response = app
+        .metrics_router
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/metrics")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let ours = "link=\"Metered\"";
+    let m = |name: &str, more: &[&str]| {
+        let mut labels = vec![ours];
+        labels.extend_from_slice(more);
+        metric(&body, name, &labels)
+    };
+    assert_eq!(
+        m("rustyfin_link_syncs_total", &["result=\"ok\""]),
+        Some(1.0),
+        "{body}"
+    );
+    assert_eq!(
+        m("rustyfin_link_syncs_total", &["result=\"error\""]),
+        Some(1.0),
+        "{body}"
+    );
+    assert_eq!(
+        m("rustyfin_link_sync_duration_seconds_count", &[]),
+        Some(2.0),
+        "{body}"
+    );
+    assert!(
+        m(
+            "rustyfin_link_request_duration_seconds_count",
+            &["call=\"api\""]
+        )
+        .is_some_and(|n| n >= 3.0),
+        "sign-in, libraries and items: {body}"
+    );
+    assert!(
+        m("rustyfin_link_request_failures_total", &[]).is_some_and(|n| n >= 1.0),
+        "the 503: {body}"
+    );
+    assert_eq!(m("rustyfin_link_up", &[]), Some(0.0), "{body}");
+    assert_eq!(m("rustyfin_link_titles", &[]), Some(2.0), "{body}");
+    assert_eq!(m("rustyfin_link_copies", &[]), Some(2.0), "{body}");
+    assert!(
+        m("rustyfin_link_last_sync_timestamp_seconds", &[]).is_some_and(|t| t > 1.7e9),
+        "{body}"
+    );
+    assert!(
+        m("rustyfin_link_sync_lag_seconds", &[]).is_some_and(|s| (0.0..600.0).contains(&s)),
+        "{body}"
+    );
+    app.cleanup().await;
+}
