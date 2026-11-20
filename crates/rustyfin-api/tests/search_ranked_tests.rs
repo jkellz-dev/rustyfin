@@ -157,3 +157,117 @@ async fn without_a_built_index_names_are_matched_in_postgres() {
     assert_eq!(names(&list), vec!["Heat"], "{list}");
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-20: people and artists through Meilisearch too.
+#[tokio::test]
+async fn people_and_artists_are_found_with_typos() {
+    let app = common::TestApp::with_meilisearch().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let music = app.create_library("Music", "music").await;
+    app.create_media_item("Radiohead", "MusicArtist", music, None)
+        .await;
+    app.create_media_item("Portishead", "MusicArtist", music, None)
+        .await;
+    for (name, kind) in [
+        ("Sigourney Weaver", "Actor"),
+        ("Ridley Scott", "Director"),
+        ("Tom Skerritt", "Actor"),
+    ] {
+        rustyfin_db::repo::people::insert(&app.pool, name, kind, None, None, None, None)
+            .await
+            .unwrap();
+    }
+    let report = app.search.sync().await.expect("sync");
+    assert_eq!(report.people_indexed, 3, "{report:?}");
+
+    // Typos: no name contains "radiohed" or "sigorney".
+    let (status, list) = app.get("/Artists?SearchTerm=radiohed", &token).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(names(&list), vec!["Radiohead"], "{list}");
+    assert_eq!(list["TotalRecordCount"], 1, "{list}");
+    let (_, list) = app.get("/Persons?SearchTerm=sigorney", &token).await;
+    assert_eq!(names(&list), vec!["Sigourney Weaver"], "{list}");
+    assert_eq!(list["TotalRecordCount"], 1, "{list}");
+    // Postgres still filters: Ridley Scott is no actor.
+    let (_, list) = app
+        .get("/Persons?SearchTerm=scot&PersonTypes=Actor", &token)
+        .await;
+    assert_eq!(names(&list), Vec::<String>::new(), "{list}");
+
+    // Search hints list people too (Jellyfin's IncludePeople, on by default).
+    let (_, hints) = app.get("/Search/Hints?SearchTerm=sigorney", &token).await;
+    let hinted: Vec<(&str, &str)> = hints["SearchHints"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{hints}"))
+        .iter()
+        .map(|h| (h["Name"].as_str().unwrap(), h["Type"].as_str().unwrap()))
+        .collect();
+    assert_eq!(hinted, vec![("Sigourney Weaver", "Person")], "{hints}");
+    let (_, hints) = app
+        .get(
+            "/Search/Hints?SearchTerm=sigorney&IncludePeople=false",
+            &token,
+        )
+        .await;
+    assert_eq!(
+        hints["SearchHints"].as_array().map(Vec::len),
+        Some(0),
+        "{hints}"
+    );
+    app.cleanup().await;
+}
+
+#[tokio::test]
+async fn the_people_index_follows_renames_and_removals() {
+    let app = common::TestApp::with_meilisearch().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let weaver = rustyfin_db::repo::people::insert(
+        &app.pool,
+        "Sigourney Weaver",
+        "Actor",
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let scott = rustyfin_db::repo::people::insert(
+        &app.pool,
+        "Ridley Scott",
+        "Director",
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    app.search.sync().await.expect("first sync");
+
+    sqlx::query("UPDATE people SET name = 'Sigourney Weaver-Simpson' WHERE id = $1")
+        .bind(weaver.id)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM people WHERE id = $1")
+        .bind(scott.id)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let report = app.search.sync().await.expect("sync");
+    assert_eq!(
+        (report.people_indexed, report.people_removed),
+        (1, 1),
+        "{report:?}"
+    );
+    let (_, list) = app.get("/Persons?SearchTerm=simpsom", &token).await;
+    assert_eq!(names(&list), vec!["Sigourney Weaver-Simpson"], "{list}");
+    let left = app
+        .search
+        .ranked_people("ridley", &[], 10)
+        .await
+        .expect("ready");
+    assert!(left.is_empty(), "{left:?}");
+    app.cleanup().await;
+}
