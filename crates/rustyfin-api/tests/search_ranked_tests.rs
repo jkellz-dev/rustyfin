@@ -271,3 +271,44 @@ async fn the_people_index_follows_renames_and_removals() {
     assert!(left.is_empty(), "{left:?}");
     app.cleanup().await;
 }
+
+/// Live, 2026-11-20: Meilisearch kept its data in an emptyDir, so a restart
+/// lost both indexes while Postgres kept the sync cursors. The next sync
+/// only sent what had changed, Meilisearch made a bare `media_items` for it,
+/// and every search fell back to Postgres ("Attribute `item_type` is not
+/// filterable"). A lost index (or one without its settings) is rebuilt whole.
+#[tokio::test]
+async fn an_index_meilisearch_lost_is_rebuilt_whole() {
+    let app = common::TestApp::with_meilisearch().await;
+    let (_, token) = app.create_user("viewer", false).await;
+    let lib = app.create_library("Films", "movies").await;
+    films(&app, lib, &["Alien", "Aliens", "Heat"]).await;
+    app.search.sync().await.expect("first sync");
+
+    // Meilisearch restarts with nothing; one film changes meanwhile.
+    app.search.drop_indexes().await;
+    sqlx::query("UPDATE media_items SET overview = 'Changed' WHERE name = 'Heat'")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    let report = app.search.sync().await.expect("sync");
+    assert!(report.rebuilt, "{report:?}");
+    assert_eq!(
+        report.indexed, 3,
+        "every film, not just the changed one: {report:?}"
+    );
+    assert!(report.people_rebuilt, "{report:?}");
+
+    // Answered by Meilisearch (a typo, a type filter), not the fallback.
+    let (status, list) = app
+        .get(
+            "/Items?SearchTerm=alein&Recursive=true&IncludeItemTypes=Movie",
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let mut found = names(&list);
+    found.sort();
+    assert_eq!(found, vec!["Alien", "Aliens"], "{list}");
+    app.cleanup().await;
+}
