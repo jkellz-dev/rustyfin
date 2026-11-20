@@ -240,3 +240,37 @@ async fn own_routes_match_in_any_case() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     app.cleanup().await;
 }
+
+/// The admin's users list marks server accounts: one call answers who may
+/// link, for administrators only.
+#[tokio::test]
+async fn administrators_see_which_users_are_servers() {
+    let app = common::TestApp::new().await;
+    let (_admin, admin_token) = app.create_user("admin", true).await;
+    let (person, person_token) = app.create_user("viewer", false).await;
+    let (server, _) = app.create_user("alex-server", false).await;
+    let (status, _) = app
+        .patch(
+            &format!("/api/v1/users/{server}/permissions"),
+            &json!({"may_link": true}),
+            &admin_token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, all) = app.get("/api/v1/users/permissions", &admin_token).await;
+    assert_eq!(status, StatusCode::OK, "{all}");
+    let of = |id: uuid::Uuid| {
+        all.as_array()
+            .unwrap_or_else(|| panic!("{all}"))
+            .iter()
+            .find(|p| p["id"] == id.to_string())
+            .map(|p| p["may_link"].clone())
+    };
+    assert_eq!(of(server), Some(json!(true)), "{all}");
+    assert_eq!(of(person), Some(json!(false)), "{all}");
+    let (status, _) = app.get("/API/V1/Users/Permissions", &admin_token).await;
+    assert_eq!(status, StatusCode::OK, "any case");
+    let (status, _) = app.get("/api/v1/users/permissions", &person_token).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    app.cleanup().await;
+}

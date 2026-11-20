@@ -273,6 +273,28 @@ pub fn link_permission(may_link: bool) -> (&'static str, &'static str) {
 #[cfg(test)]
 mod tests {
 
+    /// Owner, 2026-11-19: "Let's use a badge": an account a server links
+    /// with is marked Server, so a person's is never taken for one.
+    #[test]
+    fn a_server_account_wears_a_server_badge() {
+        assert_eq!(role_badges(false, false), vec![]);
+        assert_eq!(
+            role_badges(true, false),
+            vec![("badge badge-admin", "Admin")]
+        );
+        assert_eq!(
+            role_badges(false, true),
+            vec![("badge badge-server", "Server")]
+        );
+        assert_eq!(
+            role_badges(true, true),
+            vec![
+                ("badge badge-admin", "Admin"),
+                ("badge badge-server", "Server")
+            ]
+        );
+    }
+
     #[test]
     fn the_linking_line_says_what_the_user_may_do() {
         assert_eq!(
