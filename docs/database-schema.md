@@ -170,6 +170,17 @@ by a trigger on `media_items`.
 | `removed_at` | TIMESTAMPTZ | No | `NOW()` | |
 | `link_id` | UUID | Yes | | The link it was a copy from, if any |
 
+### `people_removals`
+
+People removed, for the search index; written by a trigger on `people`. `people.change_xid` stamps the transaction that
+last changed a person, as on `media_items`.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `person_id` | UUID | No | | The removed person |
+| `removed_xid` | XID8 | No | `pg_current_xact_id()` | The transaction that removed them |
+| `removed_at` | TIMESTAMPTZ | No | `now()` | |
+
 ### `search_sync`
 
 Where each Meilisearch index was brought up to (`rustyfin_db::repo::search_feed`): the changes since are those this
@@ -177,7 +188,7 @@ snapshot did not see. No row: the next sync builds the index whole.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
-| `index_uid` | TEXT | No | | The index (`media_items`) |
+| `index_uid` | TEXT | No | | The index (`media_items`, `media_items_people`) |
 | `cursor` | TEXT | No | | A `pg_snapshot` in text form |
 | `updated_at` | TIMESTAMPTZ | No | `now()` | |
 

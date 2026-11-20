@@ -60,6 +60,20 @@ async fn get_artists_inner(
     let start = params.start_index.unwrap_or(0);
     let limit = params.limit.unwrap_or(50).min(500);
 
+    // Meilisearch ranks the matches; without it the name is matched.
+    let ranked = match params.search_term.as_deref().map(str::trim) {
+        Some(term) if !term.is_empty() => {
+            state
+                .search_service
+                .ranked_ids(
+                    term,
+                    &["MusicArtist".to_string()],
+                    rustyfin_search::CANDIDATES,
+                )
+                .await
+        }
+        _ => None,
+    };
     let filter = media_items::ArtistFilter {
         search: params.search_term.as_deref(),
         library_id: params.parent_id,
@@ -67,6 +81,7 @@ async fn get_artists_inner(
         name_less_than: params.name_less_than.as_deref(),
         name_starts_with_or_greater: params.name_starts_with_or_greater.as_deref(),
         album_artists_only,
+        ranked: ranked.as_deref(),
     };
     let (rows, total) = media_items::list_artists(&state.pool, &filter, start, limit)
         .await

@@ -9,6 +9,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::media_items::MediaItemRow;
+use super::people::PersonRow;
 
 /// A page of changes.
 #[derive(Debug, Clone)]
@@ -125,4 +126,82 @@ pub async fn clear_cursor(pool: &PgPool, index: &str) -> Result<(), sqlx::Error>
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// A page of people changes.
+#[derive(Debug, Clone)]
+pub struct PeoplePage {
+    pub people: Vec<PersonRow>,
+    /// Removed since the cursor (first page only).
+    pub removed: Vec<Uuid>,
+    /// Where the next page starts (`xid,id`), when there is one.
+    pub next: Option<(String, Uuid)>,
+}
+
+/// People changed since `since`, `limit` per page from `after`; removals
+/// since `since` on the first page.
+pub async fn people_changes(
+    pool: &PgPool,
+    since: &str,
+    after: Option<&(String, Uuid)>,
+    limit: i64,
+) -> Result<PeoplePage, sqlx::Error> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        #[sqlx(flatten)]
+        person: PersonRow,
+        change_key: String,
+    }
+    let mut rows: Vec<Row> = sqlx::query_as(
+        "SELECT p.*, p.change_xid::text AS change_key FROM people p \
+         WHERE p.change_xid >= pg_snapshot_xmin($1::text::pg_snapshot) \
+           AND NOT pg_visible_in_snapshot(p.change_xid, $1::text::pg_snapshot) \
+           AND ($2::text IS NULL OR (p.change_xid, p.id) > ($2::text::xid8, $3)) \
+         ORDER BY p.change_xid, p.id LIMIT $4",
+    )
+    .bind(since)
+    .bind(after.map(|a| a.0.as_str()))
+    .bind(after.map(|a| a.1))
+    .bind(limit + 1)
+    .fetch_all(pool)
+    .await?;
+    let next = if rows.len() as i64 > limit {
+        rows.truncate(limit as usize);
+        rows.last().map(|r| (r.change_key.clone(), r.person.id))
+    } else {
+        None
+    };
+    let removed = if after.is_none() {
+        sqlx::query_scalar(
+            "SELECT DISTINCT r.person_id FROM people_removals r \
+             WHERE r.removed_xid >= pg_snapshot_xmin($1::text::pg_snapshot) \
+               AND NOT pg_visible_in_snapshot(r.removed_xid, $1::text::pg_snapshot) \
+               AND NOT EXISTS (SELECT 1 FROM people p WHERE p.id = r.person_id)",
+        )
+        .bind(since)
+        .fetch_all(pool)
+        .await?
+    } else {
+        Vec::new()
+    };
+    Ok(PeoplePage {
+        people: rows.into_iter().map(|r| r.person).collect(),
+        removed,
+        next,
+    })
+}
+
+/// Every person, a page at a time by id (a full rebuild).
+pub async fn people_page(
+    pool: &PgPool,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<PersonRow>, sqlx::Error> {
+    sqlx::query_as::<_, PersonRow>(
+        "SELECT * FROM people WHERE ($1::uuid IS NULL OR id > $1) ORDER BY id LIMIT $2",
+    )
+    .bind(after)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
 }

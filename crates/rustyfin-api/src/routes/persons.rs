@@ -47,25 +47,54 @@ pub async fn get_persons(
         .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
-    let persons = people::list_people(
-        &state.pool,
-        &person_types,
-        &exclude_types,
-        query.search_term.as_deref(),
-        limit,
-        offset,
-    )
-    .await
-    .map_err(ApiError::Database)?;
-
-    let total = people::count_people(
-        &state.pool,
-        &person_types,
-        &exclude_types,
-        query.search_term.as_deref(),
-    )
-    .await
-    .map_err(ApiError::Database)? as i32;
+    // Meilisearch ranks the matches (owner, 2026-11-20); without it the name
+    // is matched here.
+    let ranked = match query.search_term.as_deref().map(str::trim) {
+        Some(term) if !term.is_empty() => {
+            state
+                .search_service
+                .ranked_people(term, &person_types, rustyfin_search::CANDIDATES)
+                .await
+        }
+        _ => None,
+    };
+    let (persons, total) = if let Some(ids) = ranked {
+        let persons = people::list_people_by_ids(
+            &state.pool,
+            &ids,
+            &person_types,
+            &exclude_types,
+            limit,
+            offset,
+        )
+        .await
+        .map_err(ApiError::Database)?;
+        let total = people::count_people_by_ids(&state.pool, &ids, &person_types, &exclude_types)
+            .await
+            .map_err(ApiError::Database)?;
+        (persons, total)
+    } else {
+        let persons = people::list_people(
+            &state.pool,
+            &person_types,
+            &exclude_types,
+            query.search_term.as_deref(),
+            limit,
+            offset,
+        )
+        .await
+        .map_err(ApiError::Database)?;
+        let total = people::count_people(
+            &state.pool,
+            &person_types,
+            &exclude_types,
+            query.search_term.as_deref(),
+        )
+        .await
+        .map_err(ApiError::Database)?;
+        (persons, total)
+    };
+    let total = total as i32;
 
     let include_counts = query.include_item_types.is_some();
 

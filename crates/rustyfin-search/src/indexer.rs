@@ -1,4 +1,5 @@
-//! The Meilisearch items index: its settings and documents.
+//! The Meilisearch indexes, their settings and documents: one for items
+//! (films, shows, episodes, albums, artists, tracks...) and one for people.
 
 use std::time::Duration;
 
@@ -6,16 +7,22 @@ use meilisearch_sdk::client::{Client, SwapIndexes};
 use meilisearch_sdk::settings::Settings;
 use meilisearch_sdk::task_info::TaskInfo;
 use rustyfin_db::repo::media_items::MediaItemRow;
+use rustyfin_db::repo::people::PersonRow;
 use serde::Serialize;
 use uuid::Uuid;
 
 /// The items index's uid.
 pub const INDEX_NAME: &str = "media_items";
 
+/// The people index beside the items index `items`.
+pub fn people_uid(items: &str) -> String {
+    format!("{items}_people")
+}
+
 /// What an item is found by. Only what a search matches or narrows on: the
 /// rest is read from Postgres.
 #[derive(Serialize)]
-struct Document {
+pub struct ItemDoc {
     id: String,
     name: String,
     original_title: Option<String>,
@@ -27,7 +34,7 @@ struct Document {
     library_id: Option<String>,
 }
 
-impl From<&MediaItemRow> for Document {
+impl From<&MediaItemRow> for ItemDoc {
     fn from(item: &MediaItemRow) -> Self {
         Self {
             id: item.id.to_string(),
@@ -46,9 +53,27 @@ impl From<&MediaItemRow> for Document {
     }
 }
 
-/// The index's settings. Searchable attributes in order of weight: a match
-/// in the name counts most, one in the overview least.
-fn settings() -> Settings {
+/// What a person is found by.
+#[derive(Serialize)]
+pub struct PersonDoc {
+    id: String,
+    name: String,
+    person_type: String,
+}
+
+impl From<&PersonRow> for PersonDoc {
+    fn from(p: &PersonRow) -> Self {
+        Self {
+            id: p.id.to_string(),
+            name: p.name.clone(),
+            person_type: p.person_type.clone(),
+        }
+    }
+}
+
+/// The items index's settings. Searchable attributes in order of weight: a
+/// match in the name counts most, one in the overview least.
+pub fn item_settings() -> Settings {
     Settings::new()
         .with_searchable_attributes([
             "name",
@@ -58,6 +83,13 @@ fn settings() -> Settings {
             "overview",
         ])
         .with_filterable_attributes(["item_type", "library_id", "production_year"])
+}
+
+/// The people index's settings.
+pub fn people_settings() -> Settings {
+    Settings::new()
+        .with_searchable_attributes(["name"])
+        .with_filterable_attributes(["person_type"])
 }
 
 async fn finish(client: &Client, task: TaskInfo, timeout: Duration) -> Result<(), String> {
@@ -71,9 +103,13 @@ async fn finish(client: &Client, task: TaskInfo, timeout: Duration) -> Result<()
     Ok(())
 }
 
-/// Create the index `uid` with the items settings (and an empty one, if
-/// `uid` is new).
-pub async fn create(client: &Client, uid: &str, timeout: Duration) -> Result<(), String> {
+/// Create the index `uid` (if new) with `settings`.
+pub async fn create(
+    client: &Client,
+    uid: &str,
+    settings: &Settings,
+    timeout: Duration,
+) -> Result<(), String> {
     if client.get_index(uid).await.is_err() {
         let task = client
             .create_index(uid, Some("id"))
@@ -83,23 +119,22 @@ pub async fn create(client: &Client, uid: &str, timeout: Duration) -> Result<(),
     }
     let task = client
         .index(uid)
-        .set_settings(&settings())
+        .set_settings(settings)
         .await
         .map_err(|e| e.to_string())?;
     finish(client, task, timeout).await
 }
 
-/// Add or update `items` in `uid`, waiting until they are searchable.
-pub async fn upsert(
+/// Add or update `docs` in `uid`, waiting until they are searchable.
+pub async fn upsert<T: Serialize + Send + Sync>(
     client: &Client,
     uid: &str,
-    items: &[MediaItemRow],
+    docs: &[T],
     timeout: Duration,
 ) -> Result<(), String> {
-    let docs: Vec<Document> = items.iter().map(Document::from).collect();
     let task = client
         .index(uid)
-        .add_or_update(&docs, Some("id"))
+        .add_or_update(docs, Some("id"))
         .await
         .map_err(|e| e.to_string())?;
     finish(client, task, timeout).await
@@ -127,9 +162,10 @@ pub async fn swap_in(
     client: &Client,
     uid: &str,
     building: &str,
+    settings: &Settings,
     timeout: Duration,
 ) -> Result<(), String> {
-    create(client, uid, timeout).await?;
+    create(client, uid, settings, timeout).await?;
     let task = client
         .swap_indexes([&SwapIndexes {
             indexes: (uid.to_string(), building.to_string()),

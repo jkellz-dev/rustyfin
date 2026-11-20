@@ -186,6 +186,57 @@ pub async fn list_people(
     .await
 }
 
+/// People among `ids` (Meilisearch's best matches, best first) with the type
+/// filters, in that order, a page at a time.
+pub async fn list_people_by_ids(
+    pool: &PgPool,
+    ids: &[Uuid],
+    person_types: &[String],
+    exclude_person_types: &[String],
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<PersonRow>, sqlx::Error> {
+    sqlx::query_as::<_, PersonRow>(
+        r#"
+        SELECT * FROM people
+        WHERE id = ANY($1)
+          AND ($2::text[] = '{}' OR person_type = ANY($2))
+          AND ($3::text[] = '{}' OR person_type != ALL($3))
+        ORDER BY array_position($1, id), name
+        LIMIT $4 OFFSET $5
+        "#,
+    )
+    .bind(ids)
+    .bind(person_types)
+    .bind(exclude_person_types)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+/// How many of `ids` pass the type filters.
+pub async fn count_people_by_ids(
+    pool: &PgPool,
+    ids: &[Uuid],
+    person_types: &[String],
+    exclude_person_types: &[String],
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) FROM people
+        WHERE id = ANY($1)
+          AND ($2::text[] = '{}' OR person_type = ANY($2))
+          AND ($3::text[] = '{}' OR person_type != ALL($3))
+        "#,
+    )
+    .bind(ids)
+    .bind(person_types)
+    .bind(exclude_person_types)
+    .fetch_one(pool)
+    .await
+}
+
 /// Count people matching the given filters.
 pub async fn count_people(
     pool: &PgPool,

@@ -1617,7 +1617,8 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
       in Postgres; best first unless the app sorts; Postgres name matching only without a built index
 - [x] The index follows the library from the database's change stamps (renames, new and removed items, linked copies)
       instead of only full rebuilds; a full rebuild is swapped in
-- [ ] People and artists searched through Meilisearch too (`/Persons`, `/Artists` `SearchTerm`)
+- [x] People and artists searched through Meilisearch too (`/Persons`, `/Artists` `SearchTerm`; people in search
+      hints, merged with titles by Meilisearch's score) (owner, 2026-11-20)
 
 ---
 

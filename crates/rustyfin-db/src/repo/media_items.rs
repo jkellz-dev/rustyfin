@@ -1546,6 +1546,9 @@ pub struct ArtistFilter<'a> {
     pub name_less_than: Option<&'a str>,
     pub name_starts_with_or_greater: Option<&'a str>,
     pub album_artists_only: bool,
+    /// Meilisearch's best matches for `search`, best first: these instead of
+    /// matching the name, in this order.
+    pub ranked: Option<&'a [Uuid]>,
 }
 
 /// The alphabet-bar filters on an item's sort name (case-insensitive, by
@@ -1589,7 +1592,11 @@ fn push_artist_where(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, f: &ArtistFilt
         qb.push(" AND mi.library_id = ");
         qb.push_bind(lib);
     }
-    if let Some(term) = f.search.filter(|t| !t.is_empty()) {
+    if let Some(ids) = f.ranked {
+        qb.push(" AND mi.id = ANY(");
+        qb.push_bind(ids.to_vec());
+        qb.push(")");
+    } else if let Some(term) = f.search.filter(|t| !t.is_empty()) {
         qb.push(" AND mi.name ILIKE ");
         qb.push_bind(format!("%{term}%"));
     }
@@ -1614,7 +1621,13 @@ pub async fn list_artists(
     let total: (i64,) = count.build_query_as().fetch_one(pool).await?;
     let mut list = sqlx::QueryBuilder::new("SELECT mi.* FROM visible_media_items mi");
     push_artist_where(&mut list, filter);
-    list.push(" ORDER BY mi.sort_name, mi.name LIMIT ");
+    list.push(" ORDER BY ");
+    if let Some(ids) = filter.ranked {
+        list.push("array_position(");
+        list.push_bind(ids.to_vec());
+        list.push(", mi.id), ");
+    }
+    list.push("mi.sort_name, mi.name LIMIT ");
     list.push_bind(limit);
     list.push(" OFFSET ");
     list.push_bind(start_index);

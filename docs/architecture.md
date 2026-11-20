@@ -90,11 +90,12 @@ in PascalCase JSON, and shared enums.
 
 ### `rustyfin-search`
 
-`SearchService`: Meilisearch ranks, Postgres filters. Every search (`/Items?SearchTerm=`, search hints) asks
-Meilisearch for the best-matching ids (typo-tolerant, by name, original title, show name, genres, then overview), and
-the route reads those ids from Postgres with all its other filters (access, folder, played, linked servers), best first
-unless the app sorts. The index keeps itself in step from the database's change stamps (`change_xid`,
-`media_removals`; `search_feed`): built whole at start (swapped in, so searches keep answering), then whatever changed
+`SearchService`: Meilisearch ranks, Postgres filters. Every search (`/Items`, `/Artists` and `/Persons` with
+`SearchTerm`, search hints, which list people too) asks Meilisearch for the best-matching ids (typo-tolerant; items by
+name, original title, show name, genres, then overview, in one index; people by name, in a second), and the route reads
+those ids from Postgres with all its other filters (access, folder, played, linked servers), best first unless the app
+sorts. The index keeps itself in step from the database's change stamps (`change_xid`, `media_removals`,
+`people_removals`; `search_feed`): built whole at start (swapped in, so searches keep answering), then whatever changed
 every 10 seconds and right after a scan. Without Meilisearch, or until the index is built, names are matched in
 Postgres.
 

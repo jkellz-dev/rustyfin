@@ -108,27 +108,77 @@ pub async fn search_hints(
         .take(limit as usize)
         .collect();
 
-    let mut hints: Vec<SearchHint> = hits
+    // People too (Jellyfin's IncludePeople, on by default), unless the search
+    // is narrowed to a library or to other kinds.
+    let want_people = query.include_people != Some(false)
+        && query.parent_id.is_none()
+        && item_types
+            .as_ref()
+            .is_none_or(|t| t.iter().any(|t| t.eq_ignore_ascii_case("Person")));
+    let people = if want_people {
+        state
+            .search_service
+            .search_people(&query.search_term, limit)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        Vec::new()
+    };
+
+    let mut scored: Vec<(f64, SearchHint)> = hits
         .into_iter()
-        .map(|hit| SearchHint {
-            id: hit.id,
-            item_id: hit.id,
-            media_type: super::items::media_type_for(&hit.item_type),
-            artists: Vec::new(),
-            primary_image_aspect_ratio: None,
-            name: hit.name,
-            item_type: hit.item_type,
-            production_year: hit.production_year,
-            primary_image_tag: None,
-            thumb_image_tag: None,
-            backdrop_image_tags: None,
-            series_name: hit.series_name,
-            index_number: hit.index_number,
-            parent_index_number: hit.parent_index_number,
-            run_time_ticks: hit.runtime_ticks,
-            channel_id: None,
+        .map(|hit| {
+            (
+                hit.score,
+                SearchHint {
+                    id: hit.id,
+                    item_id: hit.id,
+                    media_type: super::items::media_type_for(&hit.item_type),
+                    artists: Vec::new(),
+                    primary_image_aspect_ratio: None,
+                    name: hit.name,
+                    item_type: hit.item_type,
+                    production_year: hit.production_year,
+                    primary_image_tag: None,
+                    thumb_image_tag: None,
+                    backdrop_image_tags: None,
+                    series_name: hit.series_name,
+                    index_number: hit.index_number,
+                    parent_index_number: hit.parent_index_number,
+                    run_time_ticks: hit.runtime_ticks,
+                    channel_id: None,
+                },
+            )
         })
         .collect();
+    scored.extend(people.into_iter().map(|(p, score)| {
+        (
+            score,
+            SearchHint {
+                id: p.id,
+                item_id: p.id,
+                media_type: super::items::media_type_for("Person"),
+                artists: Vec::new(),
+                primary_image_aspect_ratio: None,
+                name: p.name,
+                item_type: "Person".to_string(),
+                production_year: None,
+                primary_image_tag: None,
+                thumb_image_tag: None,
+                backdrop_image_tags: None,
+                series_name: None,
+                index_number: None,
+                parent_index_number: None,
+                run_time_ticks: None,
+                channel_id: None,
+            },
+        )
+    }));
+    // Best first across titles and people (Meilisearch's scores); stable, so
+    // Postgres answers (all 0) keep titles, then people.
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.truncate(limit as usize);
+    let mut hints: Vec<SearchHint> = scored.into_iter().map(|(_, h)| h).collect();
 
     // Batch load images for search results
     let item_ids: Vec<Uuid> = hints.iter().map(|h| h.id).collect();
