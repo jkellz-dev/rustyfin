@@ -36,10 +36,31 @@ async fn libraries_say_when_they_are_being_scanned_and_when_they_last_were() {
     assert_eq!(folder(&list, "Movies")["RefreshStatus"], "Idle", "{list}");
 
     app.scan_in_flight.write().await.remove(&music);
-    libraries::mark_scanned(&app.pool, music).await.unwrap();
+    libraries::mark_scanned(&app.pool, music, std::time::Duration::from_millis(133_250))
+        .await
+        .unwrap();
     let (_, list) = app.get("/Library/VirtualFolders", &admin).await;
     assert_eq!(folder(&list, "Music")["RefreshStatus"], "Idle", "{list}");
     assert!(folder(&list, "Music")["LastScanned"].is_string(), "{list}");
+    // Owner, 2026-11-20: how long the scan took (Rustyfin's own field).
+    assert_eq!(
+        folder(&list, "Music")["LastScanDurationMs"],
+        133_250,
+        "{list}"
+    );
+    assert!(
+        folder(&list, "Movies")["LastScanDurationMs"].is_null(),
+        "{list}"
+    );
+    let (_, stats) = app.get("/System/Stats", &admin).await;
+    let card = stats["Libraries"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{stats}"))
+        .iter()
+        .find(|l| l["Name"] == "Music")
+        .cloned()
+        .unwrap_or_else(|| panic!("{stats}"));
+    assert_eq!(card["LastScanDurationMs"], 133_250, "{card}");
     app.cleanup().await;
 }
 

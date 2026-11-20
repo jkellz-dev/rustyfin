@@ -249,6 +249,46 @@ pub fn recent_card(
 
 #[cfg(test)]
 mod tests {
+    /// Owner, 2026-11-20: "I'd like to see the duration each task took to
+    /// complete in the admin. Especially scans."
+    #[test]
+    fn durations_read_as_people_say_them() {
+        assert_eq!(super::format_duration(420), "under a second");
+        assert_eq!(super::format_duration(42_000), "42 s");
+        assert_eq!(super::format_duration(133_000), "2 min 13 s");
+        assert_eq!(super::format_duration(120_000), "2 min");
+        assert_eq!(super::format_duration(3_840_000), "1 h 4 min");
+        assert_eq!(super::format_duration(-5), "under a second", "clock skew");
+    }
+
+    #[test]
+    fn a_scan_line_says_how_long_it_took() {
+        assert_eq!(
+            super::scan_line(Some("2026-11-16T01:50:12.5Z"), Some(133_000)),
+            "Last scanned 2026-11-16 01:50 UTC, took 2 min 13 s"
+        );
+        assert_eq!(
+            super::scan_line(Some("2026-11-16T01:50:12.5Z"), None),
+            "Last scanned 2026-11-16 01:50 UTC"
+        );
+        assert_eq!(super::scan_line(None, None), "Never scanned");
+        assert_eq!(
+            super::scan_card_line(Some(120), Some(42_000)),
+            "Scanned 2 min ago, took 42 s"
+        );
+    }
+
+    #[test]
+    fn a_task_run_says_how_long_it_took() {
+        let start = 1_000_000.0;
+        assert_eq!(
+            super::run_took(Some(start), Some(start + 75_000.0), false),
+            "1 min 15 s"
+        );
+        assert_eq!(super::run_took(Some(start), None, true), "Running");
+        assert_eq!(super::run_took(Some(start), None, false), "");
+        assert_eq!(super::run_took(None, None, false), "");
+    }
     use super::*;
 
     #[test]
