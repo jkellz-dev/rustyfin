@@ -19,6 +19,33 @@ pub struct Permissions {
     pub may_link: bool,
 }
 
+/// One user's permissions, in the list for the admin.
+#[derive(Debug, Serialize)]
+pub struct UserPermissions {
+    pub id: Uuid,
+    pub may_link: bool,
+}
+
+/// `GET /api/v1/users/permissions`: every user's, for the admin's users list
+/// (which marks server accounts). Administrators only.
+pub async fn list(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> Result<Json<Vec<UserPermissions>>, ApiError> {
+    let users = users::list_all(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(
+        users
+            .into_iter()
+            .map(|u| UserPermissions {
+                id: u.id,
+                may_link: u.may_link,
+            })
+            .collect(),
+    ))
+}
+
 /// What to change; what is left out stays.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

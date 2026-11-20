@@ -374,6 +374,11 @@ pub async fn refresh_item(item_id: &str) -> Result<(), ApiError> {
 
 // ── Scheduled Tasks API ──────────────────────────────────
 
+/// Every user's permissions (administrators).
+pub async fn get_all_permissions() -> Result<Vec<UserPermissions>, ApiError> {
+    get_json("/api/v1/users/permissions").await
+}
+
 pub async fn get_permissions(user_id: &str) -> Result<Permissions, ApiError> {
     get_json(&format!("/api/v1/users/{user_id}/permissions")).await
 }

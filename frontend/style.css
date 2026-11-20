@@ -288,6 +288,12 @@ select:focus {
   color: var(--accent);
 }
 
+/* An account a server links with (may_link), never a person's. */
+.badge-server {
+  background: rgba(68, 204, 102, 0.15);
+  color: var(--success);
+}
+
 .badge-type {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-muted);

@@ -19,6 +19,7 @@ adds of its own lives apart from it, under `/api/v1`, so the two never mix:
 | POST | `/api/v1/links/{id}/sync` | Administrators | Start a sync now; 204 at once |
 | GET | `/api/v1/links/{id}/relay/{path}` | Users who may see the copy | A linked copy's transcode (playlists and segments) from the friend's server; apps get these URLs from `PlaybackInfo` |
 | GET | `/api/v1/catalog` | Users allowed to link | The change feed a linked Rustyfin syncs from: `since`, `after`, `limit`; answers `items` (`id`, `type`, `library_id`), `removed`, `cursor`, `more`, `next` |
+| GET | `/api/v1/users/permissions` | Administrators | Every user's: `[{"id": "…", "may_link": true}, …]` (the admin marks server accounts with it) |
 | GET | `/api/v1/users/{id}/permissions` | The user, administrators | `{"may_link": false}` |
 | PATCH | `/api/v1/users/{id}/permissions` | Administrators | Change what is sent (`{"may_link": true}`); answers the result |
 

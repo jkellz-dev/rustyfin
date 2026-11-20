@@ -31,6 +31,9 @@ pub fn Users() -> View {
     let role_filter = create_signal("all".to_string());
     let name_filter = create_signal(String::new());
 
+    // Accounts servers link with (`may_link`), marked Server in the list.
+    let servers: Signal<Vec<String>> = create_signal(Vec::new());
+
     let load_users = move || {
         spawn_local({
             async move {
@@ -39,6 +42,15 @@ pub fn Users() -> View {
                     Err(e) => error.set(Some(e.to_string())),
                 }
                 loading.set(false);
+                // Best effort: without it the list just has no Server badges.
+                if let Ok(all) = api::get_all_permissions().await {
+                    servers.set(
+                        all.into_iter()
+                            .filter(|p| p.may_link)
+                            .map(|p| p.id.replace('-', ""))
+                            .collect(),
+                    );
+                }
             }
         });
     };
@@ -372,6 +384,7 @@ pub fn Users() -> View {
                                         let name = user.name.clone();
                                         let toggle_id = user.id.clone();
                                         let is_admin = user.policy.is_administrator;
+                                        let plain_id = user.id.replace('-', "");
                                         let last_activity = ago;
                                         let del_user = user.clone();
                                         let lib_user = user.clone();
@@ -391,10 +404,18 @@ pub fn Users() -> View {
                                                     }) { (name) }
                                                 }
                                                 td(data-label="Role") {
-                                                    (if is_admin {
-                                                        view! { span(class="badge badge-admin") { "Admin" } }
-                                                    } else {
-                                                        view! { span(class="text-muted") { "User" } }
+                                                    ({
+                                                        let is_server = servers.with(|s| s.contains(&plain_id));
+                                                        let badges = user_view::role_badges(is_admin, is_server);
+                                                        if badges.is_empty() {
+                                                            view! { span(class="text-muted") { "User" } }
+                                                        } else {
+                                                            badges
+                                                                .into_iter()
+                                                                .map(|(class, label)| view! { span(class=class) { (label) } " " })
+                                                                .collect::<Vec<View>>()
+                                                                .into()
+                                                        }
                                                     })
                                                 }
                                                 td(data-label="Libraries") {

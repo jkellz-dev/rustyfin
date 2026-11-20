@@ -254,7 +254,7 @@ were not given.
 
 Rustyfin treats a request as a linking server's when its user may link (**Allow linking** on the user's page) or it
 comes from Rustyfin's own link client. Give each server that links yours its own user, with **Allow linking** on; a
-person's account should never have it.
+person's account should never have it. The admin's users list marks such accounts **Server**.
 
 ## Removing a link
 

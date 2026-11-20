@@ -545,3 +545,10 @@ pub struct LinkInfo {
 pub struct Permissions {
     pub may_link: bool,
 }
+
+/// One user's permissions, from `/api/v1/users/permissions`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UserPermissions {
+    pub id: String,
+    pub may_link: bool,
+}

@@ -90,6 +90,7 @@ pub fn router() -> Router<AppState> {
         // The change feed a linked Rustyfin syncs from (roadmap 16b.2r).
         .route("/catalog", get(link_catalog::catalog))
         // What a user may do beyond Jellyfin's policy.
+        .route("/users/permissions", get(user_permissions::list))
         .route(
             "/users/{id}/permissions",
             get(user_permissions::get).patch(user_permissions::patch),

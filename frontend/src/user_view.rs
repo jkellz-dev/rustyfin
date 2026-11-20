@@ -260,6 +260,19 @@ pub fn sort_and_filter(
     picked
 }
 
+/// The badges in a user's Role cell: Admin, and Server for an account a
+/// server links with (`may_link`), so a person's is never taken for one.
+pub fn role_badges(is_admin: bool, is_server: bool) -> Vec<(&'static str, &'static str)> {
+    let mut badges = Vec::new();
+    if is_admin {
+        badges.push(("badge badge-admin", "Admin"));
+    }
+    if is_server {
+        badges.push(("badge badge-server", "Server"));
+    }
+    badges
+}
+
 /// The user page's linking line: what it says and what its button does
 /// (roadmap 16b.2r; `/api/v1/users/{id}/permissions`).
 pub fn link_permission(may_link: bool) -> (&'static str, &'static str) {
