@@ -208,3 +208,25 @@ async fn libraries_carry_jellyfins_options() {
     assert_eq!(o["AutomaticRefreshIntervalDays"], 0, "{o}");
     assert_eq!(o["AllowEmbeddedSubtitles"], "AllowAll", "{o}");
 }
+
+/// Nightly parity (browse.hurl:189): Jellyfin's ancestors carry the user's
+/// data and child counts, the library first among them.
+#[tokio::test]
+async fn ancestors_carry_user_data_and_child_counts() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("Movies", "movies").await;
+    let film = app.create_media_item("Film", "Movie", lib, None).await;
+    let (status, body) = app.get(&format!("/Items/{film}/Ancestors"), &token).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{body}");
+    let first = &body[0];
+    assert_eq!(first["Type"], "CollectionFolder", "{body}");
+    assert!(first["UserData"]["Key"].is_string(), "{first}");
+    assert!(first["UserData"]["Played"].is_boolean(), "{first}");
+    assert_eq!(first["ChildCount"], 1, "{first}");
+    for a in body.as_array().unwrap() {
+        assert!(a["UserData"].is_object(), "{a}");
+        assert!(a["ChildCount"].is_number(), "{a}");
+    }
+    app.cleanup().await;
+}

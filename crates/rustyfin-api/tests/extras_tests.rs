@@ -282,3 +282,48 @@ async fn extras_of_a_hidden_library_are_404() {
     }
     app.cleanup().await;
 }
+
+/// Nightly parity (extras.hurl:61, :220): an extra answers like a single item:
+/// its path (for administrators), empty chapters and trickplay, and the year
+/// its file name gives.
+#[tokio::test]
+async fn extras_answer_like_single_items() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("admin", true).await;
+    let t = Tree::new();
+    film_tree(&t);
+    let lib = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO libraries (name, library_type, paths) VALUES ('Movies', 'movies', ARRAY[$1]) RETURNING id",
+    )
+    .bind(t.root())
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    scan(&app, lib, &t.root()).await;
+    let film = id_of(&app, &t.path("Film (2020)/Film (2020).mkv")).await;
+    for route in ["LocalTrailers", "SpecialFeatures"] {
+        let (status, body) = app.get(&format!("/Items/{film}/{route}"), &token).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        for extra in body.as_array().unwrap() {
+            assert!(extra["Path"].is_string(), "{route}: {extra}");
+            assert!(extra["Chapters"].is_array(), "{route}: {extra}");
+            assert!(extra["Trickplay"].is_object(), "{route}: {extra}");
+        }
+    }
+    let (_, body) = app
+        .get(&format!("/Items/{film}/LocalTrailers"), &token)
+        .await;
+    let suffixed = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e["Path"]
+                .as_str()
+                .is_some_and(|p| p.ends_with("Film (2020)-trailer.mkv"))
+        })
+        .cloned()
+        .unwrap_or_else(|| panic!("{body}"));
+    assert_eq!(suffixed["ProductionYear"], 2020, "{suffixed}");
+    app.cleanup().await;
+}
