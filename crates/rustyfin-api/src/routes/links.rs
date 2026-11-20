@@ -32,6 +32,15 @@ pub struct LinkInfo {
     pub titles: i64,
     /// Copies of films and episodes it holds.
     pub copies: i64,
+    /// How long the last sync took (since this server started).
+    pub last_sync_ms: Option<u64>,
+    /// The typical (median) time the friend's server took to answer a recent
+    /// catalogue call, and the slowest.
+    pub response_ms: Option<u64>,
+    pub slowest_ms: Option<u64>,
+    /// Syncs and requests that failed since this server started.
+    pub failed_syncs: u64,
+    pub failed_requests: u64,
 }
 
 /// `GET /api/v1/links`
@@ -47,7 +56,13 @@ pub async fn list(
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         let (titles, copies) = counts.get(&row.id).copied().unwrap_or((0, 0));
+        let stats = state.links.stats(row.id).await.unwrap_or_default();
         out.push(LinkInfo {
+            last_sync_ms: stats.last_sync_ms,
+            response_ms: stats.response_ms,
+            slowest_ms: stats.slowest_ms,
+            failed_syncs: stats.failed_syncs,
+            failed_requests: stats.failed_requests,
             syncing: state.links.is_syncing(row.id).await,
             configured: configured.contains(&row.id),
             id: row.id,

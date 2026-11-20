@@ -44,6 +44,32 @@ pub struct JellyfinClient {
     oidc: Option<super::oidc::TokenSource>,
     /// The link's name, the `link` label of its metrics.
     name: String,
+    /// What the Links page shows, since this server started.
+    stats: std::sync::Mutex<Stats>,
+}
+
+/// How many catalogue response times are kept for the Links page.
+const RECENT: usize = 100;
+
+#[derive(Default)]
+struct Stats {
+    last_sync_ms: Option<u64>,
+    failed_syncs: u64,
+    failed_requests: u64,
+    /// The latest catalogue (`api`) response times, oldest first.
+    recent_api_ms: std::collections::VecDeque<u64>,
+}
+
+/// A link's numbers for the Links page, since this server started.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LinkStats {
+    pub last_sync_ms: Option<u64>,
+    pub failed_syncs: u64,
+    pub failed_requests: u64,
+    /// The median of the recent catalogue response times.
+    pub response_ms: Option<u64>,
+    /// The slowest of them.
+    pub slowest_ms: Option<u64>,
 }
 
 /// How long a catalogue call may take. Streams have no overall limit.
@@ -64,6 +90,7 @@ impl JellyfinClient {
             session: RwLock::new(None),
             oidc: None,
             name: String::new(),
+            stats: Default::default(),
         })
     }
 
@@ -90,7 +117,21 @@ impl JellyfinClient {
             "call" => call
         )
         .record(started.elapsed().as_secs_f64());
-        if !matches!(&result, Ok(r) if !r.status().is_server_error()) {
+        let failed = !matches!(&result, Ok(r) if !r.status().is_server_error());
+        if let Ok(mut stats) = self.stats.lock() {
+            if failed {
+                stats.failed_requests += 1;
+            }
+            if call == "api" {
+                if stats.recent_api_ms.len() == RECENT {
+                    stats.recent_api_ms.pop_front();
+                }
+                stats
+                    .recent_api_ms
+                    .push_back(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX));
+            }
+        }
+        if failed {
             metrics::counter!(
                 "rustyfin_link_request_failures_total",
                 "link" => self.name.clone(),
@@ -99,6 +140,32 @@ impl JellyfinClient {
             .increment(1);
         }
         result.with_context(|| format!("could not reach {}", self.base))
+    }
+
+    /// Record a sync that took `took` and worked or not.
+    pub fn record_sync(&self, took: std::time::Duration, ok: bool) {
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.last_sync_ms = Some(u64::try_from(took.as_millis()).unwrap_or(u64::MAX));
+            if !ok {
+                stats.failed_syncs += 1;
+            }
+        }
+    }
+
+    /// This link's numbers since the server started.
+    pub fn stats(&self) -> LinkStats {
+        let Ok(stats) = self.stats.lock() else {
+            return LinkStats::default();
+        };
+        let mut sorted: Vec<u64> = stats.recent_api_ms.iter().copied().collect();
+        sorted.sort_unstable();
+        LinkStats {
+            last_sync_ms: stats.last_sync_ms,
+            failed_syncs: stats.failed_syncs,
+            failed_requests: stats.failed_requests,
+            response_ms: sorted.get(sorted.len() / 2).copied(),
+            slowest_ms: sorted.last().copied(),
+        }
     }
 
     /// Fetch a client-credentials token for every request (the friend's
