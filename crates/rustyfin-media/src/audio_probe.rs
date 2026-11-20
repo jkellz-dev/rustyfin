@@ -41,6 +41,14 @@ pub fn probe_audio(path: &Path) -> Option<ProbeResult> {
         channels,
         channel_layout: channels.and_then(layout),
         sample_rate: props.sample_rate().and_then(|r| i32::try_from(r).ok()),
+        // As ffprobe gives it (one tick per sample). A stream stored without
+        // a time base reads as scanned before the details existed, and was
+        // probed and rewritten again on every scan (live, 2026-11-20: every
+        // track of the music library, each scan).
+        time_base: Some(match props.sample_rate() {
+            Some(rate) if rate > 0 => format!("1/{rate}"),
+            _ => "1/1000".to_string(),
+        }),
         ..ProbeStream::default()
     }];
     // ffprobe lists embedded cover art as a video stream after the audio.
@@ -157,6 +165,8 @@ fn picture_stream(index: i32, picture: &Picture) -> Option<ProbeStream> {
         codec: Some(codec.to_string()),
         width: i32::try_from(width).ok(),
         height: i32::try_from(height).ok(),
+        // ffprobe's time base for attached pictures.
+        time_base: Some("1/90000".to_string()),
         ..ProbeStream::default()
     })
 }
