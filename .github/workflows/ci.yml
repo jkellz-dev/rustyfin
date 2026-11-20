@@ -19,14 +19,17 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Cargo 1.100 writes fingerprints under build/<pkg>/<hash>/fingerprint. The
-  # mr-boxington action (v1.7.3) saves its cache only when target/ holds a
-  # `.fingerprint` directory, so on 1.100 it found nothing, logged "No reusable
-  # Cargo target state was produced" and never saved. This switch (temporary
-  # in Cargo) restores the layout the action reads. Remove it once the action
-  # understands the new layout. Workflow-wide so every Cargo invocation,
-  # including the ones trunk makes, writes the layout the action saves.
-  __CARGO_TEMPORARY_BUILD_DIR_NEW_LAYOUT_OPT_OUT: 1
+  # mbx's compile cache is an R2 bucket (infra/build-cache/rustyfin in the
+  # cluster repo; owner, 2026-11-20). Every job reads it; only a push to main
+  # writes to it, so a pull request never publishes what later builds trust.
+  # GitHub's Actions cache held one ~9 GB target/ per job, over its 10 GB per
+  # repository, so the jobs' caches evicted each other and most missed.
+  MBX_REMOTE_S3_ENDPOINT: https://fa8a4faad7e8f6c40419d2489522bc79.r2.cloudflarestorage.com
+  MBX_REMOTE_S3_REGION: auto
+  MBX_REMOTE_TRUST_WRITES: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  MBX_REMOTE_MODE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'read-write' || 'read-only' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.BUILD_CACHE_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.BUILD_CACHE_SECRET_ACCESS_KEY }}
 
 jobs:
   lint:
@@ -43,17 +46,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # Compile cache, restored and saved per job. The action's restore prefix is
-      # <os>-<arch>-mbx-<generation>-<toolchain>-, so the job name has to sit in
-      # the generation: a suffix after the commit sha names the saved entry but
-      # every job would still restore the newest entry of any job (lint pulled
-      # the 1.2 GB integration tree). After the toolchain step: keys include the
-      # rustc on PATH. Unit and integration build the same host `test` profile,
-      # so they share one generation and differ only in the suffix: each restores
-      # the other's newest entry and both still save their own.
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-generation: v1-lint
+          backend: remote
+          remote-url: s3://rustyfin-build-cache
+          namespace: rustyfin
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -117,7 +114,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-generation: v2-test
+          backend: remote
+          remote-url: s3://rustyfin-build-cache
+          namespace: rustyfin
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -144,8 +143,10 @@ jobs:
       # its outputs live in frontend/target: name that workspace or nothing is saved.
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
+          backend: remote
+          remote-url: s3://rustyfin-build-cache
+          namespace: rustyfin
           working-directory: frontend
-          cache-generation: v1-frontend
 
       # trunk runs plain `cargo`, which would bypass mbx. `mbx setup` installs a
       # Cargo shim that runs mbx; putting it first on PATH routes trunk's cargo
@@ -220,10 +221,9 @@ jobs:
 
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-generation: v1-build-${{ matrix.target }}
-          # mbx's own store, not a pruned target/: the target payload left mbx with
-          # nothing to look up (0 hits) and Cargo still recompiled ~90 units a run.
-          github-cache-mode: objects
+          backend: remote
+          remote-url: s3://rustyfin-build-cache
+          namespace: rustyfin
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
