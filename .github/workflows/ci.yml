@@ -64,38 +64,13 @@ jobs:
       - name: Clippy
         run: mbx clippy -- -D warnings
 
-  test-unit:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Same disk squeeze as the integration tests: run 43637105389 died with "No
-      # space left on device" before the tests started (the restored build cache
-      # filled the runner).
-      - name: Free runner disk
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
-          (sudo rm -rf /usr/local/lib/android > /dev/null 2>&1 &)
-          df -h /
-      - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
-      - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
-        with:
-          cache-generation: v1-test
-          cache-key-suffix: unit
-
-      - name: Stub frontend dist
-        run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
-
-      - name: Run unit tests
-        run: mbx test --lib
-
-  test-integration:
-    name: Integration Tests
+  # Unit and integration tests in one job with one cache. As two jobs they
+  # saved a ~9 GB target/ each, over GitHub's 10 GB per repository, so caches
+  # evicted each other (lint, frontend and the release builds found none); and
+  # each restored the other's tree, built with other features (`--lib` across
+  # the workspace against `-p rustyfin-api`), so ~90 crates recompiled anyway.
+  test:
+    name: Tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -142,8 +117,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@9522411a9bce8484da960823fc2f46e52f981f71 # 1.100.0
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
-          cache-generation: v1-test
-          cache-key-suffix: integration
+          cache-generation: v2-test
+
+      - name: Stub frontend dist
+        run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
+
+      - name: Run unit tests
+        run: mbx test --lib
 
       - name: Run integration tests
         run: mbx test -p rustyfin-api --test '*' -- --test-threads=1
@@ -202,7 +182,7 @@ jobs:
     container:
       image: docker.io/library/rust:1.100.0-slim-bookworm@sha256:7c7d4eb4d05b7781187a327809466cfddf29753f6defdc3d19a0e291951b7a37
     if: github.event_name == 'push'
-    needs: [lint, test-unit, test-integration, build-frontend]
+    needs: [lint, test, build-frontend]
     strategy:
       matrix:
         include:
