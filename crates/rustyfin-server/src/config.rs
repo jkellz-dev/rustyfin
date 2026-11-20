@@ -686,3 +686,37 @@ impl Config {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::TasksConfig;
+
+    fn tasks(toml: &str) -> TasksConfig {
+        config::Config::builder()
+            .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap()
+    }
+
+    /// The nightly parity run (2026-11-20) would not start: its `[tasks]`
+    /// section set only `enabled`, which dropped the built-in schedules the
+    /// library scan refers to ("unknown schedule 'daily'").
+    #[test]
+    fn a_tasks_section_without_schedules_keeps_daily_and_weekly() {
+        let t = tasks("enabled = true");
+        assert_eq!(t.schedules["daily"].cron, "0 0 3 * * * *");
+        assert_eq!(t.schedules["weekly"].cron, "0 0 4 * * 7 *");
+    }
+
+    #[test]
+    fn a_schedule_of_the_same_name_replaces_the_built_in_one() {
+        let t = tasks(
+            "[schedules.daily]\ncron = \"0 30 2 * * * *\"\n[schedules.hourly]\ncron = \"0 0 * * * * *\"",
+        );
+        assert_eq!(t.schedules["daily"].cron, "0 30 2 * * * *");
+        assert_eq!(t.schedules["weekly"].cron, "0 0 4 * * 7 *");
+        assert_eq!(t.schedules["hourly"].cron, "0 0 * * * * *");
+    }
+}
