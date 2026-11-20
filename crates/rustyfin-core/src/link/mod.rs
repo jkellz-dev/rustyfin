@@ -145,7 +145,8 @@ impl Links {
             rustyfin_db::repo::links::upsert(pool, &settings.name, settings.kind.as_str(), &url)
                 .await?;
         let client = JellyfinClient::new(&url, &settings.user, &settings.password, id)?
-            .with_oidc(settings.oidc.clone());
+            .with_oidc(settings.oidc.clone())
+            .named(&settings.name);
         let link = Arc::new(Link {
             id,
             settings,
@@ -288,6 +289,15 @@ impl Links {
             Ok(r) if !r.errors.is_empty() => Some(r.errors.join("; ")),
             Ok(_) => None,
         };
+        let name = link.settings.name.clone();
+        metrics::counter!(
+            "rustyfin_link_syncs_total",
+            "link" => name.clone(),
+            "result" => if error.is_none() { "ok" } else { "error" }
+        )
+        .increment(1);
+        metrics::histogram!("rustyfin_link_sync_duration_seconds", "link" => name)
+            .record(started.elapsed().as_secs_f64());
         if let Err(e) = rustyfin_db::repo::links::record_sync(pool, id, error.as_deref()).await {
             tracing::warn!(
                 "Could not record the sync of link {}: {e}",

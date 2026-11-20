@@ -217,5 +217,5 @@ cache folder can be rebuilt; the media folders are yours as they were.
 - `GET /System/Ping` answers while the server is up (no sign-in needed).
 - `[metrics] listen = "0.0.0.0:9090"` serves Prometheus metrics on a separate port, never on the public one
   ([Configuration](configuration.md#metrics-optional)): requests, scans, library folder health, database, caches,
-  transcodes.
+  transcodes, and each linked server's syncs, latency, failures and lag.
 - Logs go to standard output; `RUST_LOG` sets the detail ([Configuration](configuration.md#logging)).

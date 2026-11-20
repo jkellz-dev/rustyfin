@@ -116,6 +116,12 @@ Metrics get their own listener and are never served on the public port. Unset, t
 - `rustyfin_library_folder_ok{library,path}` (0 when a folder is missing, empty, unreadable or hung)
 - `rustyfin_cache_bytes{cache}`, `rustyfin_cache_files{cache}` (recounted at most every 5 minutes)
 - `rustyfin_up`, `rustyfin_build_info{version}`
+- Per linked server (`link` is its name in `[[link]]`): `rustyfin_link_syncs_total{link,result}`,
+  `rustyfin_link_sync_duration_seconds{link}`, `rustyfin_link_request_duration_seconds{link,call}` (to the response's
+  headers; `call` is `api` or `stream`), `rustyfin_link_request_failures_total{link,call}` (no answer, or a 5xx),
+  `rustyfin_link_up{link}`, `rustyfin_link_titles{link}`, `rustyfin_link_copies{link}`,
+  `rustyfin_link_last_sync_timestamp_seconds{link}`, `rustyfin_link_sync_lag_seconds{link}` (since the last sync that
+  worked)
 
 ### `[metadata]`
 
