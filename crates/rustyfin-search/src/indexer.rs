@@ -82,14 +82,35 @@ pub fn item_settings() -> Settings {
             "genres",
             "overview",
         ])
-        .with_filterable_attributes(["item_type", "library_id", "production_year"])
+        .with_filterable_attributes(ITEM_FILTERS)
+}
+
+/// What the items index filters on.
+pub const ITEM_FILTERS: &[&str] = &["item_type", "library_id", "production_year"];
+/// What the people index filters on.
+pub const PEOPLE_FILTERS: &[&str] = &["person_type"];
+
+/// Whether Meilisearch has the index `uid` with every attribute in
+/// `filters` filterable (as [`create`] leaves it).
+pub async fn is_built(client: &Client, uid: &str, filters: &[&str]) -> bool {
+    let Ok(index) = client.get_index(uid).await else {
+        return false;
+    };
+    let Ok(settings) = index.get_settings().await else {
+        return false;
+    };
+    let Ok(json) = serde_json::to_value(&settings) else {
+        return false;
+    };
+    let have = json["filterableAttributes"].to_string();
+    filters.iter().all(|f| have.contains(&format!("\"{f}\"")))
 }
 
 /// The people index's settings.
 pub fn people_settings() -> Settings {
     Settings::new()
         .with_searchable_attributes(["name"])
-        .with_filterable_attributes(["person_type"])
+        .with_filterable_attributes(PEOPLE_FILTERS)
 }
 
 async fn finish(client: &Client, task: TaskInfo, timeout: Duration) -> Result<(), String> {

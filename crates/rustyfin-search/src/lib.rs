@@ -85,6 +85,8 @@ pub struct SyncReport {
     pub removed: usize,
     pub people_indexed: usize,
     pub people_removed: usize,
+    /// The people index was built whole.
+    pub people_rebuilt: bool,
 }
 
 /// Search error type.
@@ -313,24 +315,35 @@ impl SearchService {
             return Ok(SyncReport::default());
         };
         let _one = self.syncing.lock().await;
+        self.sync_locked(m).await
+    }
+
+    /// [`Self::sync`] with the lock held.
+    async fn sync_locked(&self, m: &Meili) -> Result<SyncReport, SearchError> {
         let (indexed, removed, rebuilt) = self.sync_items(m).await?;
-        let (people_indexed, people_removed, _) = self.sync_people(m).await?;
+        let (people_indexed, people_removed, people_rebuilt) = self.sync_people(m).await?;
         let report = SyncReport {
             rebuilt,
             indexed,
             removed,
             people_indexed,
             people_removed,
+            people_rebuilt,
         };
         self.ready.store(true, Ordering::Release);
         if report != SyncReport::default() {
             tracing::info!(
-                "Search index: {} item(s) and {} people indexed, {} and {} removed{}",
+                "Search index: {} item(s){} and {} people{} indexed, {} and {} removed",
                 report.indexed,
+                if report.rebuilt { " (rebuilt)" } else { "" },
                 report.people_indexed,
+                if report.people_rebuilt {
+                    " (rebuilt)"
+                } else {
+                    ""
+                },
                 report.removed,
                 report.people_removed,
-                if report.rebuilt { " (rebuilt)" } else { "" }
             );
         }
         Ok(report)
@@ -338,7 +351,7 @@ impl SearchService {
 
     async fn sync_items(&self, m: &Meili) -> Result<Counts, SearchError> {
         let engine = SearchError::Engine;
-        let Some(since) = search_feed::cursor(&self.pool, &m.index).await? else {
+        let Some(since) = self.cursor(m, &m.index, indexer::ITEM_FILTERS).await? else {
             // Built whole and swapped in, so searches keep answering from the
             // old one meanwhile; what changes during the build comes next time.
             let snapshot = search_feed::snapshot(&self.pool).await?;
@@ -395,7 +408,7 @@ impl SearchService {
 
     async fn sync_people(&self, m: &Meili) -> Result<Counts, SearchError> {
         let engine = SearchError::Engine;
-        let Some(since) = search_feed::cursor(&self.pool, &m.people).await? else {
+        let Some(since) = self.cursor(m, &m.people, indexer::PEOPLE_FILTERS).await? else {
             let snapshot = search_feed::snapshot(&self.pool).await?;
             let building = format!("{}_building", m.people);
             let settings = indexer::people_settings();
@@ -448,12 +461,34 @@ impl SearchService {
         Ok((indexed, removed, false))
     }
 
-    /// Rebuild both indexes whole, now.
+    /// Where the index `uid` was last brought up to; `None` (build it whole)
+    /// when it never was, or when Meilisearch no longer has it as built: a
+    /// Meilisearch without stored data loses its indexes on restart, and an
+    /// update would then make a bare index that filters on nothing.
+    async fn cursor(
+        &self,
+        m: &Meili,
+        uid: &str,
+        filters: &[&str],
+    ) -> Result<Option<String>, SearchError> {
+        let Some(cursor) = search_feed::cursor(&self.pool, uid).await? else {
+            return Ok(None);
+        };
+        if indexer::is_built(&m.client, uid, filters).await {
+            return Ok(Some(cursor));
+        }
+        tracing::warn!("Search index {uid} is missing or incomplete in Meilisearch; rebuilding it");
+        Ok(None)
+    }
+
+    /// Rebuild both indexes whole, now. The lock is held from clearing the
+    /// cursors on, so a sync already running cannot write its cursor back.
     pub async fn reindex_all(&self) -> Result<(), SearchError> {
         if let Some(ref m) = self.meili {
+            let _one = self.syncing.lock().await;
             search_feed::clear_cursor(&self.pool, &m.index).await?;
             search_feed::clear_cursor(&self.pool, &m.people).await?;
-            self.sync().await?;
+            self.sync_locked(m).await?;
         }
         Ok(())
     }
