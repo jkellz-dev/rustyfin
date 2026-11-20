@@ -30,6 +30,11 @@ env:
   MBX_REMOTE_MODE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'read-write' || 'read-only' }}
   AWS_ACCESS_KEY_ID: ${{ secrets.BUILD_CACHE_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.BUILD_CACHE_SECRET_ACCESS_KEY }}
+  # mbx looks up its pinned linker (wild, .mbx.toml) through GitHub's API,
+  # which allows an anonymous runner 60 requests an hour shared across every
+  # job on its IP: a release build failed there with "403 rate limit
+  # exceeded". With this read-only job token mbx asks as the repository.
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   lint:
