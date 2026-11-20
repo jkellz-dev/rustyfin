@@ -475,7 +475,7 @@ pub fn clean_title(raw: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn extract_year(text: &str) -> Option<i32> {
+pub fn extract_year(text: &str) -> Option<i32> {
     // Prefer year in parentheses
     if let Some(start) = text.find('(')
         && let Some(end) = text[start..].find(')')

@@ -15,7 +15,7 @@ use rustyfin_db::repo::{images, media_items};
 use rustyfin_models::dto::{AllThemeMediaResult, BaseItemDto, ThemeMediaResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
-use crate::error::ApiError;
+use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 /// `GET /Items/{itemId}/ThemeSongs`: `theme.mp3` and the `theme-music` folder.
@@ -89,18 +89,28 @@ pub async fn get_ancestors(
         }
     }
 
+    // Like Jellyfin, each ancestor has its child count and the user's data.
+    let counts = media_items::count_children_batch(&state.pool, &ids)
+        .await
+        .or_log_default("media_items::count_children_batch");
+    for dto in &mut dtos {
+        dto.child_count = Some(counts.get(&dto.id).copied().unwrap_or(0) as i32);
+    }
     if let Some(lib) = match library_id {
         Some(id) => rustyfin_db::repo::libraries::find_by_id(&state.pool, id)
             .await
             .map_err(ApiError::Database)?,
         None => None,
     } {
-        dtos.push(super::libraries::collection_folder_dto(
-            &lib,
-            &state.server_id,
-        ));
+        let mut folder = super::libraries::collection_folder_dto(&lib, &state.server_id);
+        let count = media_items::count_top_level_by_library(&state.pool, lib.id, &[])
+            .await
+            .or_log_default("media_items::count_top_level_by_library");
+        folder.child_count = Some(count as i32);
+        dtos.push(folder);
     }
     dtos.push(super::libraries::root_folder_dto(&state, auth.user_id).await?);
+    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
 
     Ok(Json(dtos))
 }

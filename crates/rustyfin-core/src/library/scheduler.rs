@@ -142,7 +142,8 @@ impl TaskScheduler {
 
         if self.config.run_on_startup {
             tracing::info!("Running startup scans for all libraries");
-            self.fire_all_library_scans().await;
+            // Runs on; recorded when every scan has ended.
+            drop(self.fire_all_library_scans().await);
             self.fire_static_tasks_for_all_schedules().await;
         }
 
@@ -359,31 +360,41 @@ impl TaskScheduler {
         }
     }
 
-    /// Fire scans for ALL libraries (used for run_on_startup).
-    async fn fire_all_library_scans(&self) {
-        let libraries = match libraries::list_scannable(&self.pool).await {
+    /// Scan every library at once (run_on_startup), recorded as one run of
+    /// "Scan All Libraries" so the tasks page says when it ran and how long
+    /// it took. The returned handle ends when every scan has.
+    pub async fn fire_all_library_scans(&self) -> tokio::task::JoinHandle<()> {
+        let pool = self.pool.clone();
+        let result_id = task_results::insert_running(&pool, "library_scan", "Scan All Libraries")
+            .await
+            .unwrap_or(-1);
+        let libraries = match libraries::list_scannable(&pool).await {
             Ok(libs) => libs,
             Err(e) => {
                 tracing::error!("Failed to query libraries for startup scan: {e}");
-                return;
+                if result_id >= 0 {
+                    let _ = task_results::mark_error(&pool, result_id, &e.to_string()).await;
+                }
+                return tokio::spawn(async {});
             }
         };
 
+        let mut scans = Vec::new();
         for lib in libraries {
             // No jitter on startup -- user expects immediate action
             self.in_flight.write().await.insert(lib.id);
 
-            let pool = self.pool.clone();
+            let pool = pool.clone();
             let in_flight = self.in_flight.clone();
             let people_cache_dir = self.people_cache_dir.clone();
             let lib_id = lib.id;
             let lib_name = lib.name.clone();
             let lib_paths = lib.paths.clone();
 
-            tokio::spawn(async move {
+            scans.push(tokio::spawn(async move {
                 tracing::info!("Startup scan starting: {lib_name}");
                 let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
-                match scanner.scan(lib_id, &lib_paths).await {
+                let ok = match scanner.scan(lib_id, &lib_paths).await {
                     Ok(result) => {
                         tracing::info!(
                             "Startup scan complete: {lib_name} \
@@ -393,14 +404,31 @@ impl TaskScheduler {
                             result.items_skipped,
                             result.errors,
                         );
+                        true
                     }
                     Err(e) => {
                         tracing::error!("Startup scan failed for '{lib_name}': {e}");
+                        false
                     }
-                }
+                };
                 in_flight.write().await.remove(&lib_id);
-            });
+                ok
+            }));
         }
+        tokio::spawn(async move {
+            let mut all_ok = true;
+            for scan in scans {
+                all_ok &= scan.await.unwrap_or(false);
+            }
+            if result_id >= 0 {
+                let _ = if all_ok {
+                    task_results::mark_completed(&pool, result_id).await
+                } else {
+                    task_results::mark_error(&pool, result_id, "One or more library scans failed")
+                        .await
+                };
+            }
+        })
     }
 
     /// Fire all static tasks (used for run_on_startup).

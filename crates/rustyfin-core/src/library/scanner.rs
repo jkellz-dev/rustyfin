@@ -447,6 +447,8 @@ impl LibraryScanner {
             .unwrap_or("Extra")
             .trim()
             .to_string();
+        // A year in the file name (`Film (2020)-trailer`), as Jellyfin reads it.
+        let production_year = rustyfin_common::naming::extract_year(&name);
         let item = media_items::NewMediaItem {
             item_type: item_type.to_string(),
             library_id: Some(library_id),
@@ -454,7 +456,7 @@ impl LibraryScanner {
             sort_name: Some(name.to_lowercase()),
             name,
             path: Some(path_str),
-            production_year: None,
+            production_year,
             runtime_ticks: probe_result.as_ref().map(|p| p.duration_ticks),
             index_number: None,
             parent_index_number: None,

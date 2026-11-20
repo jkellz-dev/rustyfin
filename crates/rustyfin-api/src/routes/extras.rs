@@ -60,6 +60,15 @@ async fn extras(
             auth.is_administrator,
         )
         .await;
+        // Like a single item in Jellyfin: chapters and trickplay even when
+        // empty, and the path for administrators.
+        for (dto, row) in dtos.iter_mut().zip(&rows) {
+            dto.chapters.get_or_insert_with(Vec::new);
+            dto.trickplay.get_or_insert_with(Default::default);
+            if auth.is_administrator {
+                dto.path = row.path.clone();
+            }
+        }
     }
     Ok(dtos)
 }

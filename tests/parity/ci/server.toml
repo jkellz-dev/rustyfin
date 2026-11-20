@@ -24,5 +24,8 @@ name = "Tailscale-User-Name"
 email = "Tailscale-User-Login"
 groups = "Tailscale-User-Groups"
 
+# The scheduler on, as on a real server: /ScheduledTasks lists its tasks, and
+# the scans at start are a run of "Scan All Libraries" (system.hurl). Nothing
+# else is due during the run.
 [tasks]
-enabled = false
+enabled = true
