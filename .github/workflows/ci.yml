@@ -58,11 +58,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # Its own namespace: prefetch pulls everything recorded for the lockfile
+      # in a namespace, and with the test job's ~18 GiB of debug builds beside
+      # it, lint downloaded all of them to check the code.
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           backend: remote
           remote-url: s3://rustyfin-build-cache
-          namespace: rustyfin
+          namespace: rustyfin-lint
 
       - name: Stub frontend dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
@@ -217,8 +220,9 @@ jobs:
           CROSS_PACKAGES: ${{ matrix.cross_packages }}
         run: |
           apt-get update -qq
+          # clang: wild, the x86_64 linker (.mbx.toml), links through it.
           # shellcheck disable=SC2086 # a space-separated package list on purpose
-          apt-get install -y -qq --no-install-recommends git ca-certificates pkg-config $CROSS_PACKAGES
+          apt-get install -y -qq --no-install-recommends git ca-certificates pkg-config clang $CROSS_PACKAGES
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
