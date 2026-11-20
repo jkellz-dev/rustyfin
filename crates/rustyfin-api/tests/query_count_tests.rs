@@ -87,9 +87,12 @@ impl Subscriber for QueryCounter {
             let mut sql = Statement::default();
             event.record(&mut sql);
             let sql: String = sql.0.split_whitespace().collect::<Vec<_>>().join(" ");
-            // The test pool's per-connection setup (`SET search_path`), run when
-            // the pool happens to open a connection, is not the route's query.
-            if !sql.contains("SET search_path") {
+            // Per-connection work is not the route's query: the test pool's setup
+            // (`SET search_path`) when the pool opens a connection, and SQLx's
+            // lookup of a type's oid (`pg_type`) the first time a new
+            // connection meets that type. Either lands in whichever run the
+            // pool chose to open a connection in.
+            if !sql.contains("SET search_path") && !sql.contains("SELECT pg_type.oid") {
                 self.seen.lock().unwrap().push(sql);
             }
         }
