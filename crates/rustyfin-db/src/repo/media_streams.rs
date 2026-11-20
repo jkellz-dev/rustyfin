@@ -133,9 +133,10 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
 
 /// Whether any stream of the item was stored before the details existed. ffprobe
 /// reports a time base for every stream, so a row without one predates them.
+/// Subtitle files beside a video are never probed and have none.
 pub async fn lacks_details(pool: &PgPool, item_id: Uuid) -> Result<bool, sqlx::Error> {
     let (stale,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS (SELECT 1 FROM media_streams WHERE item_id = $1 AND time_base IS NULL)",
+        "SELECT EXISTS (SELECT 1 FROM media_streams WHERE item_id = $1 AND time_base IS NULL AND NOT is_external)",
     )
     .bind(item_id)
     .fetch_one(pool)
