@@ -12,6 +12,7 @@
 //! `docs/linked-servers.md`.
 
 mod jellyfin;
+pub use jellyfin::LinkStats;
 mod oidc;
 mod sync;
 
@@ -252,6 +253,12 @@ impl Links {
         self.links.read().await.get(&id).cloned()
     }
 
+    /// The link's numbers since this server started; `None` for a link not
+    /// in the config file.
+    pub async fn stats(&self, id: Uuid) -> Option<LinkStats> {
+        self.get(id).await.map(|link| link.client.stats())
+    }
+
     /// True while the link is syncing.
     pub async fn is_syncing(&self, id: Uuid) -> bool {
         match self.get(id).await {
@@ -298,6 +305,7 @@ impl Links {
         .increment(1);
         metrics::histogram!("rustyfin_link_sync_duration_seconds", "link" => name)
             .record(started.elapsed().as_secs_f64());
+        link.client.record_sync(started.elapsed(), error.is_none());
         if let Err(e) = rustyfin_db::repo::links::record_sync(pool, id, error.as_deref()).await {
             tracing::warn!(
                 "Could not record the sync of link {}: {e}",

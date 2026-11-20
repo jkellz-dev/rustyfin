@@ -543,6 +543,16 @@ pub struct LinkInfo {
     pub copies: i64,
     #[serde(default)]
     pub offline_since: Option<String>,
+    #[serde(default)]
+    pub last_sync_ms: Option<u64>,
+    #[serde(default)]
+    pub response_ms: Option<u64>,
+    #[serde(default)]
+    pub slowest_ms: Option<u64>,
+    #[serde(default)]
+    pub failed_syncs: u64,
+    #[serde(default)]
+    pub failed_requests: u64,
 }
 
 /// Rustyfin's own permissions of a user (`/api/v1/users/{id}/permissions`).

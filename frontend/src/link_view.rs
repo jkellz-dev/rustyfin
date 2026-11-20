@@ -44,6 +44,44 @@ pub fn badge(state: &LinkState) -> (&'static str, &'static str) {
     }
 }
 
+/// A response time: milliseconds under a second, else seconds to one place.
+fn millis(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{ms} ms")
+    } else {
+        format!("{:.1} s", ms as f64 / 1000.0)
+    }
+}
+
+/// The typical response time of a link's catalogue calls, and the slowest.
+pub fn response_label(typical: Option<u64>, slowest: Option<u64>) -> String {
+    match (typical, slowest) {
+        (Some(t), Some(s)) if s > t => format!("{} (slowest {})", millis(t), millis(s)),
+        (Some(t), _) => millis(t),
+        _ => "\u{2014}".to_string(),
+    }
+}
+
+/// What failed since the server started.
+pub fn failures_label(syncs: u64, requests: u64) -> String {
+    let count = |n: u64, what: &str| match n {
+        1 => format!("1 {what}"),
+        n => format!("{n} {what}s"),
+    };
+    match (syncs, requests) {
+        (0, 0) => "None".to_string(),
+        (s, 0) => count(s, "sync"),
+        (0, r) => count(r, "request"),
+        (s, r) => format!("{}, {}", count(s, "sync"), count(r, "request")),
+    }
+}
+
+/// How long the last sync took, for under its time.
+pub fn sync_took(ms: Option<u64>) -> String {
+    ms.map(|ms| format!("took {}", crate::dashboard_view::format_duration(ms as i64)))
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     /// Owner, 2026-11-20: the per-link numbers on the Links page.
@@ -90,6 +128,11 @@ mod tests {
             titles: 3,
             copies: 5,
             offline_since: None,
+            last_sync_ms: None,
+            response_ms: None,
+            slowest_ms: None,
+            failed_syncs: 0,
+            failed_requests: 0,
         }
     }
 

@@ -7,7 +7,7 @@ use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
 use crate::components::loading::Loading;
-use crate::link_view::{LinkState, badge, link_state};
+use crate::link_view::{LinkState, badge, failures_label, link_state, response_label, sync_took};
 use crate::timer::sleep_ms;
 use crate::types::LinkInfo;
 
@@ -92,6 +92,8 @@ pub fn Links() -> View {
                                     th { "Last sync" }
                                     th { "Titles" }
                                     th { "Copies" }
+                                    th(title="Since this server started") { "Response" }
+                                    th(title="Since this server started") { "Failures" }
                                     th { "Actions" }
                                 }
                             }
@@ -110,6 +112,9 @@ pub fn Links() -> View {
                                             .as_deref()
                                             .map(format_datetime)
                                             .unwrap_or_else(|| "Never".into());
+                                        let took = sync_took(link.last_sync_ms);
+                                        let response = response_label(link.response_ms, link.slowest_ms);
+                                        let failures = failures_label(link.failed_syncs, link.failed_requests);
                                         let id = link.id.clone();
                                         let name = link.name.clone();
                                         let can_sync = link.configured && !link.syncing;
@@ -132,9 +137,15 @@ pub fn Links() -> View {
                                                     span(class=class, title=why) { (label) }
                                                     (reason)
                                                 }
-                                                td(class="text-muted", data-label="Last sync") { (last) }
+                                                td(class="text-muted", data-label="Last sync") {
+                                                    (last)
+                                                    br {}
+                                                    span(class="text-sm") { (took) }
+                                                }
                                                 td(data-label="Titles") { (link.titles) }
                                                 td(data-label="Copies") { (link.copies) }
+                                                td(class="text-muted", data-label="Response") { (response) }
+                                                td(class="text-muted", data-label="Failures") { (failures) }
                                                 td(data-label="Actions") {
                                                     button(
                                                         class="btn btn-primary btn-sm",

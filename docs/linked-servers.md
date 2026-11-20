@@ -141,7 +141,9 @@ WARN  rustyfin_core::link: Link Alex did not sync: Alex shares no library named 
 ```
 
 The admin's **Links** page (`/web/links`) shows each link: whether its last sync worked and why not, when it last
-synced, how many titles only it brought and how many copies it holds, with a **Sync now** button. The same is
+synced and how long that took, how many titles only it brought and how many copies it holds, how fast its server
+answers catalogue calls (typical and slowest of the last 100), and how many syncs and requests failed, with a **Sync
+now** button. Times and failures count from when this server started. The same is
 `GET /api/v1/links` for administrators; `POST /api/v1/links/{id}/sync` starts a sync ([Rustyfin API](rustyfin-api.md)).
 
 ## How copies are matched
