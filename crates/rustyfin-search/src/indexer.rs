@@ -183,10 +183,18 @@ pub async fn swap_in(
     client: &Client,
     uid: &str,
     building: &str,
-    settings: &Settings,
     timeout: Duration,
 ) -> Result<(), String> {
-    create(client, uid, settings, timeout).await?;
+    // The old index is dropped after the swap, so it is never given the
+    // settings: re-indexing it first (a bare index Meilisearch made searches
+    // every field) took seconds and logged Meilisearch errors for nothing.
+    if client.get_index(uid).await.is_err() {
+        let task = client
+            .create_index(uid, Some("id"))
+            .await
+            .map_err(|e| e.to_string())?;
+        finish(client, task, timeout).await?;
+    }
     let task = client
         .swap_indexes([&SwapIndexes {
             indexes: (uid.to_string(), building.to_string()),
