@@ -44,12 +44,17 @@ fn mp3(tags: &[(&str, &str)]) -> Vec<u8> {
 }
 
 async fn changes(app: &common::TestApp) -> BTreeMap<Uuid, String> {
-    sqlx::query_as::<_, (Uuid, String)>("SELECT id, change_xid::text FROM media_items")
-        .fetch_all(&app.pool)
-        .await
-        .unwrap()
-        .into_iter()
-        .collect()
+    sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, change_xid::text || ' ' || (to_jsonb(m) - 'change_xid')::text \
+         || ' streams=' || (SELECT COUNT(*) FROM media_streams s WHERE s.item_id = m.id) \
+         || ' images=' || (SELECT COUNT(*) FROM images i WHERE i.entity_id = m.id) \
+         FROM media_items m",
+    )
+    .fetch_all(&app.pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .collect()
 }
 
 #[tokio::test]
@@ -108,6 +113,14 @@ async fn a_rescan_of_unchanged_music_changes_no_item() {
     .fetch_all(&app.pool)
     .await
     .unwrap();
+    for (id, row) in &before {
+        if after.get(id) != Some(row) {
+            eprintln!(
+                "BEFORE {row}\nAFTER  {}",
+                after.get(id).map_or("gone", |r| r.as_str())
+            );
+        }
+    }
     assert!(changed.is_empty(), "changed by a rescan: {changed:?}");
     std::fs::remove_dir_all(&root).ok();
     app.cleanup().await;
