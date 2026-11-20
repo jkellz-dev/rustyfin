@@ -358,7 +358,7 @@ impl SearchService {
             let building = format!("{}_building", m.index);
             let settings = indexer::item_settings();
             indexer::drop_index(&m.client, &building).await;
-            indexer::create(&m.client, &building, TASK_TIMEOUT)
+            indexer::create(&m.client, &building, &settings, TASK_TIMEOUT)
                 .await
                 .map_err(engine)?;
             let (mut indexed, mut after) = (0, None);
@@ -413,7 +413,7 @@ impl SearchService {
             let building = format!("{}_building", m.people);
             let settings = indexer::people_settings();
             indexer::drop_index(&m.client, &building).await;
-            indexer::create(&m.client, &building, TASK_TIMEOUT)
+            indexer::create(&m.client, &building, &settings, TASK_TIMEOUT)
                 .await
                 .map_err(engine)?;
             let (mut indexed, mut after) = (0, None);
