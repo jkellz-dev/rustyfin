@@ -1,0 +1,11 @@
+# mbx workspace settings, shared by CI, local builds and the cache.
+#
+# The linker is part of every link action's cache key, so builds share cached
+# results only when they pick the same one. wild (downloaded and checksummed by
+# mbx, version pinned) links native x86_64 Linux builds everywhere. aarch64 is
+# left on the system linker: CI cross-compiles it with aarch64-linux-gnu-gcc.
+[linker.profiles.dev]
+x86_64-unknown-linux-gnu = "wild@0.11.0"
+
+[linker.profiles.release]
+x86_64-unknown-linux-gnu = "wild@0.11.0"
