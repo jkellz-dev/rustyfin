@@ -31,6 +31,9 @@ use rustyfin_search::SearchService;
 /// How often linked servers are synced.
 const LINK_SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 
+/// How often the search index catches up with the library.
+const SEARCH_SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
@@ -82,6 +85,23 @@ async fn main() -> anyhow::Result<()> {
             .as_ref()
             .and_then(|s| s.meilisearch_key.as_deref()),
     ));
+
+    // Keep the search index in step: built at start (in the background,
+    // Postgres answers searches meanwhile), then whatever changed every few
+    // seconds.
+    if search_service.is_meilisearch_available() {
+        let search = search_service.clone();
+        tokio::spawn(async move {
+            loop {
+                if let Err(e) = search.sync().await {
+                    tracing::warn!(
+                        "Search index sync failed (searches use Postgres meanwhile): {e}"
+                    );
+                }
+                tokio::time::sleep(SEARCH_SYNC_INTERVAL).await;
+            }
+        });
+    }
 
     // Initialize transcode manager
     let tc = config.transcode.clone().unwrap_or_default();

@@ -141,8 +141,8 @@ pub async fn post_updated_media(
 
             scan_in_flight.write().await.remove(&library_id);
 
-            if let Err(e) = search_service.reindex_all().await {
-                tracing::error!("Search reindex failed after webhook scan: {e}");
+            if let Err(e) = search_service.sync().await {
+                tracing::error!("Search index sync failed after webhook scan: {e}");
             }
         });
     }

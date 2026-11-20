@@ -1,83 +1,64 @@
-// Search query building and execution.
-// When Meilisearch is available, queries go there.
-// Otherwise falls back to Postgres ILIKE/tsvector.
+//! Searches against the Meilisearch items index.
 
-#[cfg(feature = "meilisearch")]
-use crate::SearchHit;
-
-#[cfg(feature = "meilisearch")]
+use meilisearch_sdk::client::Client;
+use meilisearch_sdk::search::Selectors;
 use serde::Deserialize;
+use uuid::Uuid;
 
-#[cfg(feature = "meilisearch")]
 #[derive(Deserialize)]
-struct MeiliHit {
+struct Hit {
     id: String,
-    name: String,
-    item_type: String,
-    #[serde(default)]
-    production_year: Option<i32>,
-    #[serde(default)]
-    series_name: Option<String>,
-    #[serde(default)]
-    index_number: Option<i32>,
-    #[serde(default)]
-    parent_index_number: Option<i32>,
-    #[serde(default)]
-    runtime_ticks: Option<i64>,
-    #[serde(default)]
-    library_id: Option<String>,
 }
 
-/// Search Meilisearch for items matching a query.
-#[cfg(feature = "meilisearch")]
-pub async fn search(
-    client: &meilisearch_sdk::client::Client,
-    query: &str,
+/// A Meilisearch filter for `item_types` (none when empty). Types are
+/// Jellyfin's names, letters only; anything else is left out rather than
+/// quoted into the filter.
+pub fn type_filter(item_types: &[String]) -> Option<String> {
+    let parts: Vec<String> = item_types
+        .iter()
+        .filter(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .map(|t| format!("item_type = \"{t}\""))
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(" OR "))
+}
+
+/// The ids of the items best matching `term`, best first.
+pub async fn ranked_ids(
+    client: &Client,
+    index: &str,
+    term: &str,
+    item_types: &[String],
     limit: usize,
-    item_type_filter: Option<&[String]>,
-) -> Result<Vec<SearchHit>, String> {
-    let index = client.index("media_items");
-
-    let mut search_query = index.search();
-    search_query.with_query(query);
-    search_query.with_limit(limit);
-
-    // Build filter string (must outlive search_query borrow)
-    let filter = item_type_filter.and_then(|types| {
-        if types.is_empty() {
-            return None;
-        }
-        let parts: Vec<String> = types
-            .iter()
-            .map(|t| format!("item_type = \"{t}\""))
-            .collect();
-        Some(parts.join(" OR "))
-    });
+) -> Result<Vec<Uuid>, String> {
+    let index = client.index(index);
+    let filter = type_filter(item_types);
+    let mut search = index.search();
+    search
+        .with_query(term)
+        .with_limit(limit)
+        .with_attributes_to_retrieve(Selectors::Some(&["id"]));
     if let Some(ref f) = filter {
-        search_query.with_filter(f);
+        search.with_filter(f);
     }
-
-    let results = search_query
-        .execute::<MeiliHit>()
-        .await
-        .map_err(|e| e.to_string())?;
-
+    let results = search.execute::<Hit>().await.map_err(|e| e.to_string())?;
     Ok(results
         .hits
         .into_iter()
-        .map(|hit| {
-            let h = hit.result;
-            SearchHit {
-                id: h.id.parse().unwrap_or_default(),
-                name: h.name,
-                item_type: h.item_type,
-                production_year: h.production_year,
-                series_name: h.series_name,
-                index_number: h.index_number,
-                parent_index_number: h.parent_index_number,
-                runtime_ticks: h.runtime_ticks,
-                library_id: h.library_id.and_then(|s| s.parse().ok()),
-            }
-        })
+        .filter_map(|h| h.result.id.parse().ok())
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_type_filter_takes_only_type_names() {
+        assert_eq!(type_filter(&[]), None);
+        assert_eq!(
+            type_filter(&["Movie".into(), "Series".into()]).as_deref(),
+            Some("item_type = \"Movie\" OR item_type = \"Series\"")
+        );
+        assert_eq!(type_filter(&["Movie\" OR 1=1".into()]), None);
+    }
 }

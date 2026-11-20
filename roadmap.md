@@ -1611,6 +1611,16 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
 
 ---
 
+## Search: Meilisearch ranks, Postgres filters (owner, 2026-11-19)
+
+- [x] Every `SearchTerm` search on `/Items` and search hints asks Meilisearch for the best-matching ids and filters them
+      in Postgres; best first unless the app sorts; Postgres name matching only without a built index
+- [x] The index follows the library from the database's change stamps (renames, new and removed items, linked copies)
+      instead of only full rebuilds; a full rebuild is swapped in
+- [ ] People and artists searched through Meilisearch too (`/Persons`, `/Artists` `SearchTerm`)
+
+---
+
 ## Known Bugs
 
 To fix once the Phase 16b link work is done (owner, 2026-11-19).

@@ -40,7 +40,7 @@ rustyfin-auth = { path = "crates/rustyfin-auth" }
 rustyfin-core = { path = "crates/rustyfin-core" }
 rustyfin-db = { path = "crates/rustyfin-db" }
 rustyfin-models = { path = "crates/rustyfin-models" }
-rustyfin-search = { path = "crates/rustyfin-search", features = ["meilisearch"] }
+rustyfin-search = { path = "crates/rustyfin-search" }
 rustyfin-media = { path = "crates/rustyfin-media" }
 rustyfin-frontend = { path = "crates/rustyfin-frontend" }
 rustyfin-common = { path = "crates/rustyfin-common" }

@@ -1,103 +1,154 @@
-// Meilisearch indexer — indexes media items for full-text search.
-// Only active when the `meilisearch` feature is enabled.
+//! The Meilisearch items index: its settings and documents.
 
-#[cfg(feature = "meilisearch")]
+use std::time::Duration;
+
+use meilisearch_sdk::client::{Client, SwapIndexes};
+use meilisearch_sdk::settings::Settings;
+use meilisearch_sdk::task_info::TaskInfo;
 use rustyfin_db::repo::media_items::MediaItemRow;
-
-#[cfg(feature = "meilisearch")]
 use serde::Serialize;
+use uuid::Uuid;
 
-#[cfg(feature = "meilisearch")]
-const INDEX_NAME: &str = "media_items";
+/// The items index's uid.
+pub const INDEX_NAME: &str = "media_items";
 
-#[cfg(feature = "meilisearch")]
+/// What an item is found by. Only what a search matches or narrows on: the
+/// rest is read from Postgres.
 #[derive(Serialize)]
-struct MeiliMediaItem {
+struct Document {
     id: String,
     name: String,
-    item_type: String,
-    overview: Option<String>,
-    genres: Option<Vec<String>>,
+    original_title: Option<String>,
     series_name: Option<String>,
+    genres: Option<Vec<String>>,
+    overview: Option<String>,
+    item_type: String,
     production_year: Option<i32>,
-    runtime_ticks: Option<i64>,
-    index_number: Option<i32>,
-    parent_index_number: Option<i32>,
     library_id: Option<String>,
 }
 
-/// Ensure the Meilisearch index exists with correct settings.
-#[cfg(feature = "meilisearch")]
-pub async fn ensure_index(client: &meilisearch_sdk::client::Client) -> Result<(), String> {
-    let index = client.index(INDEX_NAME);
+impl From<&MediaItemRow> for Document {
+    fn from(item: &MediaItemRow) -> Self {
+        Self {
+            id: item.id.to_string(),
+            name: item.name.clone(),
+            original_title: item
+                .original_title
+                .clone()
+                .filter(|t| !t.eq_ignore_ascii_case(&item.name)),
+            series_name: item.series_name.clone(),
+            genres: item.genres.clone(),
+            overview: item.overview.clone(),
+            item_type: item.item_type.clone(),
+            production_year: item.production_year,
+            library_id: item.library_id.map(|id| id.to_string()),
+        }
+    }
+}
 
-    // Create index if it doesn't exist
-    let _ = client
-        .create_index(INDEX_NAME, Some("id"))
-        .await
-        .map_err(|e| e.to_string())?
-        .wait_for_completion(client, None, None)
+/// The index's settings. Searchable attributes in order of weight: a match
+/// in the name counts most, one in the overview least.
+fn settings() -> Settings {
+    Settings::new()
+        .with_searchable_attributes([
+            "name",
+            "original_title",
+            "series_name",
+            "genres",
+            "overview",
+        ])
+        .with_filterable_attributes(["item_type", "library_id", "production_year"])
+}
+
+async fn finish(client: &Client, task: TaskInfo, timeout: Duration) -> Result<(), String> {
+    let task = task
+        .wait_for_completion(client, Some(Duration::from_millis(50)), Some(timeout))
         .await
         .map_err(|e| e.to_string())?;
-
-    // Set searchable attributes
-    index
-        .set_searchable_attributes(["name", "overview", "genres", "series_name"])
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Set filterable attributes
-    index
-        .set_filterable_attributes(["item_type", "production_year", "library_id"])
-        .await
-        .map_err(|e| e.to_string())?;
-
+    if task.is_failure() {
+        return Err(format!("{:?}", task.unwrap_failure()));
+    }
     Ok(())
 }
 
-/// Index a batch of media items into Meilisearch.
-#[cfg(feature = "meilisearch")]
-pub async fn index_documents(
-    client: &meilisearch_sdk::client::Client,
+/// Create the index `uid` with the items settings (and an empty one, if
+/// `uid` is new).
+pub async fn create(client: &Client, uid: &str, timeout: Duration) -> Result<(), String> {
+    if client.get_index(uid).await.is_err() {
+        let task = client
+            .create_index(uid, Some("id"))
+            .await
+            .map_err(|e| e.to_string())?;
+        finish(client, task, timeout).await?;
+    }
+    let task = client
+        .index(uid)
+        .set_settings(&settings())
+        .await
+        .map_err(|e| e.to_string())?;
+    finish(client, task, timeout).await
+}
+
+/// Add or update `items` in `uid`, waiting until they are searchable.
+pub async fn upsert(
+    client: &Client,
+    uid: &str,
     items: &[MediaItemRow],
+    timeout: Duration,
 ) -> Result<(), String> {
-    let index = client.index(INDEX_NAME);
-
-    let docs: Vec<MeiliMediaItem> = items
-        .iter()
-        .map(|item| MeiliMediaItem {
-            id: item.id.to_string(),
-            name: item.name.clone(),
-            item_type: item.item_type.clone(),
-            overview: item.overview.clone(),
-            genres: item.genres.clone(),
-            series_name: item.series_name.clone(),
-            production_year: item.production_year,
-            runtime_ticks: item.runtime_ticks,
-            index_number: item.index_number,
-            parent_index_number: item.parent_index_number,
-            library_id: item.library_id.map(|id| id.to_string()),
-        })
-        .collect();
-
-    index
+    let docs: Vec<Document> = items.iter().map(Document::from).collect();
+    let task = client
+        .index(uid)
         .add_or_update(&docs, Some("id"))
         .await
         .map_err(|e| e.to_string())?;
-
-    Ok(())
+    finish(client, task, timeout).await
 }
 
-/// Delete a document from the index by UUID.
-#[cfg(feature = "meilisearch")]
-pub async fn delete_document(
-    client: &meilisearch_sdk::client::Client,
-    item_id: uuid::Uuid,
+/// Remove `ids` from `uid`.
+pub async fn delete(
+    client: &Client,
+    uid: &str,
+    ids: &[Uuid],
+    timeout: Duration,
 ) -> Result<(), String> {
-    let index = client.index(INDEX_NAME);
-    index
-        .delete_document(&item_id.to_string())
+    let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
+    let task = client
+        .index(uid)
+        .delete_documents(&ids)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(())
+    finish(client, task, timeout).await
+}
+
+/// Put `building` in place of `uid` (creating `uid` first if need be, so the
+/// swap has two sides).
+pub async fn swap_in(
+    client: &Client,
+    uid: &str,
+    building: &str,
+    timeout: Duration,
+) -> Result<(), String> {
+    create(client, uid, timeout).await?;
+    let task = client
+        .swap_indexes([&SwapIndexes {
+            indexes: (uid.to_string(), building.to_string()),
+            rename: None,
+        }])
+        .await
+        .map_err(|e| e.to_string())?;
+    finish(client, task, timeout).await
+}
+
+/// Delete the index `uid` if there is one.
+pub async fn drop_index(client: &Client, uid: &str) {
+    if let Ok(task) = client.delete_index(uid).await {
+        let _ = task
+            .wait_for_completion(
+                client,
+                Some(Duration::from_millis(50)),
+                Some(Duration::from_secs(60)),
+            )
+            .await;
+    }
 }

@@ -264,7 +264,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   meilisearch:
-    image: getmeili/meilisearch:v1.12
+    image: getmeili/meilisearch:v1.57
     environment:
       MEILI_MASTER_KEY: rustyfin-dev-key
     ports:

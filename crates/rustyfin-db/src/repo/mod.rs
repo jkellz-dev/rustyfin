@@ -13,6 +13,7 @@ pub mod media_streams;
 pub mod people;
 pub mod play_history;
 pub mod playlists;
+pub mod search_feed;
 pub mod sessions;
 pub mod task_results;
 pub mod user_data;

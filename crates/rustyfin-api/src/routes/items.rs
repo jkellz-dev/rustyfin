@@ -1038,6 +1038,21 @@ pub async fn get_items(
     let (filter_played, filter_favorite, filter_resumable) = parse_filters(&query.filters);
 
     // Build the query
+    // Meilisearch ranks the matches (owner, 2026-11-19); everything else is
+    // filtered here. Without it (or while it is not ready) the name is matched.
+    let ranked_ids = match query.search_term.as_deref().map(str::trim) {
+        Some(term) if !term.is_empty() => {
+            state
+                .search_service
+                .ranked_ids(
+                    term,
+                    &parse_comma_delimited(&query.include_item_types),
+                    rustyfin_search::CANDIDATES,
+                )
+                .await
+        }
+        _ => None,
+    };
     let item_query = media_items::ItemQuery {
         library_id: if is_library { query.parent_id } else { None },
         parent_id: if !is_library && collection_members.is_none() {
@@ -1068,6 +1083,7 @@ pub async fn get_items(
         is_played: query.is_played.or(filter_played),
         is_resumable: filter_resumable,
         search_term: query.search_term.clone(),
+        ranked_ids,
         sort_by: collection_sort.unwrap_or_else(|| parse_comma_delimited(&query.sort_by)),
         sort_order: parse_comma_delimited(&query.sort_order),
         start_index,
