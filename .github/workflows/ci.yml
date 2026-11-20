@@ -35,6 +35,13 @@ env:
   # job on its IP: a release build failed there with "403 rate limit
   # exceeded". With this read-only job token mbx asks as the repository.
   GITHUB_TOKEN: ${{ github.token }}
+  # mbx's local store budget, which also caps what one build downloads from
+  # the remote. Its default on a runner is the 5 GiB floor: each job
+  # prefetched 5.0 GiB of the lockfile's recorded actions, hit the cap, and
+  # then missed hundreds of compilations whose blobs it could not fetch
+  # ("prediction was not restored: cached action is missing blob"). The
+  # test job alone stores about 20 GiB.
+  MBX_GC_MAX_SIZE: 30GiB
 
 jobs:
   lint:
@@ -224,11 +231,15 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: rustup target add "$TARGET"
 
+      # A namespace of their own: prefetch pulls everything recorded for the
+      # lockfile in a namespace, and these release builds (in the Debian
+      # container, both targets) share nothing with the host debug builds the
+      # other jobs, Hermes's builder and developers' machines make.
       - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           backend: remote
           remote-url: s3://rustyfin-build-cache
-          namespace: rustyfin
+          namespace: rustyfin-release
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
