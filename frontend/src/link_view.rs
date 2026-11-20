@@ -46,6 +46,35 @@ pub fn badge(state: &LinkState) -> (&'static str, &'static str) {
 
 #[cfg(test)]
 mod tests {
+    /// Owner, 2026-11-20: the per-link numbers on the Links page.
+    #[test]
+    fn response_times_read_as_typical_and_slowest() {
+        assert_eq!(
+            super::response_label(Some(120), Some(900)),
+            "120 ms (slowest 900 ms)"
+        );
+        assert_eq!(
+            super::response_label(Some(1500), Some(4200)),
+            "1.5 s (slowest 4.2 s)"
+        );
+        assert_eq!(super::response_label(Some(80), Some(80)), "80 ms");
+        assert_eq!(super::response_label(None, None), "\u{2014}");
+    }
+
+    #[test]
+    fn failures_since_start_read_plainly() {
+        assert_eq!(super::failures_label(0, 0), "None");
+        assert_eq!(super::failures_label(1, 0), "1 sync");
+        assert_eq!(super::failures_label(2, 5), "2 syncs, 5 requests");
+        assert_eq!(super::failures_label(0, 1), "1 request");
+    }
+
+    #[test]
+    fn the_last_sync_says_how_long_it_took() {
+        assert_eq!(super::sync_took(Some(4200)), "took 4 s");
+        assert_eq!(super::sync_took(Some(300)), "took under a second");
+        assert_eq!(super::sync_took(None), "");
+    }
     use super::*;
 
     fn link() -> LinkInfo {

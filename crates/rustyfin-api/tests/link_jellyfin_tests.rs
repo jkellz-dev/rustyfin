@@ -2021,3 +2021,47 @@ async fn each_link_has_its_own_metrics() {
     );
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-20 ("yes, add the rest"): the Links page shows how long the
+/// last sync took, how fast the friend's server answers catalogue calls, and
+/// what failed since this server started.
+#[tokio::test]
+async fn the_links_list_says_how_each_link_is_doing() {
+    let app = common::TestApp::new().await;
+    let (_, admin) = app.create_user("admin", true).await;
+    let (_tree, _lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    remote.lock().unwrap().films = vec![film("r200", "Only Theirs", "200", "e1", 1920, 1080)];
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(&app.pool, settings(&url, "secret"))
+        .await
+        .unwrap();
+
+    let (_, list) = app.get("/api/v1/links", &admin).await;
+    assert!(list[0]["last_sync_ms"].is_null(), "never synced: {list}");
+    assert!(list[0]["response_ms"].is_null(), "{list}");
+    assert_eq!(list[0]["failed_syncs"], 0, "{list}");
+
+    app.links.sync(&app.pool, link).await.expect("sync");
+    remote.lock().unwrap().down = true;
+    app.links.sync(&app.pool, link).await.unwrap_err();
+
+    let (_, list) = app.get("/api/v1/links", &admin).await;
+    let entry = &list[0];
+    assert!(entry["last_sync_ms"].is_u64(), "{entry}");
+    let typical = entry["response_ms"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("{entry}"));
+    let slowest = entry["slowest_ms"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("{entry}"));
+    assert!(slowest >= typical, "{entry}");
+    assert_eq!(entry["failed_syncs"], 1, "{entry}");
+    assert!(
+        entry["failed_requests"].as_u64().is_some_and(|n| n >= 1),
+        "the 503: {entry}"
+    );
+    app.cleanup().await;
+}
