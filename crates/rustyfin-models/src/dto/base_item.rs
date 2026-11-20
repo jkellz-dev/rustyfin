@@ -512,6 +512,9 @@ pub struct VirtualFolderInfo {
     pub last_scan_errors: Option<u64>,
     #[serde(default)]
     pub last_scan_failure: Option<String>,
+    /// How long the last scan took, in milliseconds (Rustyfin's own).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_scan_duration_ms: Option<i64>,
 }
 
 /// Request to create a new library.
@@ -645,6 +648,8 @@ pub struct LibraryStats {
     pub item_count: i64,
     /// When the last scan finished; None if never.
     pub last_scanned: Option<chrono::DateTime<chrono::Utc>>,
+    /// How long it took, in milliseconds.
+    pub last_scan_duration_ms: Option<i64>,
 }
 
 /// Chapter info for a media item.

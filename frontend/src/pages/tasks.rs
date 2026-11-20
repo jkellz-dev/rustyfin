@@ -4,6 +4,7 @@ use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::components::error_notice::ErrorNotice;
 use crate::components::loading::Loading;
+use crate::dashboard_view;
 use crate::timer::sleep_ms;
 use crate::types::TaskInfoDto;
 
@@ -102,6 +103,7 @@ pub fn Tasks() -> View {
                                     th { "Category" }
                                     th { "State" }
                                     th { "Last Run" }
+                                    th { "Took" }
                                     th { "Result" }
                                     th { "Actions" }
                                 }
@@ -129,6 +131,17 @@ pub fn Tasks() -> View {
                                             } else {
                                                 ("Never".to_string(), String::new(), None)
                                             };
+                                        // How long the last run took (owner, 2026-11-20).
+                                        let took = task.last_execution_result.as_ref().map_or_else(
+                                            || dashboard_view::run_took(None, None, is_running),
+                                            |r| {
+                                                dashboard_view::run_took(
+                                                    epoch_ms(&r.start_time_utc),
+                                                    r.end_time_utc.as_deref().and_then(epoch_ms),
+                                                    is_running,
+                                                )
+                                            },
+                                        );
 
                                         view! {
                                             tr {
@@ -150,6 +163,7 @@ pub fn Tasks() -> View {
                                                     })
                                                 }
                                                 td(class="text-muted", data-label="Last run") { (last_run) }
+                                                td(class="text-muted", data-label="Took") { (took) }
                                                 td(data-label="Result") {
                                                     (match result_status.as_str() {
                                                         "Completed" => view! { span(class="badge badge-success") { "Completed" } },
@@ -230,6 +244,12 @@ fn start_polling(tasks: Signal<Vec<TaskInfoDto>>, polling: Signal<bool>) {
 }
 
 /// Format an RFC 3339 datetime string to a shorter display form.
+/// An RFC 3339 time in epoch milliseconds, if the browser can read it.
+fn epoch_ms(rfc3339: &str) -> Option<f64> {
+    let ms = js_sys::Date::parse(rfc3339);
+    (!ms.is_nan()).then_some(ms)
+}
+
 fn format_datetime(rfc3339: &str) -> String {
     // Extract "YYYY-MM-DD HH:MM" from "2026-02-20T14:30:00+00:00"
     if rfc3339.len() >= 16 {

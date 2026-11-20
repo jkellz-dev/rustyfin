@@ -249,8 +249,9 @@ pub fn Dashboard() -> View {
                                     list=move || libs.clone(),
                                     view=move |lib: LibraryStats| {
                                         let count = dashboard_view::count_noun(&lib.collection_type, lib.item_count);
-                                        let scanned = dashboard_view::last_scan_label(
+                                        let scanned = dashboard_view::scan_card_line(
                                             lib.last_scanned.as_deref().and_then(age_seconds),
+                                            lib.last_scan_duration_ms,
                                         );
                                         view! {
                                             div(class="library-card") {

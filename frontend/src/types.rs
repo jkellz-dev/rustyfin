@@ -28,6 +28,9 @@ pub struct VirtualFolderInfo {
     pub last_scan_errors: Option<u64>,
     #[serde(default)]
     pub last_scan_failure: Option<String>,
+    /// How long the last scan took, in milliseconds.
+    #[serde(default)]
+    pub last_scan_duration_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -163,6 +166,8 @@ pub struct LibraryStats {
     pub item_count: i64,
     #[serde(default)]
     pub last_scanned: Option<String>,
+    #[serde(default)]
+    pub last_scan_duration_ms: Option<i64>,
 }
 
 /// One entry of `/System/ActivityLog/Entries`.

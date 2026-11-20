@@ -150,6 +150,7 @@ pub async fn get_stats(
                 collection_type: l.library_type,
                 item_count: l.item_count,
                 last_scanned: l.last_scanned_at,
+                last_scan_duration_ms: l.last_scan_duration_ms,
             })
             .collect(),
         health: Some(health),

@@ -548,7 +548,7 @@ pub fn Libraries() -> View {
                                             let scan_id = lib.item_id.clone();
                                             let scanning = dashboard_view::is_scanning(lib.refresh_status.as_deref());
                                             let progress = lib.refresh_progress;
-                                            let last = dashboard_view::last_scanned_label(lib.last_scanned.as_deref());
+                                            let last = dashboard_view::scan_line(lib.last_scanned.as_deref(), lib.last_scan_duration_ms);
                                             let del_lib = lib.clone();
                                             let edit_lib = lib.clone();
                                             view! {

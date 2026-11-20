@@ -19,6 +19,49 @@ pub fn last_scan_label(age_seconds: Option<i64>) -> String {
     }
 }
 
+/// A duration as people say it: "42 s", "2 min 13 s", "1 h 4 min".
+pub fn format_duration(ms: i64) -> String {
+    let s = ms.max(0) / 1000;
+    match s {
+        0 => "under a second".to_string(),
+        1..=59 => format!("{s} s"),
+        60..=3599 => match s % 60 {
+            0 => format!("{} min", s / 60),
+            rest => format!("{} min {rest} s", s / 60),
+        },
+        _ => format!("{} h {} min", s / 3600, s % 3600 / 60),
+    }
+}
+
+/// The libraries page's line under a library's name: when its last scan
+/// finished and how long it took.
+pub fn scan_line(iso: Option<&str>, duration_ms: Option<i64>) -> String {
+    let when = last_scanned_label(iso);
+    match (iso, duration_ms) {
+        (Some(_), Some(ms)) => format!("{when}, took {}", format_duration(ms)),
+        _ => when,
+    }
+}
+
+/// A dashboard library card's scan line: how long ago, and how long it took.
+pub fn scan_card_line(age_seconds: Option<i64>, duration_ms: Option<i64>) -> String {
+    let when = last_scan_label(age_seconds);
+    match (age_seconds, duration_ms) {
+        (Some(_), Some(ms)) => format!("{when}, took {}", format_duration(ms)),
+        _ => when,
+    }
+}
+
+/// How long a task's last run took (start and end in epoch milliseconds):
+/// "Running" while it runs, empty when there is nothing to say.
+pub fn run_took(start_ms: Option<f64>, end_ms: Option<f64>, running: bool) -> String {
+    match (start_ms, end_ms) {
+        (Some(start), Some(end)) => format_duration((end - start) as i64),
+        _ if running => "Running".to_string(),
+        _ => String::new(),
+    }
+}
+
 /// What a library's count is of.
 pub fn count_noun(collection_type: &str, count: i64) -> String {
     let (one, many) = match collection_type {

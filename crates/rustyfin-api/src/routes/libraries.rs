@@ -606,6 +606,7 @@ fn folder_info(lib: libraries::LibraryRow) -> VirtualFolderInfo {
         scan_schedule: lib.scan_schedule,
         refresh_status: None,
         last_scanned: lib.last_scanned_at,
+        last_scan_duration_ms: lib.last_scan_duration_ms,
         refresh_progress: None,
         last_scan_added: None,
         last_scan_updated: None,

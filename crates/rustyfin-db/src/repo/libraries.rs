@@ -17,6 +17,9 @@ pub struct LibraryRow {
     /// When its last scan finished (absent from queries that name columns).
     #[sqlx(default)]
     pub last_scanned_at: Option<DateTime<Utc>>,
+    /// How long its last scan took, in milliseconds.
+    #[sqlx(default)]
+    pub last_scan_duration_ms: Option<i64>,
     /// The link whose library this is, for one made for a friend's library.
     #[sqlx(default)]
     pub link_id: Option<Uuid>,
@@ -31,12 +34,13 @@ pub struct LibraryStatRow {
     /// Films, episodes, tracks and other videos (not shows, seasons or folders).
     pub item_count: i64,
     pub last_scanned_at: Option<DateTime<Utc>>,
+    pub last_scan_duration_ms: Option<i64>,
 }
 
 /// Every library with its media count and last finished scan, by name.
 pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
     sqlx::query_as::<_, LibraryStatRow>(
-        "SELECT l.id, l.name, l.library_type, l.last_scanned_at, \
+        "SELECT l.id, l.name, l.library_type, l.last_scanned_at, l.last_scan_duration_ms, \
                 (SELECT COUNT(*) FROM visible_media_items m WHERE m.library_id = l.id \
                    AND m.item_type IN ('Movie', 'Episode', 'Audio', 'MusicVideo', 'Video')) \
                   AS item_count \
@@ -46,12 +50,19 @@ pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
     .await
 }
 
-/// Record that a scan of `id` finished now.
-pub async fn mark_scanned(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE libraries SET last_scanned_at = NOW() WHERE id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
+/// Record that a scan of `id` finished now, after `took`.
+pub async fn mark_scanned(
+    pool: &PgPool,
+    id: Uuid,
+    took: std::time::Duration,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE libraries SET last_scanned_at = NOW(), last_scan_duration_ms = $2 WHERE id = $1",
+    )
+    .bind(id)
+    .bind(i64::try_from(took.as_millis()).unwrap_or(i64::MAX))
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
