@@ -42,6 +42,8 @@ pub struct JellyfinClient {
     session: RwLock<Option<Session>>,
     /// A token for the friend's proxy, when it takes OIDC tokens.
     oidc: Option<super::oidc::TokenSource>,
+    /// The link's name, the `link` label of its metrics.
+    name: String,
 }
 
 /// How long a catalogue call may take. Streams have no overall limit.
@@ -61,7 +63,42 @@ impl JellyfinClient {
             device_id: link_id.simple().to_string(),
             session: RwLock::new(None),
             oidc: None,
+            name: String::new(),
         })
+    }
+
+    /// Label this client's metrics with the link's name.
+    pub fn named(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    /// Send a request, timing it to its response's headers (roadmap 16b.3:
+    /// latency per link). A request that never got an answer or got a 5xx
+    /// counts as failed. `call` is `api` (catalogue, sign-in, PlaybackInfo)
+    /// or `stream` (relayed bytes and images).
+    async fn send(
+        &self,
+        call: &'static str,
+        request: reqwest::RequestBuilder,
+    ) -> anyhow::Result<reqwest::Response> {
+        let started = std::time::Instant::now();
+        let result = request.send().await;
+        metrics::histogram!(
+            "rustyfin_link_request_duration_seconds",
+            "link" => self.name.clone(),
+            "call" => call
+        )
+        .record(started.elapsed().as_secs_f64());
+        if !matches!(&result, Ok(r) if !r.status().is_server_error()) {
+            metrics::counter!(
+                "rustyfin_link_request_failures_total",
+                "link" => self.name.clone(),
+                "call" => call
+            )
+            .increment(1);
+        }
+        result.with_context(|| format!("could not reach {}", self.base))
     }
 
     /// Fetch a client-credentials token for every request (the friend's
@@ -128,14 +165,15 @@ impl JellyfinClient {
 
     async fn sign_in(&self) -> anyhow::Result<Session> {
         let response = self
-            .http
-            .post(format!("{}/Users/AuthenticateByName", self.base))
-            .headers(self.auth_headers(None).await?)
-            .timeout(CALL_TIMEOUT)
-            .json(&json!({"Username": self.user, "Pw": self.password}))
-            .send()
-            .await
-            .with_context(|| format!("could not reach {}", self.base))?;
+            .send(
+                "api",
+                self.http
+                    .post(format!("{}/Users/AuthenticateByName", self.base))
+                    .headers(self.auth_headers(None).await?)
+                    .timeout(CALL_TIMEOUT)
+                    .json(&json!({"Username": self.user, "Pw": self.password})),
+            )
+            .await?;
         if !response.status().is_success() {
             bail!(
                 "could not sign in to {} as {}: {}",
@@ -253,14 +291,15 @@ impl JellyfinClient {
             q.push(("userId", session.user_id.clone()));
             let url = format!("{}{}", self.base, path.replace("{user}", &session.user_id));
             let response = self
-                .http
-                .get(&url)
-                .headers(self.auth_headers(Some(&session.token)).await?)
-                .query(&q)
-                .timeout(CALL_TIMEOUT)
-                .send()
-                .await
-                .with_context(|| format!("could not reach {}", self.base))?;
+                .send(
+                    "api",
+                    self.http
+                        .get(&url)
+                        .headers(self.auth_headers(Some(&session.token)).await?)
+                        .query(&q)
+                        .timeout(CALL_TIMEOUT),
+                )
+                .await?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
                 self.forget_session().await;
                 continue;
@@ -276,15 +315,16 @@ impl JellyfinClient {
         for attempt in 0..2 {
             let session = self.session().await?;
             let response = self
-                .http
-                .post(format!("{}{}", self.base, path))
-                .headers(self.auth_headers(Some(&session.token)).await?)
-                .query(&[("userId", session.user_id.as_str())])
-                .timeout(CALL_TIMEOUT)
-                .json(body)
-                .send()
-                .await
-                .with_context(|| format!("could not reach {}", self.base))?;
+                .send(
+                    "api",
+                    self.http
+                        .post(format!("{}{}", self.base, path))
+                        .headers(self.auth_headers(Some(&session.token)).await?)
+                        .query(&[("userId", session.user_id.as_str())])
+                        .timeout(CALL_TIMEOUT)
+                        .json(body),
+                )
+                .await?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
                 self.forget_session().await;
                 continue;
@@ -312,12 +352,13 @@ impl JellyfinClient {
             let mut headers = forward.clone();
             headers.extend(self.auth_headers(Some(&session.token)).await?);
             let response = self
-                .http
-                .get(format!("{}{}", self.base, path_and_query))
-                .headers(headers)
-                .send()
-                .await
-                .with_context(|| format!("could not reach {}", self.base))?;
+                .send(
+                    "stream",
+                    self.http
+                        .get(format!("{}{}", self.base, path_and_query))
+                        .headers(headers),
+                )
+                .await?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
                 self.forget_session().await;
                 continue;
@@ -413,13 +454,14 @@ impl JellyfinClient {
             let mut headers = forward.clone();
             headers.extend(self.auth_headers(Some(&session.token)).await?);
             let response = self
-                .http
-                .get(format!("{}{}", self.base, path))
-                .headers(headers)
-                .query(query)
-                .send()
-                .await
-                .with_context(|| format!("could not reach {}", self.base))?;
+                .send(
+                    "stream",
+                    self.http
+                        .get(format!("{}{}", self.base, path))
+                        .headers(headers)
+                        .query(query),
+                )
+                .await?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
                 self.forget_session().await;
                 continue;

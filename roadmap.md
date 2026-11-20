@@ -1556,7 +1556,9 @@ Design, settled before any code:
       with no new code, and the scan's pruning never touches rows without paths). Ids are local UUIDs.
 - [x] Sync job for a Rustyfin: first full pull, then the change feed on a schedule and on demand; removals remove
       copies; the cursor is kept only after a sync that worked; a refused cursor starts over
-- [ ] Metrics per link (items, lag, failures, latency)
+- [x] Metrics per link (items, lag, failures, latency): `rustyfin_link_*` series on the metrics listener: syncs by
+      result and their duration, request latency and failures by call (`api`, `stream`), up, titles, copies, and the
+      time since the last sync that worked
 - [x] Health: a link that is down has its titles left out of every view (owner, 2026-11-19: "Their titles should be
       omitted from the views"), a title another link holds is handed to that copy, users are told in their apps, and
       it is tried every minute until it is back

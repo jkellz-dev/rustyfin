@@ -14,7 +14,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use rustyfin_db::repo::{libraries, users};
+use rustyfin_db::repo::{libraries, links, users};
 
 use crate::router::AppState;
 
@@ -38,6 +38,18 @@ pub fn handle() -> &'static PrometheusHandle {
             .and_then(|b| {
                 b.set_buckets_for_metric(
                     Matcher::Full("rustyfin_scan_duration_seconds".to_string()),
+                    SCAN_BUCKETS,
+                )
+            })
+            .and_then(|b| {
+                b.set_buckets_for_metric(
+                    Matcher::Full("rustyfin_link_request_duration_seconds".to_string()),
+                    REQUEST_BUCKETS,
+                )
+            })
+            .and_then(|b| {
+                b.set_buckets_for_metric(
+                    Matcher::Full("rustyfin_link_sync_duration_seconds".to_string()),
                     SCAN_BUCKETS,
                 )
             })
@@ -114,6 +126,29 @@ async fn collect(state: &AppState) {
         if let Some(at) = lib.last_scanned_at {
             metrics::gauge!("rustyfin_library_last_scan_timestamp_seconds", "library" => lib.name)
                 .set(at.timestamp() as f64);
+        }
+    }
+    // Per link (roadmap 16b.3): up or down, what it holds, how long ago it
+    // last synced.
+    let held = links::counts(&state.pool).await.unwrap_or_default();
+    let now = chrono::Utc::now();
+    for link in links::list(&state.pool).await.unwrap_or_default() {
+        let (titles, copies) = held.get(&link.id).copied().unwrap_or((0, 0));
+        let name = link.name;
+        metrics::gauge!("rustyfin_link_up", "link" => name.clone()).set(
+            if link.offline_since.is_none() {
+                1.0
+            } else {
+                0.0
+            },
+        );
+        metrics::gauge!("rustyfin_link_titles", "link" => name.clone()).set(titles as f64);
+        metrics::gauge!("rustyfin_link_copies", "link" => name.clone()).set(copies as f64);
+        if let Some(at) = link.last_sync_at {
+            metrics::gauge!("rustyfin_link_last_sync_timestamp_seconds", "link" => name.clone())
+                .set(at.timestamp() as f64);
+            metrics::gauge!("rustyfin_link_sync_lag_seconds", "link" => name)
+                .set((now - at).num_milliseconds().max(0) as f64 / 1000.0);
         }
     }
     if let Ok(n) = users::count(&state.pool).await {
