@@ -513,6 +513,12 @@ mod tests {
     }
 
     #[test]
+    fn a_scan_at_100_percent_is_finishing() {
+        assert_eq!(scanning_label(Some(100.0)), "Finishing…");
+        assert_eq!(scanning_label(Some(99.0)), "Scanning… 99%");
+    }
+
+    #[test]
     fn scans_say_how_far_they_got_and_how_they_ended() {
         assert_eq!(scanning_label(None), "Scanning…");
         assert_eq!(scanning_label(Some(0.0)), "Scanning…");

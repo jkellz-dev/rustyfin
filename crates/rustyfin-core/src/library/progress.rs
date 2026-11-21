@@ -238,6 +238,34 @@ mod tests {
         out
     }
 
+    /// Owner (2026-11-21, screenshot): two libraries sat at "Scanning... 100%"
+    /// for minutes. A library of several folders reached 100% at the end of
+    /// its first folder, and every scan read 100% through its last steps
+    /// (collections, linked copies, headshots).
+    #[test]
+    fn a_scan_reads_100_only_while_it_finishes() {
+        let board = ScanBoard::new();
+        let lib = Uuid::new_v4();
+        board.start(lib);
+        board.set_parts(lib, 2);
+        board.add_total(lib, 2);
+        board.step(lib);
+        board.step(lib);
+        assert_eq!(board.percent(lib), Some(50.0), "the first of two folders");
+        board.part_done(lib);
+        assert_eq!(board.percent(lib), Some(50.0));
+        board.add_total(lib, 4);
+        board.step(lib);
+        assert_eq!(board.percent(lib), Some(62.5));
+        for _ in 0..3 {
+            board.step(lib);
+        }
+        assert_eq!(board.percent(lib), Some(99.0), "never 100 while working");
+        board.part_done(lib);
+        board.finishing(lib);
+        assert_eq!(board.percent(lib), Some(100.0), "100 means finishing");
+    }
+
     #[test]
     fn progress_counts_units_and_is_sent_once_per_percent() {
         let board = ScanBoard::new();
