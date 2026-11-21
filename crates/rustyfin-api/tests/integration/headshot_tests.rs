@@ -160,3 +160,35 @@ async fn one_headshot_shows_for_the_person_in_every_item() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     app.cleanup().await;
 }
+
+const LEDGER: &str = "https://image.tmdb.org/t/p/original/5Y9HnYYa9jF4NunY9lSgJGjSe8E.jpg";
+const LEDGER_LOCAL: &str = "/config/metadata/People/H/Heath Ledger/folder.jpg";
+
+#[tokio::test]
+async fn a_web_photo_replaces_a_local_path_and_stays() {
+    // Owner (2026-11-21): 8,174 people kept a photo path from Jellyfin-era NFOs
+    // (a file in Jellyfin's own volume) after Radarr's NFOs gave them TMDB
+    // addresses, so nothing could ever download their headshot.
+    let app = common::TestApp::new().await;
+    let lib = app.create_library("Movies", "movies").await;
+    let old = app.create_media_item("Old NFO", "Movie", lib, None).await;
+    let new = app.create_media_item("New NFO", "Movie", lib, None).await;
+    let later = app.create_media_item("Later NFO", "Movie", lib, None).await;
+
+    let id = cast(&app, old, "Heath Ledger", Some(LEDGER_LOCAL), None).await;
+    cast(&app, new, "Heath Ledger", Some(LEDGER), None).await;
+    let row = people::find_by_id(&app.pool, id).await.unwrap().unwrap();
+    assert_eq!(
+        row.image_url.as_deref(),
+        Some(LEDGER),
+        "the web address wins"
+    );
+
+    // A web address is kept once stored: its file name must not move under a
+    // headshot already downloaded for it, and a local path never displaces it.
+    cast(&app, later, "Heath Ledger", Some(BELL), None).await;
+    cast(&app, later, "Heath Ledger", Some(LEDGER_LOCAL), None).await;
+    let row = people::find_by_id(&app.pool, id).await.unwrap().unwrap();
+    assert_eq!(row.image_url.as_deref(), Some(LEDGER));
+    app.cleanup().await;
+}
