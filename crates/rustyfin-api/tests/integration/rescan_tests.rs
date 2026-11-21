@@ -211,3 +211,78 @@ async fn a_subtitle_file_does_not_make_a_video_look_stale() {
     assert!(!media_streams::lacks_details(&app.pool, film).await.unwrap());
     app.cleanup().await;
 }
+
+/// Owner (2026-11-21): "new movies and collections are not populating with
+/// images". Radarr and Sonarr call the import webhook while they are still
+/// writing the art, so the first scan finds the video and NFO but no
+/// poster.jpg. Art is not part of the title's etag, so every later scan
+/// skipped the unchanged title and never looked for it again (and a
+/// collection borrows its earliest film's poster).
+#[tokio::test]
+async fn art_written_after_the_first_scan_appears_on_the_next() {
+    let app = common::TestApp::new().await;
+    let root = std::env::temp_dir().join(format!("rf-late-art-{}", Uuid::new_v4().simple()));
+    let film = root.join("films").join("Film (2020)");
+    let season = root.join("shows").join("Show").join("Season 01");
+    std::fs::create_dir_all(&film).unwrap();
+    std::fs::create_dir_all(&season).unwrap();
+    std::fs::write(film.join("Film (2020).mkv"), b"").unwrap();
+    std::fs::write(season.join("Show S01E01.mkv"), b"").unwrap();
+
+    let mut libs = Vec::new();
+    for (name, kind, dir) in [("Movies", "movies", "films"), ("TV", "tvshows", "shows")] {
+        let path = root.join(dir).to_string_lossy().to_string();
+        let id = libraries::create(&app.pool, name, kind, std::slice::from_ref(&path))
+            .await
+            .unwrap()
+            .id;
+        libs.push((id, path));
+    }
+    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scan_all = || async {
+        for (id, path) in &libs {
+            scanner
+                .scan(*id, std::slice::from_ref(path))
+                .await
+                .expect("scan");
+        }
+    };
+    scan_all().await;
+    let art = |name: &str| {
+        let pool = app.pool.clone();
+        let name = name.to_string();
+        async move {
+            sqlx::query_scalar::<_, String>(
+                "SELECT i.image_type FROM images i JOIN media_items m ON m.id = i.entity_id \
+                 WHERE m.name = $1 ORDER BY 1",
+            )
+            .bind(name)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    assert!(art("Film").await.is_empty(), "no art yet");
+
+    // The *arr app finishes writing its art.
+    std::fs::write(film.join("poster.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();
+    std::fs::write(film.join("fanart.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();
+    std::fs::write(season.join("Show S01E01-thumb.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();
+    scan_all().await;
+    assert_eq!(art("Film").await, vec!["Backdrop", "Primary"]);
+    let episode: Vec<String> = sqlx::query_scalar(
+        "SELECT i.image_type FROM images i JOIN media_items m ON m.id = i.entity_id \
+         WHERE m.item_type = 'Episode'",
+    )
+    .fetch_all(&app.pool)
+    .await
+    .unwrap();
+    assert_eq!(episode, vec!["Primary"], "the episode's still");
+
+    // And a scan after that changes nothing.
+    let before = changes(&app).await;
+    scan_all().await;
+    assert_eq!(before, changes(&app).await);
+    std::fs::remove_dir_all(&root).ok();
+    app.cleanup().await;
+}
