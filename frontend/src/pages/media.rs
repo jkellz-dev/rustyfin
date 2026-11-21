@@ -24,17 +24,6 @@ enum MediaView {
 
 // ── Helpers ─────────────────────────────────────────────
 
-fn format_runtime(ticks: i64) -> String {
-    let total_minutes = ticks / 10_000_000 / 60;
-    let hours = total_minutes / 60;
-    let minutes = total_minutes % 60;
-    if hours > 0 {
-        format!("{hours}h {minutes}m")
-    } else {
-        format!("{minutes}m")
-    }
-}
-
 fn format_chapter_time(ticks: i64) -> String {
     let total_seconds = ticks / 10_000_000;
     let hours = total_seconds / 3600;
@@ -959,8 +948,7 @@ pub fn Media(path: String) -> View {
                                             } else {
                                                 view! {}
                                             })
-                                            (if let Some(ticks) = item.runtime_ticks {
-                                                let rt = format_runtime(ticks);
+                                            (if let Some(rt) = item.runtime_ticks.and_then(|t| browse::runtime_label(t, &item.item_type)) {
                                                 view! { span(class="badge badge-runtime") { (rt) } }
                                             } else {
                                                 view! {}
@@ -1065,7 +1053,7 @@ pub fn Media(path: String) -> View {
                                                         view=move |track: BaseItemDto| {
                                                             let num_str = track.index_number.map(|n| n.to_string()).unwrap_or_default();
                                                             let name = track.name.clone();
-                                                            let duration_str = track.runtime_ticks.map(format_runtime).unwrap_or_default();
+                                                            let duration_str = track.runtime_ticks.and_then(|t| browse::runtime_label(t, "Audio")).unwrap_or_default();
                                                             view! {
                                                                 div(class="track-row") {
                                                                     span(class="track-num") { (num_str) }
@@ -1461,8 +1449,8 @@ pub fn Media(path: String) -> View {
                                             if let Some(y) = year {
                                                 meta_parts.push(y.to_string());
                                             }
-                                            if let Some(ticks) = hint.run_time_ticks {
-                                                meta_parts.push(format_runtime(ticks));
+                                            if let Some(rt) = hint.run_time_ticks.and_then(|t| browse::runtime_label(t, &item_type)) {
+                                                meta_parts.push(rt);
                                             }
                                             let meta = meta_parts.join(" · ");
 

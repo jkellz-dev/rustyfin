@@ -349,6 +349,26 @@ pub const SEARCH_KINDS: [(&str, &str); 8] = [
     ("Audio", "Tracks"),
 ];
 
+/// How long an item runs, for its badge or row; `None` when unknown (or
+/// under a second). Audio reads like a track list, `0:51` or `1:02:03`.
+/// Anything else rounds down to minutes, `1h 33m`, `2h`, `41m`, except
+/// under a minute, which shows seconds (`45s`) rather than `0m`.
+pub fn runtime_label(ticks: i64, item_type: &str) -> Option<String> {
+    let total = ticks / 10_000_000;
+    if total <= 0 {
+        return None;
+    }
+    let (h, m, s) = (total / 3600, total % 3600 / 60, total % 60);
+    Some(match (item_type, h, m) {
+        ("Audio", 0, _) => format!("{m}:{s:02}"),
+        ("Audio", _, _) => format!("{h}:{m:02}:{s:02}"),
+        (_, 0, 0) => format!("{s}s"),
+        (_, 0, _) => format!("{m}m"),
+        (_, _, 0) => format!("{h}h"),
+        _ => format!("{h}h {m}m"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
 
