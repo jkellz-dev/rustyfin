@@ -89,8 +89,14 @@ pub async fn find_or_create(
     provider_person_id: Option<&str>,
 ) -> Result<PersonRow, sqlx::Error> {
     if let Some(mut existing) = find_by_name_and_type(pool, name, person_type).await? {
-        // Update image fields if they were previously empty
-        if (existing.image_url.is_none() && image_url.is_some())
+        // A photo address is stored once, so its headshot file name stays put,
+        // except that a web address replaces a local path: a path into another
+        // program's folders (Jellyfin-era NFOs) can never be downloaded.
+        let image_url = image_url.filter(|new| match existing.image_url.as_deref() {
+            None => true,
+            Some(old) => !is_web_address(old) && is_web_address(new),
+        });
+        if image_url.is_some()
             || (existing.provider_person_id.is_none() && provider_person_id.is_some())
         {
             sqlx::query(
@@ -121,6 +127,12 @@ pub async fn find_or_create(
         provider_person_id,
     )
     .await
+}
+
+/// Whether a photo address can be downloaded: `http(s)://`, any case.
+fn is_web_address(url: &str) -> bool {
+    let url = url.trim().to_ascii_lowercase();
+    url.starts_with("https://") || url.starts_with("http://")
 }
 
 /// Link a person to a media item. Uses ON CONFLICT to update role/sort_order if already linked.
