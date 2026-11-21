@@ -29,3 +29,6 @@ groups = "Tailscale-User-Groups"
 # else is due during the run.
 [tasks]
 enabled = true
+# The suite reads the library a startup scan builds, and /ScheduledTasks
+# expects that scan to have run.
+run_on_startup = true

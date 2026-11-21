@@ -139,7 +139,7 @@ without knowing the whole state. The scan board is one shared instance for the p
 3. Session manager, search service, and the transcode manager with its cleanup and throttle task.
 4. Image and people cache folders.
 5. The task scheduler and its tasks (library scans, search reindex, activity-log and session pruning, transcode and
-   image-cache cleanup, database maintenance); with `run_on_startup`, each runs once now.
+   image-cache cleanup, database maintenance); with `run_on_startup` (off by default), each runs once now.
 6. Linked servers from `[[link]]`: each is recorded in the `links` table, and one task syncs them all 30 seconds later
    and then every 15 minutes.
 7. Forward-auth and LDAP settings, CORS, `AppState`.

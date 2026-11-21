@@ -425,7 +425,7 @@ impl Default for TasksConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            run_on_startup: true,
+            run_on_startup: false,
             jitter_seconds: 300,
             schedules: default_schedules(),
             library_scan: LibraryScanConfig::default(),
@@ -561,8 +561,10 @@ impl Default for ImageCachePruneConfig {
 fn default_tasks_enabled() -> bool {
     true
 }
+/// Off: a restart (a pod rescheduled, an upgrade) is not a reason to scan
+/// every library; scans run on their schedule and when asked.
 fn default_run_on_startup() -> bool {
-    true
+    false
 }
 fn default_jitter_seconds() -> u64 {
     300
