@@ -21,8 +21,14 @@ pub struct ServerEvent {
 /// A scan in progress.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ScanState {
+    /// Units found and done in the folder being scanned now.
     pub total: u64,
     pub done: u64,
+    /// The library's folders, and how many are done (0 parts: one folder).
+    pub parts: u64,
+    pub parts_done: u64,
+    /// Every folder is done; the scan's last steps are running.
+    pub finishing: bool,
     /// The last whole percent sent to clients.
     sent_percent: Option<u32>,
 }
@@ -102,6 +108,39 @@ impl ScanBoard {
     pub fn add_total(&self, library: Uuid, n: u64) {
         if let Some(s) = self.running.lock().expect("scan board").get_mut(&library) {
             s.total += n;
+        }
+    }
+
+    /// The library has `n` folders; each counts as an equal share.
+    pub fn set_parts(&self, library: Uuid, n: u64) {
+        if let Some(s) = self.running.lock().expect("scan board").get_mut(&library) {
+            s.parts = n;
+        }
+    }
+
+    /// One folder done: the next one's units count from zero.
+    pub fn part_done(&self, library: Uuid) {
+        if let Some(s) = self.running.lock().expect("scan board").get_mut(&library) {
+            s.parts_done += 1;
+            s.total = 0;
+            s.done = 0;
+        }
+    }
+
+    /// Every folder is scanned; the last steps (collections, linked copies,
+    /// headshots) run now. The only time a scan reads 100%.
+    pub fn finishing(&self, library: Uuid) {
+        let send = {
+            let mut running = self.running.lock().expect("scan board");
+            let Some(s) = running.get_mut(&library) else {
+                return;
+            };
+            s.finishing = true;
+            s.sent_percent = Some(100);
+            true
+        };
+        if send {
+            self.send_progress(library, 100);
         }
     }
 
@@ -217,13 +256,19 @@ impl ScanBoard {
     }
 }
 
-/// Percent done, never past 100 (more units can be found as a scan goes).
+/// Percent done: each folder an equal share, never past 99 while units
+/// remain to be found or the last steps have not begun; 100 while finishing.
 fn percent_of(s: &ScanState) -> f64 {
-    if s.total == 0 {
+    if s.finishing {
+        return 100.0;
+    }
+    let parts = s.parts.max(1) as f64;
+    let current = if s.total == 0 {
         0.0
     } else {
-        (s.done as f64 * 100.0 / s.total as f64).min(100.0)
-    }
+        (s.done as f64 / s.total as f64).min(1.0)
+    };
+    ((s.parts_done as f64 + current) * 100.0 / parts).min(99.0)
 }
 
 #[cfg(test)]
@@ -291,11 +336,11 @@ mod tests {
         assert_eq!(progress[0]["ItemId"], lib.simple().to_string());
         assert_eq!(progress[0]["Progress"], "0");
         assert_eq!(progress[1]["Progress"], "1");
-        // More units found later never send progress backwards past 100.
+        // More steps than units found never read past 99 before the end.
         for _ in 0..500 {
             board.step(lib);
         }
-        assert_eq!(board.percent(lib), Some(100.0));
+        assert_eq!(board.percent(lib), Some(99.0));
     }
 
     #[test]

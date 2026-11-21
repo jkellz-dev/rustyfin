@@ -208,11 +208,14 @@ impl LibraryScanner {
             .ok_or_else(|| anyhow::anyhow!("Library {library_id} not found"))?;
 
         let library_type = lib.library_type.as_str();
+        let board = ScanBoard::global();
+        board.set_parts(library_id, paths.len() as u64);
 
         for lib_path in paths {
             let path = PathBuf::from(lib_path);
             if !path.is_dir() {
                 tracing::warn!("Library path does not exist: {lib_path}");
+                board.part_done(library_id);
                 continue;
             }
 
@@ -228,11 +231,14 @@ impl LibraryScanner {
                 }
                 other => {
                     tracing::warn!("Unknown library type '{other}', skipping");
+                    board.part_done(library_id);
                     continue;
                 }
             }
             self.prune_missing(library_id, &path, &mut result).await;
+            board.part_done(library_id);
         }
+        board.finishing(library_id);
 
         if library_type == "movies" {
             self.sync_movie_collections(library_id).await;

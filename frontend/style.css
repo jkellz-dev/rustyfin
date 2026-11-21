@@ -235,6 +235,8 @@ tr:hover td {
 .btn-sm {
   padding: 5px 10px;
   font-size: 0.82em;
+  /* A label such as "Scanning… 100%" stays on one line. */
+  white-space: nowrap;
 }
 
 .btn:disabled {

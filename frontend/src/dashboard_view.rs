@@ -210,9 +210,11 @@ pub fn scans_finished(before: &[(String, bool)], now: &[(String, bool)]) -> Vec<
         .collect()
 }
 
-/// The Scan button while a scan runs: "Scanning… 42%" once progress is known.
+/// The Scan button while a scan runs: "Scanning… 42%" once progress is
+/// known; the server reports 100 only for its last steps, "Finishing…".
 pub fn scanning_label(progress: Option<f64>) -> String {
     match progress {
+        Some(p) if p >= 100.0 => "Finishing…".to_string(),
         Some(p) if p > 0.0 => format!("Scanning… {}%", p.floor() as u32),
         _ => "Scanning…".to_string(),
     }
