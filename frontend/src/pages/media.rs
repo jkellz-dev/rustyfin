@@ -897,6 +897,10 @@ pub fn Media(path: String) -> View {
                         let play_id = item.id.clone();
                         let (detail_poster_class, detail_placeholder_class) =
                             browse::detail_classes(&detail_item_type);
+                        // Worked out here: the view moves item.
+                        let runtime = item
+                            .runtime_ticks
+                            .and_then(|t| browse::runtime_label(t, &detail_item_type));
 
                         view! {
                             div(class="detail-page") {
@@ -948,7 +952,7 @@ pub fn Media(path: String) -> View {
                                             } else {
                                                 view! {}
                                             })
-                                            (if let Some(rt) = item.runtime_ticks.and_then(|t| browse::runtime_label(t, &item.item_type)) {
+                                            (if let Some(rt) = runtime.clone() {
                                                 view! { span(class="badge badge-runtime") { (rt) } }
                                             } else {
                                                 view! {}
