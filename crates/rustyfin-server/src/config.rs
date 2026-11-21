@@ -731,4 +731,13 @@ mod schedule_tests {
         assert_eq!(t.schedules["weekly"].cron, "0 0 4 * * 7 *");
         assert_eq!(t.schedules["hourly"].cron, "0 0 * * * * *");
     }
+    /// Owner (2026-11-21): "does a restart need to perform a full scan? I
+    /// think it should only do scans on the schedule and adhoc. Restarts happen
+    /// all the time, even in k8s because the pod gets rescheduled."
+    #[test]
+    fn a_restart_runs_no_scan_or_task_unless_asked() {
+        assert!(!tasks("enabled = true").run_on_startup);
+        assert!(!TasksConfig::default().run_on_startup);
+        assert!(tasks("run_on_startup = true").run_on_startup);
+    }
 }
