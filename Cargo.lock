@@ -3250,7 +3250,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustyfin-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -3278,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-auth"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "chrono",
@@ -3301,7 +3301,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-bench"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3316,7 +3316,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-common"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "governor",
@@ -3337,7 +3337,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3365,7 +3365,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-db"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-frontend"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "brotli",
@@ -3392,7 +3392,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-media"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -3415,7 +3415,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-meta"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-models"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-search"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "meilisearch-sdk",
  "rustyfin-db",
@@ -3459,7 +3459,7 @@ dependencies = [
 
 [[package]]
 name = "rustyfin-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
