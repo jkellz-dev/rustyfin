@@ -184,3 +184,107 @@ async fn library_options_migration_keeps_existing_libraries_intact() {
 
     db.cleanup().await;
 }
+
+const PEOPLE_PHOTOS_MIGRATION: &str = "20261121000000_people_web_photos.sql";
+
+/// People whose only photo is a local path from another program get re-read:
+/// the titles they are in lose their etag, so the next scan reads the NFO again
+/// and stores the web address it now gives. Nothing else changes.
+#[tokio::test]
+async fn people_photo_migration_rereads_only_titles_with_local_photo_paths() {
+    let db = UpgradeDb::new().await;
+    let files = migration_files();
+    let idx = files
+        .iter()
+        .position(|f| f.file_name().is_some_and(|n| n == PEOPLE_PHOTOS_MIGRATION))
+        .expect("the migration under test exists");
+    for file in &files[..idx] {
+        apply(&db.pool, file).await;
+    }
+    let item = |name: &str, kind: &str| {
+        let pool = db.pool.clone();
+        let (name, kind) = (name.to_string(), kind.to_string());
+        async move {
+            sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO media_items (name, item_type, etag) VALUES ($1, $2, 'etag-1') RETURNING id",
+            )
+            .bind(name)
+            .bind(kind)
+            .fetch_one(&pool)
+            .await
+            .expect("item")
+        }
+    };
+    let person = |name: &str, url: Option<&str>| {
+        let pool = db.pool.clone();
+        let (name, url) = (name.to_string(), url.map(str::to_string));
+        async move {
+            sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO people (name, person_type, image_url) VALUES ($1, 'Actor', $2) RETURNING id",
+            )
+            .bind(name)
+            .bind(url)
+            .fetch_one(&pool)
+            .await
+            .expect("person")
+        }
+    };
+    let link = |item: Uuid, person: Uuid| {
+        let pool = db.pool.clone();
+        async move {
+            sqlx::query("INSERT INTO media_item_people (item_id, person_id) VALUES ($1, $2)")
+                .bind(item)
+                .bind(person)
+                .execute(&pool)
+                .await
+                .expect("link");
+        }
+    };
+    let film_local = item("Film with a Jellyfin-era cast", "Movie").await;
+    let episode_local = item("Episode with a Jellyfin-era guest", "Episode").await;
+    let film_web = item("Film with TMDB photos", "Movie").await;
+    let film_none = item("Film with unpictured crew", "Movie").await;
+    let series = item("A show", "Series").await;
+    let local = person(
+        "Local Path",
+        Some("/config/metadata/People/L/Local Path/folder.jpg"),
+    )
+    .await;
+    let web = person(
+        "Web Photo",
+        Some("https://image.tmdb.org/t/p/original/a.jpg"),
+    )
+    .await;
+    let none = person("No Photo", None).await;
+    link(film_local, local).await;
+    link(film_local, web).await;
+    link(episode_local, local).await;
+    link(series, local).await;
+    link(film_web, web).await;
+    link(film_none, none).await;
+
+    apply(&db.pool, &files[idx]).await;
+
+    let etag = |id: Uuid| {
+        let pool = db.pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<String>>("SELECT etag FROM media_items WHERE id = $1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .expect("etag")
+        }
+    };
+    assert_eq!(etag(film_local).await, None, "re-read on the next scan");
+    assert_eq!(etag(episode_local).await, None, "re-read on the next scan");
+    for kept in [film_web, film_none, series] {
+        assert_eq!(etag(kept).await.as_deref(), Some("etag-1"));
+    }
+    let urls: Vec<Option<String>> =
+        sqlx::query_scalar("SELECT image_url FROM people ORDER BY name")
+            .fetch_all(&db.pool)
+            .await
+            .expect("people");
+    assert_eq!(urls.len(), 3, "no person is removed");
+    db.cleanup().await;
+}
