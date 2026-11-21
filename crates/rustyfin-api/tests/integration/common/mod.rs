@@ -186,7 +186,7 @@ impl TestApp {
             }),
             ldap_config: None,
             transcode_manager,
-            image_cache_dir: PathBuf::from("/tmp/rustyfin-test-images"),
+            image_cache_dir: image_cache_dir(&schema),
             scan_in_flight: scan_in_flight.clone(),
             scan_schedules: serde_json::json!({}),
             people_cache_dir,
@@ -520,6 +520,7 @@ impl TestApp {
     /// Drop the test schema and all its objects.
     pub async fn cleanup(&self) {
         self.search.drop_indexes().await;
+        let _ = std::fs::remove_dir_all(image_cache_dir(&self.schema));
         let _ = self
             .pool
             .execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
@@ -528,4 +529,16 @@ impl TestApp {
             ))))
             .await;
     }
+}
+
+/// Each app's own image cache, created empty. All integration tests share one
+/// process, and the health check remembers a cache folder's count for minutes
+/// by path, so a shared folder answered one test with another's (or with
+/// "Missing" from before any test created it).
+fn image_cache_dir(schema: &str) -> PathBuf {
+    let dir = std::env::temp_dir()
+        .join("rustyfin-test-images")
+        .join(schema);
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
