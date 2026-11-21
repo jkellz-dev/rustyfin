@@ -509,6 +509,9 @@ impl LibraryScanner {
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
                 self.refresh_stale_streams(existing.id, file_path).await;
+                // Art is not in the etag: the *arr apps write it after the
+                // import webhook has started the scan that added the title.
+                self.replace_images(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
             }
             // File or NFO changed — update
@@ -1279,6 +1282,8 @@ impl LibraryScanner {
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
                 self.refresh_stale_streams(existing.id, file_path).await;
+                // The still may have been written after the first scan.
+                self.replace_episode_images(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
             }
 
