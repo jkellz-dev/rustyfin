@@ -1597,6 +1597,20 @@ Design, settled before any code:
       reaches a client); the linked server runs ffmpeg
 - [ ] Progress and stop reports update the home user's state; the linked server only sees the link's session
 - [ ] If a linked server drops mid-play, the client gets an error it can retry with another copy (no silent switch)
+- [ ] **Investigate: play a linked copy straight from the friend's server** (owner, 2026-11-21). Today every byte
+      of a linked copy passes through the home server, which costs it bandwidth and adds a hop. Look into the client
+      fetching the stream from the linked server directly. Changes the design boundary above ("clients only ever talk to
+      the home server"), so it needs the owner's decision before code. To answer first:
+  - **Reach:** can the client reach the friend's server at all (same tailnet, a shared node, the friend's public
+    proxy), and how the home server tells which clients can, falling back to the relay when they cannot.
+  - **Identity:** what the client presents there. The link's token must never reach a client, and a client's own
+    identity means nothing to the friend's proxy. Candidates: a short-lived, single-item stream URL signed for that
+    one copy (the friend's server would need to accept it), or the friend's proxy admitting the home user.
+  - **Clients:** which ones follow a `MediaSources` path on another host or a redirect (Jellyfin web, Infuse, Swiftfin,
+    Plezy, Findroid), and what each does with byte ranges and HLS from a second host. Jellyswarrm's "redirect" mode
+    is prior art.
+  - **What the home server still sees:** progress and stop reports stay with the home server; the friend sees the
+    link's session, or a playing client it cannot name.
 
 #### 16b.7 Tests and measurement
 
