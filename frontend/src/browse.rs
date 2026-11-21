@@ -559,4 +559,42 @@ mod tests {
         toggle_selected(&mut s, "a");
         assert_eq!(s, vec!["b".to_string()]);
     }
+
+    #[test]
+    fn a_track_shows_minutes_and_seconds() {
+        // "Your Worst Nightmare" runs 0:51; it showed as "0m".
+        assert_eq!(runtime_label(510_000_000, "Audio").as_deref(), Some("0:51"));
+        assert_eq!(
+            runtime_label(1_850_000_000, "Audio").as_deref(),
+            Some("3:05")
+        );
+        assert_eq!(
+            runtime_label(37_230_000_000, "Audio").as_deref(),
+            Some("1:02:03")
+        );
+    }
+
+    #[test]
+    fn a_video_under_a_minute_shows_seconds() {
+        assert_eq!(runtime_label(450_000_000, "Video").as_deref(), Some("45s"));
+        assert_eq!(
+            runtime_label(25_000_000_000, "Episode").as_deref(),
+            Some("41m")
+        );
+        assert_eq!(
+            runtime_label(55_980_000_000, "Movie").as_deref(),
+            Some("1h 33m")
+        );
+        assert_eq!(
+            runtime_label(72_000_000_000, "Movie").as_deref(),
+            Some("2h")
+        );
+    }
+
+    #[test]
+    fn an_unknown_runtime_shows_nothing() {
+        assert_eq!(runtime_label(0, "Audio"), None);
+        assert_eq!(runtime_label(-5, "Movie"), None);
+        assert_eq!(runtime_label(9_000_000, "Movie"), None);
+    }
 }
