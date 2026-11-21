@@ -115,11 +115,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Every integration test is its own binary, each linked with full debug
-      # info; with ~50 of them the runner's disk ran out mid-link ("ld
-      # terminated with signal 7 [Bus error]", mbx: 4.5 GiB free). Drop the
-      # preinstalled SDKs this job never uses: dotnet, GHC and CodeQL now,
-      # Android (the biggest, slow to delete) in the background while we build.
+      # The integration tests were once ~90 binaries, each linked with full
+      # debug info, and the runner's disk ran out mid-link ("ld terminated
+      # with signal 7 [Bus error]"). They are one binary now, but the remote
+      # cache's downloads still want room. Drop the preinstalled SDKs this job
+      # never uses: dotnet, GHC and CodeQL now, Android (the biggest, slow to
+      # delete) in the background while we build.
       - name: Free runner disk
         run: |
           df -h /
@@ -140,7 +141,7 @@ jobs:
         run: mbx test --lib
 
       - name: Run integration tests
-        run: mbx test -p rustyfin-api --test '*' -- --test-threads=1
+        run: mbx test -p rustyfin-api --test integration -- --test-threads=1
 
   build-frontend:
     name: Build Frontend
