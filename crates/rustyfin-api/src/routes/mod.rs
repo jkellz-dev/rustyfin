@@ -14,6 +14,7 @@ pub mod filters;
 pub mod genres;
 pub mod hls;
 pub mod images;
+pub mod instant_mix;
 pub mod items;
 pub mod libraries;
 pub mod link_catalog;

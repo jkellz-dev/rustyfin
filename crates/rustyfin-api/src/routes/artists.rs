@@ -42,6 +42,19 @@ pub async fn get_artists(
     get_artists_inner(&state, &auth, &params, false).await
 }
 
+/// `GET /Artists/{name}` — an artist by name.
+pub async fn get_artist_by_name(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(name): Path<String>,
+) -> Result<Json<BaseItemDto>, ApiError> {
+    let artist = media_items::find_by_name_and_type(&state.pool, &name, "MusicArtist")
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+    super::items::get_item_by_id(State(state), auth, Path(artist.id)).await
+}
+
 /// `GET /Artists/AlbumArtists` — Only artists that have at least one album.
 pub async fn get_album_artists(
     State(state): State<AppState>,

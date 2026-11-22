@@ -1073,11 +1073,12 @@ impl LibraryScanner {
             && existing.etag.as_deref() == Some(etag.as_str())
         {
             self.refresh_stale_streams(existing.id, file_path).await;
-            // Tracks scanned before artists, MusicBrainz ids or lyrics were
-            // kept get them once.
+            // Tracks scanned before artists, MusicBrainz ids, lyrics or
+            // genres were kept get them once.
             if existing.artists.is_none()
                 || existing.external_ids.is_none()
                 || existing.has_lyrics.is_none()
+                || existing.genres.is_none()
             {
                 self.store_track_tags(existing.id, album_id, artist_id, file_path)
                     .await;
@@ -1605,6 +1606,15 @@ impl LibraryScanner {
             .unwrap_or_default();
         if let Err(e) = media_items::set_artists(&self.pool, item_id, &artists).await {
             tracing::warn!("Could not store the artists of {item_id}: {e}");
+        }
+        // An empty list for an untagged track, so it is not read again.
+        let genres = tags
+            .genre
+            .as_deref()
+            .map(music_tags::split_genres)
+            .unwrap_or_default();
+        if let Err(e) = media_items::set_genres(&self.pool, item_id, &genres).await {
+            tracing::warn!("Could not store the genres of {item_id}: {e}");
         }
         let ids = music_tags::musicbrainz_ids(&tags);
         let as_json = |pairs: &[(&'static str, String)]| {

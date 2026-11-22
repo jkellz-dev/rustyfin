@@ -168,6 +168,10 @@ fn routes(state: AppState) -> Router {
         // ── Library views ───────────────────────────────────────
         .route("/UserViews", get(libraries::get_user_views))
         .route(
+            "/UserViews/GroupingOptions",
+            get(libraries::get_user_views_grouping_options),
+        )
+        .route(
             "/Users/{userId}/GroupingOptions",
             get(libraries::get_grouping_options),
         )
@@ -501,6 +505,18 @@ fn routes(state: AppState) -> Router {
         )
         .route("/Items/{itemId}/LocalTrailers", get(extras::local_trailers))
         .route(
+            "/Users/{userId}/Items/{itemId}/Intros",
+            get(stubs::empty_query_result_auth),
+        )
+        .route(
+            "/Users/{userId}/Items/{itemId}/LocalTrailers",
+            get(extras::local_trailers_legacy),
+        )
+        .route(
+            "/Users/{userId}/Items/{itemId}/SpecialFeatures",
+            get(extras::special_features_legacy),
+        )
+        .route(
             "/Items/{itemId}/SpecialFeatures",
             get(extras::special_features),
         )
@@ -509,6 +525,21 @@ fn routes(state: AppState) -> Router {
             get(stubs::search_remote_subtitles).post(stubs::download_remote_subtitles),
         )
         .route("/Items/{itemId}/Similar", get(similar::get_similar))
+        // Jellyfin answers Similar under each type's path too.
+        .route("/Movies/{itemId}/Similar", get(similar::get_similar))
+        .route("/Trailers/{itemId}/Similar", get(similar::get_similar))
+        .route("/Shows/{seriesId}/Similar", get(similar::get_similar))
+        .route("/Albums/{itemId}/Similar", get(similar::get_similar))
+        .route("/Artists/{name}/Similar", get(similar::get_similar))
+        // ── Instant mixes ──────────────────────────────────────────
+        .route("/Items/{itemId}/InstantMix", get(instant_mix::from_item))
+        .route("/Songs/{itemId}/InstantMix", get(instant_mix::from_item))
+        .route("/Albums/{itemId}/InstantMix", get(instant_mix::from_item))
+        .route("/Artists/{name}/InstantMix", get(instant_mix::from_item))
+        .route("/Playlists/{playlistId}/InstantMix", get(instant_mix::from_item))
+        .route("/Artists/InstantMix", get(instant_mix::from_artist_query))
+        .route("/MusicGenres/{name}/InstantMix", get(instant_mix::from_genre_name))
+        .route("/MusicGenres/InstantMix", get(instant_mix::from_genre_id))
         .route(
             "/Items/{itemId}/ThemeSongs",
             get(theme_media::get_theme_songs),
@@ -528,6 +559,7 @@ fn routes(state: AppState) -> Router {
         .route("/Movies/Recommendations", get(similar::get_recommendations))
         .route("/Artists", get(artists::get_artists))
         .route("/Artists/AlbumArtists", get(artists::get_album_artists))
+        .route("/Artists/{name}", get(artists::get_artist_by_name))
         .route("/Genres", get(genres::get_genres))
         .route("/Genres/{genreName}", get(genres::get_genre))
         .route("/Studios", get(studios::get_studios))

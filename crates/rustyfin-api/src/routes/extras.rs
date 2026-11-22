@@ -82,6 +82,24 @@ pub async fn local_trailers(
     Ok(Json(extras(&state, &auth, item_id, &["Trailer"]).await?))
 }
 
+/// `GET /Users/{userId}/Items/{itemId}/LocalTrailers` (older clients).
+pub async fn local_trailers_legacy(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
+    local_trailers(state, auth, Path(item_id)).await
+}
+
+/// `GET /Users/{userId}/Items/{itemId}/SpecialFeatures` (older clients).
+pub async fn special_features_legacy(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
+    special_features(state, auth, Path(item_id)).await
+}
+
 /// `GET /Items/{itemId}/SpecialFeatures`: every extra but trailers and theme media.
 pub async fn special_features(
     State(state): State<AppState>,

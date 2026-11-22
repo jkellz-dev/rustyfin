@@ -505,6 +505,14 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         end_date: item.end_date,
         runtime_ticks: item.runtime_ticks,
         genres: item.genres.clone(),
+        genre_items: item.genres.as_ref().map(|g| {
+            g.iter()
+                .map(|name| NameGuidPair {
+                    name: name.clone(),
+                    id: Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes()),
+                })
+                .collect()
+        }),
         studios: item.studios.as_ref().map(|s| {
             s.iter()
                 .map(|name| NameGuidPair {

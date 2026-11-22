@@ -1345,6 +1345,56 @@ pub async fn search_index_page(
     .await
 }
 
+/// The genres an instant mix seeded by `id` draws from: the item's own and
+/// those of the tracks below it (an album's), by it (an artist's) or in it (a
+/// playlist's).
+pub async fn mix_seed_genres(pool: &PgPool, id: Uuid) -> Result<Vec<String>, sqlx::Error> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT g FROM ( \
+             SELECT unnest(genres) AS g FROM visible_media_items \
+             WHERE id = $1 \
+                OR (item_type = 'Audio' AND (parent_id = $1 OR season_id = $1 OR series_id = $1)) \
+                OR id IN (SELECT item_id FROM playlist_items WHERE playlist_id = $1) \
+         ) s WHERE g <> '' ORDER BY g",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// Tracks sharing any of `genres`, in random order, from `libraries` (every
+/// library when `None`).
+pub async fn instant_mix(
+    pool: &PgPool,
+    genres: &[String],
+    libraries: Option<&[Uuid]>,
+    limit: i64,
+) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    sqlx::query_as::<_, MediaItemRow>(
+        "SELECT * FROM visible_media_items \
+         WHERE item_type = 'Audio' AND genres && $1 \
+           AND ($2::uuid[] IS NULL OR library_id = ANY($2)) \
+         ORDER BY RANDOM() LIMIT $3",
+    )
+    .bind(genres)
+    .bind(libraries)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
+/// Replace a track's genres, writing only when they differ (a write moves the
+/// item's change stamp).
+pub async fn set_genres(pool: &PgPool, id: Uuid, genres: &[String]) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE media_items SET genres = $2 WHERE id = $1 AND genres IS DISTINCT FROM $2")
+        .bind(id)
+        .bind(genres)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Find similar items based on shared genres, studios, and tags.
 pub async fn find_similar(
     pool: &PgPool,
@@ -1361,7 +1411,6 @@ pub async fn find_similar(
         FROM visible_media_items m, source s
         WHERE m.id != $1
           AND m.item_type = $2
-          AND m.is_folder = false
           AND (
             (m.genres IS NOT NULL AND s.genres IS NOT NULL AND m.genres && s.genres)
             OR (m.studios IS NOT NULL AND s.studios IS NOT NULL AND m.studios && s.studios)

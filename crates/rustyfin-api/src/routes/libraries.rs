@@ -121,6 +121,15 @@ pub async fn get_physical_paths(
     Ok(Json(libs.into_iter().flat_map(|l| l.paths).collect()))
 }
 
+/// `GET /UserViews/GroupingOptions` — the same, for the caller.
+pub async fn get_user_views_grouping_options(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+) -> Result<Json<Vec<NameGuidPair>>, ApiError> {
+    let user = auth.user_id;
+    get_grouping_options(state, auth, axum::extract::Path(user)).await
+}
+
 /// `GET /Users/{userId}/GroupingOptions` — the libraries the caller may group
 /// into a single view.
 pub async fn get_grouping_options(
