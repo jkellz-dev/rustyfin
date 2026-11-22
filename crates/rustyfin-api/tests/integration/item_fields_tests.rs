@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use rustyfin_db::repo::{media_streams, people};
 use uuid::Uuid;
 
-async fn set(app: &common::TestApp, sql: &str, id: Uuid, other: Option<Uuid>) {
+async fn set(app: &common::TestApp, sql: &'static str, id: Uuid, other: Option<Uuid>) {
     let q = sqlx::query(sql).bind(id);
     let q = match other {
         Some(o) => q.bind(o),
