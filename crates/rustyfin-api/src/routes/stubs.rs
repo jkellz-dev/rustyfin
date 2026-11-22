@@ -96,6 +96,6 @@ pub async fn empty_font_list(_auth: AuthenticatedUser) -> Json<Vec<()>> {
 
 /// Jellyfin's 404 problem document, for routes with nothing behind them here
 /// (a splash screen, trickplay tiles, a fallback font).
-pub async fn not_found() -> crate::error::ApiError {
+pub async fn problem_not_found() -> crate::error::ApiError {
     crate::error::ApiError::NotFound
 }
