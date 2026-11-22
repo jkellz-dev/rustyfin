@@ -48,7 +48,8 @@ async fn a_search_forgives_typos_and_ranks_best_first() {
     assert_eq!(found, vec!["Alien", "Aliens"], "{list}");
     assert_eq!(list["TotalRecordCount"], 2, "{list}");
 
-    // Best first when the app does not sort; the app's order when it does.
+    // Best first, whether or not the app sorts: Jellyfin puts its search
+    // score before the app's sort (SqliteItemRepository.GetOrderByText).
     let (_, list) = app
         .get("/Items?SearchTerm=aliens&Recursive=true", &token)
         .await;
@@ -59,7 +60,7 @@ async fn a_search_forgives_typos_and_ranks_best_first() {
             &token,
         )
         .await;
-    assert_eq!(names(&list), vec!["Alien", "Aliens"], "{list}");
+    assert_eq!(names(&list), vec!["Aliens", "Alien"], "{list}");
 
     // Search hints come from the same index.
     let (_, hints) = app.get("/Search/Hints?SearchTerm=alein", &token).await;
@@ -309,5 +310,38 @@ async fn an_index_meilisearch_lost_is_rebuilt_whole() {
     let mut found = names(&list);
     found.sort();
     assert_eq!(found, vec!["Alien", "Aliens"], "{list}");
+    app.cleanup().await;
+}
+
+/// Owner, 2026-11-22: "Finamp ... search sucks. It doesn't appear to be
+/// hitting meilisearch at all". Finamp searches as you type and always sends
+/// its sort (`SortBy=SortName`), so the best match sank among the
+/// alphabetical rest of Meilisearch's candidates.
+#[tokio::test]
+async fn a_sorted_search_as_you_type_puts_the_best_match_first() {
+    let app = common::TestApp::with_meilisearch().await;
+    let (user, token) = app.create_user("listener", false).await;
+    let lib = app.create_library("Music", "music").await;
+    for name in [
+        "Aardvark Blues",
+        "Blue Sky",
+        "Abyss of Blue Skies",
+        "Skyline",
+    ] {
+        app.create_media_item(name, "Audio", lib, None).await;
+    }
+    app.search.sync().await.expect("sync");
+
+    let (status, list) = app
+        .get(
+            &format!(
+                "/Users/{user}/Items?IncludeItemTypes=Audio&Recursive=true\
+                 &SortBy=SortName&SortOrder=Ascending&SearchTerm=blue%20sky&Limit=100"
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(names(&list)[0], "Blue Sky", "{list}");
     app.cleanup().await;
 }
