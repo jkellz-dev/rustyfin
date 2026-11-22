@@ -129,15 +129,20 @@ async fn permissions_still_apply_to_a_vouched_user() {
     app.cleanup().await;
 }
 
+/// Owner, 2026-11-22: "ALL requests go through the proxy. There is no way
+/// around the proxy." So a request the proxy names nobody on is nobody's,
+/// even with a token that works.
 #[tokio::test]
-async fn without_a_proxys_word_a_token_is_still_needed() {
+async fn without_the_proxys_word_a_token_signs_nobody_in() {
     let app = common::TestApp::with_forward_auth().await;
     let (_, token) = app.create_user("viewer", false).await;
-    // No identity header: the token decides, as for in-cluster webhooks.
     let (status, _) = get_as(&app, None, &format!("/Users/Me?ApiKey={token}"), None).await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
     let (status, _) = get_as(&app, None, "/Users/Me?ApiKey=nonsense", None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // What anyone may ask still answers.
+    let (status, _) = get_as(&app, None, "/System/Info/Public", None).await;
+    assert_eq!(status, StatusCode::OK);
     // An identity header from an address no proxy uses counts for nothing.
     let mut req = Request::builder()
         .uri("/Users/Me")
