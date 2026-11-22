@@ -8,6 +8,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
+use rustyfin_db::repo::media_items;
+use rustyfin_db::repo::media_items::NameKind;
 use rustyfin_db::repo::{images, people};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
@@ -30,7 +32,7 @@ pub struct PersonsQuery {
 /// `GET /Persons` — Browsable person list with optional per-type counts.
 pub async fn get_persons(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<PersonsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(100).min(500);
@@ -147,6 +149,7 @@ pub async fn get_persons(
 
         dtos.push(dto);
     }
+    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, true).await;
 
     let mut result = QueryResult::new(dtos, total);
     result.start_index = offset as i32;
@@ -156,7 +159,7 @@ pub async fn get_persons(
 /// `GET /Persons/{name}` — Get a specific person by name.
 pub async fn get_person(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(person_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
     let person = people::find_by_name(&state.pool, &person_name)
@@ -170,7 +173,13 @@ pub async fn get_person(
         .flatten()
         .is_some();
 
-    Ok(Json(BaseItemDto {
+    let counts = people::count_items_by_person(&state.pool, person.id)
+        .await
+        .or_log_default("people::count_items_by_person");
+    let added = media_items::first_added_with(&state.pool, NameKind::Person(person.id))
+        .await
+        .or_log_default("media_items::first_added_with");
+    let mut dto = BaseItemDto {
         id: person.id,
         name: person.name,
         server_id: state.server_id.clone(),
@@ -183,8 +192,33 @@ pub async fn get_person(
         } else {
             None
         },
+        sort_name: person.sort_name,
         ..Default::default()
-    }))
+    };
+    apply_counts(&mut dto, &counts);
+    Ok(Json(
+        super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
+    ))
+}
+
+/// Per-type counts of the titles a name item stands over.
+pub(crate) fn apply_counts(dto: &mut BaseItemDto, counts: &[(String, i64)]) {
+    let mut total = 0i32;
+    for (item_type, cnt) in counts {
+        let c = *cnt as i32;
+        total += c;
+        match item_type.as_str() {
+            "Movie" => dto.movie_count = Some(c),
+            "Series" => dto.series_count = Some(c),
+            "Episode" => dto.episode_count = Some(c),
+            "Audio" => dto.song_count = Some(c),
+            "MusicAlbum" => dto.album_count = Some(c),
+            "MusicVideo" => dto.music_video_count = Some(c),
+            "Trailer" => dto.trailer_count = Some(c),
+            _ => {}
+        }
+    }
+    dto.child_count = Some(total);
 }
 
 /// `GET /Persons/{name}/Images/{imageType}` -- Serve person image.

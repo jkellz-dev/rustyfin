@@ -131,6 +131,14 @@ pub struct BaseItemDto {
     pub album_count: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub song_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trailer_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub music_video_count: Option<i32>,
 
     // Playlist item ID (entry ID within a playlist)
     #[serde(skip_serializing_if = "Option::is_none")]

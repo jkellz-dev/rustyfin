@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::media_items;
+use rustyfin_db::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -25,7 +26,7 @@ pub struct GenresQuery {
 /// `GET /Genres` — Browsable genre list with optional per-type counts.
 pub async fn get_genres(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<GenresQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let genres = media_items::distinct_genres(&state.pool, query.parent_id)
@@ -94,6 +95,7 @@ pub async fn get_genres(
         dtos.push(dto);
     }
 
+    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, false).await;
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
@@ -102,7 +104,7 @@ pub async fn get_genres(
 /// `GET /Genres/{genreName}` — Get a specific genre by name.
 pub async fn get_genre(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(genre_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
     let counts = media_items::count_items_with_genre(&state.pool, &genre_name, None)
@@ -118,7 +120,7 @@ pub async fn get_genre(
     let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes());
     let mut dto = BaseItemDto {
         id,
-        name: genre_name,
+        name: genre_name.clone(),
         server_id: state.server_id.clone(),
         item_type: "Genre".to_string(),
         child_count: Some(total_children),
@@ -136,7 +138,12 @@ pub async fn get_genre(
         }
     }
 
-    Ok(Json(dto))
+    let added = media_items::first_added_with(&state.pool, NameKind::Genre(&genre_name))
+        .await
+        .or_log_default("media_items::first_added_with");
+    Ok(Json(
+        super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
+    ))
 }
 
 /// `GET /Genres/{name}/Images/{imageType}`: the genre's picture, a title's

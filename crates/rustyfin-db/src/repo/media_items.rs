@@ -1395,6 +1395,59 @@ pub async fn set_genres(pool: &PgPool, id: Uuid, genres: &[String]) -> Result<()
     Ok(())
 }
 
+/// When the first title with this name (a genre, studio, year or person) was
+/// added: the date a name item gives as created.
+pub async fn first_added_with(
+    pool: &PgPool,
+    kind: NameKind<'_>,
+) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
+    let row: (Option<DateTime<Utc>>,) = match kind {
+        NameKind::Genre(name) => {
+            sqlx::query_as(
+                "SELECT MIN(date_created) FROM visible_media_items WHERE $1 = ANY(genres)",
+            )
+            .bind(name)
+            .fetch_one(pool)
+            .await?
+        }
+        NameKind::Studio(name) => {
+            sqlx::query_as(
+                "SELECT MIN(date_created) FROM visible_media_items WHERE $1 = ANY(studios)",
+            )
+            .bind(name)
+            .fetch_one(pool)
+            .await?
+        }
+        NameKind::Year(year) => {
+            sqlx::query_as(
+                "SELECT MIN(date_created) FROM visible_media_items WHERE production_year = $1",
+            )
+            .bind(year)
+            .fetch_one(pool)
+            .await?
+        }
+        NameKind::Person(id) => {
+            sqlx::query_as(
+                "SELECT MIN(mi.date_created) FROM visible_media_items mi \
+                 JOIN media_item_people mip ON mip.item_id = mi.id WHERE mip.person_id = $1",
+            )
+            .bind(id)
+            .fetch_one(pool)
+            .await?
+        }
+    };
+    Ok(row.0)
+}
+
+/// What a name item stands for.
+#[derive(Debug, Clone, Copy)]
+pub enum NameKind<'a> {
+    Genre(&'a str),
+    Studio(&'a str),
+    Year(i32),
+    Person(Uuid),
+}
+
 /// Find similar items based on shared genres, studios, and tags.
 pub async fn find_similar(
     pool: &PgPool,

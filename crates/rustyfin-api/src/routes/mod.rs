@@ -24,6 +24,7 @@ pub mod localization;
 pub mod lyrics;
 pub mod media_info;
 pub mod music_genres;
+pub mod name_items;
 pub mod persons;
 pub mod play_history;
 pub mod playback;

@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::media_items;
+use rustyfin_db::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -28,7 +29,7 @@ pub struct StudiosQuery {
 /// `GET /Studios` — Browsable studio list with optional per-type counts.
 pub async fn get_studios(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<StudiosQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let studios = media_items::distinct_studios(&state.pool, query.parent_id)
@@ -86,6 +87,7 @@ pub async fn get_studios(
         dtos.push(dto);
     }
 
+    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, true).await;
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
@@ -94,7 +96,7 @@ pub async fn get_studios(
 /// `GET /Studios/{name}` — Get a specific studio by name.
 pub async fn get_studio(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(studio_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
     let counts = media_items::count_items_with_studio(&state.pool, &studio_name, None)
@@ -110,7 +112,7 @@ pub async fn get_studio(
     let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, studio_name.as_bytes());
     let mut dto = BaseItemDto {
         id,
-        name: studio_name,
+        name: studio_name.clone(),
         server_id: state.server_id.clone(),
         item_type: "Studio".to_string(),
         child_count: Some(total_children),
@@ -128,7 +130,12 @@ pub async fn get_studio(
         }
     }
 
-    Ok(Json(dto))
+    let added = media_items::first_added_with(&state.pool, NameKind::Studio(&studio_name))
+        .await
+        .or_log_default("media_items::first_added_with");
+    Ok(Json(
+        super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
+    ))
 }
 
 /// `GET /Studios/{name}/Images/{imageType}` -- Serve studio image.

@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_db::repo::media_items;
+use rustyfin_db::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -23,7 +24,7 @@ pub struct YearsQuery {
 /// `GET /Years` — Browsable year list with per-type child counts.
 pub async fn get_years(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<YearsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let years = media_items::distinct_years(&state.pool, query.parent_id)
@@ -70,6 +71,7 @@ pub async fn get_years(
         dtos.push(dto);
     }
 
+    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, true).await;
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
@@ -78,7 +80,7 @@ pub async fn get_years(
 /// `GET /Years/{year}` — Get a specific year entity with per-type counts.
 pub async fn get_year(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(year): Path<i32>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
     let counts = media_items::count_items_by_year(&state.pool, year, None)
@@ -113,5 +115,10 @@ pub async fn get_year(
         }
     }
 
-    Ok(Json(dto))
+    let added = media_items::first_added_with(&state.pool, NameKind::Year(year))
+        .await
+        .or_log_default("media_items::first_added_with");
+    Ok(Json(
+        super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
+    ))
 }

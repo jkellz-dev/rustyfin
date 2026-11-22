@@ -69,6 +69,34 @@ KNOWN_DIFFERENCES = [
         "the synthetic titles share one date added, and the two servers break the tie differently (film first or show first)",
     ),
     (
+        "/Genres",
+        {},
+        r'ImageTags\.Primary|ImageBlurHashes\.Primary',
+        "Jellyfin makes a genre's picture from its titles' video frames; the test media have no art, and Rustyfin does not grab frames for genres",
+    ),
+    (
+        "/MusicGenres",
+        {},
+        r'ImageTags\.Primary|ImageBlurHashes\.Primary',
+        "Jellyfin makes a genre's picture from its titles' video frames; the test media have no art, and Rustyfin does not grab frames for genres",
+    ),
+    *[
+        (
+            path,
+            {},
+            r'\$\.Path"',
+            "Jellyfin keeps a metadata folder per person, genre, studio and year; Rustyfin keeps none, so there is no path to give",
+        )
+        for path in (
+            "/Persons/{person_name}",
+            "/Genres/{genre_name}",
+            "/Genres/{music_genre_name}",
+            "/MusicGenres/{music_genre_name}",
+            "/Studios/{studio_name}",
+            "/Years/{year}",
+        )
+    ],
+    (
         "/Sessions",
         {},
         r'RemoteEndPoint',
