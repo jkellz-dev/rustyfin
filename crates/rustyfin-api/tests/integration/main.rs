@@ -7,6 +7,7 @@ mod common;
 
 mod audio_transcode_url_tests;
 mod auth_tests;
+mod authn_noop_tests;
 mod batch1_tests;
 mod batch2_tests;
 mod batch3_tests;

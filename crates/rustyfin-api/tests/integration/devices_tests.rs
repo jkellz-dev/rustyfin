@@ -43,7 +43,7 @@ fn ids(body: &Value) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn an_admin_lists_a_users_devices_and_signs_one_out() {
+async fn an_admin_lists_a_users_devices_and_signing_one_out_changes_nothing() {
     let app = common::TestApp::new().await;
     let (_, admin) = app.create_user("admin", true).await;
     let (viewer, _) = app.create_user("viewer", false).await;
@@ -76,15 +76,14 @@ async fn an_admin_lists_a_users_devices_and_signs_one_out() {
     );
     assert!(tv_entry["DateLastActivity"].is_string(), "{tv_entry}");
 
-    // Sign the TV out: its token stops working, the phone's does not.
+    // Signing a device out is Jellyfin's; Tailscale decides who may ask
+    // (owner, 2026-11-22: authentication actions are no-ops). Nothing changes.
     let (status, _) = app.delete("/Devices?Id=tv-1", &admin).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (status, _) = app.get("/Users/Me", &tv).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(status, StatusCode::OK);
     let (status, _) = app.get("/Users/Me", &phone).await;
     assert_eq!(status, StatusCode::OK);
-    let (_, body) = app.get(&format!("/Devices?UserId={viewer}"), &admin).await;
-    assert_eq!(ids(&body), vec!["phone-1"]);
     app.cleanup().await;
 }
 
@@ -101,10 +100,10 @@ async fn only_admins_see_and_sign_out_devices() {
 }
 
 #[tokio::test]
-async fn an_unknown_device_is_not_found() {
+async fn signing_out_an_unknown_device_is_the_same_no_op() {
     let app = common::TestApp::new().await;
     let (_, admin) = app.create_user("admin", true).await;
     let (status, _) = app.delete("/Devices?Id=nope", &admin).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(status, StatusCode::NO_CONTENT);
     app.cleanup().await;
 }
