@@ -67,6 +67,7 @@ mod placeholder_image_tests;
 mod play_history_tests;
 mod play_state_tests;
 mod playlist_escaping_tests;
+mod playlist_share_tests;
 mod plezy_episode_fields_tests;
 mod pool_exhaustion_tests;
 mod prune_tests;
