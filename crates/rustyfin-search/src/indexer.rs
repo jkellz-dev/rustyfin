@@ -25,6 +25,8 @@ pub fn people_uid(items: &str) -> String {
 pub struct ItemDoc {
     id: String,
     name: String,
+    /// The name without the marks inside its words, when it has any.
+    name_joined: Option<String>,
     original_title: Option<String>,
     series_name: Option<String>,
     genres: Option<Vec<String>>,
@@ -39,6 +41,7 @@ impl From<&MediaItemRow> for ItemDoc {
         Self {
             id: item.id.to_string(),
             name: item.name.clone(),
+            name_joined: joined_name(&item.name),
             original_title: item
                 .original_title
                 .clone()
@@ -58,6 +61,7 @@ impl From<&MediaItemRow> for ItemDoc {
 pub struct PersonDoc {
     id: String,
     name: String,
+    name_joined: Option<String>,
     person_type: String,
 }
 
@@ -66,22 +70,48 @@ impl From<&PersonRow> for PersonDoc {
         Self {
             id: p.id.to_string(),
             name: p.name.clone(),
+            name_joined: joined_name(&p.name),
             person_type: p.person_type.clone(),
         }
     }
 }
 
-/// The items index's settings. Searchable attributes in order of weight: a
-/// match in the name counts most, one in the overview least.
+/// A name with the marks inside its words dropped ("P.U.L.S.E" → "PULSE",
+/// "AC/DC" → "ACDC"), when that changes it. Meilisearch splits such a word
+/// at every mark, so "pulse" would find nothing; Jellyfin matches names with
+/// their punctuation removed.
+pub fn joined_name(name: &str) -> Option<String> {
+    let words: Vec<String> = name
+        .split_whitespace()
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+        })
+        .filter(|w| !w.is_empty())
+        .collect();
+    let joined = words.join(" ");
+    let plain = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!joined.is_empty() && joined != plain).then_some(joined)
+}
+
+/// The items index's searchable attributes, in order of weight: a match in
+/// the name counts most, one in the overview least.
+pub const ITEM_SEARCHABLE: &[&str] = &[
+    "name",
+    "name_joined",
+    "original_title",
+    "series_name",
+    "genres",
+    "overview",
+];
+/// The people index's searchable attributes.
+pub const PEOPLE_SEARCHABLE: &[&str] = &["name", "name_joined"];
+
+/// The items index's settings.
 pub fn item_settings() -> Settings {
     Settings::new()
-        .with_searchable_attributes([
-            "name",
-            "original_title",
-            "series_name",
-            "genres",
-            "overview",
-        ])
+        .with_searchable_attributes(ITEM_SEARCHABLE)
         .with_filterable_attributes(ITEM_FILTERS)
 }
 
@@ -91,8 +121,10 @@ pub const ITEM_FILTERS: &[&str] = &["item_type", "library_id", "production_year"
 pub const PEOPLE_FILTERS: &[&str] = &["person_type"];
 
 /// Whether Meilisearch has the index `uid` with every attribute in
-/// `filters` filterable (as [`create`] leaves it).
-pub async fn is_built(client: &Client, uid: &str, filters: &[&str]) -> bool {
+/// `filters` filterable and `searchable` searchable (as [`create`] leaves
+/// it). An index made before a searchable attribute was added is rebuilt, so
+/// every document gains it.
+pub async fn is_built(client: &Client, uid: &str, filters: &[&str], searchable: &[&str]) -> bool {
     let Ok(index) = client.get_index(uid).await else {
         return false;
     };
@@ -103,13 +135,17 @@ pub async fn is_built(client: &Client, uid: &str, filters: &[&str]) -> bool {
         return false;
     };
     let have = json["filterableAttributes"].to_string();
+    let search = json["searchableAttributes"].to_string();
     filters.iter().all(|f| have.contains(&format!("\"{f}\"")))
+        && searchable
+            .iter()
+            .all(|f| search.contains(&format!("\"{f}\"")))
 }
 
 /// The people index's settings.
 pub fn people_settings() -> Settings {
     Settings::new()
-        .with_searchable_attributes(["name"])
+        .with_searchable_attributes(PEOPLE_SEARCHABLE)
         .with_filterable_attributes(PEOPLE_FILTERS)
 }
 
@@ -215,5 +251,19 @@ pub async fn drop_index(client: &Client, uid: &str) {
                 Some(Duration::from_secs(60)),
             )
             .await;
+    }
+}
+
+#[cfg(test)]
+mod joined_name_tests {
+    use super::joined_name;
+
+    #[test]
+    fn marks_inside_words_are_dropped() {
+        assert_eq!(joined_name("P.U.L.S.E").as_deref(), Some("PULSE"));
+        assert_eq!(joined_name("AC/DC").as_deref(), Some("ACDC"));
+        assert_eq!(joined_name("J.J. Abrams").as_deref(), Some("JJ Abrams"));
+        assert_eq!(joined_name("Pink Floyd"), None);
+        assert_eq!(joined_name("..."), None);
     }
 }

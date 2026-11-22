@@ -365,7 +365,10 @@ impl SearchService {
 
     async fn sync_items(&self, m: &Meili) -> Result<Counts, SearchError> {
         let engine = SearchError::Engine;
-        let Some(since) = self.cursor(m, &m.index, indexer::ITEM_FILTERS).await? else {
+        let Some(since) = self
+            .cursor(m, &m.index, indexer::ITEM_FILTERS, indexer::ITEM_SEARCHABLE)
+            .await?
+        else {
             // Built whole and swapped in, so searches keep answering from the
             // old one meanwhile; what changes during the build comes next time.
             let snapshot = search_feed::snapshot(&self.pool).await?;
@@ -422,7 +425,15 @@ impl SearchService {
 
     async fn sync_people(&self, m: &Meili) -> Result<Counts, SearchError> {
         let engine = SearchError::Engine;
-        let Some(since) = self.cursor(m, &m.people, indexer::PEOPLE_FILTERS).await? else {
+        let Some(since) = self
+            .cursor(
+                m,
+                &m.people,
+                indexer::PEOPLE_FILTERS,
+                indexer::PEOPLE_SEARCHABLE,
+            )
+            .await?
+        else {
             let snapshot = search_feed::snapshot(&self.pool).await?;
             let building = format!("{}_building", m.people);
             let settings = indexer::people_settings();
@@ -484,11 +495,12 @@ impl SearchService {
         m: &Meili,
         uid: &str,
         filters: &[&str],
+        searchable: &[&str],
     ) -> Result<Option<String>, SearchError> {
         let Some(cursor) = search_feed::cursor(&self.pool, uid).await? else {
             return Ok(None);
         };
-        if indexer::is_built(&m.client, uid, filters).await {
+        if indexer::is_built(&m.client, uid, filters, searchable).await {
             return Ok(Some(cursor));
         }
         tracing::warn!("Search index {uid} is missing or incomplete in Meilisearch; rebuilding it");
