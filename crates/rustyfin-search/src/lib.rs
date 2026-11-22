@@ -232,6 +232,20 @@ impl SearchService {
         Some(hits.into_iter().map(|(id, _)| id).collect())
     }
 
+    /// As [`ranked_ids`](Self::ranked_ids), with each match's tier: matches
+    /// Meilisearch scores alike share one, so an app's sort orders them.
+    pub async fn ranked_tiers(
+        &self,
+        term: &str,
+        item_types: &[String],
+        limit: usize,
+    ) -> Option<(Vec<Uuid>, Vec<i32>)> {
+        let hits = self
+            .ranked(false, term, query::type_filter(item_types), limit)
+            .await?;
+        Some(tiers(hits))
+    }
+
     /// The people best matching `term`, best first, of `person_types` (any
     /// when empty). `None` as for [`ranked_ids`](Self::ranked_ids).
     pub async fn ranked_people(
@@ -501,5 +515,42 @@ impl SearchService {
                 indexer::drop_index(&m.client, &format!("{uid}_building")).await;
             }
         }
+    }
+}
+
+/// Hits, best first, with a tier each: one per distinct score (to four
+/// places), counting from 0.
+pub fn tiers(hits: Vec<(Uuid, f64)>) -> (Vec<Uuid>, Vec<i32>) {
+    let mut ids = Vec::with_capacity(hits.len());
+    let mut tiers = Vec::with_capacity(hits.len());
+    let mut tier = 0;
+    let mut last = None;
+    for (id, score) in hits {
+        let score = (score * 10_000.0).round() as i64;
+        if last.is_some_and(|l| l != score) {
+            tier += 1;
+        }
+        last = Some(score);
+        ids.push(id);
+        tiers.push(tier);
+    }
+    (ids, tiers)
+}
+
+#[cfg(test)]
+mod tier_tests {
+    use super::*;
+
+    #[test]
+    fn equal_scores_share_a_tier() {
+        let (a, b, c, d) = (
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+        );
+        let (ids, tiers) = tiers(vec![(a, 0.99), (b, 0.8), (c, 0.80001), (d, 0.5)]);
+        assert_eq!(ids, vec![a, b, c, d]);
+        assert_eq!(tiers, vec![0, 1, 1, 2]);
     }
 }

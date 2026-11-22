@@ -1891,9 +1891,12 @@ pub struct ItemQuery {
     // Search
     pub search_term: Option<String>,
     /// Meilisearch's best matches for `search_term`, best first: these ids
-    /// instead of matching the name, in this order unless sorted otherwise.
-    /// `None`: the name is matched here.
+    /// instead of matching the name. `None`: the name is matched here.
     pub ranked_ids: Option<Vec<Uuid>>,
+    /// The score tier of each of `ranked_ids` (equal scores, one tier). A
+    /// search orders by tier before the app's sort, as Jellyfin orders by its
+    /// search score first; without tiers, by Meilisearch's order.
+    pub ranked_tiers: Vec<i32>,
 
     // Sorting
     pub sort_by: Vec<String>,
@@ -1933,6 +1936,7 @@ impl Default for ItemQuery {
             is_resumable: false,
             search_term: None,
             ranked_ids: None,
+            ranked_tiers: Vec::new(),
             sort_by: Vec::new(),
             sort_order: Vec::new(),
             start_index: 0,
@@ -2244,6 +2248,22 @@ impl ItemQuery {
         }
 
         qb.push(" ORDER BY ");
+        // A search: the best matches first whatever the app sorts by
+        // (Jellyfin's SearchScore, SqliteItemRepository.GetOrderByText);
+        // matches scored alike take the app's order.
+        if let Some(ref ids) = self.ranked_ids {
+            if self.ranked_tiers.len() == ids.len() {
+                qb.push("(");
+                qb.push_bind(self.ranked_tiers.clone());
+                qb.push("::int[])[array_position(");
+                qb.push_bind(ids.clone());
+                qb.push("::uuid[], mi.id)], ");
+            } else {
+                qb.push("array_position(");
+                qb.push_bind(ids.clone());
+                qb.push("::uuid[], mi.id), ");
+            }
+        }
         let mut first = true;
         for (i, sort_name) in self.sort_by.iter().enumerate() {
             let Some(col) = Self::sort_column(sort_name) else {
