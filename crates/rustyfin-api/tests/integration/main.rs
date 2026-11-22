@@ -55,6 +55,7 @@ mod music_browse_tests;
 mod music_fields_tests;
 mod music_mix_tests;
 mod musicbrainz_tests;
+mod name_items_tests;
 mod not_found_body_tests;
 mod owner_browse_bugs_tests;
 mod parity_shape_tests;
