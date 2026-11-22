@@ -179,9 +179,17 @@ pub(crate) async fn root_folder_dto(
         can_download: Some(false),
         location_type: Some("FileSystem".to_string()),
         media_type: Some("Unknown".to_string()),
+        // Created with the first library.
+        date_created: views
+            .iter()
+            .map(|l| l.created_at)
+            .min()
+            .or(Some(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH)),
         ..Default::default()
     };
+    dto.etag = Some(dto.id.simple().to_string());
     super::items::with_jellyfin_defaults(&mut dto);
+    super::items::attach_user_data(&state.pool, user_id, std::slice::from_mut(&mut dto)).await;
     Ok(dto)
 }
 

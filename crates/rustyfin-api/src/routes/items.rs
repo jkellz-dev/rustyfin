@@ -388,6 +388,9 @@ pub(crate) fn with_jellyfin_defaults(dto: &mut BaseItemDto) {
         dto.display_preferences_id = Some(dto.id.simple().to_string());
     }
     ensure_primary_placeholder(dto);
+    if dto.item_type == "Series" {
+        dto.air_days.get_or_insert_with(Vec::new);
+    }
     // Collections list their films by release date.
     if dto.item_type == "BoxSet" {
         dto.display_order
@@ -1170,6 +1173,7 @@ pub async fn get_items(
         auth.is_administrator,
     )
     .await;
+    attach_people_if_asked(&state, &query.fields, &mut dtos).await;
     // Attach user data if requested
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
@@ -1253,38 +1257,7 @@ pub async fn get_item_by_id(
         .await
         .or_log_default("people::list_by_item");
     if !people_rows.is_empty() {
-        // Batch-check which people have Primary images
-        let person_ids: Vec<Uuid> = people_rows.iter().map(|(p, _, _)| p.id).collect();
-        let person_images = images::list_by_items(&state.pool, &person_ids)
-            .await
-            .or_log_default("images::list_by_items");
-        let people_with_images: std::collections::HashSet<Uuid> = person_images
-            .iter()
-            .filter(|img| img.image_type == "Primary")
-            .filter_map(|img| img.entity_id)
-            .collect();
-
-        dto.people = Some(
-            people_rows
-                .into_iter()
-                .map(|(person, role, _sort_order)| {
-                    // A stored image first, else the shared headshot folder.
-                    let tag = if people_with_images.contains(&person.id) {
-                        Some(person.id.simple().to_string())
-                    } else {
-                        super::images::headshot_path(&state, &person)
-                            .and_then(|p| super::images::headshot_tag(&p))
-                    };
-                    BaseItemPerson {
-                        name: person.name,
-                        id: person.id,
-                        role,
-                        person_type: person.person_type,
-                        primary_image_tag: tag,
-                    }
-                })
-                .collect(),
-        );
+        dto.people = Some(people_dtos(&state, people_rows).await);
     }
 
     // Child count for folders (a collection counts its films)
@@ -1300,8 +1273,20 @@ pub async fn get_item_by_id(
             .unwrap_or(0);
         dto.child_count = Some(count as i32);
     }
+    if item.item_type == "MusicArtist" {
+        let (songs, albums) = media_items::artist_counts(&state.pool, item_id)
+            .await
+            .or_log_default("media_items::artist_counts");
+        dto.song_count = Some(songs as i32);
+        dto.album_count = Some(albums as i32);
+        dto.music_video_count = Some(0);
+    }
+    name_series_for_seasons(&state.pool, std::slice::from_mut(&mut dto)).await;
     // By type, not is_folder: what the scanner marks a folder is not the point.
-    if matches!(item.item_type.as_str(), "MusicAlbum" | "Series" | "Season") {
+    if matches!(
+        item.item_type.as_str(),
+        "MusicAlbum" | "MusicArtist" | "Series" | "Season"
+    ) {
         dto.cumulative_run_time_ticks = media_items::cumulative_runtime_ticks(&state.pool, item_id)
             .await
             .or_log_default("media_items::cumulative_runtime_ticks");
@@ -1379,6 +1364,68 @@ pub async fn get_item_by_id(
     }
 
     Ok(Json(dto))
+}
+
+/// Cast and crew as Jellyfin lists them, with a photo tag for whoever has one
+/// (a stored image, else the shared headshot folder).
+pub(crate) async fn people_dtos(
+    state: &AppState,
+    people_rows: Vec<(people::PersonRow, Option<String>, Option<i32>)>,
+) -> Vec<BaseItemPerson> {
+    if people_rows.is_empty() {
+        return Vec::new();
+    }
+    let person_ids: Vec<Uuid> = people_rows.iter().map(|(p, _, _)| p.id).collect();
+    let person_images = images::list_by_items(&state.pool, &person_ids)
+        .await
+        .or_log_default("images::list_by_items");
+    let people_with_images: std::collections::HashSet<Uuid> = person_images
+        .iter()
+        .filter(|img| img.image_type == "Primary")
+        .filter_map(|img| img.entity_id)
+        .collect();
+    people_rows
+        .into_iter()
+        .map(|(person, role, _sort_order)| {
+            let tag = if people_with_images.contains(&person.id) {
+                Some(person.id.simple().to_string())
+            } else {
+                super::images::headshot_path(state, &person)
+                    .and_then(|p| super::images::headshot_tag(&p))
+            };
+            BaseItemPerson {
+                name: person.name,
+                id: person.id,
+                role,
+                person_type: person.person_type,
+                primary_image_tag: tag,
+            }
+        })
+        .collect()
+}
+
+/// `Fields=People` on a list: each title's cast and crew, in one query.
+pub(crate) async fn attach_people_if_asked(
+    state: &AppState,
+    fields: &Option<String>,
+    dtos: &mut [BaseItemDto],
+) {
+    if !parse_comma_delimited(fields).iter().any(|f| f == "People") {
+        return;
+    }
+    let ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
+    let rows = people::list_by_items(&state.pool, &ids)
+        .await
+        .or_log_default("people::list_by_items");
+    let mut by_item: HashMap<Uuid, Vec<(people::PersonRow, Option<String>, Option<i32>)>> =
+        HashMap::new();
+    for (item, person, role, order) in rows {
+        by_item.entry(item).or_default().push((person, role, order));
+    }
+    for dto in dtos.iter_mut() {
+        let rows = by_item.remove(&dto.id).unwrap_or_default();
+        dto.people = Some(people_dtos(state, rows).await);
+    }
 }
 
 /// `GET /Items/Latest` — Latest additions.

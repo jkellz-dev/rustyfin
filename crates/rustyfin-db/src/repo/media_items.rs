@@ -1448,6 +1448,33 @@ pub enum NameKind<'a> {
     Person(Uuid),
 }
 
+/// The tags titles carry, under `parent` (a library) or everywhere.
+pub async fn distinct_tags(
+    pool: &PgPool,
+    parent: Option<Uuid>,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT t FROM (SELECT unnest(tags) AS t FROM visible_media_items \
+         WHERE ($1::uuid IS NULL OR library_id = $1)) s WHERE t <> '' ORDER BY t",
+    )
+    .bind(parent)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// An artist's tracks and albums.
+pub async fn artist_counts(pool: &PgPool, artist: Uuid) -> Result<(i64, i64), sqlx::Error> {
+    sqlx::query_as(
+        "SELECT COUNT(*) FILTER (WHERE item_type = 'Audio' AND series_id = $1), \
+                COUNT(*) FILTER (WHERE item_type = 'MusicAlbum' AND parent_id = $1) \
+         FROM visible_media_items WHERE series_id = $1 OR parent_id = $1",
+    )
+    .bind(artist)
+    .fetch_one(pool)
+    .await
+}
+
 /// Find similar items based on shared genres, studios, and tags.
 pub async fn find_similar(
     pool: &PgPool,

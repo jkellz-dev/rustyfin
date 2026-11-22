@@ -435,6 +435,10 @@ pub struct MediaStream {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub localized_default: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub localized_external: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub codec_tag: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_base: Option<String>,
@@ -831,6 +835,7 @@ pub struct ExternalUrl {
 #[serde(rename_all = "PascalCase")]
 pub struct QueryFilters {
     pub genres: Vec<NameGuidPair>,
+    pub tags: Vec<String>,
 }
 
 /// Culture/language info for localization endpoints.

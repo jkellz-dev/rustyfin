@@ -89,6 +89,27 @@ pub async fn get_ancestors(
         }
     }
 
+    super::items::name_series_for_seasons(&state.pool, &mut dtos).await;
+    super::items::attach_music_fields(&state.pool, &ancestors, &mut dtos).await;
+    let totals = media_items::runtime_totals(&state.pool, &ids)
+        .await
+        .or_log_default("media_items::runtime_totals");
+    for (row, dto) in ancestors.iter().zip(dtos.iter_mut()) {
+        if matches!(
+            row.item_type.as_str(),
+            "MusicAlbum" | "MusicArtist" | "Series" | "Season"
+        ) {
+            let total = totals.get(&row.id).copied();
+            dto.cumulative_run_time_ticks = total.or(Some(0));
+            if row.item_type == "MusicAlbum" {
+                dto.runtime_ticks = total.or(Some(0));
+            }
+        }
+        if auth.is_administrator {
+            dto.path = row.path.clone();
+        }
+    }
+
     // Like Jellyfin, each ancestor has its child count and the user's data.
     let counts = media_items::count_children_batch(&state.pool, &ids)
         .await

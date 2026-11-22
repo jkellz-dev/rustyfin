@@ -307,6 +307,63 @@ pub async fn count_items_by_person(
     .await
 }
 
+/// The cast and crew of each of `item_ids`, billing order first.
+pub async fn list_by_items(
+    pool: &PgPool,
+    item_ids: &[Uuid],
+) -> Result<Vec<(Uuid, PersonRow, Option<String>, Option<i32>)>, sqlx::Error> {
+    if item_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        item_id: Uuid,
+        id: Uuid,
+        name: String,
+        sort_name: Option<String>,
+        person_type: String,
+        overview: Option<String>,
+        external_ids: Option<serde_json::Value>,
+        image_url: Option<String>,
+        provider_person_id: Option<String>,
+        role: Option<String>,
+        sort_order: Option<i32>,
+    }
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT mip.item_id, p.id, p.name, p.sort_name, p.person_type, p.overview,
+               p.external_ids, p.image_url, p.provider_person_id, mip.role, mip.sort_order
+        FROM people p
+        JOIN media_item_people mip ON mip.person_id = p.id
+        WHERE mip.item_id = ANY($1)
+        ORDER BY mip.item_id, mip.sort_order NULLS LAST, p.name
+        "#,
+    )
+    .bind(item_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.item_id,
+                PersonRow {
+                    id: r.id,
+                    name: r.name,
+                    sort_name: r.sort_name,
+                    person_type: r.person_type,
+                    overview: r.overview,
+                    external_ids: r.external_ids,
+                    image_url: r.image_url,
+                    provider_person_id: r.provider_person_id,
+                },
+                r.role,
+                r.sort_order,
+            )
+        })
+        .collect())
+}
+
 /// Get people associated with a media item.
 pub async fn list_by_item(
     pool: &PgPool,

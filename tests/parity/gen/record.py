@@ -97,6 +97,27 @@ KNOWN_DIFFERENCES = [
         )
     ],
     (
+        "/Items/{track_id}",
+        {},
+        r'\.PremiereDate" ',
+        "tracks carry only ProductionYear, not a full release date (owner decision 2026-11-14)",
+    ),
+    (
+        "/Items/Latest",
+        {},
+        r'\$\[0\]\.(Container|RunTimeTicks|VideoType|Artists|ArtistItems|AlbumArtist)',
+        "the synthetic titles share one date added, and the two servers break the tie differently (film first or show first)",
+    ),
+    *[
+        (
+            path,
+            {},
+            r'\$\.Path"',
+            "Jellyfin's root folder is a folder in its config directory; Rustyfin's is virtual",
+        )
+        for path in ("/Items/Root", "/Users/{user_id}/Items/Root")
+    ],
+    (
         "/Sessions",
         {},
         r'RemoteEndPoint',

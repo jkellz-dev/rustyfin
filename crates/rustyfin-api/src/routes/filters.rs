@@ -68,5 +68,8 @@ pub async fn get_filters(
         })
         .collect();
 
-    Ok(Json(QueryFilters { genres }))
+    let tags = media_items::distinct_tags(&state.pool, parent_id)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(QueryFilters { genres, tags }))
 }
