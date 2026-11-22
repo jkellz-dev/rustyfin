@@ -74,7 +74,7 @@ async fn an_admin_lists_a_users_devices_and_signs_one_out() {
         tv_entry["LastUserId"].as_str().map(|s| s.replace('-', "")),
         Some(viewer.simple().to_string())
     );
-    assert!(tv_entry["DateLastActivated"].is_string(), "{tv_entry}");
+    assert!(tv_entry["DateLastActivity"].is_string(), "{tv_entry}");
 
     // Sign the TV out: its token stops working, the phone's does not.
     let (status, _) = app.delete("/Devices?Id=tv-1", &admin).await;
