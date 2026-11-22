@@ -567,6 +567,10 @@ pub struct UpdateLibraryRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct StartupConfiguration {
     pub startup_wizard_completed: bool,
+    #[serde(rename = "UICulture")]
+    pub ui_culture: String,
+    pub metadata_country_code: String,
+    pub preferred_metadata_language: String,
 }
 
 /// Dashboard statistics response.
@@ -879,44 +883,6 @@ pub struct ParentalRating {
 pub struct LocalizationOption {
     pub name: String,
     pub value: String,
-}
-
-/// Server configuration returned by `GET /System/Configuration`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct ServerConfiguration {
-    pub is_startup_wizard_completed: bool,
-    #[serde(rename = "EnableUPnP")]
-    pub enable_u_pn_p: bool,
-    pub public_port: u16,
-    pub public_https_port: u16,
-    pub enable_https: bool,
-    pub quick_connect_available: bool,
-    pub enable_remote_access: bool,
-    pub metadata_country_code: String,
-    pub preferred_metadata_language: String,
-    pub library_scan_fanout_concurrency: i32,
-    pub enable_slow_response_warning: bool,
-    pub image_extraction_timeout_ms: i64,
-}
-
-impl ServerConfiguration {
-    pub fn defaults(port: u16) -> Self {
-        Self {
-            is_startup_wizard_completed: true,
-            enable_u_pn_p: false,
-            public_port: port,
-            public_https_port: 8920,
-            enable_https: false,
-            quick_connect_available: false,
-            enable_remote_access: false,
-            metadata_country_code: "US".to_string(),
-            preferred_metadata_language: "en".to_string(),
-            library_scan_fanout_concurrency: 1,
-            enable_slow_response_warning: false,
-            image_extraction_timeout_ms: 0,
-        }
-    }
 }
 
 /// A trailer or other remote media link (Jellyfin's `MediaUrl`).

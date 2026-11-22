@@ -509,7 +509,7 @@ pub struct DeviceInfo {
     #[serde(default)]
     pub app_version: Option<String>,
     #[serde(default)]
-    pub date_last_activated: Option<String>,
+    pub date_last_activity: Option<String>,
 }
 
 /// A library's filter values (`/Items/Filters`).

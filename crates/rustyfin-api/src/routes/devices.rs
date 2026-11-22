@@ -31,7 +31,51 @@ pub struct DeviceInfo {
     pub app_version: Option<String>,
     pub last_user_id: Uuid,
     pub last_user_name: String,
-    pub date_last_activated: DateTime<Utc>,
+    pub date_last_activity: DateTime<Utc>,
+    pub capabilities: DeviceCapabilities,
+}
+
+/// What the device said it can do (`/Sessions/Capabilities`), while it has a
+/// session; Jellyfin's defaults otherwise.
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeviceCapabilities {
+    pub playable_media_types: Vec<String>,
+    pub supported_commands: Vec<String>,
+    pub supports_media_control: bool,
+    pub supports_persistent_identifier: bool,
+}
+
+async fn device_infos(state: &AppState, rows: Vec<sessions::DeviceRow>) -> Vec<DeviceInfo> {
+    let live = state.session_manager.get_sessions(None).await;
+    rows.into_iter()
+        .map(|d| {
+            let caps = live
+                .iter()
+                .filter(|s| s.device_id == d.device_id)
+                .find_map(|s| s.capabilities.as_ref());
+            DeviceInfo {
+                capabilities: DeviceCapabilities {
+                    playable_media_types: caps
+                        .map(|c| c.playable_media_types.clone())
+                        .unwrap_or_default(),
+                    supported_commands: caps
+                        .map(|c| c.supported_commands.clone())
+                        .unwrap_or_default(),
+                    supports_media_control: caps.is_some_and(|c| c.supports_media_control),
+                    supports_persistent_identifier: caps
+                        .is_none_or(|c| c.supports_persistent_identifier),
+                },
+                id: d.device_id,
+                name: d.device_name,
+                app_name: d.app_name,
+                app_version: d.app_version,
+                last_user_id: d.user_id,
+                last_user_name: d.user_name,
+                date_last_activity: d.last_activity,
+            }
+        })
+        .collect()
 }
 
 /// `GET /Devices`: devices signed in, of one user with `UserId`.
@@ -43,18 +87,7 @@ pub async fn get_devices(
     let rows = sessions::devices(&state.pool, q.user_id)
         .await
         .map_err(ApiError::Database)?;
-    let items: Vec<DeviceInfo> = rows
-        .into_iter()
-        .map(|d| DeviceInfo {
-            id: d.device_id,
-            name: d.device_name,
-            app_name: d.app_name,
-            app_version: d.app_version,
-            last_user_id: d.user_id,
-            last_user_name: d.user_name,
-            date_last_activated: d.last_activity,
-        })
-        .collect();
+    let items = device_infos(&state, rows).await;
     let total = items.len() as i32;
     Ok(Json(QueryResult::new(items, total)))
 }
@@ -81,4 +114,49 @@ pub async fn delete_device(
         state.session_manager.remove_session(id).await;
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeviceIdQuery {
+    #[serde(alias = "Id")]
+    pub id: String,
+}
+
+async fn one_device(state: &AppState, id: &str) -> Result<DeviceInfo, ApiError> {
+    let rows = sessions::devices(&state.pool, None)
+        .await
+        .map_err(ApiError::Database)?;
+    let rows: Vec<_> = rows
+        .into_iter()
+        .filter(|d| d.device_id == id)
+        .take(1)
+        .collect();
+    device_infos(state, rows)
+        .await
+        .pop()
+        .ok_or(ApiError::NotFound)
+}
+
+/// `GET /Devices/Info?id=`: one signed-in device.
+pub async fn get_device_info(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<DeviceIdQuery>,
+) -> Result<Json<DeviceInfo>, ApiError> {
+    Ok(Json(one_device(&state, &q.id).await?))
+}
+
+/// `GET /Devices/Options?id=`: a device's options. Rustyfin keeps no custom
+/// device names, so there is none.
+pub async fn get_device_options(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<DeviceIdQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let device = one_device(&state, &q.id).await?;
+    Ok(Json(serde_json::json!({
+        "Id": 0,
+        "DeviceId": device.id,
+        "CustomName": null,
+    })))
 }

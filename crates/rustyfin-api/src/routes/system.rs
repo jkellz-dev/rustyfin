@@ -110,6 +110,9 @@ pub async fn get_startup_config(State(state): State<AppState>) -> Json<StartupCo
     let wizard_complete = is_wizard_complete(&state).await;
     Json(StartupConfiguration {
         startup_wizard_completed: wizard_complete,
+        ui_culture: "en-US".to_string(),
+        metadata_country_code: "US".to_string(),
+        preferred_metadata_language: "en".to_string(),
     })
 }
 

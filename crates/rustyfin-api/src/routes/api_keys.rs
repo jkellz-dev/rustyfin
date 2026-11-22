@@ -28,9 +28,12 @@ pub struct CreateApiKeyResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct ApiKeyDto {
     pub id: Uuid,
-    pub name: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// What the key is for, as Jellyfin's `AppName` (and `DeviceName`).
+    pub app_name: String,
+    pub device_name: String,
+    pub date_created: chrono::DateTime<chrono::Utc>,
+    pub date_last_activity: Option<chrono::DateTime<chrono::Utc>>,
+    pub is_active: bool,
 }
 
 fn generate_api_key() -> String {
@@ -64,10 +67,12 @@ pub async fn create_api_key(
     }))
 }
 
+/// `GET /Auth/Keys` — Jellyfin's query result. The keys themselves are shown
+/// once, when made, and never listed.
 pub async fn list_api_keys(
     State(state): State<AppState>,
     _admin: AdminUser,
-) -> Result<Json<Vec<ApiKeyDto>>, ApiError> {
+) -> Result<Json<rustyfin_models::dto::QueryResult<ApiKeyDto>>, ApiError> {
     let rows = api_keys::list_all(&state.pool)
         .await
         .map_err(ApiError::Database)?;
@@ -76,13 +81,16 @@ pub async fn list_api_keys(
         .into_iter()
         .map(|r| ApiKeyDto {
             id: r.id,
-            name: r.name,
-            created_at: r.created_at,
-            last_used_at: r.last_used_at,
+            device_name: r.name.clone(),
+            app_name: r.name,
+            date_created: r.created_at,
+            date_last_activity: r.last_used_at,
+            is_active: true,
         })
         .collect();
 
-    Ok(Json(dtos))
+    let total = dtos.len() as i32;
+    Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
 }
 
 pub async fn delete_api_key(

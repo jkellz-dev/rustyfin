@@ -236,7 +236,7 @@ pub fn UserDetail(user_id: String) -> View {
                             list=move || list.clone(),
                             view=move |d: DeviceInfo| {
                                 let when = d
-                                    .date_last_activated
+                                    .date_last_activity
                                     .as_deref()
                                     .map(|s| js_sys::Date::new(&JsValue::from_str(s)).get_time())
                                     .filter(|t| !t.is_nan())

@@ -136,6 +136,55 @@ KNOWN_DIFFERENCES = [
         "Jellyfin makes a genre's picture from its titles' video frames; the test media have no art, and Rustyfin does not grab frames for genres",
     ),
     (
+        "/System/Configuration",
+        {},
+        r'PluginRepositories\[0\]',
+        "no plugins (design rule): Rustyfin lists no plugin repository",
+    ),
+    (
+        "/System/Logs",
+        {},
+        r'\$\[0\]',
+        "Rustyfin logs to stdout (the container's log), not to log files",
+    ),
+    (
+        "/Auth/PasswordResetProviders",
+        {},
+        r'\$\[0\]',
+        "sign-in is forward auth: the server resets no passwords",
+    ),
+    (
+        "/ScheduledTasks/{task_id}",
+        {},
+        r'Triggers\[0\]\.IntervalTicks',
+        "Rustyfin schedules by cron; a daily scan is a DailyTrigger where Jellyfin's default is a 12-hour interval",
+    ),
+    *[
+        (
+            path,
+            query,
+            r'^HTTP ',
+            "the server's folder browser is not served (owner decision 2026-11-22): libraries are set in Rustyfin's admin",
+        )
+        for path, query in (
+            ("/Environment/Drives", {}),
+            ("/Environment/DefaultDirectoryBrowser", {}),
+            ("/Environment/ParentPath", {"path": "/media"}),
+        )
+    ],
+    (
+        "/Startup/User",
+        {},
+        r'^HTTP ',
+        "no setup wizard: users come from forward auth (owner decision 2026-11-22)",
+    ),
+    (
+        "/Audio/{track_id}/RemoteSearch/Lyrics",
+        {},
+        r'^HTTP ',
+        "the metadata editor's remote searches are not served (owner decision 2026-11-22): rustyfin-meta fetches",
+    ),
+    (
         "/Sessions",
         {},
         r'RemoteEndPoint',

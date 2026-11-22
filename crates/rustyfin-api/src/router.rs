@@ -134,7 +134,7 @@ fn routes(state: AppState) -> Router {
         )
         .route("/Auth/Keys/{id}", delete(api_keys::delete_api_key))
         // ── Auth provider info (admin, stubs) ─────────────────
-        .route("/Auth/Providers", get(stubs::empty_array_admin))
+        .route("/Auth/Providers", get(configuration::get_auth_providers))
         .route(
             "/Auth/PasswordResetProviders",
             get(stubs::empty_array_admin),
@@ -377,6 +377,8 @@ fn routes(state: AppState) -> Router {
             "/Devices",
             get(devices::get_devices).delete(devices::delete_device),
         )
+        .route("/Devices/Info", get(devices::get_device_info))
+        .route("/Devices/Options", get(devices::get_device_options))
         .route("/Sessions/Logout", post(sessions::logout))
         .route("/Sessions/Capabilities", post(sessions::post_capabilities))
         .route(
@@ -513,6 +515,10 @@ fn routes(state: AppState) -> Router {
         .route(
             "/System/Configuration",
             get(configuration::get_configuration).post(configuration::update_configuration),
+        )
+        .route(
+            "/System/Configuration/MetadataOptions/Default",
+            get(configuration::get_default_metadata_options),
         )
         .route(
             "/System/Configuration/{key}",
