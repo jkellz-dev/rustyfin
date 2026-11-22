@@ -76,11 +76,17 @@ pub fn build_router(state: AppState) -> Router {
         ..state.clone()
     };
     let scope = crate::link_scope::LinkScope::new(state.pool.clone(), routes(local_state));
+    let vouch_state = state.clone();
     let routes = routes(state);
     Router::new().fallback_service(
         tower::ServiceBuilder::new()
             .layer(axum::middleware::from_fn(crate::api_v1::lower_case_path))
             .layer(axum::middleware::from_fn(crate::route_case::route_case))
+            // Tailscale (the trusted proxy) is the authentication.
+            .layer(axum::middleware::from_fn_with_state(
+                vouch_state,
+                crate::identity::vouch,
+            ))
             .layer(axum::middleware::from_fn_with_state(
                 scope,
                 crate::link_scope::dispatch,

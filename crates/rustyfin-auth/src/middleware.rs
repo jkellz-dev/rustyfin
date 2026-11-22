@@ -114,6 +114,11 @@ where
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // A trusted proxy said who this is (the API's forward-auth layer):
+        // that is the user, whatever token the request carries.
+        if let Some(user) = parts.extensions.get::<AuthenticatedUser>() {
+            return Ok(user.clone());
+        }
         let pool = PgPool::from_ref(state);
 
         let token = request_token(&parts.headers, parts.uri.query());

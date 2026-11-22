@@ -36,6 +36,22 @@ pub async fn find_active_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Session
         .await
 }
 
+/// The user's active session on `device_id`, most recent first.
+pub async fn find_active_for_device(
+    pool: &PgPool,
+    user_id: Uuid,
+    device_id: &str,
+) -> Result<Option<SessionRow>, sqlx::Error> {
+    sqlx::query_as::<_, SessionRow>(
+        "SELECT * FROM sessions WHERE user_id = $1 AND device_id = $2 AND is_active = true \
+         AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY last_activity DESC LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(device_id)
+    .fetch_optional(pool)
+    .await
+}
+
 /// Find active sessions for a user.
 pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<SessionRow>, sqlx::Error> {
     sqlx::query_as::<_, SessionRow>(

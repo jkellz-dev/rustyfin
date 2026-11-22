@@ -13,10 +13,16 @@ use crate::router::AppState;
 /// `GET /socket` — WebSocket endpoint for real-time updates.
 pub async fn websocket_handler(
     State(state): State<AppState>,
+    vouched: Option<axum::Extension<rustyfin_auth::middleware::AuthenticatedUser>>,
     headers: axum::http::HeaderMap,
     uri: axum::http::Uri,
     ws: WebSocketUpgrade,
 ) -> Response {
+    // A trusted proxy said who this is (`identity`): that user's session.
+    if let Some(axum::Extension(user)) = vouched {
+        let session_id = user.session_id;
+        return ws.on_upgrade(move |socket| handle_socket(socket, state, session_id, None));
+    }
     // The same check HTTP requests get: an unknown, logged-out or expired session,
     // or a disabled user, must not be able to open a socket.
     let token = rustyfin_auth::middleware::socket_token(&headers, uri.query()).unwrap_or_default();
@@ -39,7 +45,7 @@ pub async fn websocket_handler(
     };
 
     let session_id = session.id;
-    ws.on_upgrade(move |socket| handle_socket(socket, state, session_id, token))
+    ws.on_upgrade(move |socket| handle_socket(socket, state, session_id, Some(token)))
 }
 
 /// True while the token still works. A database error counts as "still works": a
@@ -54,7 +60,12 @@ async fn token_still_valid(state: &AppState, token: &str) -> bool {
     )
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, token: String) {
+async fn handle_socket(
+    socket: WebSocket,
+    state: AppState,
+    session_id: Uuid,
+    token: Option<String>,
+) {
     let (mut sender, mut receiver) = socket.split();
 
     // Subscribe to remote control commands for this session
@@ -82,7 +93,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, tok
             _ = keepalive.tick() => {
                 // Logging out, expiry or disabling the user must close a socket that
                 // is already open, not only refuse new ones.
-                if !token_still_valid(&state, &token).await {
+                let still = match token.as_deref() {
+                    Some(token) => token_still_valid(&state, token).await,
+                    // Vouched for: open while its session is.
+                    None => !matches!(
+                        rustyfin_db::repo::sessions::find_active_by_id(&state.pool, session_id).await,
+                        Ok(None)
+                    ),
+                };
+                if !still {
                     tracing::info!("closing WebSocket: its session is no longer valid");
                     break;
                 }
