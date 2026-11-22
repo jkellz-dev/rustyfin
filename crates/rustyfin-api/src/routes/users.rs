@@ -275,6 +275,22 @@ pub async fn get_user_image(
     Ok(Redirect::temporary(&url).into_response())
 }
 
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct UserImageQuery {
+    #[serde(alias = "UserId")]
+    #[serde(rename = "userId")]
+    pub user_id: Option<Uuid>,
+}
+
+/// `GET /UserImage?userId=` — a user's picture by query (Jellyfin 10.9+).
+pub async fn get_user_image_by_query(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<UserImageQuery>,
+) -> Result<Response, ApiError> {
+    let user_id = query.user_id.ok_or(ApiError::NotFound)?;
+    get_user_image(State(state), Path((user_id, "Primary".to_string()))).await
+}
+
 /// `GET /Users/{userId}/Images/{imageType}/{imageIndex}` — Same as above, ignoring index.
 pub async fn get_user_image_by_index(
     State(state): State<AppState>,

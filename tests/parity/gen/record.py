@@ -118,6 +118,18 @@ KNOWN_DIFFERENCES = [
         for path in ("/Items/Root", "/Users/{user_id}/Items/Root")
     ],
     (
+        "/Items/{track_id}/Images/Primary",
+        {},
+        r'^HTTP ',
+        "a track without art shows its embedded cover or a placeholder (owner decision 2026-11-16); Jellyfin answers 404",
+    ),
+    (
+        "/Genres/{genre_name}/Images/Primary",
+        {},
+        r'^HTTP ',
+        "Jellyfin makes a genre's picture from its titles' video frames; the test media have no art, and Rustyfin does not grab frames for genres",
+    ),
+    (
         "/Sessions",
         {},
         r'RemoteEndPoint',
@@ -563,6 +575,10 @@ def entry(method, path, query, auth, body, status, ctype, parsed):
         text += "[QueryStringParams]\n" + "".join(f"{k}: {v}\n" for k, v in query.items())
     if body is not None:
         text += json.dumps(body) + "\n"
+    reason = known_difference(path, query, f"HTTP {status}")
+    if reason:
+        # The status itself differs on purpose: nothing of the answer is held.
+        return text + f"HTTP *\n# known difference, not asserted: HTTP {status} and its body ({reason})\n"
     text += f"HTTP {status}\n[Asserts]\n"
     asserts = []
     if ctype:

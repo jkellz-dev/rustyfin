@@ -120,6 +120,8 @@ fn routes(state: AppState) -> Router {
             get(branding::get_branding_configuration),
         )
         .route("/Branding/Css", get(branding::get_branding_css))
+        .route("/Branding/Css.css", get(branding::get_branding_css))
+        .route("/Branding/Splashscreen", get(stubs::not_found))
         // ── Auth ────────────────────────────────────────────────
         .route(
             "/Users/AuthenticateByName",
@@ -525,6 +527,22 @@ fn routes(state: AppState) -> Router {
             get(stubs::search_remote_subtitles).post(stubs::download_remote_subtitles),
         )
         .route("/Items/{itemId}/Similar", get(similar::get_similar))
+        .route("/UserImage", get(users::get_user_image_by_query))
+        .route("/Playback/BitrateTest", get(streaming::bitrate_test))
+        .route("/FallbackFont/Fonts", get(stubs::empty_font_list))
+        .route("/FallbackFont/Fonts/{name}", get(stubs::not_found))
+        .route(
+            "/Videos/{itemId}/AdditionalParts",
+            get(stubs::empty_query_result_auth),
+        )
+        .route(
+            "/Videos/{itemId}/Trickplay/{width}/tiles.m3u8",
+            get(stubs::not_found),
+        )
+        .route(
+            "/Videos/{itemId}/Trickplay/{width}/{index}",
+            get(stubs::not_found),
+        )
         // Jellyfin answers Similar under each type's path too.
         .route("/Movies/{itemId}/Similar", get(similar::get_similar))
         .route("/Trailers/{itemId}/Similar", get(similar::get_similar))

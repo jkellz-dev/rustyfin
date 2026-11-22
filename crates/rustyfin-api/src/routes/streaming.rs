@@ -188,7 +188,7 @@ async fn head_stream_inner(state: &AppState, item_id: Uuid) -> Result<Response, 
     Ok(response.body(Body::empty()).unwrap())
 }
 
-async fn serve_item_file(
+pub(crate) async fn serve_item_file(
     state: &AppState,
     item_id: Uuid,
     headers: &HeaderMap,
@@ -226,4 +226,51 @@ fn mime_from_path(path: &str) -> &'static str {
         "wma" => "audio/x-ms-wma",
         _ => "application/octet-stream",
     }
+}
+
+/// Jellyfin's default and largest `/Playback/BitrateTest` sizes.
+const BITRATE_TEST_DEFAULT: usize = 102_400;
+const BITRATE_TEST_MAX: usize = 100_000_000;
+
+#[derive(Debug, Deserialize, Default)]
+pub struct BitrateTestParams {
+    #[serde(alias = "Size")]
+    pub size: Option<usize>,
+}
+
+/// `GET /Playback/BitrateTest` — `size` bytes a client times to measure its
+/// bandwidth. Incompressible (a proxy compressing it would inflate the
+/// result) and streamed in chunks, so a large test holds no buffer.
+pub async fn bitrate_test(
+    _auth: AuthenticatedUser,
+    Query(params): Query<BitrateTestParams>,
+) -> Result<Response, ApiError> {
+    let size = params.size.unwrap_or(BITRATE_TEST_DEFAULT);
+    if size == 0 || size > BITRATE_TEST_MAX {
+        return Err(ApiError::BadRequest(format!(
+            "size must be between 1 and {BITRATE_TEST_MAX}"
+        )));
+    }
+    const CHUNK: usize = 64 * 1024;
+    let chunks = size.div_ceil(CHUNK);
+    let stream = futures_util::stream::iter((0..chunks).map(move |i| {
+        let len = CHUNK.min(size - i * CHUNK);
+        // xorshift: cheap bytes no compressor shrinks.
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15 ^ (i as u64 + 1);
+        let mut chunk = Vec::with_capacity(len);
+        while chunk.len() < len {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            let take = (len - chunk.len()).min(8);
+            chunk.extend_from_slice(&x.to_le_bytes()[..take]);
+        }
+        Ok::<_, std::io::Error>(axum::body::Bytes::from(chunk))
+    }));
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::CONTENT_LENGTH, size.to_string())
+        .body(Body::from_stream(stream))
+        .unwrap())
 }

@@ -1,5 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
+    http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
@@ -24,12 +25,15 @@ pub struct UniversalAudioParams {
 
 /// `GET /Audio/{itemId}/universal` — Universal audio endpoint.
 ///
-/// Redirects to HLS transcoding or direct stream based on params.
+/// HLS redirects to the audio playlist; otherwise the file is streamed from
+/// this URL, as Jellyfin does (a redirect lost a token sent in the query).
 pub async fn get_universal_audio(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<UniversalAudioParams>,
+    Query(all_params): Query<std::collections::HashMap<String, String>>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     // The id is written into the redirect URL below.
     let play_session_id = super::hls::session_id_param(params.play_session_id.as_deref())?;
@@ -65,11 +69,18 @@ pub async fn get_universal_audio(
         if let Some(br) = params.max_streaming_bitrate {
             url.push_str(&format!("&MaxStreamingBitrate={br}"));
         }
+        // The token the client authenticated with by query goes along.
+        for (key, value) in &all_params {
+            if key.eq_ignore_ascii_case("api_key") || key.eq_ignore_ascii_case("apikey") {
+                url.push_str(&format!(
+                    "&{key}={}",
+                    rustyfin_media::transcode::names::encode_query_value(value)
+                ));
+            }
+        }
 
         Ok(Redirect::temporary(&url).into_response())
     } else {
-        // Default: redirect to direct audio stream
-        let url = format!("/Audio/{item_id}/stream");
-        Ok(Redirect::temporary(&url).into_response())
+        super::streaming::serve_item_file(&state, item_id, &headers).await
     }
 }

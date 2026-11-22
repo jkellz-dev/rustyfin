@@ -88,3 +88,14 @@ pub async fn download_remote_subtitles(
 ) -> StatusCode {
     StatusCode::NO_CONTENT
 }
+
+/// `GET /FallbackFont/Fonts` — no fallback fonts are configured.
+pub async fn empty_font_list(_auth: AuthenticatedUser) -> Json<Vec<()>> {
+    Json(Vec::new())
+}
+
+/// Jellyfin's 404 problem document, for routes with nothing behind them here
+/// (a splash screen, trickplay tiles, a fallback font).
+pub async fn not_found() -> crate::error::ApiError {
+    crate::error::ApiError::NotFound
+}
