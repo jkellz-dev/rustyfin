@@ -14,6 +14,7 @@ use crate::router::AppState;
 pub async fn websocket_handler(
     State(state): State<AppState>,
     vouched: Option<axum::Extension<rustyfin_auth::middleware::AuthenticatedUser>>,
+    unvouched: Option<axum::Extension<rustyfin_auth::middleware::Unvouched>>,
     headers: axum::http::HeaderMap,
     uri: axum::http::Uri,
     ws: WebSocketUpgrade,
@@ -22,6 +23,12 @@ pub async fn websocket_handler(
     if let Some(axum::Extension(user)) = vouched {
         let session_id = user.session_id;
         return ws.on_upgrade(move |socket| handle_socket(socket, state, session_id, None));
+    }
+    // Behind the proxy, named nobody: no socket, whatever the token.
+    if unvouched.is_some() {
+        return ws.on_upgrade(|mut socket| async move {
+            let _ = socket.close().await;
+        });
     }
     // The same check HTTP requests get: an unknown, logged-out or expired session,
     // or a disabled user, must not be able to open a socket.

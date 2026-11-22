@@ -119,6 +119,10 @@ where
         if let Some(user) = parts.extensions.get::<AuthenticatedUser>() {
             return Ok(user.clone());
         }
+        // Behind a forward-auth proxy, it names everyone: no name, nobody.
+        if parts.extensions.get::<Unvouched>().is_some() {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
         let pool = PgPool::from_ref(state);
 
         let token = request_token(&parts.headers, parts.uri.query());
@@ -151,6 +155,11 @@ where
         })
     }
 }
+
+/// Marks a request a forward-auth proxy named nobody on, where one is
+/// configured: no token makes it anybody's (the proxy is the authentication).
+#[derive(Debug, Clone, Copy)]
+pub struct Unvouched;
 
 /// Admin user extractor — requires `is_administrator = true`.
 #[derive(Debug, Clone)]

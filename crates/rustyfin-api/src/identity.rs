@@ -8,8 +8,14 @@
 //! or none, never refuses it. The token only picks the session (a device's
 //! now-playing and play reports); a device without an active one gets one.
 //! Permissions still apply: administrators only where they were, a disabled
-//! user stays out, library access as set. Requests no proxy vouches for (an
-//! in-cluster webhook, an API key) still need a token or key.
+//! user stays out, library access as set.
+//!
+//! Owner, 2026-11-22: "ALL requests go through the proxy. There is no way
+//! around the proxy." With forward auth configured, a request the proxy names
+//! nobody on is nobody's: a token alone signs no one in (only what anyone may
+//! ask answers). Server API keys (`ApiKeyUser`: an *arr's library webhook)
+//! are not a user's sign-in and still work. Without forward auth configured
+//! (development, the parity suite), tokens sign in as before.
 
 use std::net::SocketAddr;
 
@@ -21,7 +27,7 @@ use axum::{
 };
 use rustyfin_auth::{
     forward_auth::{self, ForwardAuthIdentity},
-    middleware::{AuthenticatedUser, parse_mediabrowser_header, request_token},
+    middleware::{AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token},
     session,
 };
 use rustyfin_db::repo::{sessions, users};
@@ -30,20 +36,29 @@ use crate::router::{AppState, ForwardAuthState};
 
 /// Layer: put the vouched-for user on the request for `AuthenticatedUser`.
 pub async fn vouch(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
+    let Some(fa) = state.forward_auth_config.as_ref() else {
+        return next.run(req).await;
+    };
     let peer = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0.ip());
-    if let (Some(fa), Some(ip)) = (state.forward_auth_config.as_ref(), peer)
-        && fa.trusted_proxies.is_trusted(&ip)
-        && let Some(identity) = forward_auth::extract_identity(req.headers(), &fa.headers)
+    let identity = peer
+        .filter(|ip| fa.trusted_proxies.is_trusted(ip))
+        .and_then(|_| forward_auth::extract_identity(req.headers(), &fa.headers));
+    let Some(identity) = identity else {
+        req.extensions_mut().insert(Unvouched);
+        return next.run(req).await;
+    };
     {
         match vouched_user(&state, fa, &identity, &req).await {
             Ok(Some(user)) => {
                 req.extensions_mut().insert(user);
             }
-            // Disabled: nobody, as a token for them would be.
-            Ok(None) => {}
+            // Disabled: nobody.
+            Ok(None) => {
+                req.extensions_mut().insert(Unvouched);
+            }
             Err(e) if rustyfin_db::pool::is_unavailable(&e) => {
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
