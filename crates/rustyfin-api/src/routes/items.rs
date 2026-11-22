@@ -1420,13 +1420,18 @@ pub(crate) async fn attach_people_if_asked(
     let rows = people::list_by_items(&state.pool, &ids)
         .await
         .or_log_default("people::list_by_items");
-    let mut by_item: HashMap<Uuid, Vec<Billing>> = HashMap::new();
-    for (item, person, role, order) in rows {
-        by_item.entry(item).or_default().push((person, role, order));
+    // One photo lookup for the whole page, then each title takes its own.
+    let owners: Vec<Uuid> = rows.iter().map(|(item, _, _, _)| *item).collect();
+    let billed: Vec<Billing> = rows
+        .into_iter()
+        .map(|(_, person, role, order)| (person, role, order))
+        .collect();
+    let mut by_item: HashMap<Uuid, Vec<BaseItemPerson>> = HashMap::new();
+    for (owner, person) in owners.into_iter().zip(people_dtos(state, billed).await) {
+        by_item.entry(owner).or_default().push(person);
     }
     for dto in dtos.iter_mut() {
-        let rows = by_item.remove(&dto.id).unwrap_or_default();
-        dto.people = Some(people_dtos(state, rows).await);
+        dto.people = Some(by_item.remove(&dto.id).unwrap_or_default());
     }
 }
 

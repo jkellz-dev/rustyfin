@@ -96,8 +96,7 @@ pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
         sample_rate: s.sample_rate,
         path: None, // Don't expose filesystem paths
         profile: s.profile.clone(),
-        // Jellyfin sends 0 when ffprobe gives none (audio).
-        level: s.level.or(Some(0)),
+        level: s.level,
         // The labels Jellyfin's clients put in a track's title (English).
         localized_default: matches!(s.stream_type.as_str(), "Audio" | "Subtitle")
             .then(|| "Default".to_string()),

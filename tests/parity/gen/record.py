@@ -118,6 +118,12 @@ KNOWN_DIFFERENCES = [
         for path in ("/Items/Root", "/Users/{user_id}/Items/Root")
     ],
     (
+        "/Items/{track_id}",
+        {},
+        r'MediaStreams\[0\]\.Level"',
+        "audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests)",
+    ),
+    (
         "/Items/{track_id}/Images/Primary",
         {},
         r'^HTTP ',

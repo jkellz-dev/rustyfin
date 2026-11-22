@@ -530,18 +530,18 @@ fn routes(state: AppState) -> Router {
         .route("/UserImage", get(users::get_user_image_by_query))
         .route("/Playback/BitrateTest", get(streaming::bitrate_test))
         .route("/FallbackFont/Fonts", get(stubs::empty_font_list))
-        .route("/FallbackFont/Fonts/{name}", get(stubs::problem_not_found))
+        .route("/FallbackFont/Fonts/{name}", get(stubs::problem_not_found_auth))
         .route(
             "/Videos/{itemId}/AdditionalParts",
             get(stubs::empty_query_result_auth),
         )
         .route(
             "/Videos/{itemId}/Trickplay/{width}/tiles.m3u8",
-            get(stubs::problem_not_found),
+            get(stubs::problem_not_found_auth),
         )
         .route(
             "/Videos/{itemId}/Trickplay/{width}/{index}",
-            get(stubs::problem_not_found),
+            get(stubs::problem_not_found_auth),
         )
         // Jellyfin answers Similar under each type's path too.
         .route("/Movies/{itemId}/Similar", get(similar::get_similar))

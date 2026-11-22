@@ -1,6 +1,6 @@
 //! Fields Jellyfin sends that Rustyfin left out (parity catalog,
 //! 2026-11-22): on the root folder, a season, an artist, the ancestors of an
-//! episode or a track, audio streams, Filters2, suggestions, and the people of
+//! episode or a track, audio stream labels, Filters2, suggestions, and the people of
 //! listed titles.
 
 use crate::common;
@@ -123,7 +123,6 @@ async fn shows_and_music_carry_their_parents_and_totals() {
     let stream = &t["MediaStreams"][0];
     assert_eq!(stream["LocalizedDefault"], "Default", "{stream}");
     assert_eq!(stream["LocalizedExternal"], "External", "{stream}");
-    assert!(stream["Level"].is_number(), "{stream}");
     app.cleanup().await;
 }
 

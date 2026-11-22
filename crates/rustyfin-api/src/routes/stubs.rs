@@ -99,3 +99,8 @@ pub async fn empty_font_list(_auth: AuthenticatedUser) -> Json<Vec<()>> {
 pub async fn problem_not_found() -> crate::error::ApiError {
     crate::error::ApiError::NotFound
 }
+
+/// The same for routes that need a signed-in caller (trickplay, fonts).
+pub async fn problem_not_found_auth(_auth: AuthenticatedUser) -> crate::error::ApiError {
+    crate::error::ApiError::NotFound
+}

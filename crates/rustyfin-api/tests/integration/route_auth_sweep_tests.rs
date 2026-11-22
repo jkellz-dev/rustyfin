@@ -24,6 +24,15 @@ const PUBLIC_ON_PURPOSE: &[(&str, &str)] = &[
     // Jellyfin serves these without a token: clients read them before signing in.
     ("/Branding/Configuration", "login screen branding"),
     ("/Branding/Css", "login screen branding"),
+    ("/Branding/Css.css", "login screen branding"),
+    (
+        "/Branding/Splashscreen",
+        "login screen branding (always 404: none configured)",
+    ),
+    (
+        "/UserImage",
+        "a user's picture, as Jellyfin serves it to the login user picker",
+    ),
     ("/GetUtcTime", "clock sync, no user data"),
     (
         "/QuickConnect/Enabled",
