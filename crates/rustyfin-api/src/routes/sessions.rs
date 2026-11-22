@@ -7,7 +7,6 @@ use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_core::session::ClientCapabilities;
-use rustyfin_db::repo::sessions as sessions_repo;
 use rustyfin_models::dto::{
     BaseItemDto, DeviceProfile, PlayerStateInfo, SessionInfoDto, TranscodingInfo,
 };
@@ -168,17 +167,11 @@ pub async fn get_sessions(
 }
 
 /// `POST /Sessions/Logout` — Logout the current session.
-pub async fn logout(
-    State(state): State<AppState>,
-    auth: AuthenticatedUser,
-) -> Result<StatusCode, ApiError> {
-    // Deactivate in DB
-    let _ = sessions_repo::deactivate(&state.pool, auth.session_id).await;
-
-    // Remove from in-memory tracking
-    state.session_manager.remove_session(auth.session_id).await;
-
-    Ok(StatusCode::NO_CONTENT)
+/// Signing out changes nothing (owner, 2026-11-22: Jellyfin's authentication
+/// actions are no-ops; Tailscale decides who may ask). The session stays, so
+/// addresses the app built with its token keep working.
+pub async fn logout(_auth: AuthenticatedUser) -> StatusCode {
+    StatusCode::NO_CONTENT
 }
 
 /// `POST /Sessions/Capabilities` — Report basic capabilities (query params).

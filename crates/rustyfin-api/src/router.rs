@@ -133,6 +133,10 @@ fn routes(state: AppState) -> Router {
             "/Users/AuthenticateByName",
             post(auth::authenticate_by_name),
         )
+        .route(
+            "/Users/AuthenticateWithQuickConnect",
+            post(auth::authenticate_by_name),
+        )
         // ── API keys (admin) ──────────────────────────────────
         .route(
             "/Auth/Keys",
@@ -154,7 +158,12 @@ fn routes(state: AppState) -> Router {
             get(users::get_user_by_id).delete(users::delete_user),
         )
         .route("/Users/{userId}/Policy", post(users::update_user_policy))
+        // Jellyfin's authentication actions are no-ops (owner, 2026-11-22).
         .route("/Users/{userId}/Password", post(stubs::no_content_auth))
+        .route("/Users/{userId}/EasyPassword", post(stubs::no_content_auth))
+        .route("/Users/Password", post(stubs::no_content_auth))
+        .route("/Users/ForgotPassword", post(stubs::forgot_password))
+        .route("/Users/ForgotPassword/Pin", post(stubs::forgot_password_pin))
         .route(
             "/Users/{userId}/Configuration",
             post(users::update_user_configuration),

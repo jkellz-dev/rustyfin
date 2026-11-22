@@ -68,6 +68,10 @@ pub async fn authenticate_by_name(
         fa.trusted_proxies.is_trusted(&addr.ip())
             && forward_auth::extract_identity(&headers, &fa.headers).is_some()
     });
+    // Behind the proxy it names everyone: named nobody, nobody signs in.
+    if state.forward_auth_config.is_some() && !vouched {
+        return Err(ApiError::Unauthorized);
+    }
     let name = body.username.as_deref();
     if !vouched
         && let Err(wait) = state
@@ -101,16 +105,26 @@ pub async fn authenticate_by_name(
     let app_name = mb_auth.client.as_deref().unwrap_or("Unknown Client");
     let app_version = mb_auth.version.as_deref();
 
-    let (token, session_id) = session::create_session(
-        &state.pool,
-        user.id,
-        device_id,
-        device_name,
-        app_name,
-        app_version,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // Signing in is a no-op (owner, 2026-11-22): a device that has a session
+    // keeps it and its token, so addresses an app built with the token (a
+    // queue of tracks) keep working.
+    let existing =
+        rustyfin_db::repo::sessions::find_active_for_device(&state.pool, user.id, device_id)
+            .await
+            .map_err(ApiError::Database)?;
+    let (token, session_id) = match existing {
+        Some(s) => (s.access_token, s.id),
+        None => session::create_session(
+            &state.pool,
+            user.id,
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+        )
+        .await
+        .map_err(ApiError::Database)?,
+    };
 
     // Register session with in-memory manager
     state

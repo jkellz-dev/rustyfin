@@ -104,3 +104,18 @@ pub async fn problem_not_found() -> crate::error::ApiError {
 pub async fn problem_not_found_auth(_auth: AuthenticatedUser) -> crate::error::ApiError {
     crate::error::ApiError::NotFound
 }
+
+/// `POST /Users/ForgotPassword` — Rustyfin holds no passwords: ask the admin
+/// (Jellyfin's `ForgotPasswordAction.ContactAdmin`).
+pub async fn forgot_password() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "Action": "ContactAdmin",
+        "PinFile": null,
+        "PinExpirationDate": null,
+    }))
+}
+
+/// `POST /Users/ForgotPassword/Pin` — no pin resets anything.
+pub async fn forgot_password_pin() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "Success": false, "UsersReset": [] }))
+}

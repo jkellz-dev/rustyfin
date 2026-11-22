@@ -37,8 +37,6 @@ pub fn UserDetail(user_id: String) -> View {
     let search = create_signal(String::new());
     let loading = create_signal(true);
     let devices: Signal<Vec<DeviceInfo>> = create_signal(Vec::new());
-    // The device waiting for "Sign out" to be confirmed.
-    let sign_out_target: Signal<Option<DeviceInfo>> = create_signal(None);
     let toast: Signal<Option<String>> = create_signal(None);
     let error: Signal<Option<String>> = create_signal(None);
     // Rustyfin's own permissions (roadmap 16b.2r); none until loaded.
@@ -118,43 +116,11 @@ pub fn UserDetail(user_id: String) -> View {
         }
     };
 
-    let confirm_sign_out = move |_| {
-        if let Some(device) = sign_out_target.get_clone() {
-            spawn_local(async move {
-                match api::delete_device(&device.id).await {
-                    Ok(()) => {
-                        devices.update(|list| list.retain(|d| d.id != device.id));
-                        toast.set(Some(format!("Signed out {}", device.name)));
-                    }
-                    Err(e) => error.set(Some(e.to_string())),
-                }
-                sign_out_target.set(None);
-            });
-        }
-    };
-
     view! {
         div {
             (if let Some(msg) = toast.get_clone() {
                 crate::timer::clear_toast_later(toast, msg.clone());
                 view! { div(class="toast-container", role="status", aria-live="polite") { div(class="toast toast-success") { (msg) } } }
-            } else {
-                view! {}
-            })
-            (if let Some(target) = sign_out_target.get_clone() {
-                let label = format!("{} ({})", target.name, target.app_name);
-                view! {
-                    div(class="modal-overlay") {
-                        div(class="modal", role="dialog", aria-modal="true") {
-                            h3 { "Sign out device" }
-                            p { "Sign out " (label) "? The app will have to sign in again; anything playing on it stops reporting." }
-                            div(class="modal-actions") {
-                                button(class="btn btn-secondary", on:click=move |_| sign_out_target.set(None)) { "Cancel" }
-                                button(class="btn btn-danger", on:click=confirm_sign_out) { "Sign out" }
-                            }
-                        }
-                    }
-                }
             } else {
                 view! {}
             })
@@ -247,15 +213,11 @@ pub fn UserDetail(user_id: String) -> View {
                                     _ => d.app_name.clone(),
                                 };
                                 let name = d.name.clone();
-                                let target = d.clone();
                                 view! {
                                     div(class="history-row") {
                                         div(class="history-main") {
                                             div(class="history-title") { (name) }
                                             div(class="text-muted history-detail") { (app) " · active " (when) }
-                                        }
-                                        div(class="history-side") {
-                                            button(class="btn btn-secondary btn-sm", on:click=move |_| sign_out_target.set(Some(target.clone()))) { "Sign out" }
                                         }
                                     }
                                 }

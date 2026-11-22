@@ -92,28 +92,10 @@ pub async fn get_devices(
     Ok(Json(QueryResult::new(items, total)))
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct DeleteDeviceQuery {
-    pub id: String,
-}
-
-/// `DELETE /Devices?Id=`: sign the device out; its tokens stop working.
-pub async fn delete_device(
-    State(state): State<AppState>,
-    _admin: AdminUser,
-    Query(q): Query<DeleteDeviceQuery>,
-) -> Result<StatusCode, ApiError> {
-    let ended = sessions::deactivate_device(&state.pool, &q.id)
-        .await
-        .map_err(ApiError::Database)?;
-    if ended.is_empty() {
-        return Err(ApiError::NotFound);
-    }
-    for id in ended {
-        state.session_manager.remove_session(id).await;
-    }
-    Ok(StatusCode::NO_CONTENT)
+/// `DELETE /Devices?Id=`: Jellyfin signs the device out. A no-op here (owner,
+/// 2026-11-22): Tailscale decides who may ask, so there is nothing to revoke.
+pub async fn delete_device(_admin: AdminUser) -> StatusCode {
+    StatusCode::NO_CONTENT
 }
 
 #[derive(Debug, Deserialize)]

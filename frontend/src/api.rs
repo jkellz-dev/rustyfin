@@ -299,15 +299,6 @@ pub async fn get_devices(user_id: &str) -> Result<QueryResult<DeviceInfo>, ApiEr
     get_json(&format!("/Devices?UserId={user_id}")).await
 }
 
-/// Sign a device out (its tokens stop working).
-pub async fn delete_device(device_id: &str) -> Result<(), ApiError> {
-    delete_path(&format!(
-        "/Devices?Id={}",
-        crate::media_route::encode(device_id)
-    ))
-    .await
-}
-
 /// Minutes and plays per kind of media.
 pub async fn get_play_stats(user_id: &str) -> Result<PlayStats, ApiError> {
     get_json(&format!("/Users/{user_id}/PlayStats")).await

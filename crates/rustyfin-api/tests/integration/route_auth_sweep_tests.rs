@@ -35,6 +35,14 @@ const PUBLIC_ON_PURPOSE: &[(&str, &str)] = &[
     ),
     ("/GetUtcTime", "clock sync, no user data"),
     (
+        "/Users/ForgotPassword",
+        "a no-op: always \"ask the admin\", no user data",
+    ),
+    (
+        "/Users/ForgotPassword/Pin",
+        "a no-op: never resets anything",
+    ),
+    (
         "/QuickConnect/Enabled",
         "answers false: quick connect is off by design",
     ),
