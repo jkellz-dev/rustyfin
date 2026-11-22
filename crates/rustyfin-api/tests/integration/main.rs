@@ -32,6 +32,7 @@ mod hls_ownership_tests;
 mod hls_path_safety_tests;
 mod hls_video_copy_tests;
 mod image_serving_tests;
+mod item_file_tests;
 mod item_parent_shape_tests;
 mod item_routes_tests;
 mod items_recursive_tests;
