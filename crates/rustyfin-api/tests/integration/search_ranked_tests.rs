@@ -345,3 +345,41 @@ async fn a_sorted_search_as_you_type_puts_the_best_match_first() {
     assert_eq!(names(&list)[0], "Blue Sky", "{list}");
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-22: "Looking for Pink Floyd's 'p.u.l.s.e' album finds
+/// nothing when searching 'pulse'." Meilisearch splits "P.U.L.S.E" into
+/// letters; Jellyfin matches names with their punctuation removed.
+#[tokio::test]
+async fn names_with_marks_inside_words_are_found_without_them() {
+    let app = common::TestApp::with_meilisearch().await;
+    let (_, token) = app.create_user("listener", false).await;
+    let lib = app.create_library("Music", "music").await;
+    app.create_media_item("P.U.L.S.E", "MusicAlbum", lib, None)
+        .await;
+    app.create_media_item("AC/DC", "MusicArtist", lib, None)
+        .await;
+    app.create_media_item("Pulsar", "MusicAlbum", lib, None)
+        .await;
+    app.search.sync().await.expect("sync");
+
+    for (term, kind, want) in [
+        ("pulse", "MusicAlbum", "P.U.L.S.E"),
+        ("acdc", "MusicArtist", "AC/DC"),
+    ] {
+        let (status, list) = app
+            .get(
+                &format!(
+                    "/Items?SearchTerm={term}&Recursive=true&IncludeItemTypes={kind}&SortBy=SortName"
+                ),
+                &token,
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{list}");
+        assert_eq!(
+            names(&list).first().map(String::as_str),
+            Some(want),
+            "{term}: {list}"
+        );
+    }
+    app.cleanup().await;
+}
