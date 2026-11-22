@@ -1206,6 +1206,15 @@ pub async fn get_item_by_id(
             super::libraries::root_folder_dto(&state, auth.user_id).await?,
         ));
     }
+    // A library's id is its CollectionFolder, as in the user's views (Finamp
+    // fetches the music library it was pointed at by id).
+    if let Some(folder) =
+        super::libraries::visible_library_folder(&state, auth.user_id, item_id).await?
+    {
+        let mut folders = vec![folder];
+        attach_user_data(&state.pool, auth.user_id, &mut folders).await;
+        return Ok(Json(folders.remove(0)));
+    }
     let item = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?

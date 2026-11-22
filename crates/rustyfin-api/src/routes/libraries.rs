@@ -218,6 +218,29 @@ pub(crate) fn collections_view_dto(server_id: &str, count: i64) -> BaseItemDto {
 }
 
 /// The libraries `user_id` may see.
+/// The library with this id as its `CollectionFolder`, with its child count,
+/// when the user may see it.
+pub(crate) async fn visible_library_folder(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    id: uuid::Uuid,
+) -> Result<Option<BaseItemDto>, ApiError> {
+    let Some(lib) = visible_libraries(state, user_id)
+        .await?
+        .into_iter()
+        .find(|l| l.id == id)
+    else {
+        return Ok(None);
+    };
+    let mut dto = collection_folder_dto(&lib, &state.server_id);
+    let count =
+        rustyfin_db::repo::media_items::count_top_level_by_library(&state.pool, lib.id, &[])
+            .await
+            .or_log_default("media_items::count_top_level_by_library");
+    dto.child_count = Some(count as i32);
+    Ok(Some(dto))
+}
+
 async fn visible_libraries(
     state: &AppState,
     user_id: uuid::Uuid,
