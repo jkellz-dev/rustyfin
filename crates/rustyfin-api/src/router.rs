@@ -301,6 +301,11 @@ fn routes(state: AppState) -> Router {
             get(streaming::stream_video_container).head(streaming::head_stream_container),
         )
         .route(
+            "/Items/{itemId}/File",
+            get(streaming::item_file).head(streaming::head_stream),
+        )
+        .route("/Items/{itemId}/Download", get(streaming::download_item))
+        .route(
             "/Audio/{itemId}/stream",
             get(streaming::stream_audio).head(streaming::head_stream),
         )

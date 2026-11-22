@@ -73,6 +73,71 @@ pub async fn stream_audio_container(
     serve_item_file(&state, item_id, &headers).await
 }
 
+/// `GET /Items/{itemId}/File` — the title's file as it is on disk; Finamp
+/// plays tracks from here.
+pub async fn item_file(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
+    serve_item_file(&state, item_id, &headers).await
+}
+
+/// `GET /Items/{itemId}/Download` — the file as an attachment named as on
+/// disk, for clients that keep a copy (Finamp's downloads).
+pub async fn download_item(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(item_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    super::access::require_item_access(&state, auth.user_id, item_id).await?;
+    let mut response = serve_item_file(&state, item_id, &headers).await?;
+    let item = media_items::find_by_id(&state.pool, item_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+    let name = item
+        .path
+        .as_deref()
+        .and_then(|p| std::path::Path::new(p).file_name())
+        .and_then(|n| n.to_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| item.name.clone());
+    if let Ok(value) = header::HeaderValue::from_str(&content_disposition(&name)) {
+        response
+            .headers_mut()
+            .insert(header::CONTENT_DISPOSITION, value);
+    }
+    Ok(response)
+}
+
+/// `attachment` with the name as plain ASCII (quotes and non-ASCII replaced)
+/// and, in full, as RFC 5987 UTF-8.
+fn content_disposition(name: &str) -> String {
+    let ascii: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii() && c != '"' && c != '\\' && !c.is_ascii_control() {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let mut encoded = String::new();
+    for b in name.bytes() {
+        if b.is_ascii_alphanumeric() || b"!#$&+-.^_`|~".contains(&b) {
+            encoded.push(b as char);
+        } else {
+            encoded.push_str(&format!("%{b:02X}"));
+        }
+    }
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+}
+
 /// `HEAD /Videos/{itemId}/stream` — Stream metadata without body.
 pub async fn head_stream(
     State(state): State<AppState>,
