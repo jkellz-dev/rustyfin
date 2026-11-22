@@ -156,3 +156,47 @@ async fn without_the_proxys_word_a_token_signs_nobody_in() {
     let _ = Uuid::nil();
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-22: "sonarr and radarr do not get routed through the
+/// proxy. Those routes come through the internal network. Anything that is
+/// user facing must come through the proxy." The *arr library webhook comes
+/// straight over the cluster network with a server API key and works; the
+/// same key signs no user in.
+#[tokio::test]
+async fn the_arr_webhook_comes_from_inside_with_a_server_key() {
+    let app = common::TestApp::with_forward_auth().await;
+    let key = "sonarr-key-for-tests";
+    rustyfin_db::repo::api_keys::create(
+        &app.pool,
+        "Sonarr",
+        &rustyfin_auth::api_key::hash_api_key(key),
+    )
+    .await
+    .unwrap();
+    let send = |uri: String, method: &str, body: &str| {
+        let mut req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("Content-Type", "application/json")
+            .header("X-Api-Key", key)
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        // A pod on the cluster network, not the proxy.
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([10, 42, 3, 7], 50000))));
+        app.router.clone().oneshot(req)
+    };
+    let res = send(
+        "/Library/Media/Updated".to_string(),
+        "POST",
+        r#"{"Updates":[{"Path":"/media/tv/Show/S01E01.mkv","UpdateType":"Created"}]}"#,
+    )
+    .await
+    .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = send(format!("/Users/Me?api_key={key}"), "GET", "")
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    app.cleanup().await;
+}
