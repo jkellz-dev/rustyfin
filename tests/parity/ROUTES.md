@@ -9,8 +9,8 @@ leaves it out, if one does (roadmap.md, "Design Boundaries").
 - Served by Rustyfin: 208
 - Missing: 128
 - Outside a design boundary: 90
-- Asked by a parity case: 119
-- Served but asked by no case: 113
+- Asked by a parity case: 122
+- Served but asked by no case: 112
 
 Status: **served**, **missing** (a gap), or **boundary** (left out on purpose).
 Cases: the `tests/parity/cases` files that ask the route; `-` means none does yet.
@@ -231,8 +231,8 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Artists/InstantMix` | missing | mix | Default | obsolete |
 | `GET /Artists/{itemId}/InstantMix` | missing | mix | Default |  |
 | `GET /Items/{itemId}/InstantMix` | missing | mix | Default |  |
-| `GET /MusicGenres/InstantMix` | missing | - | Default |  |
-| `GET /MusicGenres/{name}/InstantMix` | missing | - | Default |  |
+| `GET /MusicGenres/InstantMix` | missing | mix | Default |  |
+| `GET /MusicGenres/{name}/InstantMix` | missing | mix | Default |  |
 | `GET /Playlists/{itemId}/InstantMix` | missing | - | Default |  |
 | `GET /Songs/{itemId}/InstantMix` | missing | mix | Default |  |
 
@@ -415,8 +415,8 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `GET /MusicGenres` | served | names | Default | obsolete |
-| `GET /MusicGenres/{genreName}` | served | - | Default |  |
+| `GET /MusicGenres` | served | admin, detail, media, mix, names | Default | obsolete |
+| `GET /MusicGenres/{genreName}` | served | names | Default |  |
 
 ## Package
 

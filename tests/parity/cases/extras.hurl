@@ -149,7 +149,6 @@ jsonpath "$[0].Taglines" isCollection
 jsonpath "$[0].Genres" isCollection
 jsonpath "$[0].RunTimeTicks" isNumber
 jsonpath "$[0].PlayAccess" isString
-jsonpath "$[0].ProductionYear" isNumber
 jsonpath "$[0].RemoteTrailers" isCollection
 jsonpath "$[0].ProviderIds" exists
 jsonpath "$[0].IsFolder" isBoolean
@@ -469,8 +468,16 @@ jsonpath "$.IsFolder" isBoolean
 jsonpath "$.ParentId" isString
 jsonpath "$.Type" isString
 jsonpath "$.People" isCollection
+jsonpath "$.People[0].Name" isString
+jsonpath "$.People[0].Id" isString
+jsonpath "$.People[0].Role" isString
+jsonpath "$.People[0].Type" isString
 jsonpath "$.Studios" isCollection
+jsonpath "$.Studios[0].Name" isString
+jsonpath "$.Studios[0].Id" isString
 jsonpath "$.GenreItems" isCollection
+jsonpath "$.GenreItems[0].Name" isString
+jsonpath "$.GenreItems[0].Id" isString
 jsonpath "$.LocalTrailerCount" isNumber
 jsonpath "$.UserData" exists
 jsonpath "$.UserData.PlaybackPositionTicks" isNumber

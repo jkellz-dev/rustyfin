@@ -267,6 +267,8 @@ jsonpath "$.Type" isString
 jsonpath "$.People" isCollection
 jsonpath "$.Studios" isCollection
 jsonpath "$.GenreItems" isCollection
+jsonpath "$.GenreItems[0].Name" isString
+jsonpath "$.GenreItems[0].Id" isString
 jsonpath "$.LocalTrailerCount" isNumber
 jsonpath "$.UserData" exists
 jsonpath "$.UserData.PlaybackPositionTicks" isNumber

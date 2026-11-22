@@ -28,7 +28,7 @@ audio() {
 		-f lavfi -i "sine=frequency=$3:duration=4" \
 		-c:a libmp3lame -b:a 64k \
 		-metadata title="$2" -metadata artist="Test Artist" \
-		-metadata album="Test Album" -metadata track="$4" \
+		-metadata album="Test Album" -metadata track="$4" -metadata genre="Test Music Genre" \
 		-metadata "MusicBrainz Album Id=$MB_ALBUM" \
 		-metadata "MusicBrainz Release Group Id=$MB_GROUP" \
 		-metadata "MusicBrainz Artist Id=$MB_ARTIST" \
@@ -43,6 +43,24 @@ video "$out/shows/Test Show (2021)/Season 01/Test Show S01E01.mp4" "Pilot"
 video "$out/shows/Test Show (2021)/Season 01/Test Show S01E02.mp4" "Second"
 audio "$out/music/Test Artist/Test Album (2019)/01 First.mp3" "First" 330 1
 audio "$out/music/Test Artist/Test Album (2019)/02 Second.mp3" "Second" 550 2
+
+# A Radarr-style NFO, so the film has a genre, a studio, an actor and a director:
+# the routes by name (/Persons/{name}, /Genres/{name}, /Studios/{name}) need them.
+cat >"$out/movies/Test Movie (2020)/Test Movie (2020).nfo" <<'EOF'
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <title>Test Movie</title>
+  <year>2020</year>
+  <genre>Test Genre</genre>
+  <studio>Test Studio</studio>
+  <director>Test Director</director>
+  <actor>
+    <name>Test Actor</name>
+    <role>Lead</role>
+    <type>Actor</type>
+  </actor>
+</movie>
+EOF
 
 # Lyrics (11a): Jellyfin reads <track>.lrc (synced) and <track>.txt (plain).
 printf '[ar:Test Artist]\n[ti:First]\n[00:00.50]Line one\n[00:01.75]Line two\n\n[00:03.00][00:04.00]Twice\n' \

@@ -64,6 +64,22 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$.Items" isCollection
+jsonpath "$.Items[0].Name" isString
+jsonpath "$.Items[0].ServerId" isString
+jsonpath "$.Items[0].Id" isString
+jsonpath "$.Items[0].Type" isString
+jsonpath "$.Items[0].UserData" exists
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
+jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
+jsonpath "$.Items[0].UserData.Played" isBoolean
+jsonpath "$.Items[0].UserData.Key" isString
+jsonpath "$.Items[0].UserData.ItemId" isString
+jsonpath "$.Items[0].ImageTags" exists
+jsonpath "$.Items[0].BackdropImageTags" isCollection
+jsonpath "$.Items[0].ImageBlurHashes" exists
+jsonpath "$.Items[0].LocationType" isString
+jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.TotalRecordCount" isNumber
 jsonpath "$.StartIndex" isNumber
 
@@ -73,6 +89,22 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$.Items" isCollection
+jsonpath "$.Items[0].Name" isString
+jsonpath "$.Items[0].ServerId" isString
+jsonpath "$.Items[0].Id" isString
+jsonpath "$.Items[0].Type" isString
+jsonpath "$.Items[0].UserData" exists
+jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.Items[0].UserData.PlayCount" isNumber
+jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
+jsonpath "$.Items[0].UserData.Played" isBoolean
+jsonpath "$.Items[0].UserData.Key" isString
+jsonpath "$.Items[0].UserData.ItemId" isString
+jsonpath "$.Items[0].ImageTags" exists
+jsonpath "$.Items[0].BackdropImageTags" isCollection
+jsonpath "$.Items[0].ImageBlurHashes" exists
+jsonpath "$.Items[0].LocationType" isString
+jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.TotalRecordCount" isNumber
 jsonpath "$.StartIndex" isNumber
 
@@ -591,8 +623,16 @@ jsonpath "$.Items[0].ProductionYear" isNumber
 jsonpath "$.Items[0].IsFolder" isBoolean
 jsonpath "$.Items[0].Type" isString
 jsonpath "$.Items[0].People" isCollection
+jsonpath "$.Items[0].People[0].Name" isString
+jsonpath "$.Items[0].People[0].Id" isString
+jsonpath "$.Items[0].People[0].Role" isString
+jsonpath "$.Items[0].People[0].Type" isString
 jsonpath "$.Items[0].Studios" isCollection
+jsonpath "$.Items[0].Studios[0].Name" isString
+jsonpath "$.Items[0].Studios[0].Id" isString
 jsonpath "$.Items[0].GenreItems" isCollection
+jsonpath "$.Items[0].GenreItems[0].Name" isString
+jsonpath "$.Items[0].GenreItems[0].Id" isString
 jsonpath "$.Items[0].UserData" exists
 jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
 jsonpath "$.Items[0].UserData.PlayCount" isNumber

@@ -100,6 +100,18 @@ HTTP 200
 [Captures]
 year: jsonpath "$.Items[0].Name"
 
+GET {{base_url}}/MusicGenres
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+music_genre_name: jsonpath "$.Items[0].Name" urlEncode
+
+GET {{base_url}}/MusicGenres
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+music_genre_id: jsonpath "$.Items[0].Id"
+
 GET {{base_url}}/ScheduledTasks
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
@@ -257,6 +269,7 @@ jsonpath "$.Items[0].Id" isNumber
 jsonpath "$.Items[0].Name" isString
 jsonpath "$.Items[0].ShortOverview" isString
 jsonpath "$.Items[0].Type" isString
+jsonpath "$.Items[0].ItemId" isString
 jsonpath "$.Items[0].Date" isString
 jsonpath "$.Items[0].UserId" isString
 jsonpath "$.Items[0].Severity" isString

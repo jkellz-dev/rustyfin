@@ -100,6 +100,18 @@ HTTP 200
 [Captures]
 year: jsonpath "$.Items[0].Name"
 
+GET {{base_url}}/MusicGenres
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+music_genre_name: jsonpath "$.Items[0].Name" urlEncode
+
+GET {{base_url}}/MusicGenres
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+music_genre_id: jsonpath "$.Items[0].Id"
+
 GET {{base_url}}/ScheduledTasks
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
@@ -127,7 +139,7 @@ GET {{base_url}}/Items/{{movie_id}}/File
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
 [Asserts]
-header "Content-Type" contains "video/x-matroska"
+header "Content-Type" contains "video/mp4"
 
 GET {{base_url}}/Audio/{{track_id}}/stream
 Authorization: MediaBrowser Token="{{token}}"
@@ -163,7 +175,7 @@ Authorization: MediaBrowser Token="{{token}}"
 static: true
 HTTP 200
 [Asserts]
-header "Content-Type" contains "video/x-matroska"
+header "Content-Type" contains "video/mp4"
 
 HEAD {{base_url}}/Videos/{{movie_id}}/stream
 Authorization: MediaBrowser Token="{{token}}"
@@ -171,7 +183,7 @@ Authorization: MediaBrowser Token="{{token}}"
 static: true
 HTTP 200
 [Asserts]
-header "Content-Type" contains "video/x-matroska"
+header "Content-Type" contains "video/mp4"
 
 GET {{base_url}}/Videos/{{movie_id}}/AdditionalParts
 Authorization: MediaBrowser Token="{{token}}"

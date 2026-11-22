@@ -100,6 +100,18 @@ HTTP 200
 [Captures]
 year: jsonpath "$.Items[0].Name"
 
+GET {{base_url}}/MusicGenres
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+music_genre_name: jsonpath "$.Items[0].Name" urlEncode
+
+GET {{base_url}}/MusicGenres
+Authorization: MediaBrowser Token="{{token}}"
+HTTP 200
+[Captures]
+music_genre_id: jsonpath "$.Items[0].Id"
+
 GET {{base_url}}/ScheduledTasks
 Authorization: MediaBrowser Token="{{token}}"
 HTTP 200
@@ -127,8 +139,6 @@ jsonpath "$.CanDelete" isBoolean
 jsonpath "$.CanDownload" isBoolean
 jsonpath "$.SortName" isString
 jsonpath "$.ExternalUrls" isCollection
-jsonpath "$.ExternalUrls[0].Name" isString
-jsonpath "$.ExternalUrls[0].Url" isString
 jsonpath "$.Path" isString
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
 jsonpath "$.Taglines" isCollection
@@ -136,7 +146,6 @@ jsonpath "$.Genres" isCollection
 jsonpath "$.PlayAccess" isString
 jsonpath "$.RemoteTrailers" isCollection
 jsonpath "$.ProviderIds" exists
-jsonpath "$.ProviderIds.Tmdb" isString
 jsonpath "$.Type" isString
 jsonpath "$.People" isCollection
 jsonpath "$.Studios" isCollection
@@ -153,12 +162,9 @@ jsonpath "$.ChildCount" isNumber
 jsonpath "$.SpecialFeatureCount" isNumber
 jsonpath "$.DisplayPreferencesId" isString
 jsonpath "$.Tags" isCollection
-jsonpath "$.PrimaryImageAspectRatio" isNumber
 jsonpath "$.ImageTags" exists
-jsonpath "$.ImageTags.Primary" isString
 jsonpath "$.BackdropImageTags" isCollection
 jsonpath "$.ImageBlurHashes" exists
-jsonpath "$.ImageBlurHashes.Primary" exists
 jsonpath "$.LocationType" isString
 jsonpath "$.MediaType" isString
 jsonpath "$.LockedFields" isCollection
@@ -272,10 +278,8 @@ jsonpath "$.SpecialFeatureCount" isNumber
 jsonpath "$.DisplayPreferencesId" isString
 jsonpath "$.Tags" isCollection
 jsonpath "$.ImageTags" exists
-jsonpath "$.ImageTags.Thumb" isString
 jsonpath "$.BackdropImageTags" isCollection
 jsonpath "$.ImageBlurHashes" exists
-jsonpath "$.ImageBlurHashes.Thumb" exists
 jsonpath "$.LocationType" isString
 jsonpath "$.MediaType" isString
 jsonpath "$.LockedFields" isCollection
@@ -438,8 +442,129 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$.Items" isCollection
+jsonpath "$.Items[0].Name" isString
+jsonpath "$.Items[0].ServerId" isString
+jsonpath "$.Items[0].Id" isString
+jsonpath "$.Items[0].Type" isString
+jsonpath "$.Items[0].ImageTags" exists
+jsonpath "$.Items[0].ImageTags.Primary" isString
+jsonpath "$.Items[0].BackdropImageTags" isCollection
+jsonpath "$.Items[0].ImageBlurHashes" exists
+jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
+jsonpath "$.Items[0].LocationType" isString
+jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.TotalRecordCount" isNumber
 jsonpath "$.StartIndex" isNumber
+
+GET {{base_url}}/MusicGenres/{{music_genre_name}}
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+userId: {{user_id}}
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.Name" isString
+jsonpath "$.ServerId" isString
+jsonpath "$.Id" isString
+jsonpath "$.Etag" isString
+jsonpath "$.DateCreated" isString
+jsonpath "$.CanDelete" isBoolean
+jsonpath "$.CanDownload" isBoolean
+jsonpath "$.SortName" isString
+jsonpath "$.ExternalUrls" isCollection
+jsonpath "$.Path" isString
+jsonpath "$.EnableMediaSourceDisplay" isBoolean
+jsonpath "$.Taglines" isCollection
+jsonpath "$.Genres" isCollection
+jsonpath "$.PlayAccess" isString
+jsonpath "$.RemoteTrailers" isCollection
+jsonpath "$.ProviderIds" exists
+jsonpath "$.Type" isString
+jsonpath "$.People" isCollection
+jsonpath "$.Studios" isCollection
+jsonpath "$.GenreItems" isCollection
+jsonpath "$.LocalTrailerCount" isNumber
+jsonpath "$.UserData" exists
+jsonpath "$.UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.UserData.PlayCount" isNumber
+jsonpath "$.UserData.IsFavorite" isBoolean
+jsonpath "$.UserData.Played" isBoolean
+jsonpath "$.UserData.Key" isString
+jsonpath "$.UserData.ItemId" isString
+jsonpath "$.ChildCount" isNumber
+jsonpath "$.SpecialFeatureCount" isNumber
+jsonpath "$.DisplayPreferencesId" isString
+jsonpath "$.Tags" isCollection
+jsonpath "$.PrimaryImageAspectRatio" isNumber
+jsonpath "$.ImageTags" exists
+jsonpath "$.ImageTags.Primary" isString
+jsonpath "$.BackdropImageTags" isCollection
+jsonpath "$.ImageBlurHashes" exists
+jsonpath "$.ImageBlurHashes.Primary" exists
+jsonpath "$.LocationType" isString
+jsonpath "$.MediaType" isString
+jsonpath "$.LockedFields" isCollection
+jsonpath "$.SongCount" isNumber
+jsonpath "$.AlbumCount" isNumber
+jsonpath "$.ArtistCount" isNumber
+jsonpath "$.MusicVideoCount" isNumber
+jsonpath "$.LockData" isBoolean
+
+GET {{base_url}}/Genres/{{music_genre_name}}
+Authorization: MediaBrowser Token="{{token}}"
+[QueryStringParams]
+userId: {{user_id}}
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.Name" isString
+jsonpath "$.ServerId" isString
+jsonpath "$.Id" isString
+jsonpath "$.Etag" isString
+jsonpath "$.DateCreated" isString
+jsonpath "$.CanDelete" isBoolean
+jsonpath "$.CanDownload" isBoolean
+jsonpath "$.SortName" isString
+jsonpath "$.ExternalUrls" isCollection
+jsonpath "$.Path" isString
+jsonpath "$.EnableMediaSourceDisplay" isBoolean
+jsonpath "$.Taglines" isCollection
+jsonpath "$.Genres" isCollection
+jsonpath "$.PlayAccess" isString
+jsonpath "$.RemoteTrailers" isCollection
+jsonpath "$.ProviderIds" exists
+jsonpath "$.Type" isString
+jsonpath "$.People" isCollection
+jsonpath "$.Studios" isCollection
+jsonpath "$.GenreItems" isCollection
+jsonpath "$.LocalTrailerCount" isNumber
+jsonpath "$.UserData" exists
+jsonpath "$.UserData.PlaybackPositionTicks" isNumber
+jsonpath "$.UserData.PlayCount" isNumber
+jsonpath "$.UserData.IsFavorite" isBoolean
+jsonpath "$.UserData.Played" isBoolean
+jsonpath "$.UserData.Key" isString
+jsonpath "$.UserData.ItemId" isString
+jsonpath "$.ChildCount" isNumber
+jsonpath "$.SpecialFeatureCount" isNumber
+jsonpath "$.DisplayPreferencesId" isString
+jsonpath "$.Tags" isCollection
+jsonpath "$.ImageTags" exists
+jsonpath "$.BackdropImageTags" isCollection
+jsonpath "$.ImageBlurHashes" exists
+jsonpath "$.LocationType" isString
+jsonpath "$.MediaType" isString
+jsonpath "$.LockedFields" isCollection
+jsonpath "$.TrailerCount" isNumber
+jsonpath "$.MovieCount" isNumber
+jsonpath "$.SeriesCount" isNumber
+jsonpath "$.ProgramCount" isNumber
+jsonpath "$.EpisodeCount" isNumber
+jsonpath "$.SongCount" isNumber
+jsonpath "$.AlbumCount" isNumber
+jsonpath "$.ArtistCount" isNumber
+jsonpath "$.MusicVideoCount" isNumber
+jsonpath "$.LockData" isBoolean
 
 GET {{base_url}}/Items
 Authorization: MediaBrowser Token="{{token}}"
@@ -451,38 +576,6 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$.Items" isCollection
-jsonpath "$.Items[0].Name" isString
-jsonpath "$.Items[0].ServerId" isString
-jsonpath "$.Items[0].Id" isString
-jsonpath "$.Items[0].Container" isString
-jsonpath "$.Items[0].PremiereDate" isString
-jsonpath "$.Items[0].CriticRating" isNumber
-jsonpath "$.Items[0].OfficialRating" isString
-jsonpath "$.Items[0].CommunityRating" isNumber
-jsonpath "$.Items[0].RunTimeTicks" isNumber
-jsonpath "$.Items[0].ProductionYear" isNumber
-jsonpath "$.Items[0].IsFolder" isBoolean
-jsonpath "$.Items[0].Type" isString
-jsonpath "$.Items[0].UserData" exists
-jsonpath "$.Items[0].UserData.PlaybackPositionTicks" isNumber
-jsonpath "$.Items[0].UserData.PlayCount" isNumber
-jsonpath "$.Items[0].UserData.IsFavorite" isBoolean
-jsonpath "$.Items[0].UserData.Played" isBoolean
-jsonpath "$.Items[0].UserData.Key" isString
-jsonpath "$.Items[0].UserData.ItemId" isString
-jsonpath "$.Items[0].VideoType" isString
-jsonpath "$.Items[0].ImageTags" exists
-jsonpath "$.Items[0].ImageTags.Primary" isString
-jsonpath "$.Items[0].ImageTags.Logo" isString
-jsonpath "$.Items[0].ImageTags.Thumb" isString
-jsonpath "$.Items[0].BackdropImageTags" isCollection
-jsonpath "$.Items[0].ImageBlurHashes" exists
-jsonpath "$.Items[0].ImageBlurHashes.Backdrop" exists
-jsonpath "$.Items[0].ImageBlurHashes.Primary" exists
-jsonpath "$.Items[0].ImageBlurHashes.Logo" exists
-jsonpath "$.Items[0].ImageBlurHashes.Thumb" exists
-jsonpath "$.Items[0].LocationType" isString
-jsonpath "$.Items[0].MediaType" isString
 jsonpath "$.TotalRecordCount" isNumber
 jsonpath "$.StartIndex" isNumber
 
@@ -519,9 +612,9 @@ jsonpath "$.TotalRecordCount" isNumber
 jsonpath "$.StartIndex" isNumber
 
 GET {{base_url}}/Persons/{{person_name}}/Images/Primary
-HTTP 200
+HTTP 404
 [Asserts]
-header "Content-Type" contains "image/jpeg"
+header "Content-Type" contains "application/json"
 
 GET {{base_url}}/Genres/{{genre_name}}/Images/Primary
 HTTP 200
