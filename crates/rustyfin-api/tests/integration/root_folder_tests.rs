@@ -60,3 +60,42 @@ async fn an_unknown_user_has_no_root_folder() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     app.cleanup().await;
 }
+
+/// Owner (2026-11-22): Finamp "connects but fails to load any data". Finamp
+/// keeps the music library it was pointed at and fetches it by id
+/// (`/Users/{userId}/Items/{libraryId}`), as Jellyfin answers with the
+/// library's `CollectionFolder`; Rustyfin answered 404.
+#[tokio::test]
+async fn a_library_can_be_fetched_by_its_id() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", false).await;
+    let music = app.create_library("Music", "music").await;
+    let hidden = app.create_library("Hidden", "movies").await;
+    users::update_policy(&app.pool, user, false, false)
+        .await
+        .unwrap();
+    user_library_access::set_enabled_libraries(&app.pool, user, &[music])
+        .await
+        .unwrap();
+
+    for path in [
+        format!("/Items/{music}"),
+        format!("/Users/{user}/Items/{music}"),
+    ] {
+        let (status, lib) = app.get(&path, &token).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {lib}");
+        assert_eq!(lib["Id"], music.to_string(), "{lib}");
+        assert_eq!(lib["Type"], "CollectionFolder");
+        assert_eq!(lib["CollectionType"], "music");
+        assert_eq!(lib["Name"], "Music");
+        assert_eq!(lib["IsFolder"], true);
+        assert!(lib["UserData"].is_object(), "{lib}");
+    }
+    let (status, _) = app.get(&format!("/Items/{hidden}"), &token).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a library the user may not see"
+    );
+    app.cleanup().await;
+}
