@@ -1057,6 +1057,15 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
 - [x] A known-differences list (`KNOWN_DIFFERENCES` in `gen/record.py`, listed in the suite README): every
       deliberate divergence (forward-auth only, no plugins, no LiveTV, track dates as years) is named
       and the suite expects it, so an unplanned one fails
+- [x] Catalog every route Jellyfin serves (`tests/parity/ROUTES.md`, from `tools/route_catalog.py` over Jellyfin's
+      controllers) and ask every route a client may read (2026-11-22, after Finamp's `/Items/{id}/File` was found
+      missing): instant mixes, per-type Similar, name items, item fields, universal audio, bitrate test and the rest
+      landed the same day
+- [ ] The remaining routes, per the owner's 2026-11-22 decision: read-only server settings filled from
+      `rustyfin.toml` (writes refused), playlist sharing, `Sessions/{id}/Viewing`, `LiveStreams/Open`/`Close`
+      (nothing to open), the old `/PlayingItems` reports. Not served on purpose: the folder browser
+      (`/Environment/*`), the metadata editor routes, QuickConnect, remote control of other sessions, backups, client
+      logs (15g). SyncPlay stays 15b
 - [ ] Cover the routes real clients call first (the 11a client-compatibility list), then the rest of the router.
       Plezy's are covered (`cases/plezy.hurl`, from its request log, 2026-11-16); the other clients need a request
       log each (`docs/client-requests.md`)
@@ -1362,6 +1371,22 @@ Comprehensive docs, a design book for consistent branding, and a public project 
 - [ ] Synchronized playback across multiple clients
 - [ ] Session group management (create/join/leave)
 - [ ] Playback state synchronization (play, pause, seek broadcast)
+
+### 15g. Debug Layers and Client Logs (owner, 2026-11-22) — to discuss before any work
+
+Owner, on Jellyfin's `POST /ClientLog/Document`: "I don't want that as part of rustyfin server. That can be a separate
+debug module if we want it later. In fact we should think about treating whole parts of the api as separate layers for
+debugging purposes."
+
+Today a client that uploads its log gets 404 (the route is not served), and Rustyfin's own diagnostics (request log,
+Prometheus metrics, the admin's health page) live inside the server.
+
+- [ ] Decide what a "debug layer" is: a separate binary or sidecar in front of the server, an optional crate the
+      server is built with, or a router layer switched on in `rustyfin.toml`; and which parts of the API belong in one
+      (client log upload, request logging, the parity probes, traffic capture for client-compatibility work)
+- [ ] Client logs: accept `POST /ClientLog/Document` in that layer, where the logs go (a folder, the server log, a
+      size limit and retention), and who may upload
+- [ ] Whatever the shape, the media server itself gains no debug routes (owner)
 
 ### 15c. Outbound Webhooks
 
