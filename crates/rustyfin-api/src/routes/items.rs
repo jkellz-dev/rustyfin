@@ -1366,11 +1366,14 @@ pub async fn get_item_by_id(
     Ok(Json(dto))
 }
 
+/// A person on a title: who, their role, their billing order.
+type Billing = (people::PersonRow, Option<String>, Option<i32>);
+
 /// Cast and crew as Jellyfin lists them, with a photo tag for whoever has one
 /// (a stored image, else the shared headshot folder).
 pub(crate) async fn people_dtos(
     state: &AppState,
-    people_rows: Vec<(people::PersonRow, Option<String>, Option<i32>)>,
+    people_rows: Vec<Billing>,
 ) -> Vec<BaseItemPerson> {
     if people_rows.is_empty() {
         return Vec::new();
@@ -1417,8 +1420,7 @@ pub(crate) async fn attach_people_if_asked(
     let rows = people::list_by_items(&state.pool, &ids)
         .await
         .or_log_default("people::list_by_items");
-    let mut by_item: HashMap<Uuid, Vec<(people::PersonRow, Option<String>, Option<i32>)>> =
-        HashMap::new();
+    let mut by_item: HashMap<Uuid, Vec<Billing>> = HashMap::new();
     for (item, person, role, order) in rows {
         by_item.entry(item).or_default().push((person, role, order));
     }
