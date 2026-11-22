@@ -148,6 +148,31 @@ HTTP 200
 track_id: jsonpath "$.Items[0].Id"
 """
 
+
+def _capture(path, query, name, expr):
+    q = "".join(f"{k}: {v}\n" for k, v in query.items())
+    return (
+        f"GET {{{{base_url}}}}{path}\nAuthorization: {AUTH}\n"
+        + (f"[QueryStringParams]\n{q}" if q else "")
+        + f"HTTP 200\n[Captures]\n{name}: {expr}\n"
+    )
+
+
+# More ids, for the areas that ask about one episode, person, genre, studio, year,
+# scheduled task or device. Only those areas' files open with these lookups, so the
+# older areas do not change. Names go into paths URL-encoded.
+EXTRA_PREAMBLE = "\n".join([
+    _capture("/Items", {"Recursive": "true", "IncludeItemTypes": "Episode"}, "episode_id", 'jsonpath "$.Items[0].Id"'),
+    _capture("/Persons", {}, "person_name", 'jsonpath "$.Items[0].Name" urlEncode'),
+    _capture("/Genres", {}, "genre_name", 'jsonpath "$.Items[0].Name" urlEncode'),
+    _capture("/Studios", {}, "studio_name", 'jsonpath "$.Items[0].Name" urlEncode'),
+    _capture("/Artists/AlbumArtists", {}, "artist_name", 'jsonpath "$.Items[0].Name" urlEncode'),
+    _capture("/Years", {"Recursive": "true"}, "year", 'jsonpath "$.Items[0].Name"'),
+    _capture("/ScheduledTasks", {}, "task_id", 'jsonpath "$[0].Id"'),
+    _capture("/Devices", {}, "device_id", 'jsonpath "$.Items[0].Id"'),
+])
+EXTRA_AREAS = {"detail", "names", "mix", "media", "admin"}
+
 # (area, method, path, query, needs_auth, json_body)
 REQUESTS = [
     ("system", "GET", "/System/Info/Public", {}, False, None),
@@ -255,6 +280,101 @@ REQUESTS = [
     ("plezy", "GET", "/MediaSegments/{track_id}", {}, True, None),
     ("plezy", "GET", "/Audio/{track_id}/Lyrics", {}, True, None),
     ("plezy", "GET", "/Audio/{movie_id}/Lyrics", {}, True, None),
+    # Fifth slice (2026-11-22): every route Jellyfin serves that a client may read,
+    # from the route catalog (tests/parity/ROUTES.md, tools/route_catalog.py). Finamp
+    # played tracks from /Items/{id}/File, which no case asked and Rustyfin lacked.
+    # Requests that change state (reports, writes) stay out: they change what the
+    # other cases read.
+    ("detail", "GET", "/Items/Root", {}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items/Root", {}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/Intros", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items/{movie_id}/Intros", {}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items/{movie_id}/LocalTrailers", {}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items/{movie_id}/SpecialFeatures", {}, True, None),
+    ("detail", "GET", "/Items/Latest", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/UserViews", {"userId": "{user_id}"}, True, None),
+    ("detail", "GET", "/UserViews/GroupingOptions", {"userId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items", {"Recursive": "true", "IncludeItemTypes": "Movie"}, True, None),
+    ("detail", "GET", "/UserItems/{movie_id}/UserData", {"userId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items/{movie_id}/UserData", {}, True, None),
+    ("detail", "GET", "/Items/Filters2", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/Suggestions", {"userId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/ThemeSongs", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/ThemeVideos", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/PlaybackInfo", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{episode_id}", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{season_id}", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{track_id}", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{artist_id}", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{music_lib_id}", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Users/{user_id}/Items/{music_lib_id}", {}, True, None),
+    ("detail", "GET", "/Items/{episode_id}/Ancestors", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Items/{track_id}/Ancestors", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Shows/{series_id}/Episodes", {"SeasonId": "{season_id}", "UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Movies/{movie_id}/Similar", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Shows/{series_id}/Similar", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Trailers/{movie_id}/Similar", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Albums/{album_id}/Similar", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Artists/{artist_id}/Similar", {"UserId": "{user_id}"}, True, None),
+    ("detail", "GET", "/Libraries/AvailableOptions", {"LibraryContentType": "movies"}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/ExternalIdInfos", {}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/MetadataEditor", {}, True, None),
+    ("detail", "GET", "/Items/{movie_id}/RemoteImages/Providers", {}, True, None),
+    ("detail", "GET", "/Search/Hints", {"searchTerm": "track", "IncludeItemTypes": "Audio"}, True, None),
+    ("names", "GET", "/Persons/{person_name}", {"userId": "{user_id}"}, True, None),
+    ("names", "GET", "/Genres/{genre_name}", {"userId": "{user_id}"}, True, None),
+    ("names", "GET", "/Studios/{studio_name}", {"userId": "{user_id}"}, True, None),
+    ("names", "GET", "/Artists/{artist_name}", {"userId": "{user_id}"}, True, None),
+    ("names", "GET", "/Years", {"Recursive": "true", "userId": "{user_id}"}, True, None),
+    ("names", "GET", "/Years/{year}", {"userId": "{user_id}"}, True, None),
+    ("names", "GET", "/MusicGenres", {}, True, None),
+    ("names", "GET", "/Items", {"Recursive": "true", "Genres": "{genre_name}", "IncludeItemTypes": "Movie"}, True, None),
+    ("names", "GET", "/Items", {"Recursive": "true", "Years": "{year}"}, True, None),
+    ("names", "GET", "/Persons/{person_name}/Images/Primary", {}, False, None),
+    ("names", "GET", "/Genres/{genre_name}/Images/Primary", {}, False, None),
+    ("mix", "GET", "/Songs/{track_id}/InstantMix", {"UserId": "{user_id}"}, True, None),
+    ("mix", "GET", "/Albums/{album_id}/InstantMix", {"UserId": "{user_id}"}, True, None),
+    ("mix", "GET", "/Artists/{artist_id}/InstantMix", {"UserId": "{user_id}"}, True, None),
+    ("mix", "GET", "/Items/{track_id}/InstantMix", {"UserId": "{user_id}"}, True, None),
+    ("mix", "GET", "/Artists/InstantMix", {"id": "{artist_id}", "UserId": "{user_id}"}, True, None),
+    ("media", "GET", "/Items/{track_id}/File", {}, True, None),
+    ("media", "GET", "/Items/{track_id}/Download", {}, True, None),
+    ("media", "GET", "/Items/{movie_id}/File", {}, True, None),
+    ("media", "GET", "/Audio/{track_id}/stream", {"static": "true"}, True, None),
+    ("media", "HEAD", "/Audio/{track_id}/stream", {"static": "true"}, True, None),
+    ("media", "GET", "/Audio/{track_id}/universal", {"UserId": "{user_id}", "Container": "mp3,flac,aac,m4a,ogg,opus,wav", "TranscodingContainer": "mp3", "TranscodingProtocol": "http", "AudioCodec": "mp3"}, True, None),
+    ("media", "GET", "/Videos/{movie_id}/stream", {"static": "true"}, True, None),
+    ("media", "HEAD", "/Videos/{movie_id}/stream", {"static": "true"}, True, None),
+    ("media", "GET", "/Videos/{movie_id}/AdditionalParts", {"userId": "{user_id}"}, True, None),
+    ("media", "GET", "/Playback/BitrateTest", {"size": "1000"}, True, None),
+    ("media", "GET", "/FallbackFont/Fonts", {}, True, None),
+    ("media", "GET", "/Items/{album_id}/Images", {}, True, None),
+    ("media", "GET", "/Items/{track_id}/Images/Primary", {}, False, None),
+    ("media", "GET", "/Users/{user_id}/Images/Primary", {}, False, None),
+    ("media", "GET", "/UserImage", {"userId": "{user_id}"}, False, None),
+    ("media", "GET", "/Branding/Css", {}, False, None),
+    ("media", "GET", "/Branding/Css.css", {}, False, None),
+    ("media", "GET", "/Branding/Splashscreen", {}, False, None),
+    ("media", "GET", "/Videos/{movie_id}/Trickplay/320/tiles.m3u8", {}, True, None),
+    ("admin", "GET", "/System/Configuration", {}, True, None),
+    ("admin", "GET", "/System/Configuration/network", {}, True, None),
+    ("admin", "GET", "/System/Configuration/MetadataOptions/Default", {}, True, None),
+    ("admin", "GET", "/System/Logs", {}, True, None),
+    ("admin", "GET", "/System/ActivityLog/Entries", {"limit": "5"}, True, None),
+    ("admin", "GET", "/Auth/Keys", {}, True, None),
+    ("admin", "GET", "/Auth/Providers", {}, True, None),
+    ("admin", "GET", "/Auth/PasswordResetProviders", {}, True, None),
+    ("admin", "GET", "/Devices", {}, True, None),
+    ("admin", "GET", "/Devices/Info", {"id": "{device_id}"}, True, None),
+    ("admin", "GET", "/ScheduledTasks/{task_id}", {}, True, None),
+    ("admin", "GET", "/Environment/Drives", {}, True, None),
+    ("admin", "GET", "/Environment/DefaultDirectoryBrowser", {}, True, None),
+    ("admin", "GET", "/Environment/ParentPath", {"path": "/media"}, True, None),
+    ("admin", "GET", "/Startup/Configuration", {}, True, None),
+    ("admin", "GET", "/Startup/User", {}, True, None),
+    ("admin", "GET", "/Users/Public", {}, False, None),
+    ("admin", "GET", "/Items/{movie_id}/RemoteSearch/Subtitles/eng", {}, True, None),
+    ("admin", "GET", "/Audio/{track_id}/RemoteSearch/Lyrics", {}, True, None),
 ]
 
 
@@ -296,7 +416,7 @@ user_id: jsonpath "$.User.Id"
 
 
 def lookup_ids(token):
-    res = hurl_json(PREAMBLE, {"base_url": JELLYFIN, "token": token})
+    res = hurl_json(PREAMBLE + "\n" + EXTRA_PREAMBLE, {"base_url": JELLYFIN, "token": token})
     ids = {}
     for entry in res["entries"]:
         for c in entry.get("captures", []):
@@ -431,7 +551,8 @@ def main():
             "# do not edit by hand, edit REQUESTS and regenerate.\n"
             "# Variables: base_url, token, user_id.\n\n"
         )
-        (OUT / f"{area}.hurl").write_text(header + PREAMBLE + "\n".join(entries))
+        preamble = PREAMBLE + ("\n" + EXTRA_PREAMBLE if area in EXTRA_AREAS else "")
+        (OUT / f"{area}.hurl").write_text(header + preamble + "\n".join(entries))
         print(f"wrote {OUT / f'{area}.hurl'} ({len(entries)} requests)", file=sys.stderr)
 
 
