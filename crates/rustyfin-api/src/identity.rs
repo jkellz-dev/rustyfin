@@ -51,7 +51,10 @@ pub async fn vouch(State(state): State<AppState>, mut req: Request, next: Next) 
         return next.run(req).await;
     };
     {
-        match vouched_user(&state, fa, &identity, &req).await {
+        // Only what is Send crosses the awaits (a request's body is not Sync).
+        let headers = req.headers().clone();
+        let query = req.uri().query().map(str::to_string);
+        match vouched_user(&state, fa, &identity, &headers, query.as_deref()).await {
             Ok(Some(user)) => {
                 req.extensions_mut().insert(user);
             }
@@ -75,7 +78,8 @@ async fn vouched_user(
     state: &AppState,
     fa: &ForwardAuthState,
     identity: &ForwardAuthIdentity,
-    req: &Request,
+    headers: &axum::http::HeaderMap,
+    query: Option<&str>,
 ) -> Result<Option<AuthenticatedUser>, sqlx::Error> {
     let pool = &state.pool;
     let user = match users::find_by_remote_user_id(pool, &identity.remote_user).await? {
@@ -107,8 +111,7 @@ async fn vouched_user(
 
     // The session the token names, if it is this user's and still active;
     // else the device's; else a new one for the device.
-    let headers = req.headers();
-    let by_token = match request_token(headers, req.uri().query()) {
+    let by_token = match request_token(headers, query) {
         Some(token) => sessions::find_by_token(pool, &token)
             .await?
             .filter(|s| s.user_id == user.id)
