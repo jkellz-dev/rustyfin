@@ -403,6 +403,31 @@ fn routes(state: AppState) -> Router {
         )
         .route("/Sessions/Playing/Ping", post(playback::playback_ping))
         .route("/Sessions/Viewing", post(stubs::no_content_auth))
+        .route(
+            "/Sessions/{sessionId}/Viewing",
+            post(remote_control::send_display_content),
+        )
+        // Jellyfin's old play reports, before the JSON bodies above.
+        .route(
+            "/PlayingItems/{itemId}",
+            post(playback::legacy_playing_start).delete(playback::legacy_playing_stopped),
+        )
+        .route(
+            "/PlayingItems/{itemId}/Progress",
+            post(playback::legacy_playing_progress),
+        )
+        .route(
+            "/Users/{userId}/PlayingItems/{itemId}",
+            post(playback::legacy_user_playing_start)
+                .delete(playback::legacy_user_playing_stopped),
+        )
+        .route(
+            "/Users/{userId}/PlayingItems/{itemId}/Progress",
+            post(playback::legacy_user_playing_progress),
+        )
+        // Live TV leftovers: Rustyfin hands out no open tokens, so nothing opens.
+        .route("/LiveStreams/Open", post(stubs::problem_not_found_auth))
+        .route("/LiveStreams/Close", post(stubs::no_content_auth))
         // ── Remote control ───────────────────────────────────────
         .route(
             "/Sessions/{sessionId}/Playing",
@@ -608,6 +633,20 @@ fn routes(state: AppState) -> Router {
         )
         // ── Playlists ──────────────────────────────────────────────
         .route("/Playlists", post(playlists::create_playlist))
+        .route(
+            "/Playlists/{playlistId}",
+            get(playlists::get_playlist).post(playlists::update_playlist),
+        )
+        .route(
+            "/Playlists/{playlistId}/Users",
+            get(playlists::get_playlist_users),
+        )
+        .route(
+            "/Playlists/{playlistId}/Users/{userId}",
+            get(playlists::get_playlist_user)
+                .post(playlists::set_playlist_user)
+                .delete(playlists::remove_playlist_user),
+        )
         .route(
             "/Playlists/{playlistId}/Items",
             get(playlists::get_playlist_items)

@@ -163,3 +163,45 @@ pub async fn send_message_command(
 
     StatusCode::NO_CONTENT
 }
+
+/// Query of `POST /Sessions/{sessionId}/Viewing`.
+#[derive(Debug, Deserialize, Default)]
+pub struct DisplayContentQuery {
+    #[serde(rename = "itemType", alias = "ItemType")]
+    pub item_type: Option<String>,
+    #[serde(rename = "itemId", alias = "ItemId")]
+    pub item_id: Option<String>,
+    #[serde(rename = "itemName", alias = "ItemName")]
+    pub item_name: Option<String>,
+}
+
+/// `POST /Sessions/{sessionId}/Viewing` — ask a session to show an item
+/// (Jellyfin's `DisplayContent` command).
+pub async fn send_display_content(
+    State(state): State<AppState>,
+    _auth: AuthenticatedUser,
+    Path(session_id): Path<String>,
+    Query(query): Query<DisplayContentQuery>,
+) -> StatusCode {
+    let Ok(session_uuid) = session_id.parse::<Uuid>() else {
+        return StatusCode::NO_CONTENT;
+    };
+    let arguments: HashMap<String, String> = [
+        ("ItemType", query.item_type),
+        ("ItemId", query.item_id),
+        ("ItemName", query.item_name),
+    ]
+    .into_iter()
+    .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
+    .collect();
+    let command = GeneralCommand {
+        name: "DisplayContent".to_string(),
+        arguments,
+        controlling_user_id: None,
+    };
+    let _ = state
+        .session_manager
+        .send_command(session_uuid, SessionCommand::GeneralCommand(command))
+        .await;
+    StatusCode::NO_CONTENT
+}

@@ -238,3 +238,94 @@ pub async fn can_edit(
     .await?;
     Ok(row.0)
 }
+
+/// The items a playlist holds, in order.
+pub async fn list_item_ids(pool: &PgPool, playlist_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        "SELECT item_id FROM playlist_items WHERE playlist_id = $1 ORDER BY sort_order",
+    )
+    .bind(playlist_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// Replace a playlist's entries with `item_ids`, in that order.
+pub async fn replace_items(
+    pool: &PgPool,
+    playlist_id: Uuid,
+    item_ids: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM playlist_items WHERE playlist_id = $1")
+        .bind(playlist_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO playlist_items (playlist_id, item_id, sort_order) \
+         SELECT $1, i.id, (o.n - 1)::int FROM unnest($2::uuid[]) WITH ORDINALITY o(id, n) \
+         JOIN media_items i ON i.id = o.id",
+    )
+    .bind(playlist_id)
+    .bind(item_ids)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
+}
+
+/// Whether anyone may read a playlist.
+pub async fn set_open_access(pool: &PgPool, id: Uuid, open: bool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE playlists SET open_access = $1, updated_at = NOW() WHERE id = $2")
+        .bind(open)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Share a playlist with a user if that user exists; false when not.
+pub async fn share_with(
+    pool: &PgPool,
+    playlist_id: Uuid,
+    user_id: Uuid,
+    can_edit: bool,
+) -> Result<bool, sqlx::Error> {
+    let done = sqlx::query(
+        "INSERT INTO playlist_shares (playlist_id, user_id, can_edit) \
+         SELECT $1, id, $3 FROM users WHERE id = $2 \
+         ON CONFLICT (playlist_id, user_id) DO UPDATE SET can_edit = EXCLUDED.can_edit",
+    )
+    .bind(playlist_id)
+    .bind(user_id)
+    .bind(can_edit)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Replace who a playlist is shared with (users that do not exist are skipped).
+pub async fn replace_shares(
+    pool: &PgPool,
+    playlist_id: Uuid,
+    shares: &[(Uuid, bool)],
+) -> Result<(), sqlx::Error> {
+    let users: Vec<Uuid> = shares.iter().map(|s| s.0).collect();
+    let edits: Vec<bool> = shares.iter().map(|s| s.1).collect();
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM playlist_shares WHERE playlist_id = $1")
+        .bind(playlist_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO playlist_shares (playlist_id, user_id, can_edit) \
+         SELECT DISTINCT ON (s.user_id) $1, s.user_id, s.can_edit \
+         FROM unnest($2::uuid[], $3::bool[]) s(user_id, can_edit) \
+         JOIN users u ON u.id = s.user_id",
+    )
+    .bind(playlist_id)
+    .bind(&users)
+    .bind(&edits)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
+}

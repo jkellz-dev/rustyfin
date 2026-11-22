@@ -17,8 +17,56 @@ use crate::router::AppState;
 #[serde(rename_all = "PascalCase")]
 pub struct CreatePlaylistRequest {
     pub name: Option<String>,
-    pub ids: Option<String>,
+    /// Jellyfin's body sends an array; older clients a comma-separated string.
+    pub ids: Option<IdList>,
     pub media_type: Option<String>,
+    pub users: Option<Vec<SharePermission>>,
+    pub is_public: Option<bool>,
+}
+
+/// Item ids as Jellyfin's body sends them (an array) or as a query-style string.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum IdList {
+    Array(Vec<Uuid>),
+    Text(String),
+}
+
+impl IdList {
+    fn ids(&self) -> Vec<Uuid> {
+        match self {
+            IdList::Array(ids) => ids.clone(),
+            IdList::Text(text) => text
+                .split(',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect(),
+        }
+    }
+}
+
+/// Jellyfin's `PlaylistUserPermissions`: who a playlist is shared with.
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct SharePermission {
+    pub user_id: Uuid,
+    #[serde(default)]
+    pub can_edit: bool,
+}
+
+/// `POST /Playlists/{id}`: every field optional, each replaces what is there.
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdatePlaylistRequest {
+    pub name: Option<String>,
+    pub ids: Option<IdList>,
+    pub users: Option<Vec<SharePermission>>,
+    pub is_public: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdatePlaylistUserRequest {
+    pub can_edit: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -50,14 +98,22 @@ pub async fn create_playlist(
         .map_err(ApiError::Database)?;
 
     // Add initial items if provided
-    if let Some(ref ids_str) = body.ids {
-        let ids: Vec<Uuid> = ids_str
-            .split(',')
-            .filter_map(|s| s.trim().parse().ok())
-            .collect();
+    if let Some(ref ids) = body.ids {
+        let ids = ids.ids();
         if !ids.is_empty() {
             let _ = playlists::add_items(&state.pool, playlist.id, &ids).await;
         }
+    }
+    if let Some(ref users) = body.users {
+        let shares: Vec<(Uuid, bool)> = users.iter().map(|u| (u.user_id, u.can_edit)).collect();
+        playlists::replace_shares(&state.pool, playlist.id, &shares)
+            .await
+            .map_err(ApiError::Database)?;
+    }
+    if body.is_public == Some(true) {
+        playlists::set_open_access(&state.pool, playlist.id, true)
+            .await
+            .map_err(ApiError::Database)?;
     }
 
     Ok(Json(serde_json::json!({ "Id": playlist.id })))
@@ -197,5 +253,189 @@ pub async fn move_playlist_item(
         .await
         .map_err(ApiError::Database)?;
 
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// A playlist the caller may see (owner, shared, or open to all); 404 otherwise,
+/// as Jellyfin hides what a user may not see.
+async fn visible_playlist(
+    state: &AppState,
+    playlist_id: Uuid,
+    user_id: Uuid,
+) -> Result<playlists::PlaylistRow, ApiError> {
+    let playlist = playlists::find_by_id(&state.pool, playlist_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or(ApiError::NotFound)?;
+    if !playlists::can_access(&state.pool, playlist_id, user_id)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        return Err(ApiError::NotFound);
+    }
+    Ok(playlist)
+}
+
+async fn share_list(state: &AppState, playlist_id: Uuid) -> Result<Vec<SharePermission>, ApiError> {
+    let mut shares = playlists::get_shares(&state.pool, playlist_id)
+        .await
+        .map_err(ApiError::Database)?;
+    shares.sort_by_key(|s| s.user_id);
+    Ok(shares
+        .into_iter()
+        .map(|s| SharePermission {
+            user_id: s.user_id,
+            can_edit: s.can_edit,
+        })
+        .collect())
+}
+
+/// `GET /Playlists/{playlistId}` — whether it is open, who it is shared with, its items.
+pub async fn get_playlist(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(playlist_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let playlist = visible_playlist(&state, playlist_id, auth.user_id).await?;
+    let shares = share_list(&state, playlist_id).await?;
+    let item_ids = playlists::list_item_ids(&state.pool, playlist_id)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(serde_json::json!({
+        "OpenAccess": playlist.open_access,
+        "Shares": shares,
+        "ItemIds": item_ids,
+    })))
+}
+
+/// `POST /Playlists/{playlistId}` — rename, replace items, shares or openness
+/// (owner or an editor).
+pub async fn update_playlist(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(playlist_id): Path<Uuid>,
+    Json(body): Json<UpdatePlaylistRequest>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    visible_playlist(&state, playlist_id, auth.user_id).await?;
+    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        return Err(ApiError::Forbidden);
+    }
+    if let Some(ids) = body.ids {
+        playlists::replace_items(&state.pool, playlist_id, &ids.ids())
+            .await
+            .map_err(ApiError::Database)?;
+    }
+    if let Some(name) = body.name {
+        playlists::update_name(&state.pool, playlist_id, &name)
+            .await
+            .map_err(ApiError::Database)?;
+    }
+    if let Some(users) = body.users {
+        let shares: Vec<(Uuid, bool)> = users.iter().map(|u| (u.user_id, u.can_edit)).collect();
+        playlists::replace_shares(&state.pool, playlist_id, &shares)
+            .await
+            .map_err(ApiError::Database)?;
+    }
+    if let Some(open) = body.is_public {
+        playlists::set_open_access(&state.pool, playlist_id, open)
+            .await
+            .map_err(ApiError::Database)?;
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `GET /Playlists/{playlistId}/Users` — who it is shared with (owner only).
+pub async fn get_playlist_users(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path(playlist_id): Path<Uuid>,
+) -> Result<Json<Vec<SharePermission>>, ApiError> {
+    let playlist = visible_playlist(&state, playlist_id, auth.user_id).await?;
+    if playlist.owner_user_id != auth.user_id {
+        return Err(ApiError::Forbidden);
+    }
+    Ok(Json(share_list(&state, playlist_id).await?))
+}
+
+/// `GET /Playlists/{playlistId}/Users/{userId}` — one user's rights. The owner
+/// always may edit; the owner, an editor, or the user asked about may ask.
+pub async fn get_playlist_user(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<SharePermission>, ApiError> {
+    let playlist = visible_playlist(&state, playlist_id, auth.user_id).await?;
+    if user_id == playlist.owner_user_id {
+        return Ok(Json(SharePermission {
+            user_id,
+            can_edit: true,
+        }));
+    }
+    let may_ask = user_id == auth.user_id
+        || playlists::can_edit(&state.pool, playlist_id, auth.user_id)
+            .await
+            .map_err(ApiError::Database)?;
+    if !may_ask {
+        return Err(ApiError::Forbidden);
+    }
+    share_list(&state, playlist_id)
+        .await?
+        .into_iter()
+        .find(|s| s.user_id == user_id)
+        .map(Json)
+        .ok_or(ApiError::NotFound)
+}
+
+/// `POST /Playlists/{playlistId}/Users/{userId}` — share with a user (owner only).
+pub async fn set_playlist_user(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpdatePlaylistUserRequest>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let playlist = visible_playlist(&state, playlist_id, auth.user_id).await?;
+    if playlist.owner_user_id != auth.user_id {
+        return Err(ApiError::Forbidden);
+    }
+    if !playlists::share_with(
+        &state.pool,
+        playlist_id,
+        user_id,
+        body.can_edit.unwrap_or(false),
+    )
+    .await
+    .map_err(ApiError::Database)?
+    {
+        return Err(ApiError::NotFound);
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /Playlists/{playlistId}/Users/{userId}` — stop sharing (owner or an editor).
+pub async fn remove_playlist_user(
+    State(state): State<AppState>,
+    auth: AuthenticatedUser,
+    Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    visible_playlist(&state, playlist_id, auth.user_id).await?;
+    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        return Err(ApiError::Forbidden);
+    }
+    if !share_list(&state, playlist_id)
+        .await?
+        .iter()
+        .any(|s| s.user_id == user_id)
+    {
+        return Err(ApiError::NotFound);
+    }
+    playlists::remove_share(&state.pool, playlist_id, user_id)
+        .await
+        .map_err(ApiError::Database)?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
