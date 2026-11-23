@@ -70,6 +70,126 @@ async fn an_artists_albums_and_tracks_are_found_by_artist_id() {
     app.cleanup().await;
 }
 
+/// Owner, 2026-11-23: "Loading artists in Finamp seems really slow" (Sofi
+/// Tukker; the item lists of the artist page took 1 to 5 s in a library of
+/// about 67,000 tracks). The artist filter was checked track by track; it is
+/// found once, as a set, with the track artists indexed.
+#[tokio::test]
+async fn an_artist_page_stays_fast_in_a_large_library() {
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("Music", "music").await;
+    let sofi = app
+        .create_media_item("Sofi Tukker", "MusicArtist", lib, None)
+        .await;
+    let album = app
+        .create_media_item("Wet Tennis", "MusicAlbum", lib, Some(sofi))
+        .await;
+    for t in ["Purple Hat", "Summer In New York"] {
+        app.create_media_item(t, "Audio", lib, Some(album)).await;
+    }
+    // 600 other artists of one album of 100 tracks each, one track of which
+    // names Sofi Tukker as a guest.
+    sqlx::query(
+        r#"
+        WITH ar AS (
+            INSERT INTO media_items (item_type, name, sort_name, library_id)
+            SELECT 'MusicArtist', 'Artist ' || g, 'artist ' || g, $1 FROM generate_series(1, 600) g
+            RETURNING id, name
+        ), al AS (
+            INSERT INTO media_items (item_type, name, sort_name, library_id, parent_id)
+            SELECT 'MusicAlbum', ar.name || ' LP', lower(ar.name) || ' lp', $1, ar.id FROM ar
+            RETURNING id, name
+        )
+        INSERT INTO media_items (item_type, name, sort_name, library_id, parent_id, artists)
+        SELECT 'Audio', al.name || ' ' || g, lower(al.name) || ' ' || g, $1, al.id,
+               CASE WHEN al.name = 'Artist 7 LP' AND g = 3 THEN ARRAY['Artist 7', 'Sofi Tukker']
+                    ELSE ARRAY[split_part(al.name, ' LP', 1)] END
+        FROM al, generate_series(1, 100) g
+        "#,
+    )
+    .bind(lib)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_data (user_id, item_id, play_count, played) \
+         SELECT $1, id, 1 + (random() * 20)::int, true FROM media_items \
+         WHERE item_type = 'Audio' AND random() < 0.3",
+    )
+    .bind(uid)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    sqlx::query("ANALYZE media_items")
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+    // What Finamp's artist page asks for (finamp artist_content_provider.dart,
+    // 2026-11-20): within the music library, with its default fields, the
+    // albums, the albums it appears on, the five most played tracks of each
+    // kind of credit, and the track count.
+    let fields =
+        "ChildCount,DateCreated,DateLastMediaAdded,Etag,Genres,ParentId,ProviderIds,Tags,SortName";
+    let base = format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true");
+    let albums = vec!["Wet Tennis"];
+    let tracks = vec!["Artist 7 LP 3", "Purple Hat", "Summer In New York"];
+    let none: Vec<&str> = Vec::new();
+    let asks = [
+        (
+            format!(
+                "{base}&AlbumArtistIds={sofi}&IncludeItemTypes=MusicAlbum&SortBy=PremiereDate,SortName&SortOrder=Ascending&Fields={fields}"
+            ),
+            albums.clone(),
+        ),
+        (
+            format!(
+                "{base}&ArtistIds={sofi}&IncludeItemTypes=MusicAlbum&SortBy=PremiereDate,SortName&SortOrder=Ascending&Fields={fields}"
+            ),
+            albums.clone(),
+        ),
+        (
+            format!(
+                "{base}&AlbumArtistIds={sofi}&IncludeItemTypes=Audio&SortBy=PlayCount&SortOrder=Descending&Limit=5&Fields={fields}"
+            ),
+            tracks.clone(),
+        ),
+        (
+            format!(
+                "{base}&ArtistIds={sofi}&IncludeItemTypes=Audio&SortBy=PlayCount&SortOrder=Descending&Limit=5&Fields={fields}"
+            ),
+            tracks.clone(),
+        ),
+        (
+            format!("{base}&ArtistIds={sofi}&IncludeItemTypes=Audio&Limit=1&Fields="),
+            none.clone(),
+        ),
+    ];
+    let mut slow = Vec::new();
+    for (url, want) in &asks {
+        // Once to warm the caches, then timed.
+        app.get(url, &token).await;
+        let started = std::time::Instant::now();
+        let (status, body) = app.get(url, &token).await;
+        let took = started.elapsed();
+        eprintln!("ARTIST-PAGE {took:?} {url}");
+        assert_eq!(status, StatusCode::OK, "{body}");
+        if want.is_empty() {
+            assert_eq!(body["TotalRecordCount"], 3, "{url}: {body}");
+        } else {
+            let mut got = names(&body);
+            got.sort();
+            assert_eq!(&got, want, "{url}");
+        }
+        if took > std::time::Duration::from_millis(250) {
+            slow.push(format!("{took:?} {url}"));
+        }
+    }
+    assert!(slow.is_empty(), "over 60,000 tracks: {slow:#?}");
+    app.cleanup().await;
+}
+
 #[tokio::test]
 async fn filters_keep_only_played_favourite_or_resumable_items() {
     let app = common::TestApp::new().await;
