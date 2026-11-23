@@ -41,6 +41,7 @@ mod item_routes_tests;
 mod items_recursive_tests;
 mod latest_grouping_tests;
 mod latest_user_data_tests;
+mod legacy_routes_tests;
 mod library_access_tests;
 mod library_counts_tests;
 mod library_structure_tests;
