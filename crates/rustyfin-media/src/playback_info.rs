@@ -149,7 +149,8 @@ pub fn build_playback_info(
     stored_profile: Option<&DeviceProfile>,
 ) -> PlaybackInfoResponse {
     let media_streams: Vec<MediaStream> = streams.iter().map(stream_row_to_dto).collect();
-    let play_session_id = Uuid::new_v4().to_string();
+    // As Jellyfin: 32 hex digits (`Guid.ToString("N")`).
+    let play_session_id = Uuid::new_v4().simple().to_string();
 
     let profile = request
         .and_then(|r| r.device_profile.as_ref())

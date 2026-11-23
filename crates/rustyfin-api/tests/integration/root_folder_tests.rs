@@ -42,7 +42,7 @@ async fn the_root_folder_holds_the_libraries_a_user_may_see() {
     assert_eq!(status, StatusCode::OK, "{children}");
     let items = children["Items"].as_array().unwrap();
     assert_eq!(items.len(), 1, "{children}");
-    assert_eq!(items[0]["Id"], movies.to_string());
+    assert_eq!(items[0]["Id"], movies.simple().to_string());
     assert_eq!(items[0]["ParentId"], root_id);
     app.cleanup().await;
 }
@@ -84,7 +84,7 @@ async fn a_library_can_be_fetched_by_its_id() {
     ] {
         let (status, lib) = app.get(&path, &token).await;
         assert_eq!(status, StatusCode::OK, "{path}: {lib}");
-        assert_eq!(lib["Id"], music.to_string(), "{lib}");
+        assert_eq!(lib["Id"], music.simple().to_string(), "{lib}");
         assert_eq!(lib["Type"], "CollectionFolder");
         assert_eq!(lib["CollectionType"], "music");
         assert_eq!(lib["Name"], "Music");

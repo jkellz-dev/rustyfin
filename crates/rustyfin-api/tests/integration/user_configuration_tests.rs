@@ -38,8 +38,12 @@ async fn a_users_settings_are_kept_and_returned() {
         assert_eq!(c["SubtitleMode"], "Always", "{c}");
         assert_eq!(c["EnableNextEpisodeAutoPlay"], false, "{c}");
         assert_eq!(c["RememberAudioSelections"], false, "{c}");
-        assert_eq!(c["OrderedViews"], json!([lib.to_string()]), "{c}");
-        assert_eq!(c["MyMediaExcludes"], json!([lib.to_string()]), "{c}");
+        assert_eq!(c["OrderedViews"], json!([lib.simple().to_string()]), "{c}");
+        assert_eq!(
+            c["MyMediaExcludes"],
+            json!([lib.simple().to_string()]),
+            "{c}"
+        );
         assert_eq!(c["HidePlayedInLatest"], false, "{c}");
         assert!(
             c["CastReceiverId"].as_str().is_some_and(|s| !s.is_empty()),

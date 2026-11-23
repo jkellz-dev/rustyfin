@@ -146,7 +146,7 @@ async fn the_change_feed_carries_only_what_changed_where_the_user_can_see() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|i| i["id"].as_str() == Some(&series.to_string()))
+        .find(|i| i["id"].as_str() == Some(&series.simple().to_string()))
         .cloned()
         .unwrap();
     assert_eq!(entry["type"], "Series", "{first}");
@@ -262,7 +262,7 @@ async fn administrators_see_which_users_are_servers() {
         all.as_array()
             .unwrap_or_else(|| panic!("{all}"))
             .iter()
-            .find(|p| p["id"] == id.to_string())
+            .find(|p| p["id"] == id.simple().to_string())
             .map(|p| p["may_link"].clone())
     };
     assert_eq!(of(server), Some(json!(true)), "{all}");

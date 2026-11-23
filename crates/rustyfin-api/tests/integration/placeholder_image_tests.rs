@@ -141,9 +141,15 @@ async fn real_art_wins_over_the_placeholder() {
     let (_, body) = app
         .get("/Items?Recursive=true&IncludeItemTypes=Movie", &token)
         .await;
-    assert_eq!(first(&body)["ImageTags"]["Primary"], real_tag.to_string());
+    assert_eq!(
+        first(&body)["ImageTags"]["Primary"],
+        real_tag.simple().to_string()
+    );
     let (_, single) = app.get(&format!("/Items/{film}"), &token).await;
-    assert_eq!(single["ImageTags"]["Primary"], real_tag.to_string());
+    assert_eq!(
+        single["ImageTags"]["Primary"],
+        real_tag.simple().to_string()
+    );
     app.cleanup().await;
 }
 

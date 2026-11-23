@@ -45,7 +45,7 @@ async fn get_users_me_returns_authenticated_user() {
 
     assert_eq!(
         body["Id"].as_str().unwrap(),
-        user_id.to_string(),
+        user_id.simple().to_string(),
         "Id should match the authenticated user"
     );
     assert_eq!(
@@ -108,7 +108,7 @@ async fn get_item_by_id_returns_detail() {
 
     assert_eq!(
         body["Id"].as_str().unwrap(),
-        item_id.to_string(),
+        item_id.simple().to_string(),
         "Id should match the requested item"
     );
     assert_eq!(

@@ -41,7 +41,7 @@ fn find(items: &Value, id: Uuid) -> &Value {
         .as_array()
         .unwrap()
         .iter()
-        .find(|i| i["Id"] == id.to_string())
+        .find(|i| i["Id"] == id.simple().to_string())
         .unwrap_or_else(|| panic!("{id} not in {items}"))
 }
 
@@ -176,7 +176,7 @@ async fn continue_watching_keeps_to_video_and_shows_in_progress() {
         s.sort();
         s
     };
-    let mut both = vec![started.to_string(), untouched.to_string()];
+    let mut both = vec![started.simple().to_string(), untouched.simple().to_string()];
     both.sort();
     assert_eq!(shows(&next), both, "{next}");
     let (_, next) = app

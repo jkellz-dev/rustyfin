@@ -26,7 +26,7 @@ async fn a_playlist_is_shared_and_edited_like_jellyfin() {
     let (status, made) = app
         .post(
             "/Playlists",
-            &json!({"Name": "Mix", "Ids": [one], "MediaType": "Audio", "UserId": owner_id}),
+            &json!({"Name": "Mix", "Ids": [one], "MediaType": "Audio", "UserId": owner_id.simple().to_string()}),
             &owner,
         )
         .await;
@@ -37,7 +37,7 @@ async fn a_playlist_is_shared_and_edited_like_jellyfin() {
     assert_eq!(status, StatusCode::OK, "{list}");
     assert_eq!(
         list,
-        json!({"OpenAccess": false, "Shares": [], "ItemIds": [one]})
+        json!({"OpenAccess": false, "Shares": [], "ItemIds": [one.simple().to_string()]})
     );
 
     // Someone it is not shared with does not see it.
@@ -55,7 +55,10 @@ async fn a_playlist_is_shared_and_edited_like_jellyfin() {
     let (status, _) = app.get(&format!("/Playlists/{id}"), &friend).await;
     assert_eq!(status, StatusCode::OK);
     let (_, users) = app.get(&format!("/Playlists/{id}/Users"), &owner).await;
-    assert_eq!(users, json!([{"UserId": friend_id, "CanEdit": false}]));
+    assert_eq!(
+        users,
+        json!([{"UserId": friend_id.simple().to_string(), "CanEdit": false}])
+    );
     // Only the owner lists who it is shared with.
     let (status, _) = app.get(&format!("/Playlists/{id}/Users"), &friend).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -63,11 +66,17 @@ async fn a_playlist_is_shared_and_edited_like_jellyfin() {
         .get(&format!("/Playlists/{id}/Users/{friend_id}"), &friend)
         .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(me, json!({"UserId": friend_id, "CanEdit": false}));
+    assert_eq!(
+        me,
+        json!({"UserId": friend_id.simple().to_string(), "CanEdit": false})
+    );
     let (_, me) = app
         .get(&format!("/Playlists/{id}/Users/{owner_id}"), &owner)
         .await;
-    assert_eq!(me, json!({"UserId": owner_id, "CanEdit": true}));
+    assert_eq!(
+        me,
+        json!({"UserId": owner_id.simple().to_string(), "CanEdit": true})
+    );
 
     // A reader may not change it.
     let (status, _) = app
@@ -87,7 +96,7 @@ async fn a_playlist_is_shared_and_edited_like_jellyfin() {
                 "Name": "Renamed",
                 "Ids": [two],
                 "IsPublic": true,
-                "Users": [{"UserId": friend_id, "CanEdit": true}],
+                "Users": [{"UserId": friend_id.simple().to_string(), "CanEdit": true}],
             }),
             &owner,
         )
@@ -95,10 +104,10 @@ async fn a_playlist_is_shared_and_edited_like_jellyfin() {
     assert_eq!(status, StatusCode::NO_CONTENT, "{out}");
     let (_, list) = app.get(&format!("/Playlists/{id}"), &stranger).await;
     assert_eq!(list["OpenAccess"], true, "{list}");
-    assert_eq!(list["ItemIds"], json!([two]), "{list}");
+    assert_eq!(list["ItemIds"], json!([two.simple().to_string()]), "{list}");
     assert_eq!(
         list["Shares"],
-        json!([{"UserId": friend_id, "CanEdit": true}])
+        json!([{"UserId": friend_id.simple().to_string(), "CanEdit": true}])
     );
     let name: (String,) = sqlx::query_as("SELECT name FROM playlists WHERE id = $1")
         .bind(id.parse::<Uuid>().unwrap())

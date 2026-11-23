@@ -1090,7 +1090,7 @@ async fn users_list_returns_seeded_users() {
     assert!(
         users
             .iter()
-            .any(|u| u["Id"].as_str() == Some(&user_id.to_string())),
+            .any(|u| u["Id"].as_str() == Some(&user_id.simple().to_string())),
         "seeded user should appear in the user list"
     );
 

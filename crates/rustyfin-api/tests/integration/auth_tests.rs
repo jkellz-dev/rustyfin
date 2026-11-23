@@ -110,7 +110,7 @@ async fn sessions_as_non_admin_returns_only_own() {
         .expect("UserId should be a string");
     assert_eq!(
         returned_user_id,
-        user_id.to_string(),
+        user_id.simple().to_string(),
         "returned session UserId should match the regular user's ID"
     );
 

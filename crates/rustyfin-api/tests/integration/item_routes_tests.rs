@@ -42,7 +42,7 @@ async fn theme_songs_for_existing_item_is_empty_result_owned_by_item() {
     assert_eq!(body["Items"], serde_json::json!([]));
     assert_eq!(body["TotalRecordCount"], 0);
     assert_eq!(body["StartIndex"], 0);
-    assert_eq!(body["OwnerId"], item_id.to_string());
+    assert_eq!(body["OwnerId"], item_id.simple().to_string());
     app.cleanup().await;
 }
 
@@ -59,7 +59,7 @@ async fn theme_videos_for_existing_item_is_empty_result_owned_by_item() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["Items"], serde_json::json!([]));
     assert_eq!(body["TotalRecordCount"], 0);
-    assert_eq!(body["OwnerId"], item_id.to_string());
+    assert_eq!(body["OwnerId"], item_id.simple().to_string());
     app.cleanup().await;
 }
 
@@ -81,7 +81,11 @@ async fn theme_media_has_all_three_results() {
     ] {
         assert_eq!(body[key]["Items"], serde_json::json!([]), "{key}.Items");
         assert_eq!(body[key]["TotalRecordCount"], 0, "{key}.TotalRecordCount");
-        assert_eq!(body[key]["OwnerId"], item_id.to_string(), "{key}.OwnerId");
+        assert_eq!(
+            body[key]["OwnerId"],
+            item_id.simple().to_string(),
+            "{key}.OwnerId"
+        );
     }
     app.cleanup().await;
 }
@@ -164,8 +168,11 @@ async fn ancestors_walk_the_parent_chain_nearest_first() {
         .iter()
         .map(|a| a["Id"].as_str().expect("ancestor has an Id"))
         .collect();
-    assert_eq!(ids[..2], [season.to_string(), series.to_string()]);
-    assert_eq!(ids[2], lib_id.to_string());
+    assert_eq!(
+        ids[..2],
+        [season.simple().to_string(), series.simple().to_string()]
+    );
+    assert_eq!(ids[2], lib_id.simple().to_string());
     assert_eq!(ids.len(), 4, "{body}");
     assert_eq!(ancestors[0]["Type"], "Season");
     assert_eq!(ancestors[1]["Type"], "Series");
@@ -190,8 +197,11 @@ async fn ancestors_do_not_include_the_item_itself() {
         .iter()
         .map(|a| a["Id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids[0], series.to_string());
-    assert!(!ids.contains(&season.to_string().as_str()), "{body}");
+    assert_eq!(ids[0], series.simple().to_string());
+    assert!(
+        !ids.contains(&season.simple().to_string().as_str()),
+        "{body}"
+    );
     app.cleanup().await;
 }
 

@@ -121,7 +121,7 @@ async fn a_track_names_its_album_and_album_artist() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let track = by_name(&body, "A");
     assert_eq!(track["Album"], "Record", "{track}");
-    assert_eq!(track["AlbumId"], w.album.to_string(), "{track}");
+    assert_eq!(track["AlbumId"], w.album.simple().to_string(), "{track}");
     assert_eq!(
         track["AlbumPrimaryImageTag"], "placeholder-square-1",
         "{track}"
@@ -169,8 +169,8 @@ async fn tagged_artists_are_listed_and_linked_where_a_folder_exists() {
     assert_eq!(
         track["ArtistItems"],
         json!([
-            { "Name": "Band", "Id": w.band.to_string() },
-            { "Name": "Guest", "Id": w.guest.to_string() }
+            { "Name": "Band", "Id": w.band.simple().to_string() },
+            { "Name": "Guest", "Id": w.guest.simple().to_string() }
         ]),
         "an artist without a folder has no item to link: {track}"
     );
@@ -191,7 +191,7 @@ async fn an_album_names_its_artist_and_totals_its_tracks() {
         .await;
     let album = by_name(&body, "Record");
     assert_eq!(album["AlbumArtist"], "Band", "{album}");
-    let band = json!([{ "Name": "Band", "Id": w.band.to_string() }]);
+    let band = json!([{ "Name": "Band", "Id": w.band.simple().to_string() }]);
     assert_eq!(album["AlbumArtists"], band);
     assert_eq!(album["ArtistItems"], band);
     assert_eq!(album["Artists"], json!(["Band"]));

@@ -139,7 +139,7 @@ async fn media_folders_list_every_library_as_a_collection_folder() {
     let ids: Vec<&str> = items.iter().map(|i| i["Id"].as_str().unwrap()).collect();
     for lib in [w.movies, w.shows, w.music] {
         assert!(
-            ids.contains(&lib.to_string().as_str()),
+            ids.contains(&lib.simple().to_string().as_str()),
             "{lib} not in {ids:?}"
         );
     }
@@ -173,7 +173,7 @@ async fn media_folders_hide_libraries_the_user_may_not_see() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let items = body["Items"].as_array().expect("Items");
     assert_eq!(items.len(), 1, "{body}");
-    assert_eq!(items[0]["Id"], w.music.to_string());
+    assert_eq!(items[0]["Id"], w.music.simple().to_string());
     app.cleanup().await;
 }
 

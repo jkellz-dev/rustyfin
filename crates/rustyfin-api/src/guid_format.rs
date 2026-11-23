@@ -5,6 +5,11 @@
 //! hyphenated, in many places; rather than mark each, every JSON answer has
 //! its strings that are exactly a hyphenated UUID rewritten. Requests take
 //! either form (`Uuid` parses both).
+//!
+//! Strings that only look like ids keep their dashes, by key: what a client
+//! chose (`DeviceId`, `PlaySessionId`, `LiveStreamId`, echoed as sent) and
+//! MusicBrainz ids (`MusicBrainzAlbum`, ... in `ProviderIds`), which Jellyfin
+//! writes hyphenated as MusicBrainz does.
 
 use std::borrow::Cow;
 
@@ -50,6 +55,34 @@ pub fn simplify_str(text: &str) -> Cow<'_, str> {
     }
 }
 
+/// Keys whose values keep their dashes (see the module notes).
+fn keeps_dashes(key: &[u8]) -> bool {
+    matches!(key, b"DeviceId" | b"PlaySessionId" | b"LiveStreamId")
+        || key.starts_with(b"MusicBrainz")
+}
+
+/// The object key a JSON string starting at `quote` is the value of, if any.
+fn key_before(json: &[u8], quote: usize) -> Option<&[u8]> {
+    let mut j = quote;
+    let skip_ws = |mut j: usize| {
+        while j > 0 && json[j - 1].is_ascii_whitespace() {
+            j -= 1;
+        }
+        j
+    };
+    j = skip_ws(j);
+    if j == 0 || json[j - 1] != b':' {
+        return None;
+    }
+    j = skip_ws(j - 1);
+    if j == 0 || json[j - 1] != b'"' {
+        return None;
+    }
+    let end = j - 1;
+    let start = json[..end].iter().rposition(|b| *b == b'"')? + 1;
+    Some(&json[start..end])
+}
+
 fn is_hyphenated(s: &[u8]) -> bool {
     s.len() == 36
         && s.iter().enumerate().all(|(i, b)| match i {
@@ -68,6 +101,7 @@ pub fn simplify(json: &[u8]) -> Cow<'_, [u8]> {
             && (i == 0 || json[i - 1] != b'\\')
             && json[i + 37] == b'"'
             && is_hyphenated(&json[i + 1..i + 37])
+            && !key_before(json, i).is_some_and(keeps_dashes)
         {
             let o = out.get_or_insert_with(|| Vec::with_capacity(json.len()));
             o.extend_from_slice(&json[copied..=i]);
@@ -113,6 +147,9 @@ mod tests {
             r#"{"Name":"7c9e6679-7425-40de-944b-e07fc1f90ae7 (live)"}"#,
             r#"{"Id":"7c9e6679742540de944be07fc1f90ae7"}"#,
             r#"{"Note":"say \"7c9e6679-7425-40de-944b-e07fc1f90ae7\""}"#,
+            r#"{"DeviceId": "7c9e6679-7425-40de-944b-e07fc1f90ae7"}"#,
+            r#"{"PlaySessionId":"7c9e6679-7425-40de-944b-e07fc1f90ae7"}"#,
+            r#"{"ProviderIds":{"MusicBrainzAlbum":"7c9e6679-7425-40de-944b-e07fc1f90ae7"}}"#,
             "",
             "\"\"",
         ] {

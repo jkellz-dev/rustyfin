@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Migrations complete");
 
     // Generate a stable server ID (based on hostname or random)
-    let server_id = uuid::Uuid::new_v4().to_string();
+    let server_id = uuid::Uuid::new_v4().simple().to_string();
 
     // Initialize session manager
     let session_manager = Arc::new(SessionManager::new(db_pool.clone()));

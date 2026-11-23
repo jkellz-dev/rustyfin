@@ -82,7 +82,7 @@ async fn a_mix_plays_the_tracks_that_share_the_seeds_genre() {
         let got = ids(&body);
         for id in [one, two, other] {
             assert!(
-                got.contains(&id.to_string()),
+                got.contains(&id.simple().to_string()),
                 "{path}: {id} missing from {body}"
             );
         }
@@ -128,7 +128,7 @@ async fn a_mix_leaves_out_libraries_the_user_may_not_see() {
         .unwrap();
     let (status, body) = app.get(&format!("/Items/{seed}/InstantMix"), &token).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(ids(&body), vec![seed.to_string()], "{body}");
+    assert_eq!(ids(&body), vec![seed.simple().to_string()], "{body}");
     let (status, _) = app
         .get(&format!("/Items/{hidden}/InstantMix"), &token)
         .await;
@@ -151,7 +151,7 @@ async fn items_list_their_genres_with_ids() {
     assert_eq!(items.len(), 2, "{body}");
     assert_eq!(items[0]["Name"], "Horror");
     let horror = Uuid::new_v5(&Uuid::NAMESPACE_OID, b"Horror");
-    assert_eq!(items[0]["Id"], horror.to_string());
+    assert_eq!(items[0]["Id"], horror.simple().to_string());
     // The same id the genre list gives.
     let (_, genres) = app.get("/Genres", &token).await;
     let listed = genres["Items"]

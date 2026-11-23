@@ -45,7 +45,11 @@ async fn similar_answers_under_every_type() {
     }
     // Albums are folders; a similar album is still found.
     let (_, body) = app.get(&format!("/Albums/{album}/Similar"), &token).await;
-    assert_eq!(body["Items"][0]["Id"], other_album.to_string(), "{body}");
+    assert_eq!(
+        body["Items"][0]["Id"],
+        other_album.simple().to_string(),
+        "{body}"
+    );
     app.cleanup().await;
 }
 
@@ -80,7 +84,7 @@ async fn grouping_options_answer_under_user_views() {
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body[0]["Name"], "Movies", "{body}");
-    assert_eq!(body[0]["Id"], lib.to_string());
+    assert_eq!(body[0]["Id"], lib.simple().to_string());
     app.cleanup().await;
 }
 
@@ -94,7 +98,7 @@ async fn an_artist_is_found_by_name() {
         .await;
     let (status, body) = app.get("/Artists/The%20Band", &token).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["Id"], artist.to_string());
+    assert_eq!(body["Id"], artist.simple().to_string());
     assert_eq!(body["Type"], "MusicArtist");
     let (status, _) = app.get("/Artists/Nobody", &token).await;
     assert_eq!(status, StatusCode::NOT_FOUND);

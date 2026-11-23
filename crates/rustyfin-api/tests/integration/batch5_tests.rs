@@ -48,7 +48,7 @@ async fn stats_list_each_library_with_its_count_and_last_scan() {
     let libs = body["Libraries"].as_array().expect("Libraries");
     let find = |id: Uuid| {
         libs.iter()
-            .find(|l| l["Id"] == id.to_string())
+            .find(|l| l["Id"] == id.simple().to_string())
             .unwrap_or_else(|| panic!("{id} missing from {body}"))
     };
     let m = find(movies);

@@ -280,7 +280,7 @@ async fn rename_keeps_the_library_id() {
     .await;
 
     let (_, list) = app.get("/Library/VirtualFolders", &token).await;
-    assert_eq!(find(&list, "Renamed")["ItemId"], id.to_string());
+    assert_eq!(find(&list, "Renamed")["ItemId"], id.simple().to_string());
     app.cleanup().await;
 }
 

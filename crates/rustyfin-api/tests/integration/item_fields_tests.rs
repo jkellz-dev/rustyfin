@@ -94,7 +94,7 @@ async fn shows_and_music_carry_their_parents_and_totals() {
 
     let (_, s) = app.get(&format!("/Items/{season}"), &token).await;
     assert_eq!(s["SeriesName"], "Show", "{s}");
-    assert_eq!(s["SeriesId"], show.to_string(), "{s}");
+    assert_eq!(s["SeriesId"], show.simple().to_string(), "{s}");
 
     let (_, a) = app.get(&format!("/Items/{artist}"), &token).await;
     assert_eq!(a["SongCount"], 1, "{a}");
@@ -108,7 +108,7 @@ async fn shows_and_music_carry_their_parents_and_totals() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(up[0]["Type"], "Season", "{up}");
     assert_eq!(up[0]["SeriesName"], "Show", "{up}");
-    assert_eq!(up[0]["SeriesId"], show.to_string(), "{up}");
+    assert_eq!(up[0]["SeriesId"], show.simple().to_string(), "{up}");
 
     let (_, up) = app.get(&format!("/Items/{track}/Ancestors"), &token).await;
     let record = &up[0];

@@ -25,9 +25,9 @@ async fn a_top_level_item_names_its_library_as_parent() {
     let (_, list) = app
         .get("/Items?Recursive=true&IncludeItemTypes=Movie", &token)
         .await;
-    assert_eq!(first(&list)["ParentId"], lib.to_string(), "{list}");
+    assert_eq!(first(&list)["ParentId"], lib.simple().to_string(), "{list}");
     let (_, single) = app.get(&format!("/Items/{id}"), &token).await;
-    assert_eq!(single["ParentId"], lib.to_string(), "{single}");
+    assert_eq!(single["ParentId"], lib.simple().to_string(), "{single}");
     app.cleanup().await;
 }
 
@@ -48,7 +48,7 @@ async fn a_collection_folder_has_a_parent_a_count_and_user_data() {
         let (status, body) = app.get(&path, &token).await;
         assert_eq!(status, StatusCode::OK, "{path}");
         let folder = first(&body);
-        assert_eq!(folder["Id"], lib.to_string(), "{path}");
+        assert_eq!(folder["Id"], lib.simple().to_string(), "{path}");
         let parent = folder["ParentId"]
             .as_str()
             .unwrap_or_else(|| panic!("{path}: ParentId missing: {folder}"))
@@ -107,7 +107,7 @@ async fn a_season_names_its_series() {
     let (status, body) = app.get(&format!("/Shows/{series}/Seasons"), &token).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let season = first(&body);
-    assert_eq!(season["SeriesId"], series.to_string(), "{season}");
+    assert_eq!(season["SeriesId"], series.simple().to_string(), "{season}");
     assert_eq!(season["SeriesName"], "Show", "{season}");
     app.cleanup().await;
 }

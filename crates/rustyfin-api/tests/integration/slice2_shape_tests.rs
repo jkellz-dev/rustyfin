@@ -95,7 +95,7 @@ async fn grouping_options_name_the_libraries_a_user_may_group() {
     let options = body.as_array().expect("an array");
     assert_eq!(options.len(), 1, "{body}");
     assert_eq!(options[0]["Name"], "Movies");
-    assert_eq!(options[0]["Id"], lib.to_string());
+    assert_eq!(options[0]["Id"], lib.simple().to_string());
     app.cleanup().await;
 }
 
@@ -111,8 +111,8 @@ async fn search_hints_carry_item_id_media_type_and_artists() {
     let (status, body) = app.get("/Search/Hints?searchTerm=Searchable", &token).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let hint = &body["SearchHints"][0];
-    assert_eq!(hint["Id"], id.to_string(), "{body}");
-    assert_eq!(hint["ItemId"], id.to_string(), "{hint}");
+    assert_eq!(hint["Id"], id.simple().to_string(), "{body}");
+    assert_eq!(hint["ItemId"], id.simple().to_string(), "{hint}");
     assert_eq!(hint["MediaType"], "Video", "{hint}");
     assert_eq!(hint["Artists"], json!([]), "{hint}");
     app.cleanup().await;
@@ -166,7 +166,7 @@ async fn seasons_in_a_plain_list_name_their_series() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let season = first(&body);
     assert_eq!(season["Type"], "Season", "{season}");
-    assert_eq!(season["SeriesId"], series.to_string(), "{season}");
+    assert_eq!(season["SeriesId"], series.simple().to_string(), "{season}");
     assert_eq!(season["SeriesName"], "Show", "{season}");
     app.cleanup().await;
 }
@@ -202,8 +202,8 @@ async fn next_up_offers_the_first_episode_of_a_show_never_started() {
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let next = first(&body);
-    assert_eq!(next["Id"], e1.to_string(), "{body}");
-    assert_eq!(next["SeriesId"], series.to_string(), "{next}");
+    assert_eq!(next["Id"], e1.simple().to_string(), "{body}");
+    assert_eq!(next["SeriesId"], series.simple().to_string(), "{next}");
 
     // Jellyfin's DisableFirstEpisode=true hides shows the user never started.
     let (_, body) = app
