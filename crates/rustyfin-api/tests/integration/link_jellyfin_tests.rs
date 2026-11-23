@@ -452,6 +452,18 @@ async fn a_linked_jellyfin_library_merges_into_the_local_one() {
     assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
     assert_eq!(list["TotalRecordCount"], 2, "{list}");
 
+    // Owner, 2026-11-23: library counts looked inflated. A library's card
+    // counts titles, as its list does, not every copy of them.
+    let (_, stats) = app.get("/System/Stats", &token).await;
+    let card = stats["Libraries"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{stats}"))
+        .iter()
+        .find(|l| same(&l["Id"], lib))
+        .cloned()
+        .unwrap_or_else(|| panic!("{stats}"));
+    assert_eq!(card["ItemCount"], 2, "{card}");
+
     // The shared film has both copies, the friend's 2160p first and named
     // after the friend.
     let (_, item) = app
@@ -913,6 +925,25 @@ async fn a_friends_library_without_a_local_one_gets_its_own() {
         )
         .await;
     assert_eq!(names(&list), vec!["Beach", "Birthday 2019"], "{list}");
+
+    // Owner, 2026-11-23: the Libraries page said such a library was "Never
+    // scanned" while its titles played. The sync is what fills it, so a sync
+    // records when it finished and how long it took; the card says it is a
+    // link's. A library that only takes in a friend's copies keeps its scans.
+    let (_, stats) = app.get("/System/Stats", &token).await;
+    let cards = stats["Libraries"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{stats}"));
+    let own = cards
+        .iter()
+        .find(|l| l["Name"] == "Home Videos · Alex")
+        .unwrap_or_else(|| panic!("{stats}"));
+    assert!(own["LastScanned"].is_string(), "{own}");
+    assert!(own["LastScanDurationMs"].is_number(), "{own}");
+    assert_eq!(own["Linked"], true, "{own}");
+    for other in cards.iter().filter(|l| l["Name"] != "Home Videos · Alex") {
+        assert_eq!(other["Linked"], false, "{other}");
+    }
 
     // It has no folders: a scan of it leaves the friend's videos alone.
     let id = Uuid::parse_str(&shorts).unwrap();
