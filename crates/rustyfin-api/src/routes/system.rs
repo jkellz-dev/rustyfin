@@ -180,6 +180,7 @@ pub async fn get_stats(
                 item_count: l.item_count,
                 last_scanned: l.last_scanned_at,
                 last_scan_duration_ms: l.last_scan_duration_ms,
+                linked: l.linked,
             })
             .collect(),
         health: Some(health),

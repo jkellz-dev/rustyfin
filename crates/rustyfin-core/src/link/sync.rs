@@ -89,6 +89,7 @@ async fn sync_library(
     stored: &Stored<'_>,
     progress: &mut Progress,
 ) -> anyhow::Result<()> {
+    let started = std::time::Instant::now();
     let client = &link.client;
     let (remote_id, local_library, shows) = target(pool, link, map, remote_libraries).await?;
     let types = if shows {
@@ -128,6 +129,10 @@ async fn sync_library(
                 }
             }
         }
+    }
+    // A library of its own has no folders to scan: this sync is what fills it.
+    if map.local.is_none() {
+        rustyfin_db::repo::libraries::mark_scanned(pool, local_library, started.elapsed()).await?;
     }
     Ok(())
 }
@@ -188,15 +193,21 @@ fn plain(id: &str) -> String {
 /// busy one fetches only what changed. The first sync (or one after the
 /// friend refused the cursor) takes everything and removes what it lacks.
 async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport> {
+    let started = std::time::Instant::now();
     let client = &link.client;
     let remote_libraries = client.libraries().await?;
     let mut report = SyncReport::default();
     // The friend's library -> (local library, whether it holds shows).
     let mut targets: HashMap<String, (Uuid, bool)> = HashMap::new();
+    // Libraries of their own, which only this sync fills.
+    let mut own: Vec<Uuid> = Vec::new();
     for map in &link.settings.libraries {
         match target(pool, link, map, &remote_libraries).await {
             Ok((remote, local, shows)) => {
                 targets.insert(plain(&remote), (local, shows));
+                if map.local.is_none() {
+                    own.push(local);
+                }
             }
             Err(e) => report.errors.push(format!("{}: {e:#}", map.remote)),
         }
@@ -280,6 +291,9 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
     // With a mapping failing, its changes come again next time.
     if report.errors.is_empty() {
         links::set_catalog_cursor(pool, link.id, &feed.cursor).await?;
+        for library in own {
+            rustyfin_db::repo::libraries::mark_scanned(pool, library, started.elapsed()).await?;
+        }
     }
     report.merged = links::merge(pool).await?;
     Ok(report)

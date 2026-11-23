@@ -666,6 +666,9 @@ pub struct LibraryStats {
     pub last_scanned: Option<chrono::DateTime<chrono::Utc>>,
     /// How long it took, in milliseconds.
     pub last_scan_duration_ms: Option<i64>,
+    /// A library a link made and fills: its "scan" is the link's sync.
+    #[serde(default)]
+    pub linked: bool,
 }
 
 /// Chapter info for a media item.

@@ -43,6 +43,30 @@ pub fn scan_line(iso: Option<&str>, duration_ms: Option<i64>) -> String {
     }
 }
 
+/// The libraries page's line for a library a link fills: its last sync.
+pub fn sync_line(iso: Option<&str>, duration_ms: Option<i64>) -> String {
+    let when = match iso {
+        Some(t) if t.len() >= 16 => format!("Last synced {} UTC", t[..16].replace('T', " ")),
+        _ => "Not synced yet".to_string(),
+    };
+    match (iso, duration_ms) {
+        (Some(_), Some(ms)) => format!("{when}, took {}", format_duration(ms)),
+        _ => when,
+    }
+}
+
+/// A dashboard card's line for a library a link fills.
+pub fn sync_card_line(age_seconds: Option<i64>, duration_ms: Option<i64>) -> String {
+    let when = match age_seconds {
+        Some(s) => format!("Synced {}", ago_label(s.max(0))),
+        None => "Not synced yet".to_string(),
+    };
+    match (age_seconds, duration_ms) {
+        (Some(_), Some(ms)) => format!("{when}, took {}", format_duration(ms)),
+        _ => when,
+    }
+}
+
 /// A dashboard library card's scan line: how long ago, and how long it took.
 pub fn scan_card_line(age_seconds: Option<i64>, duration_ms: Option<i64>) -> String {
     let when = last_scan_label(age_seconds);
@@ -321,6 +345,20 @@ mod tests {
             super::scan_card_line(Some(120), Some(42_000)),
             "Scanned 2 min ago, took 42 s"
         );
+    }
+
+    #[test]
+    fn a_library_a_link_fills_says_when_it_synced() {
+        assert_eq!(
+            super::sync_line(Some("2026-11-23T06:21:25.9Z"), Some(14_000)),
+            "Last synced 2026-11-23 06:21 UTC, took 14 s"
+        );
+        assert_eq!(super::sync_line(None, None), "Not synced yet");
+        assert_eq!(
+            super::sync_card_line(Some(300), Some(14_000)),
+            "Synced 5 min ago, took 14 s"
+        );
+        assert_eq!(super::sync_card_line(None, None), "Not synced yet");
     }
 
     #[test]

@@ -113,7 +113,8 @@ async fn collect(state: &AppState) {
 
     let counts: Vec<(String, String, i64)> = sqlx::query_as(
         "SELECT l.name, m.item_type, COUNT(*) FROM media_items m \
-         JOIN libraries l ON l.id = m.library_id GROUP BY l.name, m.item_type",
+         JOIN libraries l ON l.id = m.library_id \
+         WHERE m.owner_id IS NULL GROUP BY l.name, m.item_type",
     )
     .fetch_all(&state.pool)
     .await

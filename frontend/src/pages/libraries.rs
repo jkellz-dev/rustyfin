@@ -544,11 +544,21 @@ pub fn Libraries() -> View {
                                         view=move |lib| {
                                             let name = lib.name.clone();
                                             let ctype = lib.collection_type.clone().unwrap_or_else(|| "unknown".to_string());
-                                            let locations = lib.locations.join(", ");
+                                            // A library a link made has no folders: the link fills it.
+                                            let linked = lib.locations.is_empty();
+                                            let locations = if linked {
+                                                "Filled by a linked server".to_string()
+                                            } else {
+                                                lib.locations.join(", ")
+                                            };
                                             let scan_id = lib.item_id.clone();
                                             let scanning = dashboard_view::is_scanning(lib.refresh_status.as_deref());
                                             let progress = lib.refresh_progress;
-                                            let last = dashboard_view::scan_line(lib.last_scanned.as_deref(), lib.last_scan_duration_ms);
+                                            let last = if linked {
+                                                dashboard_view::sync_line(lib.last_scanned.as_deref(), lib.last_scan_duration_ms)
+                                            } else {
+                                                dashboard_view::scan_line(lib.last_scanned.as_deref(), lib.last_scan_duration_ms)
+                                            };
                                             let del_lib = lib.clone();
                                             let edit_lib = lib.clone();
                                             view! {
@@ -572,7 +582,8 @@ pub fn Libraries() -> View {
                                                                 }
                                                             ) { "Edit" }
                                                             button(class="btn btn-secondary btn-sm",
-                                                                disabled=scanning,
+                                                                // Nothing to scan: the link syncs it (Links page).
+                                                                disabled=scanning || linked,
                                                                 on:click={
                                                                     let scan_id = scan_id.clone();
                                                                     move |_| on_scan(scan_id.clone())

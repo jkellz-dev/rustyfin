@@ -31,17 +31,22 @@ pub struct LibraryStatRow {
     pub id: Uuid,
     pub name: String,
     pub library_type: String,
-    /// Films, episodes, tracks and other videos (not shows, seasons or folders).
+    /// Films, episodes, tracks and other videos (not shows, seasons or folders),
+    /// each once: not its other versions (a friend's copies) or extras.
     pub item_count: i64,
     pub last_scanned_at: Option<DateTime<Utc>>,
     pub last_scan_duration_ms: Option<i64>,
+    /// A library a link made and fills (no folders of its own).
+    pub linked: bool,
 }
 
 /// Every library with its media count and last finished scan, by name.
 pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
     sqlx::query_as::<_, LibraryStatRow>(
         "SELECT l.id, l.name, l.library_type, l.last_scanned_at, l.last_scan_duration_ms, \
+                l.link_id IS NOT NULL AS linked, \
                 (SELECT COUNT(*) FROM visible_media_items m WHERE m.library_id = l.id \
+                   AND m.owner_id IS NULL \
                    AND m.item_type IN ('Movie', 'Episode', 'Audio', 'MusicVideo', 'Video')) \
                   AS item_count \
          FROM libraries l ORDER BY l.name",
