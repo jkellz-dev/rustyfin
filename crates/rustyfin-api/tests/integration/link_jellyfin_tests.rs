@@ -42,6 +42,9 @@ struct Remote {
     playback_bodies: Vec<Value>,
     /// The server is down: everything answers 503.
     down: bool,
+    /// The friend's collections (BoxSets), and the films of each by id.
+    box_sets: Vec<Value>,
+    box_children: HashMap<String, Vec<String>>,
 }
 
 type Shared = Arc<Mutex<Remote>>;
@@ -137,45 +140,55 @@ async fn items(
         .chain(&r.shows)
         .cloned()
         .collect();
-    let (films, total): (Vec<Value>, usize) = if let Some(ids) = q.get("Ids") {
-        let ids: Vec<&str> = ids.split(',').collect();
-        let found: Vec<Value> = everything
-            .into_iter()
-            .filter(|f| ids.contains(&f["Id"].as_str().unwrap()))
-            .collect();
-        let n = found.len();
-        (found, n)
-    } else {
-        let library = match q.get("ParentId").map(String::as_str) {
-            Some("lib1") => &r.films,
-            Some("lib2") => &r.videos,
-            Some("lib3") => &r.shows,
-            other => panic!("no library {other:?}"),
+    let (films, total): (Vec<Value>, usize) =
+        if q.get("IncludeItemTypes").map(String::as_str) == Some("BoxSet") {
+            (r.box_sets.clone(), r.box_sets.len())
+        } else if let Some(children) = q.get("ParentId").and_then(|p| r.box_children.get(p)) {
+            let found: Vec<Value> = everything
+                .into_iter()
+                .filter(|f| children.iter().any(|c| f["Id"] == c.as_str()))
+                .collect();
+            let n = found.len();
+            (found, n)
+        } else if let Some(ids) = q.get("Ids") {
+            let ids: Vec<&str> = ids.split(',').collect();
+            let found: Vec<Value> = everything
+                .into_iter()
+                .filter(|f| ids.contains(&f["Id"].as_str().unwrap()))
+                .collect();
+            let n = found.len();
+            (found, n)
+        } else {
+            let library = match q.get("ParentId").map(String::as_str) {
+                Some("lib1") => &r.films,
+                Some("lib2") => &r.videos,
+                Some("lib3") => &r.shows,
+                other => panic!("no library {other:?}"),
+            };
+            let types: Vec<&str> = q
+                .get("IncludeItemTypes")
+                .map(|t| t.split(',').collect())
+                .unwrap_or_default();
+            let matching: Vec<&Value> = library
+                .iter()
+                .filter(|f| types.contains(&f["Type"].as_str().unwrap()))
+                .collect();
+            let start: usize = q
+                .get("StartIndex")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            let limit: usize = q
+                .get("Limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(usize::MAX);
+            let page = matching
+                .iter()
+                .skip(start)
+                .take(limit)
+                .map(|f| json!({"Id": f["Id"], "Etag": f["Etag"], "Type": f["Type"]}))
+                .collect();
+            (page, matching.len())
         };
-        let types: Vec<&str> = q
-            .get("IncludeItemTypes")
-            .map(|t| t.split(',').collect())
-            .unwrap_or_default();
-        let matching: Vec<&Value> = library
-            .iter()
-            .filter(|f| types.contains(&f["Type"].as_str().unwrap()))
-            .collect();
-        let start: usize = q
-            .get("StartIndex")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        let limit: usize = q
-            .get("Limit")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(usize::MAX);
-        let page = matching
-            .iter()
-            .skip(start)
-            .take(limit)
-            .map(|f| json!({"Id": f["Id"], "Etag": f["Etag"], "Type": f["Type"]}))
-            .collect();
-        (page, matching.len())
-    };
     axum::Json(json!({"Items": films, "TotalRecordCount": total})).into_response()
 }
 
@@ -2149,5 +2162,162 @@ async fn the_links_list_says_how_each_link_is_doing() {
         entry["failed_requests"].as_u64().is_some_and(|n| n >= 1),
         "the 503: {entry}"
     );
+    app.cleanup().await;
+}
+
+/// A film of the friend's in a collection (Jellyfin's `TmdbCollection`
+/// provider id, from TMDB or the film's NFO).
+fn in_collection(mut f: Value, tmdb_collection: &str) -> Value {
+    f["ProviderIds"]["TmdbCollection"] = json!(tmdb_collection);
+    f
+}
+
+async fn collections_of(
+    app: &common::TestApp,
+    token: &str,
+    lib: Uuid,
+) -> Vec<(String, Vec<String>)> {
+    let (_, sets) = app
+        .get(
+            &format!("/Items?ParentId={lib}&IncludeItemTypes=BoxSet&Recursive=true"),
+            token,
+        )
+        .await;
+    let mut out = Vec::new();
+    for set in sets["Items"].as_array().unwrap_or_else(|| panic!("{sets}")) {
+        let (_, films) = app
+            .get(
+                &format!("/Items?ParentId={}", set["Id"].as_str().unwrap()),
+                token,
+            )
+            .await;
+        out.push((set["Name"].as_str().unwrap().to_string(), names(&films)));
+    }
+    out.sort();
+    out
+}
+
+/// Owner, 2026-11-23, after asking whether a link brings collections: "Build
+/// it". The friend's films join this server's collections by TMDB collection
+/// id, as copies of a film join it by TMDB id; a collection only the friend
+/// has comes across under the friend's name for it; the friend's collections
+/// with no TMDB id come across by their films. This server's name wins, and a
+/// scan keeps what the link brought. (A collection of fewer than two films is
+/// never listed: owner, 2026-11-16.)
+#[tokio::test]
+async fn a_friends_films_join_the_collections_here() {
+    let app = common::TestApp::new().await;
+    let (_uid, token) = app.create_user("viewer", true).await;
+    let (tree, lib, _local) = local_library(&app).await;
+    // The local film is in "Shared Saga" (TMDB collection 500).
+    std::fs::write(
+        tree.0.join("Shared Film (2001)/Shared Film (2001).nfo"),
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<movie><title>Shared Film</title><uniqueid type="tmdb" default="true">100</uniqueid>
+<set tmdbcolid="500"><name>Shared Saga</name></set></movie>"#,
+    )
+    .unwrap();
+    let root = tree.0.to_string_lossy().to_string();
+    let rescan = || {
+        let root = root.clone();
+        let pool = app.pool.clone();
+        async move {
+            LibraryScanner::new(pool, None)
+                .scan(lib, &[root])
+                .await
+                .expect("scan")
+        }
+    };
+    rescan().await;
+    // One film of its own: not listed yet.
+    assert_eq!(collections_of(&app, &token, lib).await, vec![]);
+
+    let remote: Shared = Default::default();
+    {
+        let mut r = remote.lock().unwrap();
+        r.films = vec![
+            in_collection(film("r100", "Shared Film", "100", "e1", 3840, 2160), "500"),
+            in_collection(film("r200", "Only Theirs", "200", "e1", 1920, 1080), "500"),
+            in_collection(film("r300", "Lone Theirs", "300", "e1", 1920, 1080), "600"),
+            in_collection(
+                film("r310", "Lone Theirs Two", "310", "e1", 1920, 1080),
+                "600",
+            ),
+            film("r400", "Manual One", "400", "e1", 1920, 1080),
+            film("r410", "Manual Two", "410", "e1", 1920, 1080),
+        ];
+        r.box_sets = vec![
+            json!({"Id": "bs500", "Name": "Their Name For It", "Type": "BoxSet",
+                   "ProviderIds": {"Tmdb": "500"}}),
+            json!({"Id": "bs600", "Name": "Their Saga", "Type": "BoxSet",
+                   "ProviderIds": {"Tmdb": "600"}}),
+            json!({"Id": "bsfav", "Name": "Favourites", "Type": "BoxSet", "ProviderIds": {}}),
+        ];
+        r.box_children
+            .insert("bsfav".into(), vec!["r400".into(), "r410".into()]);
+    }
+    let url = fake_jellyfin(remote.clone()).await;
+    let link = app
+        .links
+        .register(&app.pool, settings(&url, "secret"))
+        .await
+        .unwrap();
+    app.links.sync(&app.pool, link).await.expect("sync");
+
+    let s = |v: &str| v.to_string();
+    assert_eq!(
+        collections_of(&app, &token, lib).await,
+        vec![
+            (s("Favourites"), vec![s("Manual One"), s("Manual Two")]),
+            (s("Shared Saga"), vec![s("Only Theirs"), s("Shared Film")]),
+            (
+                s("Their Saga"),
+                vec![s("Lone Theirs"), s("Lone Theirs Two")]
+            ),
+        ]
+    );
+    // One light request for the list; one for the films of the collection
+    // with no TMDB id.
+    let seen = remote.lock().unwrap().seen.clone();
+    assert_eq!(
+        seen.iter()
+            .filter(|q| q.contains("IncludeItemTypes=BoxSet"))
+            .count(),
+        1,
+        "{seen:?}"
+    );
+    assert_eq!(
+        seen.iter().filter(|q| q.contains("ParentId=bs")).count(),
+        1,
+        "{seen:?}"
+    );
+
+    // A scan keeps what the link brought.
+    rescan().await;
+    assert_eq!(collections_of(&app, &token, lib).await.len(), 3);
+
+    // The friend drops a film and a collection: they leave here too (Shared
+    // Saga is back to one film, so not listed, but still holds it).
+    {
+        let mut r = remote.lock().unwrap();
+        r.films.retain(|f| f["Id"] != "r200");
+        r.box_sets.retain(|b| b["Id"] != "bsfav");
+    }
+    app.links.sync(&app.pool, link).await.expect("sync again");
+    assert_eq!(
+        collections_of(&app, &token, lib).await,
+        vec![(
+            s("Their Saga"),
+            vec![s("Lone Theirs"), s("Lone Theirs Two")]
+        )]
+    );
+    let shared: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM collection_items ci JOIN media_items b ON b.id = ci.collection_id \
+         WHERE b.name = 'Shared Saga'",
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    assert_eq!(shared, 1, "Shared Saga keeps its own film only");
     app.cleanup().await;
 }
