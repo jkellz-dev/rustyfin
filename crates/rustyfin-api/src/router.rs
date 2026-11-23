@@ -190,7 +190,7 @@ fn routes(state: AppState) -> Router {
         )
         // ── Media update notifications ─────────────────────────
         .route("/Library/Media/Updated", post(webhooks::post_updated_media))
-        // Sonarr's and Radarr's older notifications, by provider id.
+        // Jellyfin's older library notifications, by provider id.
         .route("/Library/Movies/Added", post(webhooks::post_updated_movies))
         .route("/Library/Movies/Updated", post(webhooks::post_updated_movies))
         .route("/Library/Series/Added", post(webhooks::post_updated_series))

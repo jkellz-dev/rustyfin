@@ -1,6 +1,6 @@
 //! `rustyfin artwork`: fill in missing artwork from TMDB.
 //!
-//! For libraries another tool (Sonarr, Radarr) already manages: NFOs and
+//! For libraries another tool already manages: NFOs and
 //! existing images are never touched. Each show or film folder is checked for a
 //! poster and fanart, and each season folder for a cover (in the season folder
 //! or as `season01-poster.jpg` in the show folder). Only folders missing
@@ -144,7 +144,7 @@ pub struct ArtworkStats {
     pub collection_checks: usize,
 }
 
-/// The TMDB collections the films in `dirs` belong to (Radarr's
+/// The TMDB collections the films in `dirs` belong to (the NFO's
 /// `<set tmdbcolid>`) that still need art in `collections`: no `poster.jpg`
 /// yet, or all of them with `force`. Each once, in id order.
 pub fn collections_needing_art(dirs: &[PathBuf], collections: &Path, force: bool) -> Vec<i64> {
@@ -320,7 +320,7 @@ pub fn headshots_wanted(people: &[nfo::NfoPerson], people_dir: &Path) -> Vec<(St
     wanted
 }
 
-/// The cast and crew of a show or film folder from its NFO (Radarr and Sonarr
+/// The cast and crew of a show or film folder from its NFO (Kodi-format NFOs
 /// write actor thumbs there).
 fn nfo_people(dir: &Path, tv: bool) -> Vec<nfo::NfoPerson> {
     let meta = if tv {
@@ -666,14 +666,20 @@ mod tests {
             "Plain (2003) [tmdbid-171]",
             Some("<movie><title>x</title></movie>"),
         );
-        let radarr = film(
+        let with_id = film(
             "New (2025) [tmdbid-172]",
             Some(r#"<movie><title>x</title><set tmdbcolid="1565"><name>N</name></set></movie>"#),
         );
         let no_id = film("Unknown (2004)", None);
         let recent = film("Asked (2005) [tmdbid-173]", None);
         rustyfin_common::title_settings::record_collection_checked(&recent, None).unwrap();
-        let dirs = [stale.clone(), no_set.clone(), radarr, no_id, recent.clone()];
+        let dirs = [
+            stale.clone(),
+            no_set.clone(),
+            with_id,
+            no_id,
+            recent.clone(),
+        ];
         assert_eq!(
             films_needing_collection_check(&dirs, false),
             [(stale.clone(), 170), (no_set.clone(), 171)]

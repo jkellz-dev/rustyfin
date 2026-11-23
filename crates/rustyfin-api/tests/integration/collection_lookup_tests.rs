@@ -1,6 +1,6 @@
 //! Collections split by stale NFOs (owner, 2026-11-16): 28 Days Later and
 //! 28 Weeks Later's NFOs name "28 Days/Weeks Later Collection" with no id;
-//! 28 Years Later's (Radarr, newer) names "28 Days/Weeks/Years Later
+//! 28 Years Later's (newer NFO) names "28 Days/Weeks/Years Later
 //! Collection" with `tmdbcolid` 1565. Once `rustyfin artwork
 //! --check-collections` has recorded TMDB's answer in the films'
 //! `.rustyfin.toml`, the scan makes one collection of all three.

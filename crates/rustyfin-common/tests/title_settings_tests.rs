@@ -177,7 +177,7 @@ fn the_lyrics_check_is_recorded_beside_other_settings() {
 fn a_collection_found_on_tmdb_is_recorded_beside_other_settings() {
     // Owner, 2026-11-16: `rustyfin artwork --check-collections` asks TMDB which
     // collection a film is in when its NFO does not say, and keeps the answer
-    // in the title's settings (NFOs belong to Radarr).
+    // in the title's settings (NFOs belong to the tool that writes them).
     let d = Dir::new();
     d.write("# mine\n[artwork]\nskip = true\n");
     let name = r#"28 Days/Weeks/Years Later "Collection""#;

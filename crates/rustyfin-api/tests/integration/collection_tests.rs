@@ -1,7 +1,7 @@
 //! Collections fill in from the film series named in each movie's NFO.
 //!
 //! Owner (2026-11-14): "I also want to use Collections. Right now Collections
-//! are empty." Decision: automatic from film series, as Jellyfin does: Radarr
+//! are empty." Decision: automatic from film series, as Jellyfin does: the NFO
 //! writes `<set><name>…</name></set>` (older tools `<set>…</set>`) into each
 //! film's NFO, and a scan groups films by it into a BoxSet. Collections made by
 //! hand are never touched.
@@ -155,7 +155,7 @@ async fn a_film_that_leaves_the_series_leaves_the_collection_and_empty_ones_go()
             .unwrap()
     };
 
-    // Radarr rewrites one NFO without the set: one film left, not listed,
+    // One NFO is rewritten without the set: one film left, not listed,
     // but kept (with its art) in case a film joins again.
     tree.movie("Aliens (1986)", None);
     scan(&app, lib, &tree).await;
@@ -202,7 +202,7 @@ async fn a_hand_made_collection_is_left_alone() {
     app.cleanup().await;
 }
 
-/// Radarr writes the collection's TMDB id: `<set tmdbcolid="1267164">`.
+/// Some NFO writers give the collection's TMDB id: `<set tmdbcolid="1267164">`.
 /// Collections are keyed by it, so a film whose older NFO only names the set
 /// joins the same one, and a rename on TMDB renames rather than splits it.
 #[tokio::test]
@@ -234,7 +234,7 @@ async fn collections_are_keyed_by_their_tmdb_id() {
     assert_eq!(sets[0]["ProviderIds"]["Tmdb"], "1267164", "{body}");
     let id = sets[0]["Id"].as_str().unwrap().to_string();
 
-    // TMDB renames the collection; Radarr rewrites both NFOs.
+    // TMDB renames the collection; both NFOs are rewritten.
     let renamed = r#"<set tmdbcolid="1267164"><name>Ready or Not Films</name></set>"#;
     tree.movie("Ready or Not (2019)", Some(renamed));
     tree.movie("Ready or Not 2 Here I Come (2026)", Some(renamed));
@@ -252,9 +252,9 @@ async fn collections_are_keyed_by_their_tmdb_id() {
 fn the_tmdb_collection_id_is_read_from_the_nfo() {
     let dir = std::env::temp_dir().join(format!("rf-set-{}", Uuid::new_v4().simple()));
     std::fs::create_dir_all(&dir).unwrap();
-    let radarr = dir.join("a.nfo");
+    let with_id = dir.join("a.nfo");
     std::fs::write(
-        &radarr,
+        &with_id,
         r#"<movie><title>A</title><set tmdbcolid="1267164"><name>Ready or Not Collection</name><overview /></set></movie>"#,
     )
     .unwrap();
@@ -264,7 +264,7 @@ fn the_tmdb_collection_id_is_read_from_the_nfo() {
         "<movie><title>B</title><set>Alien Collection</set></movie>",
     )
     .unwrap();
-    let set = rustyfin_core::parse_movie_set(&radarr).unwrap();
+    let set = rustyfin_core::parse_movie_set(&with_id).unwrap();
     assert_eq!(set.name, "Ready or Not Collection");
     assert_eq!(set.tmdb_id.as_deref(), Some("1267164"));
     let set = rustyfin_core::parse_movie_set(&named).unwrap();

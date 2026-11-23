@@ -36,7 +36,7 @@ pub async fn post_updated_media(
     rescan(&state, &paths).await
 }
 
-/// The provider ids the *arr apps' older notifications name a title by
+/// The provider ids Jellyfin's older library notifications name a title by
 /// (query keys arrive in PascalCase, see `query_case`).
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -50,8 +50,8 @@ fn given(id: Option<String>) -> Option<String> {
     id.filter(|s| !s.trim().is_empty())
 }
 
-/// `POST /Library/Movies/Added` and `/Library/Movies/Updated`: Radarr's older
-/// notification. As Jellyfin: the films with that IMDb id if one is given,
+/// `POST /Library/Movies/Added` and `/Library/Movies/Updated`: Jellyfin's older
+/// notification for films. As Jellyfin: the films with that IMDb id if one is given,
 /// else that TMDB id, else none; their folders are rescanned.
 pub async fn post_updated_movies(
     State(state): State<AppState>,
@@ -69,8 +69,8 @@ pub async fn post_updated_movies(
     rescan(&state, &paths).await
 }
 
-/// `POST /Library/Series/Added` and `/Library/Series/Updated`: Sonarr's older
-/// notification; the series with that TVDB id are rescanned.
+/// `POST /Library/Series/Added` and `/Library/Series/Updated`: Jellyfin's older
+/// notification for shows; the series with that TVDB id are rescanned.
 pub async fn post_updated_series(
     State(state): State<AppState>,
     _api_key: ApiKeyUser,
@@ -86,7 +86,7 @@ pub async fn post_updated_series(
 }
 
 /// Rescan the folders of `paths` (a file's folder, or the folder itself) and
-/// drop the items whose path is gone: what every *arr notification asks.
+/// drop the items whose path is gone: what every library notification asks.
 async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiError> {
     let libs = libraries::list_scannable(&state.pool)
         .await

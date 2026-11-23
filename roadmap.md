@@ -293,7 +293,7 @@ implementation; future maintenance tasks plug into the same system.
 
 ### 10b. Media Update Notifications [DONE]
 
-Push-based notification model: external tools (CLI, Sonarr, Radarr, scripts) POST changed filesystem paths to the
+Push-based notification model: external tools (CLI, scripts, other programs) POST changed filesystem paths to the
 server, triggering scoped rescans of just the affected directories. Replaces inotify/filesystem monitoring — avoids
 kernel watch limits and container sysctl issues.
 
@@ -484,11 +484,11 @@ low-priority admin features.
       `AlbumArtist(s)`, `Artists` (tags via `media_items.artists`, else the album artist) and `ArtistItems` (artist
       folders of the same library), `HasLyrics: false`; albums name their artist; albums and artists total their
       tracks' `RunTimeTicks`
-- [x] Season covers (owner, 2026-11-14): read from the season folder and from the show folder's Kodi/Sonarr names
+- [x] Season covers (owner, 2026-11-14): read from the season folder and from the show folder's Kodi names
       (`season01-poster.jpg`, `season-specials-poster.jpg`, `-banner`, `-fanart`, `-landscape`); a season without
       one shows the show's poster; seasons and episodes carry `SeriesPrimaryImageTag`
 - [x] `rustyfin artwork <dir> -t tvshows|movies`: download only missing posters, fanart and season posters from TMDB
-      for Sonarr/Radarr-managed libraries; matched by `[tmdbid]`/`[tvdbid]`/NFO ids via TMDB find, never by title;
+      for libraries another tool manages; matched by `[tmdbid]`/`[tvdbid]`/NFO ids via TMDB find, never by title;
       existing files and NFOs untouched (`--force` replaces images)
 - [x] Image serving (owner, 2026-11-14): tagged URLs cached a year (`immutable`), others an hour, every image with an
       ETag and 304s before any resize; `Accept: image/webp` no longer re-encodes (lossless-only encoder); files
@@ -499,7 +499,7 @@ low-priority admin features.
       their NFO names (`<set><name>` or `<set>`), as Jellyfin does; listed with `IncludeItemTypes=BoxSet`, a
       collection lists its films (`ParentId`), counts them, and shows its earliest film's poster. Hand-made
       collections are untouched; automatic ones that lose all films go
-- [x] Episode thumbnails (owner, 2026-11-14): an episode's image is its own `<episode>-thumb.jpg` (Sonarr/Kodi), else a
+- [x] Episode thumbnails (owner, 2026-11-14): an episode's image is its own `<episode>-thumb.jpg` (Kodi), else a
       frame grabbed once with ffmpeg at 10% of the runtime into the image cache (landscape placeholder if that
       fails); episodes no longer take the season folder's poster; the admin shows episodes as 16:9 cards
 - [x] A track's release date is its year (decided 2026-11-14): `ProductionYear` from the tag, else the
@@ -1078,17 +1078,17 @@ tests check Rustyfin against what we believe Jellyfin does; this suite checks it
 
 ### 11i. Metadata Sidecar & Collection Art
 
-Decided (2026-11-14): NFO files (written by Radarr/Sonarr) stay the metadata input; what they lack goes in a
-Rustyfin-owned sidecar beside them, because Radarr rewrites its NFOs on refresh. Downloaded art is stored as fetched.
+Decided (2026-11-14): NFO files (written by other tools) stay the metadata input; what they lack goes in a
+Rustyfin-owned sidecar beside them, because NFO writers rewrite them on refresh. Downloaded art is stored as fetched.
 
-- [x] Check what Radarr's Kodi NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?).
-      Answered from Radarr's writer (`XbmcMetadata.cs`, develop, 2026-11-16): `<set tmdbcolid>` with the collection
+- [x] Check what Kodi-format movie NFOs actually carry once enabled live (actor TMDB ids? `<set>` collection id?).
+      Answered from a common writer's source (2026-11-16): `<set tmdbcolid>` with the collection
       name, `<uniqueid>` TMDB and IMDb ids; actors carry `name`, `role`, `order` and a `thumb` (the TMDB profile
       URL) but no TMDB person id
 - [x] Sidecar file beside each NFO: the per-title `.rustyfin.toml` (`docs/title-settings.md`; TOML):
       `[ids]` overrides the NFO's ids, `[artwork]` and `[lyrics]` hold the tools' state. The collection id needs no
-      sidecar (Radarr writes `<set tmdbcolid>`); actor ids do not either (next item)
-- [x] Collections keyed by TMDB collection id when known (Radarr's `<set tmdbcolid>`); their art fetched by
+      sidecar (some writers give `<set tmdbcolid>`); actor ids do not either (next item)
+- [x] Collections keyed by TMDB collection id when known (`<set tmdbcolid>`); their art fetched by
       `rustyfin artwork` into `rustyfin-cache` as one folder per collection,
       `collections/<tmdb-id>/poster.jpg|backdrop.jpg|…` (owner, 2026-11-14), beside the people folder, attached by
       the scan; else the earliest film's poster
@@ -1204,7 +1204,7 @@ validation, and polish needed for daily use.
       (`media_route.rs`), so back/forward, reload and bookmarks work; breadcrumbs come from the item's ancestors
 - [x] Search filters (scope by type: movies, series, music, episodes): films, shows, episodes, albums, artists, tracks;
       in the address
-- [ ] TV and music collections (deferred 2026-11-16): only Radarr's movie `<set>` creates collections today.
+- [ ] TV and music collections (deferred 2026-11-16): only a movie NFO's `<set>` creates collections today.
       Add `collections = ["..."]` to a title's `.rustyfin.toml` (scan creates and fills them), then a media-browser
       action to create a collection and add shows or albums. Plezy lists collections server-wide, as Jellyfin does.
 

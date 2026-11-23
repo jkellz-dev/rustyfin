@@ -1,4 +1,4 @@
-//! Radarr names a film with no known year "Title ()"; the empty parentheses
+//! A film with no known year can be named "Title ()"; the empty parentheses
 //! are not part of the title.
 use rustyfin_common::naming::{clean_title, split_folder_year};
 

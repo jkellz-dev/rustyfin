@@ -33,7 +33,7 @@ The server attaches collection art to automatic collections at scan time, so sca
 ## `--collections-only`
 
 Fetches only the art of the TMDB collections the films' NFOs name (`<set tmdbcolid="...">`), skipping posters,
-fanart and headshots. Useful after Radarr adds films to new collections.
+fanart and headshots. Useful after films are added to new collections.
 
 ## Music (`-t music`)
 
@@ -43,8 +43,8 @@ rustyfin artwork /data/media/music -t music
 
 For every album folder (a folder holding tracks) with no cover file, fetches the front cover from the
 [Cover Art Archive](https://coverartarchive.org) and saves it as `cover.jpg` beside the tracks; the server uses it at
-the next scan. Albums are matched by MusicBrainz id, never by name: `album.nfo` (Lidarr's `musicbrainzalbumid`,
-`musicbrainzreleasegroupid`), else the first track's tags (Picard, Lidarr). The exact release is tried first, then any
+the next scan. Albums are matched by MusicBrainz id, never by name: `album.nfo` (its `musicbrainzalbumid`,
+`musicbrainzreleasegroupid`), else the first track's tags (Picard). The exact release is tried first, then any
 release of the release group. The 1200 px JPEG is saved when the archive has made one; for new uploads it has not yet,
 and the original is saved instead.
 
@@ -59,8 +59,8 @@ Albums whose tracks carry an embedded cover already show it without this; a cove
 
 Collections come from the films' NFOs. An NFO written before TMDB renamed a collection, or by a tool that writes only
 the name (`<set>28 Days/Weeks Later Collection</set>`, no `tmdbcolid`), splits a series in two: "28 Days/Weeks Later
-Collection" for the old films and "28 Days/Weeks/Years Later Collection" for the new one. Radarr does not rewrite such
-NFOs on its own.
+Collection" for the old films and "28 Days/Weeks/Years Later Collection" for the new one. NFO writers do not rewrite
+such NFOs on its own.
 
 `--check-collections` asks TMDB (`/movie/{id}`, one call per film) which collection each film is in, for films whose NFO
 gives no collection id and that have a TMDB id (folder name, NFO or `.rustyfin.toml`). The answer goes into the film's

@@ -8,12 +8,12 @@ server at your folders. What lives only in Jellyfin's database does not come acr
 - **Your folders as they are.** The same naming rules (`Film (2020)/Film (2020).mkv`, `Show/Season 01/Show S01E01.mkv`,
   `Artist/Album/01 - Track.flac`), extras folders and `- trailer` files, and multiple versions of a film. See
   [Library Scanning](library-scanning.md).
-- **NFO files** (Kodi format, as written by Radarr, Sonarr, tinyMediaManager or Jellyfin's own NFO saver): titles, plot,
+- **NFO files** (Kodi format, as written by tinyMediaManager, Kodi or Jellyfin's own NFO saver): titles, plot,
   ratings, people, genres, studios, provider ids, and film collections from `<set>`.
 - **Artwork beside the media**: `poster.jpg`, `folder.jpg`, `fanart.jpg`, `banner.jpg`, `logo.png`, `landscape.jpg`,
   season images, and art embedded in music files.
 - **Subtitles**: inside the file, and files beside it named `<video name>.<language>[.forced|.sdh].srt` (also `.vtt`,
-  `.ass`, `.ssa`), which is how Bazarr and Jellyfin name them.
+  `.ass`, `.ssa`), which is how Jellyfin names them.
 - **Lyrics**: `.lrc`, `.elrc` or `.txt` beside a track, or in its tags. See [Lyrics](lyrics.md).
 - **The apps.** Jellyfin apps (Infuse, Swiftfin, Jellyfin Media Player, ...) sign in to Rustyfin with its address, as
   they would to Jellyfin; testing each on real devices is still under way (roadmap 11a), and what clients ask for is

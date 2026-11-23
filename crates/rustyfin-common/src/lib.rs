@@ -1,6 +1,6 @@
 //! Pieces shared by the server and the `rustyfin` metadata tool.
 //!
-//! File and folder naming rules ([`naming`]), Kodi/Radarr NFO reading
+//! File and folder naming rules ([`naming`]), Kodi NFO reading
 //! ([`nfo`]), per-title `.rustyfin.toml` settings ([`title_settings`]),
 //! music tags ([`music_tags`]), and the outside metadata sources with their
 //! rate limits and caches: TMDB, TVDB, fanart.tv, MusicBrainz, Discogs and

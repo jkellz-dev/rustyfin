@@ -1,7 +1,7 @@
 //! A library with broken files scans everything else (roadmap 11c: "handle
 //! missing/corrupt media files during scan (log and skip, don't crash)").
 //!
-//! Real libraries hold dangling links (a file moved by an *arr app mid-scan),
+//! Real libraries hold dangling links (a file moved by another program mid-scan),
 //! truncated NFOs, artwork that is not an image, file names that are not
 //! UTF-8 and files that are not media at all. None of them may stop a scan,
 //! fail the files around them, or make a later request answer 500.

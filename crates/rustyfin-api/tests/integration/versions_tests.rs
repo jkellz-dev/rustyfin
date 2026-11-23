@@ -1,5 +1,5 @@
 //! Multiple versions of one film (owner, 2026-11-16: "28 Days Later" showed
-//! twice; Radarr had kept a Bluray-1080p and a WEBDL-480p file in its folder).
+//! twice; the folder held a Bluray-1080p and a WEBDL-480p file in its folder).
 //! Jellyfin 10.10.7 (sandbox) groups files named `<folder> - <label>` in the
 //! film's folder into one film: listed once, `MediaSourceCount` 2, one media
 //! source per file named by its label, the first being the film itself; the

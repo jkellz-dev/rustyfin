@@ -1,6 +1,6 @@
-//! Show and episode NFOs as Sonarr's Kodi metadata writes them (real ones
+//! Show and episode NFOs in Kodi's format as media managers write them (real ones
 //! cast trimmed): `<uniqueid>` ids (including
-//! Sonarr's own and TVmaze, which are ignored), TheTVDB photo addresses for
+//! the managing tool's own and TVmaze, which are ignored), TheTVDB photo addresses for
 //! the cast with no `<order>`, an `<episodeguide>` of JSON, and the TheTVDB
 //! page as a plain line after `</tvshow>`.
 
@@ -14,9 +14,9 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 #[test]
-fn a_sonarr_show_parses_with_its_ids_and_cast() {
+fn a_kodi_show_parses_with_its_ids_and_cast() {
     let meta =
-        nfo::parse_series_nfo(&fixture("sonarr_tvshow.nfo")).expect("a Sonarr tvshow.nfo parses");
+        nfo::parse_series_nfo(&fixture("kodi_tvshow.nfo")).expect("a Kodi tvshow.nfo parses");
     assert_eq!(meta.title.as_deref(), Some("Andor"));
     assert_eq!(meta.official_rating.as_deref(), Some("TV-14"));
     assert_eq!(meta.tvdb_id.as_deref(), Some("393189"));
@@ -41,9 +41,9 @@ fn a_sonarr_show_parses_with_its_ids_and_cast() {
 }
 
 #[test]
-fn a_sonarr_episode_parses_with_its_tvdb_id() {
-    let meta = nfo::parse_episode_nfo(&fixture("sonarr_episode.nfo"))
-        .expect("a Sonarr episode NFO parses");
+fn a_kodi_episode_parses_with_its_tvdb_id() {
+    let meta =
+        nfo::parse_episode_nfo(&fixture("kodi_episode.nfo")).expect("a Kodi episode NFO parses");
     assert_eq!(meta.title.as_deref(), Some("Ever Been to Ghorman?"));
     assert_eq!(meta.tvdb_id.as_deref(), Some("10983008"));
     assert!(

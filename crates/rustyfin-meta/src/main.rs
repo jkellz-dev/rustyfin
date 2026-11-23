@@ -56,7 +56,7 @@ enum Command {
         media_type: String,
     },
     /// Download missing posters, fanart and season posters from TMDB, for
-    /// libraries another tool (Sonarr, Radarr) manages; with `-t music`,
+    /// libraries another tool manages; with `-t music`,
     /// album covers from the Cover Art Archive (by MusicBrainz id). Existing files and NFOs
     /// are left alone (--force replaces images); folders are matched by the id
     /// in their name or NFO, never by title.

@@ -44,7 +44,7 @@ video "$out/shows/Test Show (2021)/Season 01/Test Show S01E02.mp4" "Second"
 audio "$out/music/Test Artist/Test Album (2019)/01 First.mp3" "First" 330 1
 audio "$out/music/Test Artist/Test Album (2019)/02 Second.mp3" "Second" 550 2
 
-# A Radarr-style NFO, so the film has a genre, a studio, an actor and a director:
+# A Kodi-style NFO, so the film has a genre, a studio, an actor and a director:
 # the routes by name (/Persons/{name}, /Genres/{name}, /Studios/{name}) need them.
 cat >"$out/movies/Test Movie (2020)/Test Movie (2020).nfo" <<'EOF'
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>

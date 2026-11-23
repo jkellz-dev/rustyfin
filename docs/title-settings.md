@@ -2,7 +2,7 @@
 
 A film's or show's folder may hold a `.rustyfin.toml` with settings for that title alone. It is optional: most folders
 have none, and deleting the file resets the title to what its NFO and folder name say. Because it sits in the title's
-folder, it moves with the title when Radarr or Sonarr renames the folder and goes away when the title is deleted.
+folder, it moves with the title when the folder is renamed and goes away when the title is deleted.
 
 ```toml
 # Rustyfin settings for this title. Optional: delete the file to reset.

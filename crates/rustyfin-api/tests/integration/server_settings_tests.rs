@@ -128,8 +128,8 @@ async fn devices_and_keys_answer_in_jellyfins_shapes() {
 
     let (status, made) = app
         .post(
-            "/Auth/Keys?App=Sonarr",
-            &serde_json::json!({"Name": "Sonarr"}),
+            "/Auth/Keys?App=Notifier",
+            &serde_json::json!({"Name": "Notifier"}),
             &admin,
         )
         .await;
@@ -138,7 +138,7 @@ async fn devices_and_keys_answer_in_jellyfins_shapes() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(keys["TotalRecordCount"], 1, "{keys}");
     assert_eq!(keys["StartIndex"], 0, "{keys}");
-    assert_eq!(keys["Items"][0]["AppName"], "Sonarr", "{keys}");
+    assert_eq!(keys["Items"][0]["AppName"], "Notifier", "{keys}");
     assert!(keys["Items"][0]["DateCreated"].is_string(), "{keys}");
     // Keys are shown once, when made; never listed.
     assert!(keys["Items"][0].get("AccessToken").is_none(), "{keys}");

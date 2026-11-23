@@ -4,7 +4,7 @@
 //! Season covers should come from tvdb as well." The server never fetches from
 //! providers (design boundary); it reads artwork beside the media. Season art is
 //! read from the season folder (`Season 01/poster.jpg`) and from the Kodi /
-//! Sonarr names in the show folder (`season01-poster.jpg`,
+//! Kodi names in the show folder (`season01-poster.jpg`,
 //! `season-specials-poster.jpg`, `-banner`, `-fanart`, `-landscape`), which is
 //! also where `rustyfin fetch` saves TVDB's season posters. A season with no
 //! cover of its own shows the show's.

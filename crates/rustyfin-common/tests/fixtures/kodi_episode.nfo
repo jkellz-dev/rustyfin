@@ -6,7 +6,7 @@
   <aired>2025-04-29</aired>
   <plot>Cassian and Bix adjust to a Luthen safehouse. All eyes are on Ghorman. Wilmon visits Saw Gerrera.</plot>
   <uniqueid type="tvdb" default="true">10983008</uniqueid>
-  <uniqueid type="sonarr">11957</uniqueid>
+  <uniqueid type="manager">11957</uniqueid>
   <thumb>https://artworks.thetvdb.com/banners/v4/episode/10983008/screencap/6811792f2af16.jpg</thumb>
   <watched>false</watched>
   <fileinfo>

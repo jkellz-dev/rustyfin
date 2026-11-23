@@ -1,4 +1,4 @@
-//! A movie NFO as Radarr's Kodi metadata writes it (a real one, cast
+//! A movie NFO in Kodi's format as media managers write it (a real one, cast
 //! trimmed): `<uniqueid>` ids, `<ratings>`, TMDB web
 //! addresses for art and cast photos, cast out of order, empty elements, and
 //! the film's TMDB and IMDb pages as plain lines after `</movie>`.
@@ -7,12 +7,12 @@ use rustyfin_common::nfo;
 use std::path::Path;
 
 fn path() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/radarr_movie.nfo")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/kodi_movie.nfo")
 }
 
 #[test]
 fn parses_despite_the_links_after_the_document() {
-    let meta = nfo::parse_movie_nfo(&path()).expect("a Radarr NFO parses");
+    let meta = nfo::parse_movie_nfo(&path()).expect("a Kodi movie NFO parses");
     assert_eq!(meta.title.as_deref(), Some("8-Bit Christmas"));
     assert_eq!(meta.production_year, Some(2021));
     assert_eq!(meta.tmdb_id.as_deref(), Some("802217"));

@@ -2,7 +2,7 @@
 
 ## Overview
 
-External tools (rustyfin CLI, Sonarr, Radarr, scripts) notify the server when files change on disk. The server performs a scoped rescan of just the affected directories instead of a full library walk. This replaces inotify/filesystem monitoring with a push-based notification model.
+External tools (rustyfin CLI, scripts, other programs) notify the server when files change on disk. The server performs a scoped rescan of just the affected directories instead of a full library walk. This replaces inotify/filesystem monitoring with a push-based notification model.
 
 **Why not inotify?** Filesystem watchers require one kernel watch per subdirectory on Linux. A large media library can hit the `max_user_watches` limit (default 8,192), consume non-swappable kernel memory, and break in containers where the sysctl is locked. Media libraries change rarely — holding thousands of watches open 24/7 is disproportionate. Scheduled scans already cover eventual consistency; this endpoint adds an immediate fast path.
 
@@ -108,7 +108,7 @@ CREATE TABLE api_keys (
 
 ### Admin API
 
-- `POST /Auth/Keys` — Generate a new API key. Body: `{ "Name": "Sonarr" }`. Returns `{ "Id": "...", "Name": "...", "Key": "rfy_abc123..." }`. The plaintext key is returned once and never stored — only the hash is persisted.
+- `POST /Auth/Keys` — Generate a new API key. Body: `{ "Name": "Notifier" }`. Returns `{ "Id": "...", "Name": "...", "Key": "rfy_abc123..." }`. The plaintext key is returned once and never stored — only the hash is persisted.
 - `GET /Auth/Keys` — List all keys. Returns `[{ "Id": "...", "Name": "...", "CreatedAt": "...", "LastUsedAt": "..." }]`. Never includes the key itself.
 - `DELETE /Auth/Keys/{id}` — Revoke a key.
 

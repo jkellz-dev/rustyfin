@@ -136,10 +136,11 @@ would cross the network readable. Put the service account's password in the envi
 
 ## Server API keys
 
-An administrator makes an API key by sending `POST /Auth/Keys` with `{"Name": "Sonarr"}` (the admin has no page for it
-yet); the answer's `Key` is shown only then. A key names no person and signs no one in: it is only for Sonarr's and
-Radarr's "a file changed" notifications (`POST /Library/Media/Updated` and the older `/Library/Movies/...` and
-`/Library/Series/...`), which they send with the key straight to Rustyfin, not through the proxy.
+An administrator makes an API key by sending `POST /Auth/Keys` with `{"Name": "Library notifier"}` (the admin has no
+page for it yet); the answer's `Key` is shown only then. A key names no person and signs no one in: it is only for the
+"a file changed" notifications other programs can send (`POST /Library/Media/Updated` and the older
+`/Library/Movies/...` and `/Library/Series/...`), which they send with the key straight to Rustyfin, not through the
+proxy.
 
 ## For developers
 
@@ -150,7 +151,7 @@ or a new one). Routes take the user through extractors from `rustyfin-auth`:
 - `AuthenticatedUser`: the user (from the identity layer, or a token where no proxy is configured); 401 without one.
 - `AdminUser`: the same, and an administrator; 403 for anyone else.
 - `OptionalUser`: the user if there is one (public routes that answer more to a signed-in user).
-- `ApiKeyUser`: a server API key, for the *arr notifications only.
+- `ApiKeyUser`: a server API key, for library notifications only.
 
 A disabled user is refused everywhere. Tokens are accepted where Jellyfin's apps put them: the `Authorization:
 MediaBrowser ... Token="..."` header (or `Emby`), `X-Emby-Token`, `X-MediaBrowser-Token`, and `api_key` or `ApiKey` in

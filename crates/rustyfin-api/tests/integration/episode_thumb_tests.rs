@@ -2,7 +2,7 @@
 //!
 //! Owner (2026-11-14): "Lets change episodes from posters to thumbnails... Like
 //! jellyfin, lets use a screen cap for the image." An episode's image is
-//! Sonarr's `<episode>-thumb.jpg` beside it when there is one, else a frame
+//! Kodi's `<episode>-thumb.jpg` beside it when there is one, else a frame
 //! grabbed from the video (the server writes it to its own image cache, never
 //! beside the media). Episodes no longer take the season folder's poster.
 use crate::common;

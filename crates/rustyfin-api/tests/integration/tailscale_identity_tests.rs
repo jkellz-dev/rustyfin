@@ -157,18 +157,18 @@ async fn without_the_proxys_word_a_token_signs_nobody_in() {
     app.cleanup().await;
 }
 
-/// Owner, 2026-11-22: "sonarr and radarr do not get routed through the
-/// proxy. Those routes come through the internal network. Anything that is
-/// user facing must come through the proxy." The *arr library webhook comes
+/// Owner, 2026-11-22: tools that notify the server of library changes come
+/// over the internal network, not the proxy; anything user facing must come
+/// through the proxy. The library webhook comes
 /// straight over the cluster network with a server API key and works; the
 /// same key signs no user in.
 #[tokio::test]
-async fn the_arr_webhook_comes_from_inside_with_a_server_key() {
+async fn the_library_webhook_comes_from_inside_with_a_server_key() {
     let app = common::TestApp::with_forward_auth().await;
-    let key = "sonarr-key-for-tests";
+    let key = "library-key-for-tests";
     rustyfin_db::repo::api_keys::create(
         &app.pool,
-        "Sonarr",
+        "Library tool",
         &rustyfin_auth::api_key::hash_api_key(key),
     )
     .await

@@ -169,7 +169,7 @@ struct AlbumNfo {
 }
 
 /// A track duration in seconds: `259.0` (Kodi), or `mm:ss` / `h:mm:ss`
-/// (Lidarr). Anything else is no duration, not a broken album NFO.
+/// (music managers write it). Anything else is no duration, not a broken album NFO.
 fn de_track_duration<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -310,14 +310,14 @@ struct MovieSetOnly {
     set: Option<NfoSet>,
 }
 
-/// `<set><name>Alien Collection</name><overview>…</overview></set>` (Radarr,
+/// `<set><name>Alien Collection</name><overview>…</overview></set>` (Kodi format,
 /// Kodi 17+) or `<set>Alien Collection</set>` (older tools).
 #[derive(Debug, Deserialize)]
 struct NfoSet {
     #[serde(rename = "$text")]
     text: Option<String>,
     name: Option<String>,
-    /// Radarr: `<set tmdbcolid="1267164">`.
+    /// Some writers: `<set tmdbcolid="1267164">`.
     #[serde(rename = "@tmdbcolid")]
     tmdbcolid: Option<String>,
 }
@@ -326,7 +326,7 @@ struct NfoSet {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MovieSet {
     pub name: String,
-    /// The collection's TMDB id, when the NFO gives it (Radarr does).
+    /// The collection's TMDB id, when the NFO gives it.
     pub tmdb_id: Option<String>,
 }
 
@@ -1776,7 +1776,7 @@ mod tests {
         assert!(result.is_none(), "Nonexistent file should return None");
     }
 
-    /// Lidarr writes a track's duration as `mm:ss` (or `h:mm:ss`). One odd
+    /// Music NFOs write a track's duration as `mm:ss` (or `h:mm:ss`). One odd
     /// value must not cost the whole album its NFO (seen in a real scan, 2026-11-16).
     #[test]
     fn nfo_album_track_durations_in_clock_form() {

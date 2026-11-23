@@ -213,7 +213,7 @@ async fn a_subtitle_file_does_not_make_a_video_look_stale() {
 }
 
 /// Owner (2026-11-21): "new movies and collections are not populating with
-/// images". Radarr and Sonarr call the import webhook while they are still
+/// images". Media managers call the import webhook while they are still
 /// writing the art, so the first scan finds the video and NFO but no
 /// poster.jpg. Art is not part of the title's etag, so every later scan
 /// skipped the unchanged title and never looked for it again (and a
@@ -264,7 +264,7 @@ async fn art_written_after_the_first_scan_appears_on_the_next() {
     };
     assert!(art("Film").await.is_empty(), "no art yet");
 
-    // The *arr app finishes writing its art.
+    // The art finishes being written.
     std::fs::write(film.join("poster.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();
     std::fs::write(film.join("fanart.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();
     std::fs::write(season.join("Show S01E01-thumb.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();

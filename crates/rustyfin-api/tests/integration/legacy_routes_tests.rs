@@ -1,5 +1,5 @@
 //! Jellyfin routes Rustyfin did not answer yet (tests/parity/ROUTES.md): the
-//! *arr apps' older library notifications, the image path that carries its
+//! older library notifications, the image path that carries its
 //! options as path segments, obsolete lists Jellyfin still answers, the
 //! session extras and the startup user.
 
@@ -13,16 +13,16 @@ use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-/// Sonarr's and Radarr's older Jellyfin notifications name a title by its
+/// Jellyfin's older library notifications name a title by its
 /// TVDB, IMDb or TMDB id (`POST /Library/Series/Updated?tvdbId=`,
 /// `/Library/Movies/Updated?imdbId=`); Jellyfin rescans that title's folder.
 #[tokio::test]
 async fn the_arrs_older_notifications_rescan_the_title_they_name() {
     let app = common::TestApp::new().await;
-    let key = "radarr-key-for-tests";
+    let key = "library-key-for-tests";
     rustyfin_db::repo::api_keys::create(
         &app.pool,
-        "Radarr",
+        "Library tool",
         &rustyfin_auth::api_key::hash_api_key(key),
     )
     .await
@@ -53,7 +53,7 @@ async fn the_arrs_older_notifications_rescan_the_title_they_name() {
     .await
     .unwrap();
 
-    // The *arr app imports a poster and a new episode, then tells the server.
+    // A poster and a new episode arrive, then the server is told.
     std::fs::write(film.join("poster.jpg"), b"\xFF\xD8\xFF\xE0x").unwrap();
     std::fs::write(season.join("Show S01E02.mkv"), b"").unwrap();
     let send = |uri: &str, with_key: bool| {

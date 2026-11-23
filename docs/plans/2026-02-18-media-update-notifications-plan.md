@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Enable external tools (CLI, Sonarr, scripts) to notify the server of filesystem changes, triggering scoped rescans instead of full library walks.
+**Goal:** Enable external tools (CLI, scripts) to notify the server of filesystem changes, triggering scoped rescans instead of full library walks.
 
 **Architecture:** A `POST /Library/Media/Updated` endpoint accepts changed paths, resolves them to libraries, and triggers targeted scans. API keys stored in the database authenticate webhook callers. The `rustyfin` CLI gains a `notify` command and auto-notifies after `fetch`.
 

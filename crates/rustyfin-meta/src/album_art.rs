@@ -1,6 +1,6 @@
 //! `rustyfin artwork -t music`: album covers from the Cover Art Archive for
-//! albums with no cover file (owner, 2026-11-16: new Lidarr albums had no
-//! picture anywhere). Albums are found by the MusicBrainz ids Lidarr and
+//! albums with no cover file (owner, 2026-11-16: newly added albums had no
+//! picture anywhere). Albums are found by the MusicBrainz ids album NFOs and
 //! Picard already write (`album.nfo`, else the first track's tags), never by
 //! name. The cover is saved as `cover.jpg` in the album folder, which the
 //! server picks up at its next scan. Existing covers are never replaced
@@ -63,7 +63,7 @@ pub fn has_cover(dir: &Path) -> bool {
 }
 
 /// The album's MusicBrainz release and release-group ids: `album.nfo`
-/// (Lidarr) first, else the first track's tags (Picard, Lidarr).
+/// first, else the first track's tags (Picard).
 pub fn album_mbids(dir: &Path) -> (Option<String>, Option<String>) {
     let clean = |s: Option<String>| s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
     if let Some(meta) = nfo::find_album_nfo(dir).and_then(|p| nfo::parse_album_nfo(&p)) {
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn lidarrs_album_nfo_names_the_release() {
+    fn an_album_nfo_names_the_release() {
         let t = Tree::new();
         t.file("A/B/01.flac", "");
         t.file(

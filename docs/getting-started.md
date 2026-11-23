@@ -165,8 +165,8 @@ to your tailnet: remove someone there to shut them out.
 **Libraries → Add Library**: a name, the type (Movies, Shows, Music or Mixed), and the folder as the container sees it
 (`/media/movies`). The scan starts at once and the Scan button shows its progress; later scans run every night.
 
-Rustyfin reads titles, plots, artwork and subtitles from the files beside your media, named the way Radarr, Sonarr,
-Lidarr and Jellyfin name them ([Library Scanning](library-scanning.md)). It fetches nothing from the internet itself; to
+Rustyfin reads titles, plots, artwork and subtitles from the files beside your media, named the way Jellyfin and Kodi
+name them ([Library Scanning](library-scanning.md)). It fetches nothing from the internet itself; to
 fill in missing artwork or lyrics, see [Optional extras](#optional-extras).
 
 ## 5. Connect an app
@@ -207,17 +207,15 @@ Tailscale account, which becomes their Rustyfin user; give them the libraries yo
   the `rustyfin` container (`devices: ["/dev/dri:/dev/dri"]` for Intel and AMD). Without it, ffmpeg converts on the CPU
   when an app cannot play a file as it is.
 - **Metrics**: `[metrics] listen = "0.0.0.0:9090"` serves Prometheus metrics on a second port.
-- **Sonarr and Radarr**: they can tell Rustyfin when they add or change a file, so it scans just that folder. Make a
-  key from a device on your tailnet:
+- **Library notifications**: a program that adds or changes files can tell Rustyfin which folder changed, so it scans
+  just that folder, with Jellyfin's `POST /Library/Media/Updated`. Make a key for it from a device on your tailnet:
 
   ```bash
   curl -X POST https://rustyfin.<your-tailnet>.ts.net/Auth/Keys \
-    -H 'Content-Type: application/json' -d '{"Name": "Sonarr"}'
+    -H 'Content-Type: application/json' -d '{"Name": "Notifier"}'
   ```
 
-  In Sonarr or Radarr, **Settings → Connect → + → Emby / Jellyfin**: host `tailscale` (the container Rustyfin shares a
-  network with; run Sonarr in the same Compose file), port `8096`, the `Key` from the answer, and **Update Library** on.
-  If they see your folders at other paths than Rustyfin does (`/tv` against `/media/tv`), fill in **Map Paths**. The
-  key only lets them send these notifications.
+  The program sends the `Key` from the answer as `X-Api-Key` (or `?api_key=`), straight to the `tailscale` container on
+  port `8096` (run it in the same Compose file). The key only lets it send these notifications.
 - **A friend's Jellyfin**: their libraries can merge into yours ([Linked Servers](linked-servers.md)).
 - **Coming from Jellyfin**: what comes across and what does not ([Moving from Jellyfin](migrating-from-jellyfin.md)).

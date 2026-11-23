@@ -167,7 +167,7 @@ const LEDGER_LOCAL: &str = "/config/metadata/People/H/Heath Ledger/folder.jpg";
 #[tokio::test]
 async fn a_web_photo_replaces_a_local_path_and_stays() {
     // Owner (2026-11-21): 8,174 people kept a photo path from Jellyfin-era NFOs
-    // (a file in Jellyfin's own volume) after Radarr's NFOs gave them TMDB
+    // (a file in Jellyfin's own volume) after their NFOs gave them TMDB
     // addresses, so nothing could ever download their headshot.
     let app = common::TestApp::new().await;
     let lib = app.create_library("Movies", "movies").await;

@@ -93,7 +93,7 @@ impl ExtraKind {
 
 /// A film file's version label when it follows Jellyfin's multi-version rule:
 /// its name is its folder's name, then nothing or a separator (`-`, `_`, `.`)
-/// or a bracket, as Radarr names versions
+/// or a bracket, as media managers name versions
 /// (`Film (2002) [tmdbid-170] - [Bluray-1080p][x265].mkv` gives
 /// `[Bluray-1080p][x265]`). `Some("")` for the plain `Film (2002).mkv`; `None`
 /// when the name does not start with the folder's.
@@ -469,7 +469,7 @@ pub fn clean_title(raw: &str) -> String {
     let s = s.replace(['.', '_'], " ");
     // Replace hyphens surrounded by spaces
     let s = s.replace(" - ", " ");
-    // An empty year ("Baby Driver 2 ()": Radarr before a release year is known)
+    // An empty year ("Baby Driver 2 ()": named before a release year is known)
     let s = s.replace("()", " ");
     // Collapse whitespace and trim
     s.split_whitespace().collect::<Vec<_>>().join(" ")

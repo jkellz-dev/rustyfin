@@ -13,7 +13,7 @@
 //! Owner, 2026-11-22: "ALL requests go through the proxy. There is no way
 //! around the proxy." With forward auth configured, a request the proxy names
 //! nobody on is nobody's: a token alone signs no one in (only what anyone may
-//! ask answers). Server API keys (`ApiKeyUser`: an *arr's library webhook)
+//! ask answers). Server API keys (`ApiKeyUser`: the library-update webhook)
 //! are not a user's sign-in and still work. Without forward auth configured
 //! (development, the parity suite), tokens sign in as before.
 

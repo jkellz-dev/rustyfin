@@ -133,7 +133,7 @@ fn classify_image(stem_lower: &str, item_stem: &str, path: &str) -> Option<Disco
     None
 }
 
-/// The file-name stems a season's art uses in the show folder (Kodi, Sonarr and
+/// The file-name stems a season's art uses in the show folder (Kodi and
 /// Jellyfin): `season01`, `season1` and `season-specials` for season 0.
 fn season_prefixes(season: i32) -> Vec<String> {
     if season == 0 {
@@ -149,7 +149,7 @@ fn season_prefixes(season: i32) -> Vec<String> {
 
 /// A season's art kept in the show folder: `season01-poster.jpg` (or plain
 /// `season01.jpg`), `-banner`, `-fanart`, `-landscape`/`-thumb`. This is where
-/// Sonarr's Kodi metadata and `rustyfin fetch` write it.
+/// Kodi-format metadata writers and `rustyfin fetch` write it.
 pub fn discover_season_images(series_dir: &Path, season: i32) -> Vec<DiscoveredImage> {
     let prefixes = season_prefixes(season);
     let mut images = Vec::new();
@@ -192,7 +192,7 @@ pub fn discover_season_images(series_dir: &Path, season: i32) -> Vec<DiscoveredI
 }
 
 /// An episode's own images: files named after the episode, `<episode>-thumb.jpg`
-/// (Sonarr/Kodi) or `<episode>.jpg`, as its primary image. The season's
+/// (Kodi) or `<episode>.jpg`, as its primary image. The season's
 /// `poster.jpg` in the same folder belongs to the season, not to each episode.
 pub fn discover_episode_images(dir: &Path, episode_stem: &str) -> Vec<DiscoveredImage> {
     let stem = episode_stem.to_lowercase();

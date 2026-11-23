@@ -1,5 +1,5 @@
 //! Albums without a cover file show the cover embedded in their first track
-//! (owner, 2026-11-16: new Lidarr albums were blank squares in Plezy and the
+//! (owner, 2026-11-16: newly added albums were blank squares in Plezy and the
 //! admin; Jellyfin falls back to the embedded picture).
 use crate::common;
 

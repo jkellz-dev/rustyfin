@@ -52,10 +52,10 @@ pub struct AutoSet {
     pub items: Vec<Uuid>,
 }
 
-/// Group films by the series their NFO names. A TMDB collection id (Radarr's
+/// Group films by the series their NFO names. A TMDB collection id (the NFO's
 /// `tmdbcolid`) is the key when known; a film whose NFO only names the set
 /// joins the collection of that name that has an id, if any, so a library
-/// mid-way between Jellyfin and Radarr NFOs does not split. Sorted by name.
+/// mid-way between NFO writers does not split. Sorted by name.
 /// `found` is (film, set name, TMDB collection id).
 pub fn group_auto_sets(found: Vec<(Uuid, String, Option<String>)>) -> Vec<AutoSet> {
     use std::collections::BTreeMap;
@@ -80,7 +80,7 @@ pub fn group_auto_sets(found: Vec<(Uuid, String, Option<String>)>) -> Vec<AutoSe
             tmdb_id: tmdb_id.clone(),
             items: Vec::new(),
         });
-        // Radarr's (id-bearing) name wins over an older NFO's.
+        // The id-bearing name wins over an older NFO's.
         if has_own_id {
             group.name = name;
         }

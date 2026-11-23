@@ -21,7 +21,7 @@ device on your tailnet is already a known person, so apps connect with nothing m
 
 ## What it does
 
-- **Films, shows and music**, scanned from folders named the way Jellyfin, Radarr, Sonarr and Lidarr name them;
+- **Films, shows and music**, scanned from folders named the way Jellyfin and Kodi name them;
   NFO files, artwork and subtitle files beside the media; extras, film versions and collections.
 - **Playback**: direct play with HTTP ranges, remux, and HLS transcoding with ffmpeg (hardware acceleration optional),
   chosen from each app's device profile; subtitles embedded or beside the video; lyrics.

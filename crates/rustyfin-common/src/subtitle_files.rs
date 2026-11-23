@@ -1,4 +1,4 @@
-//! Subtitle files beside a video (Bazarr, downloads, rips), named as Jellyfin
+//! Subtitle files beside a video (subtitle tools, rips), named as Jellyfin
 //! reads them: `<video name>[.<language>][.forced|.default|.sdh].<srt|vtt|ass|ssa>`.
 
 use std::path::{Path, PathBuf};

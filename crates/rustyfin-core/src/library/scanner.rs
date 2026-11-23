@@ -515,7 +515,7 @@ impl LibraryScanner {
         if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
             if existing.etag.as_deref() == Some(&etag) {
                 self.refresh_stale_streams(existing.id, file_path).await;
-                // Art is not in the etag: the *arr apps write it after the
+                // Art is not in the etag: media managers write it after the
                 // import webhook has started the scan that added the title.
                 self.replace_images(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
@@ -1429,7 +1429,7 @@ impl LibraryScanner {
     /// never had a directory on record, go too. User data cascades.
     /// Group the library's films into collections by the film series their NFO
     /// names (`<set>`), as Jellyfin does. Every film's NFO is read on each scan,
-    /// so films scanned before this existed, and NFOs Radarr rewrote, are
+    /// so films scanned before this existed, and NFOs rewritten since, are
     /// picked up without a file change.
     async fn sync_movie_collections(&self, library_id: Uuid) {
         // Films only: a film's extras and other versions share its folder and

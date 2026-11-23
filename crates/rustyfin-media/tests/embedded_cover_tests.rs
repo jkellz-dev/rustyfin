@@ -1,5 +1,5 @@
 //! Cover art embedded in a track, for albums with no cover file (owner,
-//! 2026-11-16: new Lidarr albums showed blank in Plezy; Jellyfin uses the
+//! 2026-11-16: newly added albums showed blank in Plezy; Jellyfin uses the
 //! first track's embedded picture when the folder has none).
 use std::path::{Path, PathBuf};
 

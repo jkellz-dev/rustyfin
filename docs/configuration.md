@@ -196,7 +196,7 @@ of the same name replaces one, and the rest are kept.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Run scheduled tasks at all |
-| `run_on_startup` | bool | `false` | Run every task, library scans included, once when the server starts. Off by default: scans run on their schedule, when an admin asks, and when Radarr, Sonarr or Lidarr report an import |
+| `run_on_startup` | bool | `false` | Run every task, library scans included, once when the server starts. Off by default: scans run on their schedule, when an admin asks, and when a program sends a library notification |
 | `jitter_seconds` | integer | `300` | Random delay added to each scheduled run |
 | `schedules.daily.cron` | `String` | `0 0 3 * * * *` | 03:00 every day |
 | `schedules.weekly.cron` | `String` | `0 0 4 * * 7 *` | 04:00 on Sundays |
