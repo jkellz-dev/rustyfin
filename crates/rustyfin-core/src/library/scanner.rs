@@ -1432,42 +1432,10 @@ impl LibraryScanner {
     /// so films scanned before this existed, and NFOs rewritten since, are
     /// picked up without a file change.
     async fn sync_movie_collections(&self, library_id: Uuid) {
-        // Films only: a film's extras and other versions share its folder and
-        // NFO, and must not join its collection beside it.
-        let items = match media_items::list_film_paths(&self.pool, library_id).await {
-            Ok(items) => items,
-            Err(e) => {
-                tracing::error!("Collections: cannot list library {library_id}: {e}");
-                return;
-            }
-        };
-        let found: Vec<(Uuid, String, Option<String>)> = items
-            .into_iter()
-            .filter_map(|(id, path)| {
-                let path = Path::new(&path);
-                let nfo_set = find_movie_nfo(path)
-                    .and_then(|nfo| rustyfin_common::nfo::parse_movie_set(&nfo));
-                // TMDB's answer, when `rustyfin artwork --check-collections`
-                // recorded one, wins over an NFO that may be stale.
-                let looked_up = path
-                    .parent()
-                    .and_then(rustyfin_common::title_settings::load)
-                    .and_then(|s| Some((s.collection.tmdb?, s.collection.name)));
-                match looked_up {
-                    Some((tmdb, name)) => {
-                        let name = name.or_else(|| nfo_set.map(|s| s.name))?;
-                        Some((id, name, Some(tmdb.to_string())))
-                    }
-                    None => nfo_set.map(|set| (id, set.name, set.tmdb_id)),
-                }
-            })
-            .collect();
-        let sets = collections::group_auto_sets(found);
-        match collections::sync_auto(&self.pool, library_id, &sets).await {
-            Ok((0, 0)) => {}
-            Ok((created, removed)) => tracing::info!(
-                "Collections in library {library_id}: {} in all, {created} new, {removed} removed",
-                sets.len()
+        match rebuild_movie_collections(&self.pool, library_id).await {
+            Ok((_, 0, 0)) => {}
+            Ok((all, created, removed)) => tracing::info!(
+                "Collections in library {library_id}: {all} in all, {created} new, {removed} removed"
             ),
             Err(e) => tracing::error!("Collections: library {library_id}: {e}"),
         }
@@ -2124,4 +2092,81 @@ async fn probe_file_graceful(path: &Path) -> Option<probe::ProbeResult> {
             None
         }
     }
+}
+
+/// Make a films library's automatic collections again: the film series each
+/// film's NFO names (`<set>`), as Jellyfin does, or the collection
+/// `rustyfin artwork --check-collections` recorded; and for films a linked
+/// server holds, the collection that server puts them in (roadmap 16b.4),
+/// joined by TMDB collection id. This server's NFOs win: a film of its own
+/// keeps its own collection, and an id-bearing name here names the
+/// collection. Collections made by hand are never touched. Returns (how
+/// many, created, removed).
+pub async fn rebuild_movie_collections(
+    pool: &sqlx::PgPool,
+    library_id: Uuid,
+) -> Result<(usize, usize, usize), sqlx::Error> {
+    // Films only: a film's extras and other versions share its folder and
+    // NFO, and must not join its collection beside it.
+    let items = media_items::list_film_paths(pool, library_id).await?;
+    let found: Vec<(Uuid, String, Option<String>)> = items
+        .into_iter()
+        .filter_map(|(id, path)| {
+            let path = Path::new(&path);
+            let nfo_set =
+                find_movie_nfo(path).and_then(|nfo| rustyfin_common::nfo::parse_movie_set(&nfo));
+            // TMDB's answer, when `rustyfin artwork --check-collections`
+            // recorded one, wins over an NFO that may be stale.
+            let looked_up = path
+                .parent()
+                .and_then(rustyfin_common::title_settings::load)
+                .and_then(|s| Some((s.collection.tmdb?, s.collection.name)));
+            match looked_up {
+                Some((tmdb, name)) => {
+                    let name = name.or_else(|| nfo_set.map(|s| s.name))?;
+                    Some((id, name, Some(tmdb.to_string())))
+                }
+                None => nfo_set.map(|set| (id, set.name, set.tmdb_id)),
+            }
+        })
+        .collect();
+    // The linked films' collections. One with no name here takes the name
+    // this server or another friend gives that TMDB id, or is left out.
+    let own: std::collections::HashSet<Uuid> = found.iter().map(|f| f.0).collect();
+    let mut names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for (_, name, tmdb) in &found {
+        if let Some(tmdb) = tmdb {
+            names.entry(tmdb.clone()).or_insert_with(|| name.clone());
+        }
+    }
+    let linked = rustyfin_db::repo::links::collection_members(pool, library_id).await?;
+    for (_, name, tmdb) in &linked {
+        if let Some(tmdb) = tmdb
+            && !name.is_empty()
+        {
+            names.entry(tmdb.clone()).or_insert_with(|| name.clone());
+        }
+    }
+    let mut all: Vec<(Uuid, String, Option<String>)> = Vec::new();
+    for (film, name, tmdb) in linked {
+        if own.contains(&film) {
+            continue;
+        }
+        let name = match tmdb.as_ref().and_then(|t| names.get(t)) {
+            Some(here) => here.clone(),
+            None if !name.is_empty() => name,
+            None => continue,
+        };
+        if !all
+            .iter()
+            .any(|(f, n, t)| *f == film && *n == name && *t == tmdb)
+        {
+            all.push((film, name, tmdb));
+        }
+    }
+    // This server's own last: its id-bearing names win.
+    all.extend(found);
+    let sets = collections::group_auto_sets(all);
+    let (created, removed) = collections::sync_auto(pool, library_id, &sets).await?;
+    Ok((sets.len(), created, removed))
 }

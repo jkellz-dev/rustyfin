@@ -59,7 +59,32 @@ pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<Sync
         report.removed = links::delete_copies(pool, link.id, &gone).await?;
     }
     report.merged = links::merge(pool).await?;
+    sync_collections(pool, link, &mut report).await?;
     Ok(report)
+}
+
+/// The friend's collections: store them, and when they or the link's films
+/// changed, make the collections of the films libraries the link fills again.
+async fn sync_collections(
+    pool: &PgPool,
+    link: &Link,
+    report: &mut SyncReport,
+) -> anyhow::Result<()> {
+    let sets = match link.client.collections().await {
+        Ok(sets) => sets,
+        Err(e) => {
+            report.errors.push(format!("collections: {e:#}"));
+            return Ok(());
+        }
+    };
+    let changed = links::set_collections(pool, link.id, &sets).await?;
+    let films_changed = report.added + report.updated + report.removed + report.merged > 0;
+    if changed || films_changed {
+        for library in links::movie_libraries(pool, link.id).await? {
+            crate::library::scanner::rebuild_movie_collections(pool, library).await?;
+        }
+    }
+    Ok(())
 }
 
 /// What the link held before this sync.

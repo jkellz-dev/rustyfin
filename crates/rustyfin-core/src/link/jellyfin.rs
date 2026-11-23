@@ -488,6 +488,54 @@ impl JellyfinClient {
         }
     }
 
+    /// The collections (BoxSets) the link user can see. The friend's films
+    /// name their TMDB collection themselves (`TmdbCollection`), so only a
+    /// collection without a TMDB id has its films listed: one light request,
+    /// plus one per such collection.
+    pub async fn collections(
+        &self,
+    ) -> anyhow::Result<Vec<rustyfin_db::repo::links::LinkCollection>> {
+        let light = |q: &mut Vec<(&str, String)>| {
+            q.push(("EnableImages", "false".into()));
+            q.push(("EnableUserData", "false".into()));
+        };
+        let mut q = vec![
+            ("IncludeItemTypes", "BoxSet".to_string()),
+            ("Recursive", "true".into()),
+            ("Fields", "ProviderIds".into()),
+        ];
+        light(&mut q);
+        let body = self.get_json("/Items", &q).await?;
+        let mut out = Vec::new();
+        for v in items(&body) {
+            let (Some(id), Some(name)) = (v["Id"].as_str(), v["Name"].as_str()) else {
+                continue;
+            };
+            let tmdb_id = v["ProviderIds"]["Tmdb"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+            let members = if tmdb_id.is_some() {
+                Vec::new()
+            } else {
+                let mut q = vec![("ParentId", id.to_string())];
+                light(&mut q);
+                let films = self.get_json("/Items", &q).await?;
+                items(&films)
+                    .iter()
+                    .filter_map(|f| f["Id"].as_str().map(str::to_string))
+                    .collect()
+            };
+            out.push(rustyfin_db::repo::links::LinkCollection {
+                remote_id: id.to_string(),
+                name: name.to_string(),
+                tmdb_id,
+                members,
+            });
+        }
+        Ok(out)
+    }
+
     /// Full details of these items.
     pub async fn items_by_id(&self, ids: &[String]) -> anyhow::Result<Vec<Value>> {
         let body = self

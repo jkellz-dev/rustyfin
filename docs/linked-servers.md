@@ -13,6 +13,8 @@ appear in your libraries next to yours, as one collection:
 - Every version the friend keeps of a film is a copy of its own ("2160p Director's Cut · Alex").
 - A film of yours that lacks artwork, an overview, genres, ratings or provider ids borrows them from a friend's copy.
   What your film has is never replaced.
+- A friend's film joins your collection of its series (Alien³ joins your "Alien Collection"), and a collection only
+  your friend has comes across ([Collections](#collections)).
 - Your watched state, resume points and favourites stay on your server, whichever copy you played.
 
 Your apps only ever talk to your server. It signs in to the friend's server, keeps a copy of the shared catalogue (never
@@ -160,6 +162,20 @@ episodes by episode number. So:
   for shows.
 - A friend's season you lack goes into your show; a friend's episode you lack goes into your season; a friend's copy
   of an episode you have is another version of yours.
+
+## Collections
+
+Each sync also reads the friend's collections (one light request, plus one for each collection that has no TMDB id)
+and adds their films to yours, on the next scan as well:
+
+- **By TMDB collection id.** A friend's film says which TMDB collection it is in, and joins your collection with that
+  id. A collection you do not have comes across under your friend's name for it.
+- **Your name wins.** When you and your friend name a collection differently, yours is kept.
+- **Collections with no TMDB id** (ones your friend made by hand) come across by their films, under their name.
+- **Your own films stay where your NFOs put them**: a friend's copy of a film you have never moves it to another
+  collection.
+- When your friend drops a film or a collection, it leaves yours at the next sync. Collections you made by hand are
+  never touched. A Rustyfin friend's collections do not come across yet.
 
 ## Which copy plays
 

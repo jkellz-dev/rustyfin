@@ -1594,6 +1594,11 @@ Design, settled before any code:
       another friend's copy of a film the server lacks. Stable ids: the local film keeps its id; a linked copy keeps
       its row across syncs.
 - [ ] Series and seasons by provider id, episodes by series plus season and episode numbers
+- [x] Collections (owner, 2026-11-23: "Build it"): a friend's films join this server's collections by TMDB collection
+      id (Jellyfin's `TmdbCollection` provider id); the friend's collections come across under their name when this
+      server has none of that id, and the ones with no TMDB id by their films. This server's names and its own films'
+      NFO collections win; a scan keeps what the link brought. Not yet for Rustyfin links (their films carry no
+      collection id).
 - [ ] An item matched to several items on one server, or carrying conflicting provider ids, is never merged; it is
       listed in an admin "conflicts" view
 - [ ] Series and seasons merge too, so one show lists episodes from both servers, each episode with its copies

@@ -376,6 +376,122 @@ pub struct LinkedItem {
     pub images: Vec<(String, i32, String)>,
 }
 
+/// A friend's collection as the last sync saw it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LinkCollection {
+    /// The friend's id for it.
+    pub remote_id: String,
+    pub name: String,
+    /// Its TMDB collection id: the friend's films that name it join it.
+    pub tmdb_id: Option<String>,
+    /// For a collection with no TMDB id, the friend's ids of its films.
+    pub members: Vec<String>,
+}
+
+/// Make the link's stored collections `sets`; true when that changed them.
+pub async fn set_collections(
+    pool: &PgPool,
+    link_id: Uuid,
+    sets: &[LinkCollection],
+) -> Result<bool, sqlx::Error> {
+    let rows: Vec<(String, String, Option<String>, Vec<String>)> = sqlx::query_as(
+        "SELECT remote_id, name, tmdb_id, members FROM link_collections WHERE link_id = $1",
+    )
+    .bind(link_id)
+    .fetch_all(pool)
+    .await?;
+    let mut before: Vec<LinkCollection> = rows
+        .into_iter()
+        .map(|(remote_id, name, tmdb_id, mut members)| {
+            members.sort();
+            LinkCollection {
+                remote_id,
+                name,
+                tmdb_id,
+                members,
+            }
+        })
+        .collect();
+    let mut after: Vec<LinkCollection> = sets
+        .iter()
+        .cloned()
+        .map(|mut s| {
+            s.members.sort();
+            s
+        })
+        .collect();
+    before.sort();
+    after.sort();
+    after.dedup_by(|a, b| a.remote_id == b.remote_id);
+    if before == after {
+        return Ok(false);
+    }
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM link_collections WHERE link_id = $1")
+        .bind(link_id)
+        .execute(&mut *tx)
+        .await?;
+    for set in &after {
+        sqlx::query(
+            "INSERT INTO link_collections (link_id, remote_id, name, tmdb_id, members) \
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(link_id)
+        .bind(&set.remote_id)
+        .bind(&set.name)
+        .bind(&set.tmdb_id)
+        .bind(&set.members)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// The films linked into `library_id` and the collections their servers put
+/// them in: (the film, or the film it is a copy of; the collection's name,
+/// empty when the friend has no collection of that id; its TMDB id).
+pub async fn collection_members(
+    pool: &PgPool,
+    library_id: Uuid,
+) -> Result<Vec<(Uuid, String, Option<String>)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH films AS (
+            SELECT COALESCE(m.owner_id, m.id) AS film, m.link_id,
+                   split_part(m.remote_id, '/', 1) AS remote_item,
+                   NULLIF(m.external_ids->>'TmdbCollection', '') AS tmdb
+            FROM media_items m
+            WHERE m.library_id = $1 AND m.link_id IS NOT NULL AND m.item_type = 'Movie'
+              AND (m.owner_id IS NULL OR m.extra_type = 'Version')
+        )
+        SELECT f.film, COALESCE(c.name, ''), f.tmdb
+        FROM films f
+        LEFT JOIN link_collections c ON c.link_id = f.link_id AND c.tmdb_id = f.tmdb
+        WHERE f.tmdb IS NOT NULL
+        UNION
+        SELECT f.film, c.name, NULL
+        FROM films f
+        JOIN link_collections c ON c.link_id = f.link_id AND c.tmdb_id IS NULL
+         AND f.remote_item = ANY(c.members)
+        "#,
+    )
+    .bind(library_id)
+    .fetch_all(pool)
+    .await
+}
+
+/// The films libraries the link puts films in.
+pub async fn movie_libraries(pool: &PgPool, link_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT l.id FROM libraries l WHERE l.library_type = 'movies' AND (l.link_id = $1 \
+         OR EXISTS (SELECT 1 FROM media_items m WHERE m.library_id = l.id AND m.link_id = $1))",
+    )
+    .bind(link_id)
+    .fetch_all(pool)
+    .await
+}
+
 /// Store a linked item (new or changed); returns its row id and whether it
 /// was new. A new copy starts out on its own; [`merge`] makes it a version
 /// and puts seasons and episodes in place.
