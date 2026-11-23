@@ -206,7 +206,8 @@ async fn item_routes_still_serve_an_item_in_an_allowed_library() {
 #[tokio::test]
 async fn lists_do_not_contain_items_from_a_hidden_library() {
     let w = world().await;
-    let hidden = w.hidden.to_string();
+    // Answers write ids as 32 hex digits; look for either form.
+    let hidden = [w.hidden.to_string(), w.hidden.simple().to_string()];
     let mut leaks = Vec::new();
 
     for route in [
@@ -225,7 +226,8 @@ async fn lists_do_not_contain_items_from_a_hidden_library() {
         if !status.is_success() {
             continue; // a route that does not exist for this shape is not a leak
         }
-        if body.to_string().contains(&hidden) {
+        let text = body.to_string();
+        if hidden.iter().any(|h| text.contains(h.as_str())) {
             leaks.push(format!("GET {route} lists the hidden item"));
         }
     }

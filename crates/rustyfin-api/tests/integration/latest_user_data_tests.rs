@@ -204,6 +204,6 @@ async fn continue_watching_keeps_to_video_and_shows_in_progress() {
             &token,
         )
         .await;
-    assert_eq!(shows(&next), [untouched.to_string()], "{next}");
+    assert_eq!(shows(&next), [untouched.simple().to_string()], "{next}");
     app.cleanup().await;
 }

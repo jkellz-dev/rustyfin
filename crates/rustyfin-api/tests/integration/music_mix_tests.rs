@@ -87,7 +87,7 @@ async fn a_mix_plays_the_tracks_that_share_the_seeds_genre() {
             );
         }
         assert!(
-            !got.contains(&rock.to_string()),
+            !got.contains(&rock.simple().to_string()),
             "{path}: a rock track in a jazz mix"
         );
         assert_eq!(body["TotalRecordCount"], 3, "{path}");

@@ -135,7 +135,7 @@ async fn a_track_names_its_album_and_album_artist() {
     assert_eq!(track["Artists"], json!(["Band"]), "{track}");
     assert_eq!(
         track["ArtistItems"],
-        json!([{ "Name": "Band", "Id": w.band.to_string() }])
+        json!([{ "Name": "Band", "Id": w.band.simple().to_string() }])
     );
     assert_eq!(track["HasLyrics"], false, "{track}");
 
