@@ -31,6 +31,17 @@ pub struct VirtualFolderInfo {
     /// How long the last scan took, in milliseconds.
     #[serde(default)]
     pub last_scan_duration_ms: Option<i64>,
+    /// The linked servers that fill it; a scan of it syncs them.
+    #[serde(default)]
+    pub linked_servers: Vec<LinkedServer>,
+}
+
+/// A linked server that fills a library, and the library of its that does.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LinkedServer {
+    pub name: String,
+    pub library: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

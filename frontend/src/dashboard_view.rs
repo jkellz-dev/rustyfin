@@ -57,8 +57,15 @@ pub fn sync_line(iso: Option<&str>, duration_ms: Option<i64>) -> String {
 
 /// The libraries page's line for the linked servers a library syncs
 /// (owner, 2026-11-23): "Synced from Tenzelarom (Movies)".
-pub fn linked_line(_sources: &[(String, String)]) -> Option<String> {
-    None
+pub fn linked_line(sources: &[(String, String)]) -> Option<String> {
+    if sources.is_empty() {
+        return None;
+    }
+    let each: Vec<String> = sources
+        .iter()
+        .map(|(link, library)| format!("{link} ({library})"))
+        .collect();
+    Some(format!("Synced from {}", each.join(", ")))
 }
 
 /// A dashboard card's line for a library a link fills.

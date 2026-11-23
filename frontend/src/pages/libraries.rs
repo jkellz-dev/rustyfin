@@ -546,11 +546,13 @@ pub fn Libraries() -> View {
                                             let ctype = lib.collection_type.clone().unwrap_or_else(|| "unknown".to_string());
                                             // A library a link made has no folders: the link fills it.
                                             let linked = lib.locations.is_empty();
-                                            let locations = if linked {
-                                                "Filled by a linked server".to_string()
-                                            } else {
-                                                lib.locations.join(", ")
-                                            };
+                                            let locations = lib.locations.join(", ");
+                                            let sources: Vec<(String, String)> = lib
+                                                .linked_servers
+                                                .iter()
+                                                .map(|s| (s.name.clone(), s.library.clone()))
+                                                .collect();
+                                            let synced_from = dashboard_view::linked_line(&sources);
                                             let scan_id = lib.item_id.clone();
                                             let scanning = dashboard_view::is_scanning(lib.refresh_status.as_deref());
                                             let progress = lib.refresh_progress;
@@ -568,30 +570,41 @@ pub fn Libraries() -> View {
                                                         div(class="text-muted text-small") { (last) }
                                                     }
                                                     td(data-label="Type") { span(class="badge badge-type") { (ctype) } }
-                                                    td(data-label="Paths") { (locations) }
+                                                    td(data-label="Paths") {
+                                                        (if locations.is_empty() {
+                                                            view! {}
+                                                        } else {
+                                                            let locations = locations.clone();
+                                                            view! { div { (locations) } }
+                                                        })
+                                                        (match synced_from.clone() {
+                                                            Some(line) => view! { div(class="text-muted text-small") { (line) } },
+                                                            None => view! {},
+                                                        })
+                                                    }
                                                     td(data-label="Actions") {
                                                         div(class="flex-gap") {
                                                             (if linked {
-                                                                // Set in rustyfin.toml ([[link]]): nothing to change here.
-                                                                view! { span(class="text-muted text-small") { "Set in rustyfin.toml" } }
+                                                                view! {}
                                                             } else {
                                                                 let edit_lib = edit_lib.clone();
-                                                                let del_lib = del_lib.clone();
-                                                                let scan_id = scan_id.clone();
                                                                 view! {
-                                                            button(class="btn btn-secondary btn-sm",
-                                                                on:click={
-                                                                    let edit_lib = edit_lib.clone();
-                                                                    move |_| {
-                                                                        edit_name.set(edit_lib.name.clone());
-                                                                        edit_paths.set(edit_lib.locations.clone());
-                                                                        edit_target.set(Some(edit_lib.clone()));
-                                                                    }
+                                                                    button(class="btn btn-secondary btn-sm",
+                                                                        on:click={
+                                                                            let edit_lib = edit_lib.clone();
+                                                                            move |_| {
+                                                                                edit_name.set(edit_lib.name.clone());
+                                                                                edit_paths.set(edit_lib.locations.clone());
+                                                                                edit_target.set(Some(edit_lib.clone()));
+                                                                            }
+                                                                        }
+                                                                    ) { "Edit" }
                                                                 }
-                                                            ) { "Edit" }
+                                                            })
+                                                            // Scans its folders, then syncs the linked servers
+                                                            // that fill it; a link's own library only syncs.
                                                             button(class="btn btn-secondary btn-sm",
-                                                                // Nothing to scan: the link syncs it (Links page).
-                                                                disabled=scanning || linked,
+                                                                disabled=scanning,
                                                                 on:click={
                                                                     let scan_id = scan_id.clone();
                                                                     move |_| on_scan(scan_id.clone())
@@ -604,12 +617,18 @@ pub fn Libraries() -> View {
                                                                     view! { "Scan" }
                                                                 })
                                                             }
-                                                            button(class="btn btn-danger btn-sm",
-                                                                on:click={
-                                                                    let del_lib = del_lib.clone();
-                                                                    move |_| delete_target.set(Some(del_lib.clone()))
-                                                                }
-                                                            ) { "Delete" }
+                                                            (if linked {
+                                                                // Set in rustyfin.toml ([[link]]): nothing to change here.
+                                                                view! { span(class="text-muted text-small") { "Set in rustyfin.toml" } }
+                                                            } else {
+                                                                let del_lib = del_lib.clone();
+                                                                view! {
+                                                                    button(class="btn btn-danger btn-sm",
+                                                                        on:click={
+                                                                            let del_lib = del_lib.clone();
+                                                                            move |_| delete_target.set(Some(del_lib.clone()))
+                                                                        }
+                                                                    ) { "Delete" }
                                                                 }
                                                             })
                                                         }

@@ -335,6 +335,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     // A link taken out of the config goes, with what it brought.
+    if let Some(scheduler) = &task_scheduler_for_state {
+        scheduler.set_links(links.clone());
+    }
     let configured: Vec<String> = config.links.iter().map(|l| l.name.clone()).collect();
     match rustyfin_db::repo::links::remove_unconfigured(&db_pool, &configured).await {
         Ok(removed) => {

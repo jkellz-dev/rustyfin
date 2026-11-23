@@ -527,6 +527,18 @@ pub struct VirtualFolderInfo {
     /// How long the last scan took, in milliseconds (Rustyfin's own).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_scan_duration_ms: Option<i64>,
+    /// The linked servers that fill it, and which of their libraries
+    /// (Rustyfin's own): a scan of it syncs them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_servers: Vec<LinkedServer>,
+}
+
+/// A linked server that fills a library, and the library of its that does.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LinkedServer {
+    pub name: String,
+    pub library: String,
 }
 
 /// Request to create a new library.

@@ -117,7 +117,12 @@ against their server's transcode limits, and stops when their server sees it idl
 
 ## How syncing works
 
-Your server syncs each link 30 seconds after it starts and then every 15 minutes:
+Your server syncs each link 30 seconds after it starts and then every 15 minutes, and whenever you scan a library it
+fills: **Scan** on the Libraries page (or `POST /Library/Refresh?Id=…`) scans the library's folders, then syncs its
+links; a library a link made has no folders, so scanning it just syncs. **Scan All Libraries** syncs each link once,
+after the scans. The Libraries page lists, under each library's paths, the linked servers it syncs.
+
+Each sync:
 
 1. It signs in as the link user (and signs in again if the friend's server forgot the session).
 2. For each mapped library, it lists the friend's films (or series, seasons and episodes) with Jellyfin's change tag

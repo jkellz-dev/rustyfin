@@ -80,6 +80,9 @@ pub struct TaskScheduler {
     in_flight: Arc<RwLock<HashSet<Uuid>>>,
     people_cache_dir: Option<std::path::PathBuf>,
     static_tasks: RwLock<Vec<(String, Arc<dyn ScheduledTask>)>>, // (schedule_name, task)
+    /// The linked servers: "Scan All Libraries" syncs those that fill a
+    /// library after the scans (owner, 2026-11-23).
+    links: std::sync::OnceLock<Arc<crate::link::Links>>,
 }
 
 impl TaskScheduler {
@@ -95,7 +98,13 @@ impl TaskScheduler {
             in_flight,
             people_cache_dir,
             static_tasks: RwLock::new(Vec::new()),
+            links: std::sync::OnceLock::new(),
         }
+    }
+
+    /// The linked servers, made after the scheduler.
+    pub fn set_links(&self, links: Arc<crate::link::Links>) {
+        let _ = self.links.set(links);
     }
 
     /// Register a static task (not library-scan) with its schedule name.
@@ -522,6 +531,7 @@ impl TaskScheduler {
         // Special case: library_scan
         if task_key == "library_scan" {
             let pool = self.pool.clone();
+            let links = self.links.get().cloned();
             let in_flight = self.in_flight.clone();
             let people_cache_dir = self.people_cache_dir.clone();
             tokio::spawn(async move {
@@ -543,8 +553,11 @@ impl TaskScheduler {
                 let scanner =
                     crate::library::scanner::LibraryScanner::new(pool.clone(), people_cache_dir);
                 let mut had_error = false;
+                let named: Vec<(String, Option<Uuid>)> =
+                    libs.iter().map(|l| (l.name.clone(), l.link_id)).collect();
                 for lib in libs {
-                    if in_flight.read().await.contains(&lib.id) {
+                    // A library a link made has no folders: its sync is its scan.
+                    if lib.paths.is_empty() || in_flight.read().await.contains(&lib.id) {
                         continue;
                     }
                     in_flight.write().await.insert(lib.id);
@@ -556,6 +569,10 @@ impl TaskScheduler {
                         }
                     }
                     in_flight.write().await.remove(&lib.id);
+                }
+                // Then the links that fill them, each once.
+                if let Some(links) = links {
+                    links.sync_for(&pool, &named).await;
                 }
                 if result_id >= 0 {
                     if had_error {

@@ -10,8 +10,8 @@ use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
 use rustyfin_db::repo::{activity_log, libraries, user_library_access};
 use rustyfin_models::dto::{
-    BaseItemDto, CreateLibraryRequest, LibraryOptions, MediaPathInfo, NameGuidPair, QueryResult,
-    UpdateLibraryRequest, VirtualFolderInfo,
+    BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
+    QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
 };
 
 use crate::error::{ApiError, DegradeExt};
@@ -348,14 +348,28 @@ pub async fn get_virtual_folders(
         .map_err(ApiError::Database)?;
 
     let scanning = state.scan_in_flight.read().await.clone();
+    // The linked servers each library syncs (Rustyfin's own).
+    let mut sources = std::collections::HashMap::new();
+    for lib in &libs {
+        let found: Vec<LinkedServer> = state
+            .links
+            .sources(&lib.name, lib.link_id)
+            .await
+            .into_iter()
+            .map(|(_, name, library)| LinkedServer { name, library })
+            .collect();
+        sources.insert(lib.id, found);
+    }
     let folders: Vec<VirtualFolderInfo> = libs
         .into_iter()
         .map(|lib| {
+            let linked = sources.remove(&lib.id).unwrap_or_default();
             let active = scanning.contains(&lib.id);
             let board = rustyfin_core::library::progress::ScanBoard::global();
             let progress = board.percent(lib.id);
             let last = board.last(lib.id);
             let mut info = folder_info(lib);
+            info.linked_servers = linked;
             info.refresh_status = Some(
                 if active || progress.is_some() {
                     "Active"
@@ -440,12 +454,30 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
     let search_service = state.search_service.clone();
     let scan_in_flight = state.scan_in_flight.clone();
     let people_cache_dir = state.people_cache_dir.clone();
+    let links = state.links.clone();
     tokio::spawn(async move {
         let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
+        // Owner, 2026-11-23: a scan of a library is followed by a sync of the
+        // links that fill it, each once; a library a link made has no
+        // folders, so its sync is its scan. A library stays "scanning" until
+        // its links have synced.
+        let mut filled = Vec::new();
         for lib in libs_to_scan {
-            if let Err(e) = scanner.scan(lib.id, &lib.paths).await {
+            if !lib.paths.is_empty()
+                && let Err(e) = scanner.scan(lib.id, &lib.paths).await
+            {
                 tracing::error!("Scan failed for library {}: {e}", lib.id);
             }
+            if links.sources(&lib.name, lib.link_id).await.is_empty() {
+                scan_in_flight.write().await.remove(&lib.id);
+            } else {
+                filled.push(lib);
+            }
+        }
+        let named: Vec<(String, Option<uuid::Uuid>)> =
+            filled.iter().map(|l| (l.name.clone(), l.link_id)).collect();
+        links.sync_for(&pool, &named).await;
+        for lib in filled {
             scan_in_flight.write().await.remove(&lib.id);
         }
         let _ = activity_log::insert(
@@ -673,6 +705,7 @@ fn folder_info(lib: libraries::LibraryRow) -> VirtualFolderInfo {
         last_scan_removed: None,
         last_scan_errors: None,
         last_scan_failure: None,
+        linked_servers: Vec::new(),
     }
 }
 

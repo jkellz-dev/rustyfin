@@ -267,6 +267,54 @@ impl Links {
         }
     }
 
+    /// The links that fill a library (named `library_name`; `library_link`
+    /// when a link made it), and the friend's library each brings: (link id,
+    /// link name, the friend's library), from the config, so known before
+    /// the first sync.
+    pub async fn sources(
+        &self,
+        library_name: &str,
+        library_link: Option<Uuid>,
+    ) -> Vec<(Uuid, String, String)> {
+        let here = library_name.trim().to_lowercase();
+        let links = self.links.read().await;
+        let mut out = Vec::new();
+        for link in links.values() {
+            for map in &link.settings.libraries {
+                let remote = map.remote.trim();
+                let fills = match &map.local {
+                    Some(local) => local.trim().to_lowercase() == here,
+                    None => {
+                        library_link == Some(link.id)
+                            && format!("{remote} · {}", link.settings.name).to_lowercase() == here
+                    }
+                };
+                if fills {
+                    out.push((link.id, link.settings.name.clone(), remote.to_string()));
+                }
+            }
+        }
+        out.sort_by(|a, b| (&a.1, &a.2).cmp(&(&b.1, &b.2)));
+        out
+    }
+
+    /// Sync, one after another, each link that fills any of `libraries`
+    /// ((name, the link that made it)), each once: a library's scan is
+    /// followed by its links' syncs (owner, 2026-11-23).
+    pub async fn sync_for(&self, pool: &PgPool, libraries: &[(String, Option<Uuid>)]) {
+        let mut ids: Vec<Uuid> = Vec::new();
+        for (name, made_by) in libraries {
+            for (id, _, _) in self.sources(name, *made_by).await {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        for id in ids {
+            let _ = self.sync(pool, id).await;
+        }
+    }
+
     pub async fn ids(&self) -> Vec<Uuid> {
         self.links.read().await.keys().copied().collect()
     }
