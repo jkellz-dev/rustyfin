@@ -145,7 +145,7 @@ async fn media_folders_list_every_library_as_a_collection_folder() {
     }
     let shows = items
         .iter()
-        .find(|i| i["Id"] == w.shows.to_string())
+        .find(|i| i["Id"] == w.shows.simple().to_string())
         .unwrap();
     assert_eq!(shows["Name"], "Shows");
     assert_eq!(shows["Type"], "CollectionFolder");

@@ -129,7 +129,7 @@ async fn a_track_names_its_album_and_album_artist() {
     assert_eq!(track["AlbumArtist"], "Band", "{track}");
     assert_eq!(
         track["AlbumArtists"],
-        json!([{ "Name": "Band", "Id": w.band.to_string() }])
+        json!([{ "Name": "Band", "Id": w.band.simple().to_string() }])
     );
     // No tags: the track's artist is the album artist.
     assert_eq!(track["Artists"], json!(["Band"]), "{track}");

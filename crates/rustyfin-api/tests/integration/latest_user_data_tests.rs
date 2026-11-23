@@ -188,7 +188,7 @@ async fn continue_watching_keeps_to_video_and_shows_in_progress() {
             &token,
         )
         .await;
-    assert_eq!(shows(&next), [started.to_string()], "{next}");
+    assert_eq!(shows(&next), [started.simple().to_string()], "{next}");
 
     // A show last watched before the cutoff is left out; the untouched one stays.
     sqlx::query("UPDATE user_data SET last_played_date = NOW() - INTERVAL '2 years'")

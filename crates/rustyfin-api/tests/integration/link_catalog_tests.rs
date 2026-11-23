@@ -150,7 +150,11 @@ async fn the_change_feed_carries_only_what_changed_where_the_user_can_see() {
         .cloned()
         .unwrap();
     assert_eq!(entry["type"], "Series", "{first}");
-    assert_eq!(entry["library_id"], json!(shows), "{first}");
+    assert_eq!(
+        entry["library_id"],
+        json!(shows.simple().to_string()),
+        "{first}"
+    );
     assert_eq!(first["more"], false, "{first}");
     assert!(first["cursor"].is_string(), "{first}");
 
