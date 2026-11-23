@@ -26,6 +26,7 @@ mod episode_thumb_tests;
 mod external_subtitle_tests;
 mod extras_tests;
 mod folder_identity_tests;
+mod guid_format_tests;
 mod has_lyrics_tests;
 mod headshot_tests;
 mod hls_api_key_tests;
