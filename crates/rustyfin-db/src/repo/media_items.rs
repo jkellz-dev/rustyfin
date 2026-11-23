@@ -2169,15 +2169,26 @@ impl ItemQuery {
         }
 
         // Artist filter: albums below the artist, their tracks, and tracks
-        // whose artists name it.
+        // whose artists name it. Found once, as a set of ids, by index
+        // (parent_id, and the GIN index on artists): checked item by item it
+        // took seconds in a large music library (owner, 2026-11-23).
         if !self.artist_ids.is_empty() {
-            qb.push(" AND EXISTS (SELECT 1 FROM visible_media_items a WHERE a.id = ANY(");
+            let artists = "(SELECT a.id FROM visible_media_items a WHERE a.id = ANY(";
+            qb.push(" AND mi.id IN (SELECT x.id FROM visible_media_items x WHERE x.parent_id IN ");
+            qb.push(artists);
             qb.push_bind(&self.artist_ids);
             qb.push(
-                ") AND (mi.parent_id = a.id \
-                   OR mi.parent_id IN (SELECT al.id FROM visible_media_items al WHERE al.parent_id = a.id) \
-                   OR a.name = ANY(mi.artists)))",
+                ")) UNION ALL SELECT t.id FROM visible_media_items t WHERE t.parent_id IN \
+                 (SELECT al.id FROM visible_media_items al WHERE al.parent_id IN ",
             );
+            qb.push(artists);
+            qb.push_bind(&self.artist_ids);
+            qb.push(
+                "))) UNION ALL SELECT t.id FROM visible_media_items t WHERE t.artists && \
+                 ARRAY(SELECT a.name FROM visible_media_items a WHERE a.id = ANY(",
+            );
+            qb.push_bind(&self.artist_ids);
+            qb.push(")))");
         }
 
         // Album filter: the album's tracks, directly or in a disc folder.
