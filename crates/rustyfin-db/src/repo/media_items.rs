@@ -741,6 +741,25 @@ pub async fn delete_by_path(pool: &PgPool, path: &str) -> Result<bool, sqlx::Err
     Ok(result.rows_affected() > 0)
 }
 
+/// The paths of the items of `item_type` whose provider id `key` (`Imdb`,
+/// `Tmdb`, `Tvdb`) is `value`, in any case.
+pub async fn paths_by_external_id(
+    pool: &PgPool,
+    item_type: &str,
+    key: &str,
+    value: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT path FROM media_items WHERE item_type = $1 AND path IS NOT NULL \
+         AND lower(external_ids->>$2) = lower($3)",
+    )
+    .bind(item_type)
+    .bind(key)
+    .bind(value)
+    .fetch_all(pool)
+    .await
+}
+
 /// Delete all media items for a library.
 pub async fn delete_by_library(pool: &PgPool, library_id: Uuid) -> Result<u64, sqlx::Error> {
     let result = sqlx::query("DELETE FROM media_items WHERE library_id = $1")

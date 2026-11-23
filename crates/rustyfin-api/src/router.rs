@@ -122,6 +122,8 @@ fn routes(state: AppState) -> Router {
         // ── Startup ─────────────────────────────────────────────
         .route("/Startup/Configuration", get(system::get_startup_config))
         .route("/Startup/Complete", post(system::complete_startup))
+        .route("/Startup/User", get(system::get_startup_user))
+        .route("/Startup/FirstUser", get(system::get_startup_user))
         // ── Branding (no auth) ──────────────────────────────────
         .route(
             "/Branding/Configuration",
@@ -170,6 +172,10 @@ fn routes(state: AppState) -> Router {
             "/Users/{userId}/Configuration",
             post(users::update_user_configuration),
         )
+        .route(
+            "/Users/Configuration",
+            post(users::update_own_configuration),
+        )
         .route("/Users/New", post(stubs::create_user_disabled))
         // ── User images ──────────────────────────────────────
         .route(
@@ -184,6 +190,11 @@ fn routes(state: AppState) -> Router {
         )
         // ── Media update notifications ─────────────────────────
         .route("/Library/Media/Updated", post(webhooks::post_updated_media))
+        // Sonarr's and Radarr's older notifications, by provider id.
+        .route("/Library/Movies/Added", post(webhooks::post_updated_movies))
+        .route("/Library/Movies/Updated", post(webhooks::post_updated_movies))
+        .route("/Library/Series/Added", post(webhooks::post_updated_series))
+        .route("/Library/Series/Updated", post(webhooks::post_updated_series))
         // ── Library views ───────────────────────────────────────
         .route("/UserViews", get(libraries::get_user_views))
         .route(
@@ -266,6 +277,10 @@ fn routes(state: AppState) -> Router {
         .route(
             "/Items/{itemId}/Images/{imageType}/{imageIndex}",
             get(images::get_item_image_by_index),
+        )
+        .route(
+            "/Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}",
+            get(images::get_item_image_by_path),
         )
         .route("/Items/{itemId}/Images", get(images::get_item_images_list))
         // ── Entity image stubs (genres, studios, persons, artists, music genres) ──
@@ -461,6 +476,16 @@ fn routes(state: AppState) -> Router {
             post(remote_control::send_general_command),
         )
         .route(
+            "/Sessions/{sessionId}/System/{command}",
+            post(remote_control::send_general_command),
+        )
+        // A Rustyfin session carries one user (the one Tailscale names), so
+        // adding or removing others is a no-op.
+        .route(
+            "/Sessions/{sessionId}/User/{userId}",
+            post(stubs::no_content_auth).delete(stubs::no_content_auth),
+        )
+        .route(
             "/Sessions/{sessionId}/Command",
             post(remote_control::send_full_general_command),
         )
@@ -517,7 +542,10 @@ fn routes(state: AppState) -> Router {
         .route("/Shows/{seriesId}/Episodes", get(shows::get_episodes))
         // ── Quick Connect ────────────────────────────────────────
         .route("/QuickConnect/Enabled", get(quick_connect::get_enabled))
-        .route("/QuickConnect/Initiate", post(quick_connect::initiate))
+        .route(
+            "/QuickConnect/Initiate",
+            post(quick_connect::initiate).get(quick_connect::initiate),
+        )
         .route("/QuickConnect/Connect", get(quick_connect::connect))
         .route("/QuickConnect/Authorize", post(quick_connect::authorize))
         // ── Localization ─────────────────────────────────────────
@@ -594,6 +622,14 @@ fn routes(state: AppState) -> Router {
         // Jellyfin answers Similar under each type's path too.
         .route("/Movies/{itemId}/Similar", get(similar::get_similar))
         .route("/Trailers/{itemId}/Similar", get(similar::get_similar))
+        // No trailer libraries (trailers are a title's extras): always empty.
+        .route("/Trailers", get(stubs::empty_query_result_auth))
+        .route(
+            "/Items/{itemId}/CriticReviews",
+            get(stubs::empty_query_result_auth),
+        )
+        // Rustyfin does not hand out its machine's network addresses.
+        .route("/System/WakeOnLanInfo", get(stubs::empty_array_auth))
         .route("/Shows/{seriesId}/Similar", get(similar::get_similar))
         .route("/Albums/{itemId}/Similar", get(similar::get_similar))
         .route("/Artists/{name}/Similar", get(similar::get_similar))

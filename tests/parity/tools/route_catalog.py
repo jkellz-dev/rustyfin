@@ -35,6 +35,7 @@ BOUNDARIES = [
     (r".*", r"/web/configurationpages?", "no plugins (plugin configuration pages)"),
     (r".*", r"/channels(/.*)?", "no plugins (channels come from channel plugins)"),
     (r".*", r"/items/remotesearch/book", "no book libraries"),
+    (r"POST", r"/clientlog/document", "client logs are not part of the server (roadmap 15g)"),
     (r"POST|DELETE", r"/startup/.*", "configuration is a read-only file, not a setup wizard"),
     (r"POST", r"/system/configuration(/.*)?", "configuration is a read-only file"),
     (r"POST", r"/system/(restart|shutdown)", "the server's lifecycle belongs to its supervisor"),
@@ -59,6 +60,7 @@ BOUNDARIES = [
 def norm(path):
     p = "/" + path.strip("/")
     p = re.sub(r"\{[^}]+\}\.\{[^}]+\}", "{}", p)  # {segmentId}.{container}: one segment
+    p = re.sub(r"\{[^}]+\}\.[A-Za-z0-9]+(?=/|$)", "{}", p)  # {index}.jpg: axum's {index} takes it
     p = re.sub(r"\{[^}]+\}", "{}", p)
     return p.lower()
 

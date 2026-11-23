@@ -71,6 +71,25 @@ pub(crate) fn user_configuration(row: &users::UserRow) -> UserConfiguration {
 
 /// `POST /Users/{userId}/Configuration`: save the app's settings for a user
 /// (the user themself, or an administrator).
+/// `?userId=` on `POST /Users/Configuration`.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UserIdQuery {
+    pub user_id: Option<Uuid>,
+}
+
+/// `POST /Users/Configuration`: as `POST /Users/{userId}/Configuration`, for
+/// `?userId=` or else the signed-in user.
+pub async fn update_own_configuration(
+    state: State<AppState>,
+    auth: AuthenticatedUser,
+    axum::extract::Query(q): axum::extract::Query<UserIdQuery>,
+    config: Json<UserConfiguration>,
+) -> Result<StatusCode, ApiError> {
+    let user_id = q.user_id.unwrap_or(auth.user_id);
+    update_user_configuration(state, auth, Path(user_id), config).await
+}
+
 pub async fn update_user_configuration(
     State(state): State<AppState>,
     auth: AuthenticatedUser,

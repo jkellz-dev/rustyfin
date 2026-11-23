@@ -30,6 +30,11 @@ pub async fn no_content_auth(_auth: AuthenticatedUser) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
+/// Empty JSON array — requires a signed-in user.
+pub async fn empty_array_auth(_auth: AuthenticatedUser) -> Json<Vec<()>> {
+    Json(vec![])
+}
+
 /// 204 No Content — requires admin.
 pub async fn no_content_admin(_auth: AdminUser) -> StatusCode {
     StatusCode::NO_CONTENT

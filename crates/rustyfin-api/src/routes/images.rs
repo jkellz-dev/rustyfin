@@ -231,6 +231,36 @@ async fn serve_placeholder(
     serve_image(&path.to_string_lossy(), opts, state, req).await
 }
 /// `GET /Items/{itemId}/Images/{imageType}/{imageIndex}` -- Serve item image by index.
+/// The image path's segments after the index: tag, format, max width, max
+/// height, percent played, unplayed count.
+type ImagePathTail = (Uuid, String, i32, String, String, u32, u32, String, String);
+
+/// `GET /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}`:
+/// Jellyfin's older form, the query's options as path segments. The played
+/// and unplayed overlays are not drawn (as in Jellyfin, which ignores them).
+pub async fn get_item_image_by_path(
+    state: State<AppState>,
+    user: OptionalUser,
+    Path((item_id, image_type, image_index, tag, format, max_width, max_height, _, _)): Path<
+        ImagePathTail,
+    >,
+    Query(mut params): Query<ImageParams>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    params.tag.get_or_insert(tag);
+    params.format.get_or_insert(format);
+    params.max_width.get_or_insert(max_width);
+    params.max_height.get_or_insert(max_height);
+    get_item_image_by_index(
+        state,
+        user,
+        Path((item_id, image_type, image_index)),
+        Query(params),
+        headers,
+    )
+    .await
+}
+
 pub async fn get_item_image_by_index(
     State(state): State<AppState>,
     user: OptionalUser,

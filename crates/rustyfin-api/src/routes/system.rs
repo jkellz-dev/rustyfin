@@ -105,6 +105,32 @@ pub async fn ping(State(state): State<AppState>) -> impl IntoResponse {
     (StatusCode::OK, Json(state.server_name.clone()))
 }
 
+/// The startup wizard's user.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct StartupUser {
+    pub name: Option<String>,
+    pub password: Option<String>,
+}
+
+/// `GET /Startup/User` and `/Startup/FirstUser`: the first user made. Jellyfin
+/// also sends that user's password hash; Rustyfin has no passwords (Tailscale
+/// signs users in), so `Password` is null. Admins only: setup is long done.
+pub async fn get_startup_user(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> Result<Json<StartupUser>, ApiError> {
+    let first = users::list_all(&state.pool)
+        .await
+        .map_err(ApiError::Database)?
+        .into_iter()
+        .min_by_key(|u| u.created_at);
+    Ok(Json(StartupUser {
+        name: first.map(|u| u.username),
+        password: None,
+    }))
+}
+
 /// `GET /Startup/Configuration` — Check if startup wizard is complete.
 pub async fn get_startup_config(State(state): State<AppState>) -> Json<StartupConfiguration> {
     let wizard_complete = is_wizard_complete(&state).await;

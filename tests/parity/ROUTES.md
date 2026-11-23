@@ -6,11 +6,11 @@ Rustyfin serves it, which parity case files ask it, and the design boundary that
 leaves it out, if one does (roadmap.md, "Design Boundaries").
 
 - Jellyfin routes: 426
-- Served by Rustyfin: 208
-- Missing: 128
-- Outside a design boundary: 90
+- Served by Rustyfin: 275
+- Missing: 64
+- Outside a design boundary: 87
 - Asked by a parity case: 122
-- Served but asked by no case: 112
+- Served but asked by no case: 149
 
 Status: **served**, **missing** (a gap), or **boundary** (left out on purpose).
 Cases: the `tests/parity/cases` files that ask the route; `-` means none does yet.
@@ -36,7 +36,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | --- | --- | --- | --- | --- |
 | `GET /Artists` | served | library, plezy | Default |  |
 | `GET /Artists/AlbumArtists` | served | admin, browse, detail, extras, library, localization, media, mix, music, names, playback, plezy, sessions, system, users | Default |  |
-| `GET /Artists/{name}` | missing | names | Default |  |
+| `GET /Artists/{name}` | served | names | Default |  |
 
 ## Audio
 
@@ -62,7 +62,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | --- | --- | --- | --- | --- |
 | `GET /Branding/Configuration` | served | system | anonymous |  |
 | `GET /Branding/Css` | served | media | anonymous |  |
-| `GET /Branding/Css.css` | missing | media | anonymous |  |
+| `GET /Branding/Css.css` | served | media | anonymous |  |
 
 ## Channels
 
@@ -78,7 +78,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `POST /ClientLog/Document` | missing | - | Default |  |
+| `POST /ClientLog/Document` | boundary | - | Default | client logs are not part of the server (roadmap 15g) |
 
 ## Collection
 
@@ -95,7 +95,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /System/Configuration` | served | admin | Default |  |
 | `POST /System/Configuration` | served | - | RequiresElevation | configuration is a read-only file |
 | `POST /System/Configuration/Branding` | boundary | - | RequiresElevation | only v12.4; configuration is a read-only file |
-| `GET /System/Configuration/MetadataOptions/Default` | missing | admin | RequiresElevation |  |
+| `GET /System/Configuration/MetadataOptions/Default` | served | admin | RequiresElevation |  |
 | `GET /System/Configuration/{key}` | served | - | Default |  |
 | `POST /System/Configuration/{key}` | served | - | RequiresElevation | configuration is a read-only file |
 | `POST /System/MediaEncoder/Path` | boundary | - | FirstTimeSetupOrElevated | obsolete; only v10.10.7; configuration is a read-only file |
@@ -113,8 +113,8 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | --- | --- | --- | --- | --- |
 | `DELETE /Devices` | served | - | RequiresElevation |  |
 | `GET /Devices` | served | admin, detail, media, mix, names | RequiresElevation |  |
-| `GET /Devices/Info` | missing | admin | RequiresElevation |  |
-| `GET /Devices/Options` | missing | - | RequiresElevation |  |
+| `GET /Devices/Info` | served | admin | RequiresElevation |  |
+| `GET /Devices/Options` | served | - | RequiresElevation |  |
 | `POST /Devices/Options` | missing | - | RequiresElevation |  |
 
 ## DisplayPreferences
@@ -180,7 +180,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Artists/{name}/Images/{imageType}/{imageIndex}` | served | - | anonymous |  |
 | `HEAD /Artists/{name}/Images/{imageType}/{imageIndex}` | served | - | anonymous |  |
 | `DELETE /Branding/Splashscreen` | boundary | - | RequiresElevation | configuration is a read-only file (branding) |
-| `GET /Branding/Splashscreen` | missing | media | anonymous |  |
+| `GET /Branding/Splashscreen` | served | media | anonymous |  |
 | `POST /Branding/Splashscreen` | boundary | - | RequiresElevation | configuration is a read-only file (branding) |
 | `GET /Genres/{name}/Images/{imageType}` | served | - | anonymous |  |
 | `HEAD /Genres/{name}/Images/{imageType}` | served | - | anonymous |  |
@@ -196,8 +196,8 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}` | served | - | anonymous |  |
 | `POST /Items/{itemId}/Images/{imageType}/{imageIndex}` | boundary | - | RequiresElevation | the server never writes to media (art is rustyfin-meta's) |
 | `POST /Items/{itemId}/Images/{imageType}/{imageIndex}/Index` | boundary | - | RequiresElevation | the server never writes to media (art is rustyfin-meta's) |
-| `GET /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}` | missing | - | anonymous |  |
-| `HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}` | missing | - | anonymous |  |
+| `GET /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}` | served | - | anonymous |  |
+| `HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}` | served | - | anonymous |  |
 | `GET /MusicGenres/{name}/Images/{imageType}` | served | - | anonymous |  |
 | `HEAD /MusicGenres/{name}/Images/{imageType}` | served | - | anonymous |  |
 | `GET /MusicGenres/{name}/Images/{imageType}/{imageIndex}` | served | - | anonymous |  |
@@ -211,8 +211,8 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Studios/{name}/Images/{imageType}/{imageIndex}` | served | - | anonymous |  |
 | `HEAD /Studios/{name}/Images/{imageType}/{imageIndex}` | served | - | anonymous |  |
 | `DELETE /UserImage` | missing | - | Default |  |
-| `GET /UserImage` | missing | media | anonymous |  |
-| `HEAD /UserImage` | missing | - | anonymous |  |
+| `GET /UserImage` | served | media | anonymous |  |
+| `HEAD /UserImage` | served | - | anonymous |  |
 | `POST /UserImage` | missing | - | Default |  |
 | `DELETE /Users/{userId}/Images/{imageType}` | served | - | Default | obsolete |
 | `GET /Users/{userId}/Images/{imageType}` | served | - | anonymous | obsolete |
@@ -227,14 +227,14 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `GET /Albums/{itemId}/InstantMix` | missing | mix | Default |  |
-| `GET /Artists/InstantMix` | missing | mix | Default | obsolete |
-| `GET /Artists/{itemId}/InstantMix` | missing | mix | Default |  |
-| `GET /Items/{itemId}/InstantMix` | missing | mix | Default |  |
-| `GET /MusicGenres/InstantMix` | missing | mix | Default |  |
-| `GET /MusicGenres/{name}/InstantMix` | missing | mix | Default |  |
-| `GET /Playlists/{itemId}/InstantMix` | missing | - | Default |  |
-| `GET /Songs/{itemId}/InstantMix` | missing | mix | Default |  |
+| `GET /Albums/{itemId}/InstantMix` | served | mix | Default |  |
+| `GET /Artists/InstantMix` | served | mix | Default | obsolete |
+| `GET /Artists/{itemId}/InstantMix` | served | mix | Default |  |
+| `GET /Items/{itemId}/InstantMix` | served | mix | Default |  |
+| `GET /MusicGenres/InstantMix` | served | mix | Default |  |
+| `GET /MusicGenres/{name}/InstantMix` | served | mix | Default |  |
+| `GET /Playlists/{itemId}/InstantMix` | served | - | Default |  |
+| `GET /Songs/{itemId}/InstantMix` | served | mix | Default |  |
 
 ## ItemLookup
 
@@ -283,14 +283,14 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `GET /Albums/{itemId}/Similar` | missing | detail | Default |  |
-| `GET /Artists/{itemId}/Similar` | missing | detail | Default |  |
+| `GET /Albums/{itemId}/Similar` | served | detail | Default |  |
+| `GET /Artists/{itemId}/Similar` | served | detail | Default |  |
 | `DELETE /Items` | boundary | - | Default | the server never deletes media |
 | `GET /Items/Counts` | served | library | Default |  |
 | `DELETE /Items/{itemId}` | boundary | - | Default | the server never deletes media |
 | `GET /Items/{itemId}/Ancestors` | served | browse, detail | Default |  |
 | `GET /Items/{itemId}/Collections` | served | - | Default | only v12.4 |
-| `GET /Items/{itemId}/CriticReviews` | missing | - | Default | obsolete; only v10.10.7 |
+| `GET /Items/{itemId}/CriticReviews` | served | - | Default | obsolete; only v10.10.7 |
 | `GET /Items/{itemId}/Download` | served | media | Download |  |
 | `GET /Items/{itemId}/File` | served | media | Default |  |
 | `GET /Items/{itemId}/Similar` | served | browse, plezy | Default |  |
@@ -300,15 +300,15 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Libraries/AvailableOptions` | missing | detail | FirstTimeSetupOrDefault |  |
 | `POST /Library/Media/Updated` | served | - | Default |  |
 | `GET /Library/MediaFolders` | served | library | RequiresElevation |  |
-| `POST /Library/Movies/Added` | missing | - | Default |  |
-| `POST /Library/Movies/Updated` | missing | - | Default |  |
+| `POST /Library/Movies/Added` | served | - | Default |  |
+| `POST /Library/Movies/Updated` | served | - | Default |  |
 | `GET /Library/PhysicalPaths` | served | system | RequiresElevation |  |
 | `POST /Library/Refresh` | served | - | RequiresElevation |  |
-| `POST /Library/Series/Added` | missing | - | Default |  |
-| `POST /Library/Series/Updated` | missing | - | Default |  |
-| `GET /Movies/{itemId}/Similar` | missing | detail | Default |  |
-| `GET /Shows/{itemId}/Similar` | missing | detail | Default |  |
-| `GET /Trailers/{itemId}/Similar` | missing | detail | Default |  |
+| `POST /Library/Series/Added` | served | - | Default |  |
+| `POST /Library/Series/Updated` | served | - | Default |  |
+| `GET /Movies/{itemId}/Similar` | served | detail | Default |  |
+| `GET /Shows/{itemId}/Similar` | served | detail | Default |  |
+| `GET /Trailers/{itemId}/Similar` | served | detail | Default |  |
 
 ## LibraryStructure
 
@@ -395,9 +395,9 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | --- | --- | --- | --- | --- |
 | `GET /Items/{itemId}/PlaybackInfo` | served | detail | Default |  |
 | `POST /Items/{itemId}/PlaybackInfo` | served | playback, plezy | Default |  |
-| `POST /LiveStreams/Close` | missing | - | Default |  |
-| `POST /LiveStreams/Open` | missing | - | Default |  |
-| `GET /Playback/BitrateTest` | missing | media | Default |  |
+| `POST /LiveStreams/Close` | served | - | Default |  |
+| `POST /LiveStreams/Open` | served | - | Default |  |
+| `GET /Playback/BitrateTest` | served | media | Default |  |
 
 ## MediaSegments
 
@@ -441,24 +441,24 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
 | `POST /Playlists` | served | - | Default |  |
-| `GET /Playlists/{playlistId}` | missing | - | Default |  |
-| `POST /Playlists/{playlistId}` | missing | - | Default |  |
+| `GET /Playlists/{playlistId}` | served | - | Default |  |
+| `POST /Playlists/{playlistId}` | served | - | Default |  |
 | `DELETE /Playlists/{playlistId}/Items` | served | - | Default |  |
 | `GET /Playlists/{playlistId}/Items` | served | - | Default |  |
 | `POST /Playlists/{playlistId}/Items` | served | - | Default |  |
 | `POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}` | served | - | Default |  |
-| `GET /Playlists/{playlistId}/Users` | missing | - | Default |  |
-| `DELETE /Playlists/{playlistId}/Users/{userId}` | missing | - | Default |  |
-| `GET /Playlists/{playlistId}/Users/{userId}` | missing | - | Default |  |
-| `POST /Playlists/{playlistId}/Users/{userId}` | missing | - | Default |  |
+| `GET /Playlists/{playlistId}/Users` | served | - | Default |  |
+| `DELETE /Playlists/{playlistId}/Users/{userId}` | served | - | Default |  |
+| `GET /Playlists/{playlistId}/Users/{userId}` | served | - | Default |  |
+| `POST /Playlists/{playlistId}/Users/{userId}` | served | - | Default |  |
 
 ## Playstate
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `DELETE /PlayingItems/{itemId}` | missing | - | Default |  |
-| `POST /PlayingItems/{itemId}` | missing | - | Default |  |
-| `POST /PlayingItems/{itemId}/Progress` | missing | - | Default |  |
+| `DELETE /PlayingItems/{itemId}` | served | - | Default |  |
+| `POST /PlayingItems/{itemId}` | served | - | Default |  |
+| `POST /PlayingItems/{itemId}/Progress` | served | - | Default |  |
 | `POST /Sessions/Playing` | served | - | Default |  |
 | `POST /Sessions/Playing/Ping` | served | - | Default |  |
 | `POST /Sessions/Playing/Progress` | served | - | Default |  |
@@ -467,9 +467,9 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `POST /UserPlayedItems/{itemId}` | served | - | Default |  |
 | `DELETE /Users/{userId}/PlayedItems/{itemId}` | served | - | Default | obsolete |
 | `POST /Users/{userId}/PlayedItems/{itemId}` | served | - | Default | obsolete |
-| `DELETE /Users/{userId}/PlayingItems/{itemId}` | missing | - | Default | obsolete |
-| `POST /Users/{userId}/PlayingItems/{itemId}` | missing | - | Default | obsolete |
-| `POST /Users/{userId}/PlayingItems/{itemId}/Progress` | missing | - | Default | obsolete |
+| `DELETE /Users/{userId}/PlayingItems/{itemId}` | served | - | Default | obsolete |
+| `POST /Users/{userId}/PlayingItems/{itemId}` | served | - | Default | obsolete |
+| `POST /Users/{userId}/PlayingItems/{itemId}/Progress` | served | - | Default | obsolete |
 
 ## Plugins
 
@@ -492,7 +492,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `POST /QuickConnect/Authorize` | served | - | Default |  |
 | `GET /QuickConnect/Connect` | served | - | anonymous |  |
 | `GET /QuickConnect/Enabled` | served | system | anonymous |  |
-| `GET /QuickConnect/Initiate` | missing | - | anonymous | obsolete; only v10.10.7 |
+| `GET /QuickConnect/Initiate` | served | - | anonymous | obsolete; only v10.10.7 |
 | `POST /QuickConnect/Initiate` | served | - | anonymous |  |
 
 ## RemoteImage
@@ -535,10 +535,10 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `POST /Sessions/{sessionId}/Message` | served | - | Default |  |
 | `POST /Sessions/{sessionId}/Playing` | served | - | Default |  |
 | `POST /Sessions/{sessionId}/Playing/{command}` | served | - | Default |  |
-| `POST /Sessions/{sessionId}/System/{command}` | missing | - | Default |  |
-| `DELETE /Sessions/{sessionId}/User/{userId}` | missing | - | Default |  |
-| `POST /Sessions/{sessionId}/User/{userId}` | missing | - | Default |  |
-| `POST /Sessions/{sessionId}/Viewing` | missing | - | Default |  |
+| `POST /Sessions/{sessionId}/System/{command}` | served | - | Default |  |
+| `DELETE /Sessions/{sessionId}/User/{userId}` | served | - | Default |  |
+| `POST /Sessions/{sessionId}/User/{userId}` | served | - | Default |  |
+| `POST /Sessions/{sessionId}/Viewing` | served | - | Default |  |
 
 ## Startup
 
@@ -547,9 +547,9 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `POST /Startup/Complete` | served | - | FirstTimeSetupOrElevated | configuration is a read-only file, not a setup wizard |
 | `GET /Startup/Configuration` | served | admin | FirstTimeSetupOrElevated |  |
 | `POST /Startup/Configuration` | boundary | - | FirstTimeSetupOrElevated | configuration is a read-only file, not a setup wizard |
-| `GET /Startup/FirstUser` | missing | - | FirstTimeSetupOrElevated |  |
+| `GET /Startup/FirstUser` | served | - | FirstTimeSetupOrElevated |  |
 | `POST /Startup/RemoteAccess` | boundary | - | FirstTimeSetupOrElevated | configuration is a read-only file, not a setup wizard |
-| `GET /Startup/User` | missing | admin | FirstTimeSetupOrElevated |  |
+| `GET /Startup/User` | served | admin | FirstTimeSetupOrElevated |  |
 | `POST /Startup/User` | boundary | - | FirstTimeSetupOrElevated | configuration is a read-only file, not a setup wizard |
 
 ## Studios
@@ -563,8 +563,8 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `GET /FallbackFont/Fonts` | missing | media | Default |  |
-| `GET /FallbackFont/Fonts/{name}` | missing | - | Default |  |
+| `GET /FallbackFont/Fonts` | served | media | Default |  |
+| `GET /FallbackFont/Fonts/{name}` | served | - | Default |  |
 | `GET /Items/{itemId}/RemoteSearch/Subtitles/{language}` | served | - | SubtitleManagement |  |
 | `POST /Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | served | - | SubtitleManagement |  |
 | `GET /Providers/Subtitles/Subtitles/{subtitleId}` | missing | - | SubtitleManagement |  |
@@ -622,7 +622,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `POST /System/Ping` | served | - | anonymous |  |
 | `POST /System/Restart` | served | - | LocalAccessOrRequiresElevation | the server's lifecycle belongs to its supervisor |
 | `POST /System/Shutdown` | served | - | RequiresElevation | the server's lifecycle belongs to its supervisor |
-| `GET /System/WakeOnLanInfo` | missing | - | Default | obsolete; only v10.10.7 |
+| `GET /System/WakeOnLanInfo` | served | - | Default | obsolete; only v10.10.7 |
 
 ## TimeSync
 
@@ -634,14 +634,14 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `GET /Trailers` | missing | - | Default |  |
+| `GET /Trailers` | served | - | Default |  |
 
 ## Trickplay
 
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
-| `GET /Videos/{itemId}/Trickplay/{width}/tiles.m3u8` | missing | - | Default |  |
-| `GET /Videos/{itemId}/Trickplay/{width}/{index}.jpg` | missing | - | Default |  |
+| `GET /Videos/{itemId}/Trickplay/{width}/tiles.m3u8` | served | - | Default |  |
+| `GET /Videos/{itemId}/Trickplay/{width}/{index}.jpg` | served | - | Default |  |
 
 ## TvShows
 
@@ -666,20 +666,20 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Users` | served | users | Default |  |
 | `POST /Users` | boundary | - | Default | forward auth: a user exists once the proxy first sends their identity |
 | `POST /Users/AuthenticateByName` | served | - | anonymous |  |
-| `POST /Users/AuthenticateWithQuickConnect` | missing | - | anonymous |  |
-| `POST /Users/Configuration` | missing | - | Default |  |
-| `POST /Users/ForgotPassword` | boundary | - | anonymous | forward auth: Rustyfin never holds or checks a password |
-| `POST /Users/ForgotPassword/Pin` | boundary | - | anonymous | forward auth: Rustyfin never holds or checks a password |
+| `POST /Users/AuthenticateWithQuickConnect` | served | - | anonymous |  |
+| `POST /Users/Configuration` | served | - | Default |  |
+| `POST /Users/ForgotPassword` | served | - | anonymous | forward auth: Rustyfin never holds or checks a password |
+| `POST /Users/ForgotPassword/Pin` | served | - | anonymous | forward auth: Rustyfin never holds or checks a password |
 | `GET /Users/Me` | served | users | Default |  |
 | `POST /Users/New` | served | - | RequiresElevation |  |
-| `POST /Users/Password` | boundary | - | Default | forward auth: Rustyfin never holds or checks a password |
+| `POST /Users/Password` | served | - | Default | forward auth: Rustyfin never holds or checks a password |
 | `GET /Users/Public` | served | admin | anonymous |  |
 | `DELETE /Users/{userId}` | served | - | RequiresElevation |  |
 | `GET /Users/{userId}` | served | users | IgnoreParentalControl |  |
 | `POST /Users/{userId}` | missing | - | Default | obsolete |
 | `POST /Users/{userId}/Authenticate` | boundary | - | anonymous | obsolete; forward auth: Rustyfin never checks a password |
 | `POST /Users/{userId}/Configuration` | served | - | Default | obsolete |
-| `POST /Users/{userId}/EasyPassword` | boundary | - | Default | obsolete; only v10.10.7; forward auth: Rustyfin never holds or checks a password |
+| `POST /Users/{userId}/EasyPassword` | served | - | Default | obsolete; only v10.10.7; forward auth: Rustyfin never holds or checks a password |
 | `POST /Users/{userId}/Password` | served | - | Default | obsolete; forward auth: Rustyfin never holds or checks a password |
 | `POST /Users/{userId}/Policy` | served | - | RequiresElevation |  |
 
@@ -702,11 +702,11 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Users/{userId}/Items/Latest` | served | library, music, plezy | Default | obsolete |
 | `GET /Users/{userId}/Items/Root` | served | detail | Default | obsolete |
 | `GET /Users/{userId}/Items/{itemId}` | served | detail, extras, library, plezy | Default | obsolete |
-| `GET /Users/{userId}/Items/{itemId}/Intros` | missing | detail | Default | obsolete |
-| `GET /Users/{userId}/Items/{itemId}/LocalTrailers` | missing | detail | Default | obsolete |
+| `GET /Users/{userId}/Items/{itemId}/Intros` | served | detail | Default | obsolete |
+| `GET /Users/{userId}/Items/{itemId}/LocalTrailers` | served | detail | Default | obsolete |
 | `DELETE /Users/{userId}/Items/{itemId}/Rating` | served | - | Default | obsolete |
 | `POST /Users/{userId}/Items/{itemId}/Rating` | served | - | Default | obsolete |
-| `GET /Users/{userId}/Items/{itemId}/SpecialFeatures` | missing | detail | Default | obsolete |
+| `GET /Users/{userId}/Items/{itemId}/SpecialFeatures` | served | detail | Default | obsolete |
 
 ## UserViews
 
@@ -715,7 +715,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | `GET /Users/{userId}/GroupingOptions` | served | users | Default | obsolete |
 | `GET /Users/{userId}/Views` | served | library | Default | obsolete |
 | `GET /UserViews` | served | detail | Default |  |
-| `GET /UserViews/GroupingOptions` | missing | detail | Default |  |
+| `GET /UserViews/GroupingOptions` | served | detail | Default |  |
 
 ## VideoAttachments
 
@@ -728,7 +728,7 @@ A route marked obsolete is one Jellyfin keeps for old clients.
 | Route | Status | Cases | Auth | Note |
 | --- | --- | --- | --- | --- |
 | `POST /Videos/MergeVersions` | missing | - | RequiresElevation |  |
-| `GET /Videos/{itemId}/AdditionalParts` | missing | media | Default |  |
+| `GET /Videos/{itemId}/AdditionalParts` | served | media | Default |  |
 | `DELETE /Videos/{itemId}/AlternateSources` | missing | - | RequiresElevation |  |
 | `GET /Videos/{itemId}/stream` | served | media | anonymous |  |
 | `HEAD /Videos/{itemId}/stream` | served | media | anonymous |  |

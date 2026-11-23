@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
 use serde::Deserialize;
 
 use rustyfin_auth::api_key::ApiKeyUser;
@@ -28,6 +32,62 @@ pub async fn post_updated_media(
     _api_key: ApiKeyUser,
     Json(dto): Json<MediaUpdateInfoDto>,
 ) -> Result<StatusCode, ApiError> {
+    let paths: Vec<String> = dto.updates.into_iter().map(|u| u.path).collect();
+    rescan(&state, &paths).await
+}
+
+/// The provider ids the *arr apps' older notifications name a title by
+/// (query keys arrive in PascalCase, see `query_case`).
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ProviderIdQuery {
+    pub tmdb_id: Option<String>,
+    pub imdb_id: Option<String>,
+    pub tvdb_id: Option<String>,
+}
+
+fn given(id: Option<String>) -> Option<String> {
+    id.filter(|s| !s.trim().is_empty())
+}
+
+/// `POST /Library/Movies/Added` and `/Library/Movies/Updated`: Radarr's older
+/// notification. As Jellyfin: the films with that IMDb id if one is given,
+/// else that TMDB id, else none; their folders are rescanned.
+pub async fn post_updated_movies(
+    State(state): State<AppState>,
+    _api_key: ApiKeyUser,
+    Query(q): Query<ProviderIdQuery>,
+) -> Result<StatusCode, ApiError> {
+    let (key, value) = match (given(q.imdb_id), given(q.tmdb_id)) {
+        (Some(imdb), _) => ("Imdb", imdb),
+        (None, Some(tmdb)) => ("Tmdb", tmdb),
+        (None, None) => return Ok(StatusCode::NO_CONTENT),
+    };
+    let paths = media_items::paths_by_external_id(&state.pool, "Movie", key, &value)
+        .await
+        .map_err(ApiError::Database)?;
+    rescan(&state, &paths).await
+}
+
+/// `POST /Library/Series/Added` and `/Library/Series/Updated`: Sonarr's older
+/// notification; the series with that TVDB id are rescanned.
+pub async fn post_updated_series(
+    State(state): State<AppState>,
+    _api_key: ApiKeyUser,
+    Query(q): Query<ProviderIdQuery>,
+) -> Result<StatusCode, ApiError> {
+    let Some(tvdb) = given(q.tvdb_id) else {
+        return Ok(StatusCode::NO_CONTENT);
+    };
+    let paths = media_items::paths_by_external_id(&state.pool, "Series", "Tvdb", &tvdb)
+        .await
+        .map_err(ApiError::Database)?;
+    rescan(&state, &paths).await
+}
+
+/// Rescan the folders of `paths` (a file's folder, or the folder itself) and
+/// drop the items whose path is gone: what every *arr notification asks.
+async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiError> {
     let libs = libraries::list_scannable(&state.pool)
         .await
         .map_err(ApiError::Database)?;
@@ -36,15 +96,15 @@ pub async fn post_updated_media(
     let mut scan_targets: HashMap<uuid::Uuid, Vec<String>> = HashMap::new();
     let mut delete_paths: Vec<String> = Vec::new();
 
-    for update in &dto.updates {
-        let path = Path::new(&update.path);
+    for update_path in paths {
+        let path = Path::new(update_path);
 
         if path.exists() {
             // Resolve parent directory (if file) or self (if directory)
             let scan_dir = if path.is_file() {
                 path.parent().map(|p| p.to_string_lossy().to_string())
             } else {
-                Some(update.path.clone())
+                Some(update_path.clone())
             };
 
             if let Some(scan_dir) = scan_dir {
@@ -55,11 +115,11 @@ pub async fn post_updated_media(
                 {
                     scan_targets.entry(lib.id).or_default().push(scan_dir);
                 } else {
-                    tracing::warn!("No library found for path: {}", update.path);
+                    tracing::warn!("No library found for path: {}", update_path);
                 }
             }
         } else {
-            delete_paths.push(update.path.clone());
+            delete_paths.push(update_path.clone());
         }
     }
 
