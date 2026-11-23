@@ -200,3 +200,22 @@ async fn the_arr_webhook_comes_from_inside_with_a_server_key() {
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
     app.cleanup().await;
 }
+
+/// A new server's first user is its administrator (Getting Started: "the
+/// first person to open it"). Since the proxy's word signs people in on every
+/// request, the first request made the user before any sign-in ran, and the
+/// sign-in's first-user rule never fired: a fresh install had no admin.
+#[tokio::test]
+async fn the_first_person_the_proxy_names_is_the_administrator() {
+    let app = common::TestApp::with_forward_auth().await;
+    let (status, me) = get_as(&app, Some("first@example.com"), "/Users/Me", Some("laptop")).await;
+    assert_eq!(status, StatusCode::OK, "{me}");
+    assert_eq!(me["Policy"]["IsAdministrator"], true, "{me}");
+    let (status, me) = get_as(&app, Some("second@example.com"), "/Users/Me", Some("phone")).await;
+    assert_eq!(status, StatusCode::OK, "{me}");
+    assert_eq!(me["Policy"]["IsAdministrator"], false, "{me}");
+    // And the first stays one.
+    let (_, me) = get_as(&app, Some("first@example.com"), "/Users/Me", Some("laptop")).await;
+    assert_eq!(me["Policy"]["IsAdministrator"], true, "{me}");
+    app.cleanup().await;
+}
