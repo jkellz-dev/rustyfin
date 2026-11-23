@@ -80,6 +80,8 @@ pub fn build_router(state: AppState) -> Router {
     let routes = routes(state);
     Router::new().fallback_service(
         tower::ServiceBuilder::new()
+            // Ids in answers as Jellyfin writes them (32 hex digits).
+            .layer(axum::middleware::from_fn(crate::guid_format::simple_guids))
             .layer(axum::middleware::from_fn(crate::api_v1::lower_case_path))
             .layer(axum::middleware::from_fn(crate::route_case::route_case))
             // Tailscale (the trusted proxy) is the authentication.

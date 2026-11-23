@@ -82,7 +82,8 @@ async fn handle_socket(
 
     // Send initial ForceKeepAlive
     let msg = OutboundWebSocketMessage::new("ForceKeepAlive", 60);
-    if let Ok(json) = serde_json::to_string(&msg)
+    if let Ok(json) =
+        serde_json::to_string(&msg).map(|j| crate::guid_format::simplify_str(&j).into_owned())
         && sender
             .send(axum::extract::ws::Message::text(json))
             .await
@@ -115,6 +116,7 @@ async fn handle_socket(
 
                 let msg = OutboundWebSocketMessage::new("ForceKeepAlive", 60);
                 if let Ok(json) = serde_json::to_string(&msg)
+            .map(|j| crate::guid_format::simplify_str(&j).into_owned())
                     && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
                 {
                     break;
@@ -124,6 +126,7 @@ async fn handle_socket(
             Ok(event) = events.recv() => {
                 let msg = OutboundWebSocketMessage::new(&event.message_type, event.data);
                 if let Ok(json) = serde_json::to_string(&msg)
+            .map(|j| crate::guid_format::simplify_str(&j).into_owned())
                     && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
                 {
                     break;
@@ -133,6 +136,7 @@ async fn handle_socket(
             Ok(cmd) = cmd_rx.recv() => {
                 let ws_msg = command_to_ws_message(cmd);
                 if let Ok(json) = serde_json::to_string(&ws_msg)
+            .map(|j| crate::guid_format::simplify_str(&j).into_owned())
                     && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
                 {
                     break;
