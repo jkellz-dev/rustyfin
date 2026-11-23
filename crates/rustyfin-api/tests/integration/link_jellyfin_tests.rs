@@ -2321,3 +2321,113 @@ async fn a_friends_films_join_the_collections_here() {
     assert_eq!(shared, 1, "Shared Saga keeps its own film only");
     app.cleanup().await;
 }
+
+/// Wait (up to 30 s) until `sql` counts `want`.
+async fn wait_for_count(app: &common::TestApp, sql: &'static str, want: i64) {
+    let mut got = -1;
+    for _ in 0..150 {
+        got = sqlx::query_scalar(sql).fetch_one(&app.pool).await.unwrap();
+        if got == want {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    panic!("{sql}: {got}, wanted {want}");
+}
+
+/// The linked servers `/Library/VirtualFolders` says fill `name`.
+async fn linked_servers_of(app: &common::TestApp, token: &str, name: &str) -> Value {
+    let (_, folders) = app.get("/Library/VirtualFolders", token).await;
+    folders
+        .as_array()
+        .unwrap_or_else(|| panic!("{folders}"))
+        .iter()
+        .find(|f| f["Name"] == name)
+        .unwrap_or_else(|| panic!("no {name}: {folders}"))["LinkedServers"]
+        .clone()
+}
+
+/// Owner, 2026-11-23: "a scan of a library should also initiate a sync of a
+/// remote that populates it. Since standup is fully a remote it should just
+/// sync instead of scan, but it should still be part of 'scan all'. ... if a
+/// user presses 'scan library' it should trigger both jobs sequentially." And
+/// the Libraries page lists the linked servers a library syncs, beside its
+/// paths.
+#[tokio::test]
+async fn scanning_a_library_syncs_the_links_that_fill_it() {
+    let app = common::TestApp::new().await;
+    let (_uid, token) = app.create_user("admin", true).await;
+    let (_tree, lib, _local) = local_library(&app).await;
+    let remote: Shared = Default::default();
+    {
+        let mut r = remote.lock().unwrap();
+        r.films = vec![film("r100", "Shared Film", "100", "e1", 3840, 2160)];
+        r.videos = vec![video("v1", "Beach")];
+    }
+    let url = fake_jellyfin(remote.clone()).await;
+    let mut s = settings(&url, "secret");
+    s.libraries.push(LibraryMap {
+        remote: "Home Videos".into(),
+        local: None,
+    });
+    let link = app.links.register(&app.pool, s).await.unwrap();
+
+    // Before any sync, Movies already names what fills it.
+    assert_eq!(
+        linked_servers_of(&app, &token, "Movies").await,
+        json!([{"Name": "Alex", "Library": "Films"}])
+    );
+
+    // Scanning Movies syncs the link: the friend's copy and its own library
+    // arrive.
+    let (status, _) = app
+        .post(&format!("/Library/Refresh?Id={lib}"), &json!({}), &token)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    wait_for_count(
+        &app,
+        "SELECT COUNT(*) FROM media_items WHERE link_id IS NOT NULL AND name = 'Beach'",
+        1,
+    )
+    .await;
+    wait_for_count(
+        &app,
+        "SELECT COUNT(*) FROM media_items WHERE link_id IS NOT NULL AND name = 'Shared Film'",
+        1,
+    )
+    .await;
+    let own: Uuid = sqlx::query_scalar("SELECT id FROM libraries WHERE link_id = $1")
+        .bind(link)
+        .fetch_one(&app.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        linked_servers_of(&app, &token, "Home Videos · Alex").await,
+        json!([{"Name": "Alex", "Library": "Home Videos"}])
+    );
+
+    // The link's own library has no folders: scanning it is its sync.
+    remote.lock().unwrap().videos.push(video("v2", "Birthday"));
+    let (status, _) = app
+        .post(&format!("/Library/Refresh?Id={own}"), &json!({}), &token)
+        .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    wait_for_count(
+        &app,
+        "SELECT COUNT(*) FROM media_items WHERE link_id IS NOT NULL AND name = 'Birthday'",
+        1,
+    )
+    .await;
+
+    // Scan all syncs it too.
+    remote.lock().unwrap().videos.push(video("v3", "Picnic"));
+    let (status, _) = app.post("/Library/Refresh", &json!({}), &token).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    wait_for_count(
+        &app,
+        "SELECT COUNT(*) FROM media_items WHERE link_id IS NOT NULL AND name = 'Picnic'",
+        1,
+    )
+    .await;
+    app.cleanup().await;
+}

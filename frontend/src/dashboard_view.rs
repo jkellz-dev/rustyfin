@@ -55,6 +55,12 @@ pub fn sync_line(iso: Option<&str>, duration_ms: Option<i64>) -> String {
     }
 }
 
+/// The libraries page's line for the linked servers a library syncs
+/// (owner, 2026-11-23): "Synced from Tenzelarom (Movies)".
+pub fn linked_line(_sources: &[(String, String)]) -> Option<String> {
+    None
+}
+
 /// A dashboard card's line for a library a link fills.
 pub fn sync_card_line(age_seconds: Option<i64>, duration_ms: Option<i64>) -> String {
     let when = match age_seconds {
@@ -318,6 +324,23 @@ pub fn recent_card(
 
 #[cfg(test)]
 mod tests {
+    /// Owner, 2026-11-23: "The UI for libraries should reflect a remote library
+    /// that is part of it. Currently it lists the paths, but it should also
+    /// list any remotes it syncs."
+    #[test]
+    fn a_library_names_the_linked_servers_it_syncs() {
+        let s = |a: &str, b: &str| (a.to_string(), b.to_string());
+        assert_eq!(super::linked_line(&[]), None);
+        assert_eq!(
+            super::linked_line(&[s("Tenzelarom", "Stand-Up Comedy")]).as_deref(),
+            Some("Synced from Tenzelarom (Stand-Up Comedy)")
+        );
+        assert_eq!(
+            super::linked_line(&[s("Alex", "Films"), s("Tenzelarom", "Movies")]).as_deref(),
+            Some("Synced from Alex (Films), Tenzelarom (Movies)")
+        );
+    }
+
     /// Owner, 2026-11-20: "I'd like to see the duration each task took to
     /// complete in the admin. Especially scans."
     #[test]
