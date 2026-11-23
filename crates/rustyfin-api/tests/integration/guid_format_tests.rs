@@ -1,6 +1,6 @@
 //! Owner, 2026-11-22: pressing play on an album in Finamp queued it but did
-//! not start, with "FormatException: Invalid radix-16 number (at character
-//! 1) b-" from `FinampStorableQueueInfo.packIds`. Finamp packs each id as 16
+//! not start, with `FormatException: Invalid radix-16 number (at character 1)
+//! b-` from `FinampStorableQueueInfo.packIds`. Finamp packs each id as 16
 //! bytes from 32 hex digits, two at a time; Rustyfin wrote ids as
 //! hyphenated UUIDs, so a pair landed on a dash. Jellyfin writes every Guid
 //! as 32 lowercase hex digits ("N" format).
