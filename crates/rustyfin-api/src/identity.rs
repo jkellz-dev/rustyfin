@@ -85,14 +85,22 @@ async fn vouched_user(
     let user = match users::find_by_remote_user_id(pool, &identity.remote_user).await? {
         Some(user) => user,
         None => {
-            users::upsert_from_forward_auth(
+            // A new server's first user is its administrator.
+            let first = users::count(pool).await? == 0;
+            let user = users::upsert_from_forward_auth(
                 pool,
                 &identity.remote_user,
                 &identity.remote_user,
                 identity.display_name.as_deref(),
                 identity.email.as_deref(),
             )
-            .await?
+            .await?;
+            if first && !user.is_administrator {
+                users::update_policy(pool, user.id, true, user.enable_all_libraries).await?;
+                users::find_by_id(pool, user.id).await?.unwrap_or(user)
+            } else {
+                user
+            }
         }
     };
     if user.is_disabled {
