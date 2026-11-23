@@ -519,6 +519,7 @@ pub async fn update_virtual_folder(
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;
+    refuse_if_linked(&before)?;
     let lib = libraries::update(&state.pool, query.id, &req.name, &req.paths)
         .await
         .map_err(ApiError::Database)?
@@ -559,6 +560,12 @@ pub async fn delete_virtual_folder(
     } else {
         return Err(ApiError::BadRequest("name or id is required".to_string()));
     };
+    if let Some(lib) = libraries::find_by_id(&state.pool, id)
+        .await
+        .map_err(ApiError::Database)?
+    {
+        refuse_if_linked(&lib)?;
+    }
 
     let deleted = libraries::delete(&state.pool, id)
         .await
@@ -569,6 +576,19 @@ pub async fn delete_virtual_folder(
 
     log_library_event(&state, "Library deleted", &name, "LibraryDeleted").await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// A library a link made is the link's: it is set in `rustyfin.toml`
+/// (`[[link]]`), and the next sync would make it again, so it is not renamed,
+/// deleted or given folders here.
+fn refuse_if_linked(lib: &libraries::LibraryRow) -> Result<(), ApiError> {
+    if lib.link_id.is_some() {
+        return Err(ApiError::Conflict(format!(
+            "'{}' is filled by a linked server; change it in rustyfin.toml ([[link]])",
+            lib.name
+        )));
+    }
+    Ok(())
 }
 
 // ── Jellyfin LibraryStructureController parity ───────────────────────
@@ -847,6 +867,7 @@ pub async fn rename_virtual_folder(
     let new_name = require_new_name(query_value(&pairs, "NewName").unwrap_or_default())?;
 
     let lib = find_named(&state, name).await?;
+    refuse_if_linked(&lib)?;
     if let Some(other) = libraries::find_by_name(&state.pool, new_name)
         .await
         .map_err(ApiError::Database)?
@@ -882,6 +903,7 @@ pub async fn add_media_path(
     }
 
     let lib = find_named(&state, name).await?;
+    refuse_if_linked(&lib)?;
     if !std::path::Path::new(path).is_dir() {
         return Err(ApiError::NotFound);
     }

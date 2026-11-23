@@ -571,6 +571,14 @@ pub fn Libraries() -> View {
                                                     td(data-label="Paths") { (locations) }
                                                     td(data-label="Actions") {
                                                         div(class="flex-gap") {
+                                                            (if linked {
+                                                                // Set in rustyfin.toml ([[link]]): nothing to change here.
+                                                                view! { span(class="text-muted text-small") { "Set in rustyfin.toml" } }
+                                                            } else {
+                                                                let edit_lib = edit_lib.clone();
+                                                                let del_lib = del_lib.clone();
+                                                                let scan_id = scan_id.clone();
+                                                                view! {
                                                             button(class="btn btn-secondary btn-sm",
                                                                 on:click={
                                                                     let edit_lib = edit_lib.clone();
@@ -602,6 +610,8 @@ pub fn Libraries() -> View {
                                                                     move |_| delete_target.set(Some(del_lib.clone()))
                                                                 }
                                                             ) { "Delete" }
+                                                                }
+                                                            })
                                                         }
                                                     }
                                                 }
