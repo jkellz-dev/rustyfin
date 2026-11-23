@@ -945,6 +945,62 @@ async fn a_friends_library_without_a_local_one_gets_its_own() {
         assert_eq!(other["Linked"], false, "{other}");
     }
 
+    // Owner, 2026-11-23: such a library is changed only in rustyfin.toml
+    // ([[link]]): the next sync would make it again. Renaming, deleting or
+    // giving it folders is refused, and it is still there.
+    let lib_name = "Home Videos · Alex";
+    let enc = |s: &str| s.replace(' ', "%20").replace('·', "%C2%B7");
+    for (status, what) in [
+        (
+            app.delete(&format!("/Library/VirtualFolders?Id={shorts}"), &token)
+                .await
+                .0,
+            "delete",
+        ),
+        (
+            app.post(
+                &format!(
+                    "/Library/VirtualFolders/Name?Name={}&NewName=Shorts",
+                    enc(lib_name)
+                ),
+                &json!({}),
+                &token,
+            )
+            .await
+            .0,
+            "rename",
+        ),
+        (
+            app.post(
+                &format!("/Library/VirtualFolders/Update?Id={shorts}"),
+                &json!({"Name": "Shorts", "Paths": ["/tmp"]}),
+                &token,
+            )
+            .await
+            .0,
+            "edit",
+        ),
+        (
+            app.post(
+                "/Library/VirtualFolders/Paths",
+                &json!({"Name": lib_name, "Path": "/tmp"}),
+                &token,
+            )
+            .await
+            .0,
+            "add a folder",
+        ),
+    ] {
+        assert_eq!(status, StatusCode::CONFLICT, "{what}");
+    }
+    let still: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM libraries WHERE name = 'Home Videos · Alex' AND paths = '{}'",
+    )
+    .fetch_one(&app.pool)
+    .await
+    .unwrap();
+    assert_eq!(still, 1, "untouched");
+
     // It has no folders: a scan of it leaves the friend's videos alone.
     let id = Uuid::parse_str(&shorts).unwrap();
     LibraryScanner::new(app.pool.clone(), None)
