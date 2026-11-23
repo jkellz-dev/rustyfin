@@ -94,11 +94,22 @@ docker run --rm \
   ghcr.io/jkellz-dev/rustyfin-meta artwork /media/movies -t movies
 ```
 
-In Kubernetes, a `rustyfin-meta` sidecar beside the server (with its own read-write mount of the media) can run it:
+In the [Getting Started](getting-started.md) Compose setup, add it as a service with the media mounted writable, and run
+it when you want:
 
-```bash
-kubectl exec deploy/rustyfin -c rustyfin-meta -- rustyfin artwork /media/movies -t movies
+```yaml
+  rustyfin-meta:
+    image: ghcr.io/jkellz-dev/rustyfin-meta:latest
+    profiles: [tools]          # not started by `docker compose up`
+    environment:
+      RUSTYFIN__METADATA__TMDB_API_KEY: ${TMDB_API_KEY}
+    volumes:
+      - /path/to/movies:/media/movies
+      - /path/to/tv:/media/tv
 ```
 
-For a long run, a one-off Job with the same image, mounts and settings keeps it apart from the server; follow it with
-`kubectl logs -f job/<name>` until the `Done:` line.
+```bash
+docker compose run --rm rustyfin-meta artwork /media/movies -t movies
+```
+
+A long run ends with a `Done:` line.

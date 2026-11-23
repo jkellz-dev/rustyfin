@@ -119,7 +119,7 @@ once and kept in memory, and `index.html` for any admin address. See [Admin Fron
 ### `rustyfin-meta`
 
 The `rustyfin` command: fetches artwork and lyrics for what the server scanned and writes them beside the media. It is
-the only writer to the media folders and runs with its own writable mount (a sidecar or a Job). See
+the only writer to the media folders and runs with its own writable mount (a container of its own, run when needed). See
 [Artwork](artwork.md) and [Lyrics](lyrics.md).
 
 ## Application state

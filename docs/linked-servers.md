@@ -88,7 +88,7 @@ remote = "Homemade Shorts"             # "Homemade Shorts · Alex"
 | `password` / `password_file` | Jellyfin: one of them | The user's password, or a file holding it (a trailing newline is ignored) |
 | `libraries` | at least one | `remote` (the friend's library) merges into `local` (yours); with no `local`, it gets a library of its own |
 
-Prefer `password_file` with a secret mounted into the container (a Docker or Kubernetes secret) over writing the
+Prefer `password_file` with a secret mounted into the container (a Docker Compose secret, say) over writing the
 password into the config file. Environment variables cannot set `[[link]]` tables.
 
 A link with a missing password or no libraries is skipped at start with an error in the log; the server still starts.
@@ -209,7 +209,7 @@ local = "Movies"
 
 Your server has to arrive at their proxy as that user. Over Tailscale, a node owned by a person is that person; a
 tagged node (the usual way to run a server) is named by an app capability your friend grants it in their tailnet policy
-(see [Authentication](authentication.md), "Tagged nodes").
+(see [Authentication](authentication.md#tagged-devices)).
 
 Behind a proxy that takes OIDC tokens (oauth2-proxy and the like), your friend registers your server as a client at
 their identity provider, and the provider names it as the user your server arrives as. Add `[link.oidc]`:

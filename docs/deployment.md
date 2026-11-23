@@ -1,7 +1,7 @@
 # Deployment
 
-How to run Rustyfin for real: as a container or a systemd service, behind Caddy, nginx or Traefik. For a first try on
-one machine, start with [Getting Started](getting-started.md); every setting is in [Configuration](configuration.md).
+What Rustyfin needs, and how to run it other than the [Getting Started](getting-started.md) setup: a single container,
+a systemd service, or behind Caddy, nginx or Traefik. Every setting is in [Configuration](configuration.md).
 
 ## What it needs
 
@@ -10,8 +10,9 @@ one machine, start with [Getting Started](getting-started.md); every setting is 
 - **The media folders, read-only.** The server never writes to them.
 - **A writable cache folder** for resized images, transcode segments and people's pictures (`server.image_cache_dir`,
   `transcode.temp_dir`). Transcode segments can take several GB while people watch.
-- **A reverse proxy** that signs people in and passes who they are in headers (forward auth), or an LDAPS server for
-  apps that ask for a password. Rustyfin stores no passwords.
+- **Something that says who people are**: a proxy that signs them in and passes who they are in a header (Tailscale
+  Serve, or forward auth through Authelia and the like), or else an LDAPS server that checks the password Jellyfin's
+  apps send. Rustyfin stores no passwords ([Authentication](authentication.md)).
 - Optional: Meilisearch for search (Postgres answers otherwise). The server makes no outside requests; a TMDB key is
   for the `rustyfin` metadata tool ([Artwork](artwork.md)).
 
@@ -32,11 +33,9 @@ docker run -d --name rustyfin \
 ```
 
 Publish the port only to the proxy (a shared Docker network, or `-p 127.0.0.1:8096:8096`): anyone who reaches Rustyfin
-directly from an address in `trusted_proxies` can claim any user.
-
-**Kubernetes**: the same, with the TOML in a ConfigMap mounted at `/app/rustyfin.toml`, the database password in a
-Secret as `RUSTYFIN__DATABASE__PASSWORD`, media volumes `readOnly: true`, and a memory request but no memory limit (an
-out-of-memory kill in the middle of a scan loses its progress). Probe `GET /System/Ping`.
+directly from an address in `trusted_proxies` can claim any user. Give the container memory to spare rather than a tight
+limit: a server killed for memory in the middle of a scan loses that scan's progress. `GET /System/Ping` answers while
+it is up, for a health check.
 
 ## systemd
 
@@ -101,10 +100,9 @@ Whatever the proxy, four things matter:
 4. **Streams are long and large**: no response buffering, generous read timeouts, no body size limit on uploads to
    `/Items/{id}/Images`.
 
-Apps that cannot do the sign-in proxy's login page (most TV and phone apps) sign in with a user name and password,
-which Rustyfin checks against LDAPS (`[auth.ldap]`); the proxy must let `/Users/AuthenticateByName` and the app's
-token-signed requests through without its own login. How each provider does that (Authelia access rules, Tailscale's
-identity on the tailnet): [Authentication](authentication.md).
+A proxy with a login page in the browser leaves out the apps on TVs and phones, which cannot show it; with a proxy
+configured, Rustyfin refuses any sign-in it names no one for. Tailscale Serve has no such page: each device is already
+a known person ([Getting Started](getting-started.md), [Authentication](authentication.md)).
 
 ### Caddy with Authelia
 

@@ -76,7 +76,7 @@ trusted_proxies = ["127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/1
 # ── Task Scheduler ────────────────────────────────────────
 [tasks]
 enabled = true                                 # Enable scheduled tasks
-run_on_startup = true                          # Run all tasks immediately on boot
+run_on_startup = false                         # true: run every task when the server starts (a restart then rescans)
 jitter_seconds = 300                           # Random jitter added to schedule times
 
 [tasks.schedules.daily]

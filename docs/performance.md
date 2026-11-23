@@ -41,8 +41,8 @@ measures the API and the database. Playback is measured only with `--streams`, o
 
 ## Results
 
-Commit `72bb774`, 2026-11-17, in a Kubernetes pod limited to 4 CPUs and 8 GiB (Intel Core i7-10700K), with Postgres
-16.16 in its own pod (4 CPUs, 1 GiB) and ffprobe 7.0.2. `mise run bench` at scale 1: 81,390 files, which the scan turns
+Commit `72bb774`, 2026-11-17, in a container limited to 4 CPUs and 8 GiB (Intel Core i7-10700K), with Postgres 16.16 in
+its own container (4 CPUs, 1 GiB) and ffprobe 7.0.2. `mise run bench` at scale 1: 81,390 files, which the scan turns
 into 2,700 films, 300 shows, 3,150 episodes, 7,500 albums and 75,000 tracks (91,200 items with the seasons, artists and
 extras).
 

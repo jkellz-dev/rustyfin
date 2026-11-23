@@ -151,8 +151,9 @@ Without the section, the defaults below apply.
 
 ### `[auth.forward_auth]`
 
-Sign-in by a reverse proxy (Tailscale, Authelia, Authentik, ...) that puts the user's identity in request headers.
-Rustyfin creates the user on first sign-in. Headers are only believed from the proxies listed.
+Sign-in by a proxy (Tailscale Serve, or Authelia, Authentik, ... behind a reverse proxy) that puts the user's identity
+in request headers. Headers are only believed from the proxies listed, and with a proxy configured it is the only way
+in. Rustyfin creates each user the first time they are named; the first user of a new server is its administrator.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -172,7 +173,8 @@ Rustyfin creates the user on first sign-in. Headers are only believed from the p
 
 ### `[auth.ldap]` (optional)
 
-Password sign-in for apps that ask for one, checked by binding to an LDAPS server. Rustyfin stores no passwords.
+Password sign-in, checked by binding to an LDAPS server, for setups without a sign-in proxy (with one, the proxy
+decides). Rustyfin stores no passwords.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -294,18 +296,12 @@ docker compose down -v     # Also remove volumes (destroys data)
 
 ### Docker Compose
 
-A complete setup (Postgres, Rustyfin and a forward-auth proxy) is in [Getting Started](getting-started.md). In the
+A complete setup (Rustyfin, Postgres, Meilisearch and Tailscale) is in [Getting Started](getting-started.md). In the
 container, the server's working directory is `/app`: mount the configuration at `/app/rustyfin.toml`, and the media
 read-only.
 
-### Kubernetes
-
-See the example manifests in your cluster config. Key points:
-
-- **ConfigMap** mounts `rustyfin.toml` at `/app/rustyfin.toml` (set `workingDir: /app`)
-- **Secrets** inject `RUSTYFIN__DATABASE__USER` and `RUSTYFIN__DATABASE__PASSWORD` as env vars
-- Non-secret database fields (`host`, `port`, `name`) go in the TOML file
-- Media volumes should be mounted read-only
+Secrets (the database password, the Meilisearch key, a link's password) are best set from the environment
+(`RUSTYFIN__DATABASE__PASSWORD`, ...) or a file (`password_file`), not written into `rustyfin.toml`.
 
 Container, systemd and proxy examples: [Deployment](deployment.md).
 

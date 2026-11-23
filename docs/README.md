@@ -7,14 +7,14 @@ Jellyfin Media Player) connect to it seamlessly.
 
 | Document | Description |
 |----------|-------------|
-| [Getting Started](getting-started.md) | Run it with Docker Compose, add a library, connect an app |
+| [Getting Started](getting-started.md) | Run it with Docker Compose and Tailscale, add libraries, connect apps |
 | [Deployment](deployment.md) | Container, systemd, Caddy/nginx/Traefik with forward auth, upgrades, backups |
 | [Architecture](architecture.md) | Crate structure, dependency graph, design decisions |
 | [Configuration](configuration.md) | Config file, environment variables, deployment |
 | [API Compatibility](api-compatibility.md) | What is answered for real, what is a no-op, what is left out |
 | [API Reference](api-reference.md) | Complete HTTP API documentation (40+ routes) |
 | [Rustyfin API](rustyfin-api.md) | Rustyfin's own routes under `/api/v1`, apart from the Jellyfin API |
-| [Authentication](authentication.md) | Forward auth, session management, extractors |
+| [Authentication](authentication.md) | How people sign in: Tailscale, other sign-in proxies, LDAPS, API keys |
 | [Database Schema](database-schema.md) | All tables, columns, indexes, relationships |
 | [Library Scanning](library-scanning.md) | Scanner workflow, file naming, NFO parsing, TMDB |
 | [Artwork](artwork.md) | `rustyfin artwork`: posters, headshots, collection art, the 30-day no-art memory |
@@ -31,7 +31,8 @@ Jellyfin Media Player) connect to it seamlessly.
 
 ## Quick Start
 
-To run it: [Getting Started](getting-started.md) (Docker Compose with Postgres and a sign-in proxy). To work on it:
+To run it: [Getting Started](getting-started.md) (Docker Compose with Postgres, Meilisearch and Tailscale). To work on
+it:
 
 ```bash
 docker compose up -d                 # Postgres, Meilisearch and a dev sign-in proxy
@@ -43,8 +44,8 @@ More in the [Development Guide](development.md).
 
 ## Key Design Decisions
 
-- **Authentication**: Forward auth only --- a reverse proxy (Authelia, Authentik, etc.) handles user authentication. No
-  local passwords, no OIDC.
+- **Authentication**: a proxy in front (Tailscale Serve, or forward auth) says who each request is from, or else LDAPS
+  checks the password; Rustyfin keeps no passwords and only decides what each person may do.
 - **Database**: PostgreSQL via sqlx with runtime migrations.
 - **API Compatibility**: All JSON responses use PascalCase to match Jellyfin's format. Legacy routes preserved for
   client compatibility.

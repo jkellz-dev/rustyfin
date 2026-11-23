@@ -11,7 +11,7 @@ covering every screen:
 
 ```sh
 # on the server: RUST_LOG=rustyfin=info,tower_http=info,rustyfin_api::request_log=debug
-docker logs rustyfin > live.log                              # or: kubectl logs deploy/rustyfin -c rustyfin > live.log
+docker compose logs --no-log-prefix rustyfin > live.log
 python3 -I tests/parity/tools/rank_requests.py live.log tests/parity/cases
 ```
 

@@ -1,141 +1,223 @@
 # Getting Started
 
-Run Rustyfin with Docker Compose, add a library, and connect an app. You need Docker and your media folders. The server
-reads titles, plots and artwork from the files beside your media (NFOs and images, as Radarr, Sonarr and Jellyfin write
-them); to fill in what is missing, the `rustyfin` tool fetches from TMDB and others ([Artwork](artwork.md)).
+Run Rustyfin with Docker Compose, add your libraries, and connect Jellyfin's apps. This takes four containers on one
+machine: Rustyfin, Postgres for its data, Meilisearch for search, and Tailscale, which signs people in.
 
-Rustyfin does not ask for passwords: a reverse proxy in front of it says who each request is from (forward auth). The
-setup below uses Caddy with a fixed user so you can try it on your own machine;
-[Signing in for real](#signing-in-for-real) replaces that before anyone else can reach it.
+## How people sign in
+
+Rustyfin has no passwords. Something in front of it says who each request is from, and Rustyfin decides what that person
+may see. This guide uses [Tailscale](https://tailscale.com): every phone, TV and computer you sign in to your tailnet
+is already a known person, so Jellyfin's apps connect with nothing more to type, and nothing is open to the internet.
+Tailscale is free for personal use.
+
+Another sign-in proxy can take Tailscale's place ([Authentication](authentication.md)), but apps on TVs and phones
+cannot show a proxy's login page, so a proxy that asks for a password in the browser leaves them out.
+
+## What you need
+
+- A machine with Docker and Docker Compose, and your media folders on it.
+- A Tailscale account. In its admin console:
+  - **DNS**: turn on MagicDNS and **HTTPS Certificates**.
+  - **Settings → Keys**: generate an auth key for the server. A key with a tag (for example `tag:rustyfin`) makes it a
+    server rather than one of your own devices; the tag needs an entry in your policy's `tagOwners`.
+  - **Access controls**: let the people who should watch reach the server on port 443. The default policy lets everyone
+    in your tailnet reach everything.
 
 ## 1. The files
 
-In an empty folder, create `docker-compose.yml`:
+Make a folder with four files.
+
+`.env`, the secrets (keep it out of version control):
+
+```bash
+TS_AUTHKEY=tskey-auth-...
+POSTGRES_PASSWORD=a-long-random-password
+MEILI_MASTER_KEY=another-long-random-string
+```
+
+`compose.yaml`:
 
 ```yaml
 services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    # The server's name on your tailnet: https://rustyfin.<your-tailnet>.ts.net
+    hostname: rustyfin
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    restart: unless-stopped
+
+  rustyfin:
+    image: ghcr.io/jkellz-dev/rustyfin-server:latest
+    # Shares the tailscale container's network, so Tailscale reaches Rustyfin
+    # at 127.0.0.1 and nothing else can claim to be its proxy.
+    network_mode: service:tailscale
+    environment:
+      RUSTYFIN__DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
+      RUSTYFIN__SEARCH__MEILISEARCH_KEY: ${MEILI_MASTER_KEY}
+    volumes:
+      - ./rustyfin.toml:/app/rustyfin.toml:ro
+      - /path/to/movies:/media/movies:ro
+      - /path/to/tv:/media/tv:ro
+      - /path/to/music:/media/music:ro
+      - cache:/var/cache/rustyfin
+    depends_on:
+      - tailscale
+      - postgres
+      - meilisearch
+    restart: unless-stopped
+
   postgres:
     image: postgres:17
     environment:
       POSTGRES_DB: rustyfin
       POSTGRES_USER: rustyfin
-      POSTGRES_PASSWORD: change-me
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres:/var/lib/postgresql/data
+    restart: unless-stopped
 
-  rustyfin:
-    image: ghcr.io/jkellz-dev/rustyfin-server:latest
+  meilisearch:
+    image: getmeili/meilisearch:v1.57
     environment:
-      RUSTYFIN__DATABASE__HOST: postgres
-      RUSTYFIN__DATABASE__PASSWORD: change-me
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
     volumes:
-      - ./rustyfin.toml:/app/rustyfin.toml:ro
-      - /path/to/your/media:/media:ro       # read-only: Rustyfin never writes to media
-      - cache:/var/cache/rustyfin
-    depends_on:
-      - postgres
-
-  caddy:
-    image: caddy:2
-    ports:
-      - "8096:8096"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    depends_on:
-      - rustyfin
+      - meilisearch:/meili_data
+    restart: unless-stopped
 
 volumes:
-  pgdata:
+  tailscale:
   cache:
+  postgres:
+  meilisearch:
 ```
 
-`rustyfin.toml` (every setting: [Configuration](configuration.md)):
+Change the `/path/to/...` lines to your folders. They are mounted read-only: Rustyfin never writes to your media.
+
+`serve.json`, which tells Tailscale to pass HTTPS requests on to Rustyfin (keep `${TS_CERT_DOMAIN}` as it is;
+Tailscale fills it in):
+
+```json
+{
+  "TCP": { "443": { "HTTPS": true } },
+  "Web": {
+    "${TS_CERT_DOMAIN}:443": {
+      "Handlers": { "/": { "Proxy": "http://127.0.0.1:8096" } }
+    }
+  }
+}
+```
+
+Tailscale adds `Tailscale-User-Login` and `Tailscale-User-Name` to each request it passes on, naming the person who
+sent it, and removes any copies the request already had.
+
+`rustyfin.toml` (put your tailnet's name in `base_url`; every setting is in [Configuration](configuration.md)):
 
 ```toml
 [server]
-base_url = "http://localhost:8096"
+base_url = "https://rustyfin.your-tailnet.ts.net"
 image_cache_dir = "/var/cache/rustyfin/images"
+
+[database]
+host = "postgres"
+
+[search]
+meilisearch_url = "http://meilisearch:7700"
 
 [transcode]
 temp_dir = "/var/cache/rustyfin/transcode"
 
-# Believe identity headers only from the Docker network (where Caddy is).
+# Believe who a request is from only when Tailscale passed it on.
 [auth.forward_auth]
-trusted_proxies = ["172.16.0.0/12"]
-```
+trusted_proxies = ["127.0.0.1/32"]
 
-`Caddyfile`, which signs every request in as one user (only for trying it out):
-
-```text
-:8096 {
-    reverse_proxy rustyfin:8096 {
-        header_up Remote-User "me"
-        header_up Remote-Name "Me"
-    }
-}
+[auth.forward_auth.headers]
+user = "Tailscale-User-Login"
+name = "Tailscale-User-Name"
+email = "Tailscale-User-Login"
 ```
 
 ## 2. Start it
 
 ```bash
 docker compose up -d
-docker compose logs -f rustyfin     # wait for the server to say it is listening
+docker compose logs -f rustyfin
 ```
 
-The server runs its database migrations on start. Open <http://localhost:8096/web>: the first user to sign in is an
-administrator.
+Rustyfin sets up its database on the first start and says when it is listening. The first start of Tailscale also
+fetches the HTTPS certificate, which can take a minute.
 
-## 3. Add a library
+## 3. Open the admin
 
-In the admin, **Libraries → Add Library**: a name, the type (Movies, Shows, Music, Mixed) and a folder as the container
-sees it (`/media/movies`). The first scan starts at once; the Scan button shows its progress. Folder and file naming:
-[Library Scanning](library-scanning.md). Coming from Jellyfin: [Moving from Jellyfin](migrating-from-jellyfin.md).
+From a device on your tailnet, open `https://rustyfin.<your-tailnet>.ts.net/web`. You are signed in as your Tailscale
+user. The first person to open it becomes the administrator; everyone after is an ordinary user. The admin's **Users**
+page makes others administrators and chooses which libraries each person sees. Who can reach the server at all is up
+to your tailnet: remove someone there to shut them out.
 
-## 4. Connect an app
+## 4. Add your libraries
 
-In a Jellyfin app (Infuse, Swiftfin, Jellyfin Media Player, ...), add a server with the address people reach Rustyfin
-at. Through the proxy, the app is signed in as the proxy says. You can also play from the admin: **Media**, then
-**Play** on any title.
+**Libraries → Add Library**: a name, the type (Movies, Shows, Music or Mixed), and the folder as the container sees it
+(`/media/movies`). The scan starts at once and the Scan button shows its progress; later scans run every night.
 
-## Signing in for real
+Rustyfin reads titles, plots, artwork and subtitles from the files beside your media, named the way Radarr, Sonarr,
+Lidarr and Jellyfin name them ([Library Scanning](library-scanning.md)). It fetches nothing from the internet itself; to
+fill in missing artwork or lyrics, see [Optional extras](#optional-extras).
 
-Replace the fixed-user Caddyfile with a proxy that asks who people are, and keep Rustyfin itself unreachable except
-through that proxy (`trusted_proxies` lists only the proxy's addresses).
+## 5. Connect an app
 
-**Authelia (or another forward-auth provider) with Caddy**: Caddy asks the provider about each request and passes on
-the headers it returns:
+In a Jellyfin app (Infuse, Swiftfin, Findroid, Finamp, Jellyfin Media Player, the Jellyfin TV apps, ...), on a device
+signed in to your tailnet:
 
-```text
-media.example.com {
-    forward_auth authelia:9091 {
-        uri /api/authz/forward-auth
-        copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
-    }
-    reverse_proxy rustyfin:8096
-}
-```
+1. Add a server: `https://rustyfin.<your-tailnet>.ts.net`.
+2. At the sign-in screen, type any user name and leave the password empty. Rustyfin signs the app in as the person
+   Tailscale names for that device, whatever you type.
 
-Users in the group named by `[auth.forward_auth] admin_group` are administrators.
+Signing out of an app changes nothing on the server; to stop a device, remove it from your tailnet.
 
-**Other header names**: if your proxy sends different headers (Tailscale sends `Tailscale-User-Login`,
-`Tailscale-User-Name`), name them in `rustyfin.toml`:
+A device added to your tailnet with a tag (a shared TV, say) belongs to no one, so Tailscale names nobody and Rustyfin
+refuses it. Sign the device in to Tailscale as a person, or name a user for it with an app capability
+([Authentication](authentication.md#tagged-devices)).
 
-```toml
-[auth.forward_auth.headers]
-user = "Tailscale-User-Login"
-name = "Tailscale-User-Name"
-```
+## Sharing with friends
 
-**Apps that ask for a password**: add `[auth.ldap]` to check it against an LDAPS server
-([Configuration](configuration.md)).
+Share the server's machine with them from Tailscale's admin console (**Machines → Share**). They join with their own
+Tailscale account, which becomes their Rustyfin user; give them the libraries you want on the **Users** page.
 
-More: [Authentication](authentication.md).
+## Keeping it running
+
+- **Updating**: `docker compose pull && docker compose up -d`. The database is updated on start.
+- **Backups**: the Postgres database holds users, watched state, play history and what the scans found:
+  `docker compose exec postgres pg_dump -U rustyfin rustyfin > rustyfin.sql`. The cache and the search index are
+  rebuilt by themselves; your media folders are untouched.
+- **Health**: the admin's dashboard shows each library folder and the server's state. Logs:
+  `docker compose logs rustyfin`.
 
 ## Optional extras
 
-- **Search**: add a Meilisearch service and `[search] meilisearch_url`; without it, search uses Postgres.
-- **Metrics**: `[metrics] listen = "0.0.0.0:9090"` serves Prometheus metrics on a separate port.
-- **Artwork and lyrics**: the `rustyfin` tool (image `ghcr.io/jkellz-dev/rustyfin-meta`) fetches them into the media
-  folders; it needs write access to them, which the server never has ([Artwork](artwork.md)).
-- **Hardware transcoding**: `[transcode] hardware_acceleration` (`qsv`, `vaapi`, `nvenc`) with the device passed into
-  the container.
+- **Artwork, cast photos and lyrics**: the `rustyfin` tool (image `ghcr.io/jkellz-dev/rustyfin-meta`) fetches what is
+  missing from TMDB, MusicBrainz and LRCLIB. It writes artwork and lyrics beside your media, so it runs on its own with
+  a writable mount, never inside the server ([Artwork](artwork.md), [Lyrics](lyrics.md)).
+- **Hardware transcoding**: `[transcode] hardware_acceleration` (`qsv`, `vaapi` or `nvenc`), with the GPU passed into
+  the `rustyfin` container (`devices: ["/dev/dri:/dev/dri"]` for Intel and AMD). Without it, ffmpeg converts on the CPU
+  when an app cannot play a file as it is.
+- **Metrics**: `[metrics] listen = "0.0.0.0:9090"` serves Prometheus metrics on a second port.
+- **Sonarr and Radarr**: they can tell Rustyfin when they add or change a file, so it scans just that folder. Make a
+  key from a device on your tailnet:
+
+  ```bash
+  curl -X POST https://rustyfin.<your-tailnet>.ts.net/Auth/Keys \
+    -H 'Content-Type: application/json' -d '{"Name": "Sonarr"}'
+  ```
+
+  In Sonarr or Radarr, **Settings → Connect → + → Emby / Jellyfin**: host `tailscale` (the container Rustyfin shares a
+  network with; run Sonarr in the same Compose file), port `8096`, the `Key` from the answer, and **Update Library** on.
+  If they see your folders at other paths than Rustyfin does (`/tv` against `/media/tv`), fill in **Map Paths**. The
+  key only lets them send these notifications.
+- **A friend's Jellyfin**: their libraries can merge into yours ([Linked Servers](linked-servers.md)).
+- **Coming from Jellyfin**: what comes across and what does not ([Moving from Jellyfin](migrating-from-jellyfin.md)).

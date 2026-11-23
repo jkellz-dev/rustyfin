@@ -1,11 +1,23 @@
 # Rustyfin
 
-A media server in Rust that speaks Jellyfin's API, so Jellyfin's apps (Infuse, Swiftfin, Jellyfin Media Player, ...)
-work with it unchanged. The aim is a fast, light Jellyfin replacement for people who run their own servers: one binary,
-Postgres for state, media folders mounted read-only.
+A media server in Rust that speaks Jellyfin's API, so Jellyfin's apps (Infuse, Swiftfin, Findroid, Finamp, Jellyfin
+Media Player, ...) work with it unchanged. The aim is a fast, light Jellyfin replacement for people who run their own
+servers: one binary, Postgres for state, media folders mounted read-only.
 
 **Status**: pre-release. Testing each Jellyfin app on real devices is still under way. What is done and what is next:
 [`roadmap.md`](roadmap.md).
+
+## Quick start
+
+Rustyfin runs in Docker Compose beside Postgres, Meilisearch (search) and Tailscale, which signs people in: every
+device on your tailnet is already a known person, so apps connect with nothing more to type.
+
+1. In Tailscale's admin console, turn on MagicDNS and HTTPS certificates and make an auth key.
+2. Write `compose.yaml`, `serve.json`, `rustyfin.toml` and `.env` from [Getting Started](docs/getting-started.md), with
+   your media folders mounted read-only.
+3. `docker compose up -d`
+4. Open `https://rustyfin.<your-tailnet>.ts.net/web` (the first person in is the administrator) and add your libraries.
+5. In a Jellyfin app, add that address as a server and sign in with any user name.
 
 ## What it does
 
@@ -22,21 +34,24 @@ Postgres for state, media folders mounted read-only.
   MusicBrainz and others, and fetches lyrics, into the media folders.
 - **Linked servers**: a friend's Jellyfin shares libraries with yours, and their films merge into your libraries as
   extra versions, the best copy playing by default. [Linked Servers](docs/linked-servers.md).
-- **Operations**: Prometheus metrics, health on the dashboard, migrations at start.
+- **Operations**: Prometheus metrics, health on the dashboard, database migrations at start.
 
 ## What it leaves out, on purpose
 
-- **Passwords**: people are signed in by a reverse proxy (forward auth: Authelia, Tailscale, ...) or an LDAPS server.
+- **Passwords**: Tailscale (or another sign-in proxy) says who each request is from, or else an LDAPS server checks the
+  password; Rustyfin only decides what each person may see. [Authentication](docs/authentication.md).
 - **Writing to media folders**: the server only reads them; the separate `rustyfin` tool is the one writer.
 - Plugins, Live TV and DVR, photo and book libraries.
 
-## Getting started
+## Documentation
 
-- [Getting Started](docs/getting-started.md): Docker Compose with Postgres and a sign-in proxy, in a few minutes.
-- [Deployment](docs/deployment.md): container, systemd, Caddy, nginx or Traefik.
+- [Getting Started](docs/getting-started.md): the Docker Compose setup, step by step.
+- [Authentication](docs/authentication.md): Tailscale, other sign-in proxies, LDAPS.
 - [Configuration](docs/configuration.md): every setting.
+- [Deployment](docs/deployment.md): a single container, systemd, Caddy, nginx or Traefik; upgrades and backups.
 - [Moving from Jellyfin](docs/migrating-from-jellyfin.md): what comes across and what does not.
 - [Linked Servers](docs/linked-servers.md): merge a friend's libraries into yours.
+- Everything else: [`docs/`](docs/README.md).
 
 Images: `ghcr.io/jkellz-dev/rustyfin-server` (the server) and `ghcr.io/jkellz-dev/rustyfin-meta` (the `rustyfin`
 tool), for `linux/amd64` and `linux/arm64`.
@@ -52,8 +67,7 @@ mise run format          # format and fix everything hk checks
 ```
 
 Tests come first, history stays linear, and commits are conventional: see [Contributing](docs/contributing.md), the
-[Development Guide](docs/development.md) and the [Architecture](docs/architecture.md). All documentation:
-[`docs/`](docs/README.md).
+[Development Guide](docs/development.md) and the [Architecture](docs/architecture.md).
 
 ## License
 
