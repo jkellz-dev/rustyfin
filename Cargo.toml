@@ -66,6 +66,11 @@ uuid = { version = "1", features = ["v4", "v5", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Traces to an OpenTelemetry collector (`[tracing] otlp_endpoint`).
+opentelemetry = { version = "0.33", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.33", default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace"] }
+tracing-opentelemetry = { version = "0.34", default-features = false }
 rand = "0.10"
 cron = "0.17"
 async-trait = "0.1"
