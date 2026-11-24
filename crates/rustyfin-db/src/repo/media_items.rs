@@ -1149,16 +1149,20 @@ pub async fn runtime_totals(
     if folder_ids.is_empty() {
         return Ok(std::collections::HashMap::new());
     }
+    // The walk carries each item's type and runtime, and does not look
+    // below a track (it has no children): an artist list's totals took more
+    // than a third of its time (owner, 2026-11-23).
     let rows: Vec<(Uuid, i64)> = sqlx::query_as(
-        "WITH RECURSIVE below(root, id, depth) AS ( \
-             SELECT id, id, 0 FROM visible_media_items WHERE id = ANY($1) \
+        "WITH RECURSIVE below(root, id, item_type, runtime_ticks, depth) AS ( \
+             SELECT id, id, item_type, runtime_ticks, 0 FROM visible_media_items WHERE id = ANY($1) \
              UNION ALL \
-             SELECT below.root, m.id, below.depth + 1 FROM visible_media_items m \
-             JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
-         SELECT below.root, SUM(m.runtime_ticks)::BIGINT FROM below \
-         JOIN visible_media_items m ON m.id = below.id \
-         WHERE below.depth > 0 AND m.item_type = 'Audio' AND m.runtime_ticks IS NOT NULL \
-         GROUP BY below.root",
+             SELECT below.root, m.id, m.item_type, m.runtime_ticks, below.depth + 1 \
+             FROM visible_media_items m \
+             JOIN below ON m.parent_id = below.id \
+             WHERE below.depth < 64 AND below.item_type <> 'Audio') \
+         SELECT root, SUM(runtime_ticks)::BIGINT FROM below \
+         WHERE depth > 0 AND item_type = 'Audio' AND runtime_ticks IS NOT NULL \
+         GROUP BY root",
     )
     .bind(folder_ids)
     .fetch_all(pool)

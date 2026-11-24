@@ -65,19 +65,23 @@ pub async fn folder_progress(
         return Ok(std::collections::HashMap::new());
     }
     let rows = sqlx::query_as::<_, (Uuid, i64, i64)>(
-        "WITH RECURSIVE below(root, id, depth) AS ( \
-             SELECT id, id, 0 FROM visible_media_items WHERE id = ANY($2) \
+        // The walk carries each item's type and does not look below a track
+        // (it has no children): an artist list's progress took more than a
+        // third of its time (owner, 2026-11-23).
+        "WITH RECURSIVE below(root, id, item_type, depth) AS ( \
+             SELECT id, id, item_type, 0 FROM visible_media_items WHERE id = ANY($2) \
              UNION ALL \
-             SELECT below.root, m.id, below.depth + 1 FROM visible_media_items m \
-             JOIN below ON m.parent_id = below.id WHERE below.depth < 64) \
+             SELECT below.root, m.id, m.item_type, below.depth + 1 FROM visible_media_items m \
+             JOIN below ON m.parent_id = below.id \
+             WHERE below.depth < 64 AND below.item_type <> 'Audio') \
          SELECT b.root, COUNT(*), \
                 COUNT(*) FILTER (WHERE NOT COALESCE(ud.played, false)) \
-         FROM (SELECT root, id FROM below WHERE depth > 0 \
-               UNION SELECT collection_id, item_id FROM collection_items \
-                     WHERE collection_id = ANY($2)) b \
-         JOIN visible_media_items m ON m.id = b.id \
-         LEFT JOIN user_data ud ON ud.item_id = m.id AND ud.user_id = $1 \
-         WHERE m.item_type IN ('Movie', 'Episode', 'Audio', 'Video', 'MusicVideo', 'Trailer') \
+         FROM (SELECT root, id, item_type FROM below WHERE depth > 0 \
+               UNION SELECT ci.collection_id, ci.item_id, m.item_type FROM collection_items ci \
+                     JOIN visible_media_items m ON m.id = ci.item_id \
+                     WHERE ci.collection_id = ANY($2)) b \
+         LEFT JOIN user_data ud ON ud.item_id = b.id AND ud.user_id = $1 \
+         WHERE b.item_type IN ('Movie', 'Episode', 'Audio', 'Video', 'MusicVideo', 'Trailer') \
          GROUP BY b.root",
     )
     .bind(user_id)
