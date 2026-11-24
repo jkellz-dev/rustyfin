@@ -74,14 +74,52 @@ pub fn read_tags(path: &Path) -> Option<AudioTags> {
 }
 
 /// Split a genre string on common delimiters (`;`, `/`, `,`, `\0`) into
-/// individual genres, trimming whitespace.
+/// individual genres, trimming whitespace, each named once. ID3 codes are
+/// named ([`genre_name`]).
 pub fn split_genres(genre: &str) -> Vec<String> {
-    genre
-        .split([';', '/', ',', '\0'])
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect()
+    let mut out: Vec<String> = Vec::new();
+    for name in genre.split([';', '/', ',', '\0']).filter_map(genre_name) {
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
+/// A tagged genre as people name it. ID3 lets a tag give its ID3v1 code
+/// ("17", "(17)", or "(17)Rock" with the name after it), and "(RX)" / "(CR)"
+/// for remix and cover: those become the name. A bare number that is no code
+/// is dropped (owner, 2026-11-23: genres that are "just numbers").
+pub fn genre_name(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    let code = if let Some(rest) = s.strip_prefix('(')
+        && let Some(end) = rest.find(')')
+    {
+        let code = &rest[..end];
+        let after = rest[end + 1..].trim();
+        // "(17)Rock": the name is written out; "(17)(20)": codes only.
+        if !after.is_empty() && !after.starts_with('(') {
+            return Some(after.to_string());
+        }
+        match code {
+            "RX" => return Some("Remix".to_string()),
+            "CR" => return Some("Cover".to_string()),
+            _ => code,
+        }
+    } else {
+        s
+    };
+    if code.is_empty() {
+        return None;
+    }
+    if code.bytes().all(|b| b.is_ascii_digit()) {
+        return code
+            .parse::<usize>()
+            .ok()
+            .and_then(|n| lofty::id3::v1::GENRES.get(n))
+            .map(|g| g.to_string());
+    }
+    Some(s.to_string())
 }
 
 pub fn extract_cover_art(audio_path: &Path, output_path: &Path) -> Option<()> {

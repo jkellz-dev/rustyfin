@@ -79,7 +79,15 @@ async fn check_image_access(
         .await
         .map_err(ApiError::Database)?;
     match accessible {
-        Some(allowed) if !allowed.contains(&item_id) => Err(ApiError::NotFound),
+        // A genre's picture is anyone's (its albums are checked when opened).
+        Some(allowed)
+            if !allowed.contains(&item_id)
+                && super::music_genres::genre_name_by_id(&state.pool, item_id)
+                    .await
+                    .is_none() =>
+        {
+            Err(ApiError::NotFound)
+        }
         _ => Ok(()),
     }
 }
@@ -221,6 +229,26 @@ async fn serve_placeholder(
         // draw initials).
         let path = headshot_path(state, &person).ok_or(ApiError::NotFound)?;
         return serve_image(&path.to_string_lossy(), opts, state, req).await;
+    } else if let Some(genre) = super::music_genres::genre_name_by_id(&state.pool, item_id).await {
+        // A genre: one of its albums' covers, else a title's art (films).
+        let album = media_items::genre_albums(&state.pool, std::slice::from_ref(&genre), None)
+            .await
+            .map_err(ApiError::Database)?
+            .remove(&genre);
+        if let Some(album) = album {
+            if let Some(cover) = images::find_by_item_and_type(&state.pool, album, "Primary", 0)
+                .await
+                .map_err(ApiError::Database)?
+            {
+                return serve_image(&cover.path, opts, state, req).await;
+            }
+            return Box::pin(serve_placeholder(state, album, image_type, opts, req)).await;
+        }
+        let image = media_items::genre_image(&state.pool, &genre, None)
+            .await
+            .map_err(ApiError::Database)?
+            .ok_or(ApiError::NotFound)?;
+        return serve_image(&image.path, opts, state, req).await;
     } else {
         return Err(ApiError::NotFound);
     };

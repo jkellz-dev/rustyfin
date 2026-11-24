@@ -55,10 +55,15 @@ pub async fn get_music_genres(
         media_items::count_genres_by_types(&state.pool, &names, query.parent_id, MUSIC_TYPES)
             .await
             .or_log_default("media_items::count_genres_by_types");
+    // Each genre's picture: one of its albums' covers (owner, 2026-11-23).
+    let covers = media_items::genre_albums(&state.pool, &names, query.parent_id)
+        .await
+        .or_log_default("media_items::genre_albums");
     let mut dtos = Vec::with_capacity(page.len());
     for genre_name in page {
         let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes());
         let counts = all_counts.remove(genre_name.as_str()).unwrap_or_default();
+        let cover = covers.get(genre_name.as_str()).copied();
 
         let mut dto = BaseItemDto {
             id,
@@ -67,6 +72,12 @@ pub async fn get_music_genres(
             item_type: "MusicGenre".to_string(),
             ..Default::default()
         };
+        if let Some(album) = cover {
+            dto.image_tags = Some(std::collections::HashMap::from([(
+                "Primary".to_string(),
+                genre_image_tag(album),
+            )]));
+        }
 
         let mut total_children = 0i32;
         for (item_type, cnt) in &counts {
@@ -129,4 +140,37 @@ pub async fn get_music_genre(
     Ok(Json(
         super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
     ))
+}
+
+/// The image tag of a genre's picture: changes when another album stands for
+/// it.
+pub(crate) fn genre_image_tag(album: Uuid) -> String {
+    format!("genre-{}", album.simple())
+}
+
+/// Genre ids are made from their names (UUID v5); the names of every genre,
+/// by id, kept for five minutes. Artwork requests come in bursts of a page.
+type GenreIds = Option<(std::time::Instant, std::collections::HashMap<Uuid, String>)>;
+static GENRE_IDS: std::sync::Mutex<GenreIds> = std::sync::Mutex::new(None);
+
+/// The genre named by `id` (a Genre or MusicGenre item's id), if any.
+pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<String> {
+    if let Ok(cached) = GENRE_IDS.lock()
+        && let Some((at, names)) = cached.as_ref()
+        && at.elapsed() < std::time::Duration::from_secs(300)
+    {
+        return names.get(&id).cloned();
+    }
+    let genres = media_items::distinct_genres(pool, None)
+        .await
+        .or_log_default("media_items::distinct_genres");
+    let names: std::collections::HashMap<Uuid, String> = genres
+        .into_iter()
+        .map(|g| (Uuid::new_v5(&Uuid::NAMESPACE_OID, g.as_bytes()), g))
+        .collect();
+    let found = names.get(&id).cloned();
+    if let Ok(mut cached) = GENRE_IDS.lock() {
+        *cached = Some((std::time::Instant::now(), names));
+    }
+    found
 }

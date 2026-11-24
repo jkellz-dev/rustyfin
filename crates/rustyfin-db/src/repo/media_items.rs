@@ -1634,6 +1634,49 @@ pub async fn count_genres_by_types(
     Ok(out)
 }
 
+/// For each of `genres`, the album whose cover stands for it: an album of
+/// the genre (or of a track in it), one with its own artwork first, then the
+/// newest. Genre -> album id.
+pub async fn genre_albums(
+    pool: &PgPool,
+    genres: &[String],
+    library_id: Option<Uuid>,
+) -> Result<HashMap<String, Uuid>, sqlx::Error> {
+    if genres.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(String, Uuid)> = sqlx::query_as(
+        r#"
+        WITH hits AS (
+            SELECT g.genre, CASE WHEN p.item_type = 'MusicAlbum' THEN p.id ELSE p.parent_id END AS album
+            FROM visible_media_items t
+            CROSS JOIN unnest(t.genres) AS g(genre)
+            JOIN media_items p ON p.id = t.parent_id
+            WHERE t.item_type = 'Audio' AND g.genre = ANY($1)
+              AND ($2::uuid IS NULL OR t.library_id = $2)
+            UNION
+            SELECT g.genre, m.id
+            FROM visible_media_items m
+            CROSS JOIN unnest(m.genres) AS g(genre)
+            WHERE m.item_type = 'MusicAlbum' AND g.genre = ANY($1)
+              AND ($2::uuid IS NULL OR m.library_id = $2)
+        )
+        SELECT DISTINCT ON (h.genre) h.genre, a.id
+        FROM hits h
+        JOIN media_items a ON a.id = h.album AND a.item_type = 'MusicAlbum'
+        ORDER BY h.genre,
+                 EXISTS (SELECT 1 FROM images i WHERE i.entity_id = a.id
+                         AND i.image_type = 'Primary') DESC,
+                 a.date_created DESC, a.id
+        "#,
+    )
+    .bind(genres)
+    .bind(library_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// Distinct studio values, optionally scoped to a library.
 pub async fn distinct_studios(
     pool: &PgPool,
