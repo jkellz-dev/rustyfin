@@ -149,7 +149,8 @@ pub(crate) fn genre_image_tag(album: Uuid) -> String {
 }
 
 /// Genre ids are made from their names (UUID v5); the names of every genre,
-/// by id, kept for five minutes. Artwork requests come in bursts of a page.
+/// by id, kept for five minutes. Artwork requests come in bursts of a page;
+/// an id not in the list reads the names again (a genre added since).
 type GenreIds = Option<(std::time::Instant, std::collections::HashMap<Uuid, String>)>;
 static GENRE_IDS: std::sync::Mutex<GenreIds> = std::sync::Mutex::new(None);
 
@@ -158,8 +159,9 @@ pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<St
     if let Ok(cached) = GENRE_IDS.lock()
         && let Some((at, names)) = cached.as_ref()
         && at.elapsed() < std::time::Duration::from_secs(300)
+        && let Some(name) = names.get(&id)
     {
-        return names.get(&id).cloned();
+        return Some(name.clone());
     }
     let genres = media_items::distinct_genres(pool, None)
         .await
