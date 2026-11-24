@@ -566,15 +566,6 @@ async fn genres_of_a_music_library_are_music_genres() {
     app.cleanup().await;
 }
 
-/// A one-pixel PNG for artwork in tests.
-const PIXEL_PNG: &[u8] = &[
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x60, 0x18, 0x05, 0xf8,
-    0x0f, 0x00, 0x01, 0x04, 0x01, 0x00, 0x5d, 0xa5, 0xb3, 0x5a, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
-];
-
 /// Owner, 2026-11-23: "regarding genres for music, there are no images in
 /// the genres, its just blank." A music genre's picture is the cover of one
 /// of its albums (one with its own artwork first), as Finamp asks for it:
@@ -598,8 +589,13 @@ async fn music_genres_have_pictures() {
         .execute(&app.pool)
         .await
         .unwrap();
-    let cover = std::env::temp_dir().join(format!("rustyfin-cover-{album}.png"));
-    std::fs::write(&cover, PIXEL_PNG).unwrap();
+    // A real PNG (the poster placeholder), copied in as the album's cover.
+    let dir = std::env::temp_dir().join(format!("rustyfin-cover-{}", album.simple()));
+    let cover = dir.join("cover.png");
+    let drawn = rustyfin_media::image_processing::Placeholder::Poster
+        .ensure_file(&dir.join(".cache"))
+        .unwrap();
+    std::fs::copy(drawn, &cover).unwrap();
     sqlx::query("INSERT INTO images (entity_id, image_type, path, image_index) VALUES ($1, 'Primary', $2, 0)")
         .bind(album)
         .bind(cover.to_string_lossy().to_string())
@@ -621,7 +617,7 @@ async fn music_genres_have_pictures() {
         .get(&format!("/Items/{id}/Images/Primary?maxWidth=200"), &token)
         .await;
     assert_eq!(status, StatusCode::OK);
-    std::fs::remove_file(&cover).ok();
+    std::fs::remove_dir_all(&dir).ok();
     app.cleanup().await;
 }
 
