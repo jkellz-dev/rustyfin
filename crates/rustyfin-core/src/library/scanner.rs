@@ -1010,7 +1010,7 @@ impl LibraryScanner {
                         artist_id,
                         album_id,
                         artist_name,
-                        None,
+                        TrackNfo::default(),
                     )
                     .await
                 {
@@ -1051,6 +1051,22 @@ impl LibraryScanner {
 
         self.replace_images(album_id, album_dir).await;
         self.enrichment.enrich_album(album_id, album_dir).await;
+        // The album NFO's content, kept as the album's change tag: tracks are
+        // read again when it changes, not when a writer merely rewrites it
+        // (owner, 2026-11-24: every scan re-read 66,000 tracks). An album
+        // scanned before this kept nothing, so it only records it.
+        let nfo_tag = album_nfo_tag(album_dir);
+        let nfo_changed = match media_items::find_by_id(&self.pool, album_id).await {
+            Ok(Some(row)) if row.etag != nfo_tag => {
+                if let Err(e) =
+                    media_items::set_etag(&self.pool, album_id, nfo_tag.as_deref()).await
+                {
+                    tracing::warn!("Could not store the NFO tag of album {album_id}: {e}");
+                }
+                row.etag.is_some()
+            }
+            _ => false,
+        };
         self.spent("albums: folder, art, NFO", t);
         let t = Instant::now();
 
@@ -1091,7 +1107,10 @@ impl LibraryScanner {
                         artist_id,
                         album_id,
                         artist_name,
-                        track_map.get(filename).copied(),
+                        TrackNfo {
+                            track: track_map.get(filename).copied(),
+                            album_changed: nfo_changed,
+                        },
                     )
                 })
                 .collect();
@@ -1121,19 +1140,31 @@ impl LibraryScanner {
         artist_id: Uuid,
         album_id: Uuid,
         artist_name: &str,
-        nfo_track: Option<&rustyfin_common::nfo::NfoTrack>,
+        nfo: TrackNfo<'_>,
     ) -> anyhow::Result<IngestOutcome> {
+        let TrackNfo {
+            track: nfo_track,
+            album_changed: nfo_changed,
+        } = nfo;
         let path_str = file_path.to_string_lossy().to_string();
         let t = Instant::now();
-        let album_nfo = file_path.parent().and_then(find_album_nfo);
-        let etag = compute_etag(file_path, &[album_nfo])?;
+        // The file alone: the album NFO is followed by its content
+        // (`nfo_changed`). Tags written before held the NFO's mtime after the
+        // file's ("<mtime>-<size>-<nfo mtime>"); those still match.
+        let etag = compute_etag(file_path, &[])?;
         self.spent("track: file stat", t);
         let t = Instant::now();
         let existing = media_items::find_by_path(&self.pool, &path_str).await?;
         self.spent("track: database lookup", t);
         let t = Instant::now();
         if let Some(existing) = &existing
-            && existing.etag.as_deref() == Some(etag.as_str())
+            && !nfo_changed
+            && existing.etag.as_deref().is_some_and(|stored| {
+                stored == etag
+                    || stored
+                        .strip_prefix(etag.as_str())
+                        .is_some_and(|rest| rest.starts_with('-') && !rest[1..].contains('-'))
+            })
         {
             let _upkeep = SpentOnDrop(self, "track: unchanged upkeep", t);
             self.refresh_stale_streams(existing.id, file_path).await;
@@ -1939,6 +1970,26 @@ fn compute_etag(path: &Path, sidecars: &[Option<PathBuf>]) -> anyhow::Result<Str
         }
     }
     Ok(etag)
+}
+
+/// What a track's album NFO says of it, and whether that NFO's content
+/// changed since the last scan (its tracks are then read again).
+#[derive(Clone, Copy, Default)]
+struct TrackNfo<'a> {
+    track: Option<&'a rustyfin_common::nfo::NfoTrack>,
+    album_changed: bool,
+}
+
+/// An album NFO's content as a change tag ("nfo-<length>-<FNV-1a 64>"), if
+/// it has one. Stable across builds and Rust versions (unlike std's hasher).
+fn album_nfo_tag(album_dir: &Path) -> Option<String> {
+    let bytes = std::fs::read(find_album_nfo(album_dir)?).ok()?;
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in &bytes {
+        hash ^= u64::from(*b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Some(format!("nfo-{}-{hash:016x}", bytes.len()))
 }
 
 fn has_ignored_file_name(path: &Path) -> bool {

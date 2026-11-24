@@ -426,6 +426,16 @@ pub async fn latest_by_library(
     .await
 }
 
+/// Set an item's change tag.
+pub async fn set_etag(pool: &PgPool, id: Uuid, etag: Option<&str>) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE media_items SET etag = $2 WHERE id = $1")
+        .bind(id)
+        .bind(etag)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Find a media item by its filesystem path.
 pub async fn find_by_path(pool: &PgPool, path: &str) -> Result<Option<MediaItemRow>, sqlx::Error> {
     sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE path = $1")
