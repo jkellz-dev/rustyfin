@@ -29,6 +29,26 @@ pub async fn get_genres(
     auth: AuthenticatedUser,
     Query(query): Query<GenresQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    // A music (or music videos) library's genres are music genres, as
+    // Jellyfin answers them (GenresController); Finamp opens only those.
+    if let Some(parent) = query.parent_id
+        && let Some(lib) = rustyfin_db::repo::libraries::find_by_id(&state.pool, parent)
+            .await
+            .map_err(ApiError::Database)?
+        && matches!(lib.library_type.as_str(), "music" | "musicvideos")
+    {
+        return super::music_genres::get_music_genres(
+            State(state),
+            auth,
+            Query(super::music_genres::MusicGenresQuery {
+                parent_id: query.parent_id,
+                search_term: query.search_term,
+                start_index: query.start_index,
+                limit: query.limit,
+            }),
+        )
+        .await;
+    }
     let genres = media_items::distinct_genres(&state.pool, query.parent_id)
         .await
         .map_err(ApiError::Database)?;
