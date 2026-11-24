@@ -68,6 +68,13 @@ pub fn linked_line(sources: &[(String, String)]) -> Option<String> {
     Some(format!("Synced from {}", each.join(", ")))
 }
 
+/// The tasks page's result badge: (label, badge class, the reason to show
+/// under it). Jellyfin's "Aborted" (the server stopped the run) reads
+/// "Interrupted" (owner, 2026-11-23).
+pub fn run_result(_status: &str, _error: Option<&str>) -> (String, &'static str, Option<String>) {
+    (String::new(), "", None)
+}
+
 /// A dashboard card's line for a library a link fills.
 pub fn sync_card_line(age_seconds: Option<i64>, duration_ms: Option<i64>) -> String {
     let when = match age_seconds {
@@ -331,6 +338,43 @@ pub fn recent_card(
 
 #[cfg(test)]
 mod tests {
+    /// Owner, 2026-11-23: a scan stopped by a restart read "FAILED" with no
+    /// reason on the tasks page.
+    #[test]
+    fn a_run_says_how_it_ended_and_why() {
+        assert_eq!(
+            super::run_result("Completed", None),
+            ("Completed".to_string(), "badge-success", None)
+        );
+        assert_eq!(
+            super::run_result(
+                "Aborted",
+                Some("Interrupted: the server restarted during the run")
+            ),
+            (
+                "Interrupted".to_string(),
+                "badge-warning",
+                Some("Interrupted: the server restarted during the run".to_string())
+            )
+        );
+        assert_eq!(
+            super::run_result("Failed", Some("One or more library scans failed")),
+            (
+                "Failed".to_string(),
+                "badge-error",
+                Some("One or more library scans failed".to_string())
+            )
+        );
+        assert_eq!(
+            super::run_result("Error", None),
+            ("Failed".to_string(), "badge-error", None)
+        );
+        assert_eq!(
+            super::run_result("Cancelled", None),
+            ("Cancelled".to_string(), "badge-warning", None)
+        );
+    }
+
     /// Owner, 2026-11-23: "The UI for libraries should reflect a remote library
     /// that is part of it. Currently it lists the paths, but it should also
     /// list any remotes it syncs."

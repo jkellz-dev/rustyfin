@@ -97,6 +97,7 @@ mod subtitle_delivery_tests;
 mod system_control_tests;
 mod system_health_tests;
 mod tailscale_identity_tests;
+mod task_interrupted_tests;
 mod theme_songs_tests;
 mod title_settings_scan_tests;
 mod token_tests;
