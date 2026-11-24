@@ -670,46 +670,47 @@ pub async fn merge(pool: &PgPool) -> Result<u64, sqlx::Error> {
         ("Movie", &["Tmdb", "Imdb"][..]),
         ("Series", &["Tvdb", "Tmdb", "Imdb"][..]),
     ] {
-        let keys: Vec<String> = keys.iter().map(|k| k.to_string()).collect();
-        let local: Vec<(Uuid, Uuid)> = sqlx::query_as(
-            r#"
-            SELECT l.id, (array_agg(o.id))[1]
-            FROM media_items l
-            JOIN media_items o
-              ON o.library_id = l.library_id AND o.item_type = $1
-             AND o.owner_id IS NULL AND o.link_id IS NULL
-             AND EXISTS (SELECT 1 FROM unnest($2::text[]) k
-                         WHERE l.external_ids->>k IS NOT NULL
-                           AND o.external_ids->>k = l.external_ids->>k)
-            WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = $1
-            GROUP BY l.id
-            HAVING count(DISTINCT o.id) = 1
-            "#,
-        )
+        // One equality join per provider id, so Postgres hashes them: an
+        // EXISTS over the keys compared every copy with every title of its
+        // library, 2.9 s a sync (owner, 2026-11-23, pg_stat_statements).
+        // The keys are this function's own constants, never input.
+        let pairs = |others: &str| -> String {
+            keys.iter()
+                .map(|k| {
+                    format!(
+                        "SELECT l.id AS l, o.id AS o FROM media_items l \
+                         JOIN media_items o ON o.external_ids->>'{k}' = l.external_ids->>'{k}' \
+                          AND o.library_id = l.library_id AND o.item_type = $1 \
+                          AND o.owner_id IS NULL AND {others} \
+                         WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = $1 \
+                           AND l.external_ids->>'{k}' IS NOT NULL"
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" UNION ")
+        };
+        let local: Vec<(Uuid, Uuid)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "WITH pairs AS ({}) \
+             SELECT l, (array_agg(o))[1] FROM pairs GROUP BY l HAVING count(DISTINCT o) = 1",
+            pairs("o.link_id IS NULL")
+        )))
         .bind(item_type)
-        .bind(&keys)
         .fetch_all(pool)
         .await?;
         merged += make_versions(pool, &local).await?;
 
-        let linked: Vec<(Uuid, Uuid)> = sqlx::query_as(
-            r#"
-            SELECT l.id, first.id
-            FROM media_items l
-            JOIN LATERAL (
-                SELECT o.id FROM media_items o
-                WHERE o.library_id = l.library_id AND o.item_type = $1
-                  AND o.owner_id IS NULL AND o.link_id IS NOT NULL
-                  AND EXISTS (SELECT 1 FROM unnest($2::text[]) k
-                              WHERE l.external_ids->>k IS NOT NULL
-                                AND o.external_ids->>k = l.external_ids->>k)
-                ORDER BY (o.link_id = ANY($3)), (o.remote_id LIKE '%/%'), o.id LIMIT 1
-            ) first ON first.id <> l.id
-            WHERE l.link_id IS NOT NULL AND l.owner_id IS NULL AND l.item_type = $1
-            "#,
-        )
+        // Each copy's first match among the linked copies (itself included):
+        // the main copy of a server that is up, then the lowest id.
+        let linked: Vec<(Uuid, Uuid)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "WITH pairs AS ({}) \
+             SELECT l, o FROM ( \
+                 SELECT DISTINCT ON (p.l) p.l, p.o FROM pairs p \
+                 JOIN media_items m ON m.id = p.o \
+                 ORDER BY p.l, (m.link_id = ANY($2)), (m.remote_id LIKE '%/%'), m.id \
+             ) first WHERE o <> l",
+            pairs("o.link_id IS NOT NULL")
+        )))
         .bind(item_type)
-        .bind(&keys)
         .bind(&offline)
         .fetch_all(pool)
         .await?;
