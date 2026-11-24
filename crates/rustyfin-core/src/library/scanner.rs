@@ -115,6 +115,7 @@ impl LibraryScanner {
     }
 
     /// The file's probe: the one `prefetch_probes` already ran, else a new one.
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan", path = %path.display()))]
     async fn probe(&self, path: &Path) -> Option<probe::ProbeResult> {
         if let Some(done) = self.probed.lock().await.remove(path) {
             return done;
@@ -159,6 +160,7 @@ impl LibraryScanner {
     }
 
     /// Scan a library and ingest media items.
+    #[tracing::instrument(name = "scan", skip_all, fields(rustyfin.task = "library_scan", library = %library_id))]
     pub async fn scan(&self, library_id: Uuid, paths: &[String]) -> anyhow::Result<ScanResult> {
         let started = Instant::now();
         let started_at = chrono::Utc::now();
@@ -328,6 +330,7 @@ impl LibraryScanner {
         Ok(result)
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan", path = %lib_path.display()))]
     async fn scan_movies(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
         let video_files = collect_video_files(lib_path).await;
         let (films, mut extras) = split_extras(video_files);
@@ -676,6 +679,7 @@ impl LibraryScanner {
         Ok(IngestOutcome::Added)
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan", path = %lib_path.display()))]
     async fn scan_tvshows(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
         let Ok(entries) = std::fs::read_dir(lib_path) else {
             return;
@@ -713,6 +717,7 @@ impl LibraryScanner {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan"))]
     async fn scan_series(
         &self,
         series_dir: &Path,
@@ -893,6 +898,7 @@ impl LibraryScanner {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan", path = %lib_path.display()))]
     async fn scan_music(&self, lib_path: &Path, library_id: Uuid, result: &mut ScanResult) {
         let Ok(entries) = std::fs::read_dir(lib_path) else {
             return;
@@ -930,6 +936,7 @@ impl LibraryScanner {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan", artist = artist_name))]
     async fn scan_artist(
         &self,
         artist_dir: &Path,
@@ -1038,6 +1045,7 @@ impl LibraryScanner {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan", album = album_name))]
     async fn scan_album(
         &self,
         album_dir: &Path,
@@ -1543,6 +1551,7 @@ impl LibraryScanner {
     /// names (`<set>`), as Jellyfin does. Every film's NFO is read on each scan,
     /// so films scanned before this existed, and NFOs rewritten since, are
     /// picked up without a file change.
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan"))]
     async fn sync_movie_collections(&self, library_id: Uuid) {
         match rebuild_movie_collections(&self.pool, library_id).await {
             Ok((_, 0, 0)) => {}
@@ -1566,6 +1575,7 @@ impl LibraryScanner {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan"))]
     async fn prune_missing(&self, library_id: Uuid, root: &Path, result: &mut ScanResult) {
         match std::fs::read_dir(root) {
             Ok(mut entries) => {
@@ -1666,6 +1676,7 @@ impl LibraryScanner {
     /// A track's own artists, from its tags. An empty list records "read, none".
     /// What a track's tags say beyond its title and numbers: its artists, and
     /// the MusicBrainz ids of the track, its album and its album artist.
+    #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan"))]
     async fn store_track_tags(
         &self,
         item_id: Uuid,

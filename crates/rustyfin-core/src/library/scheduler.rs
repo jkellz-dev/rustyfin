@@ -243,7 +243,12 @@ impl TaskScheduler {
                     let result_id = task_results::insert_running(&pool, &task_key, &task_name)
                         .await
                         .unwrap_or(-1);
-                    match task.run().await {
+                    match tracing::Instrument::instrument(
+                        task.run(),
+                        tracing::info_span!("task", rustyfin.task = %task.key()),
+                    )
+                    .await
+                    {
                         Ok(()) => {
                             tracing::info!("Scheduled task '{task_name}' completed");
                             if result_id >= 0 {
@@ -453,7 +458,12 @@ impl TaskScheduler {
                 let result_id = task_results::insert_running(&pool, &task_key, &task_name)
                     .await
                     .unwrap_or(-1);
-                match task.run().await {
+                match tracing::Instrument::instrument(
+                    task.run(),
+                    tracing::info_span!("task", rustyfin.task = %task.key()),
+                )
+                .await
+                {
                     Ok(()) => {
                         if result_id >= 0 {
                             let _ = task_results::mark_completed(&pool, result_id).await;
@@ -604,7 +614,12 @@ impl TaskScheduler {
                         task_results::insert_running(&pool, &task_key_owned, &task_name)
                             .await
                             .unwrap_or(-1);
-                    match task.run().await {
+                    match tracing::Instrument::instrument(
+                        task.run(),
+                        tracing::info_span!("task", rustyfin.task = %task.key()),
+                    )
+                    .await
+                    {
                         Ok(()) => {
                             tracing::info!("Manual task '{task_name}' completed");
                             if result_id >= 0 {

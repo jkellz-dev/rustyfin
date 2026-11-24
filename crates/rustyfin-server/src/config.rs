@@ -21,6 +21,8 @@ pub struct Config {
     pub tasks: TasksConfig,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub tracing: TracingConfig,
     /// Linked servers (`[[link]]`, roadmap 16b; docs/linked-servers.md).
     #[serde(default, rename = "link")]
     pub links: Vec<LinkConfig>,
@@ -143,6 +145,18 @@ impl LinkConfig {
                 .transpose()?,
         })
     }
+}
+
+/// Logs and traces (`[tracing]`).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TracingConfig {
+    /// An OpenTelemetry collector's OTLP/HTTP address, e.g.
+    /// `http://collector:4318`. Unset: no traces.
+    #[serde(default)]
+    pub otlp_endpoint: Option<String>,
+    /// Log lines as JSON objects, each with its trace id when traced.
+    #[serde(default)]
+    pub json_logs: bool,
 }
 
 /// Prometheus metrics, on a listener of their own (not the public port).

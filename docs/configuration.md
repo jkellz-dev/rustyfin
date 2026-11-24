@@ -123,6 +123,28 @@ Metrics get their own listener and are never served on the public port. Unset, t
   `rustyfin_link_last_sync_timestamp_seconds{link}`, `rustyfin_link_sync_lag_seconds{link}` (since the last sync that
   worked)
 
+### `[tracing]` (optional)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `otlp_endpoint` | `String` | --- | An OpenTelemetry collector's OTLP/HTTP address, e.g. `http://collector:4318` |
+| `json_logs` | `bool` | `false` | Log lines as JSON objects instead of text |
+
+With `otlp_endpoint` set, Rustyfin sends traces to the collector (Grafana Tempo, Jaeger or any OTLP receiver), service
+name `rustyfin`:
+
+- one span per API request (`GET /Users/{userId}/Items`), with its status; each SQL statement it runs is an event on the
+  span, with the time it took
+- one trace per library scan (span `scan`), with spans for each artist, album and show, each file read, and the prune
+  and collection steps; a scan's SQL statements are left out (tens of thousands per scan)
+- one span per background task (`task`)
+
+Scan and task spans carry `rustyfin.task`, so a collector that samples traces can keep every one of them. Rustyfin sends
+every trace; sampling, if any, is the collector's.
+
+With `json_logs`, each line is one JSON object: `timestamp`, `level`, `target`, `message` and the event's other fields,
+`span` (the innermost one) and, when traced, `trace_id` and `span_id`, so a log store can link a line to its trace.
+
 ### `[metadata]`
 
 | Field | Type | Default | Description |
@@ -321,7 +343,8 @@ See [Authentication](authentication.md) for details.
 
 ## Logging
 
-Logging uses `tracing` with an env filter. Set the `RUST_LOG` environment variable:
+Logs go to stdout, as text, or as JSON lines with `[tracing] json_logs = true`. Set what is logged with the `RUST_LOG`
+environment variable:
 
 ```bash
 # Default (set automatically if RUST_LOG is unset)

@@ -25,4 +25,5 @@ pub mod request_log;
 pub mod route_case;
 pub mod router;
 pub mod routes;
+pub mod telemetry;
 pub mod user_prefs;

@@ -88,7 +88,21 @@ pub async fn track_requests(matched: Option<MatchedPath>, req: Request, next: Ne
     let method = req.method().to_string();
     let route = matched.map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
     let started = Instant::now();
-    let response = next.run(req).await;
+    // The request's span (traces): its route, and its status once answered.
+    let span = tracing::info_span!(
+        "http.request",
+        otel.name = %format!("{method} {route}"),
+        otel.kind = "server",
+        http.request.method = %method,
+        http.route = %route,
+        http.response.status_code = tracing::field::Empty,
+        otel.status_code = tracing::field::Empty,
+    );
+    let response = tracing::Instrument::instrument(next.run(req), span.clone()).await;
+    span.record("http.response.status_code", response.status().as_u16());
+    if response.status().is_server_error() {
+        span.record("otel.status_code", "ERROR");
+    }
     let status = response.status().as_u16().to_string();
     metrics::counter!(
         "rustyfin_http_requests_total",

@@ -14,7 +14,6 @@ use ipnet::IpNet;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use rustyfin_api::router::{AppState, ForwardAuthState, build_router};
 use rustyfin_auth::forward_auth::ForwardAuthHeaders;
@@ -36,17 +35,12 @@ const SEARCH_SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "rustyfin=debug,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
-    // Load configuration
+    // Configuration first: it says how to log and where traces go.
     let config = config::Config::load()?;
+    let tracer = rustyfin_api::telemetry::init(
+        config.tracing.otlp_endpoint.as_deref(),
+        config.tracing.json_logs,
+    )?;
     tracing::info!(
         "Starting {} on port {}",
         config.server.server_name,
@@ -461,6 +455,10 @@ async fn main() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal(shutdown))
     .await?;
 
+    // Send the traces still buffered (the exporter blocks: off the runtime).
+    if let Some(tracer) = tracer {
+        let _ = tokio::task::spawn_blocking(move || tracer.shutdown()).await;
+    }
     Ok(())
 }
 
