@@ -50,17 +50,15 @@ pub async fn get_music_genres(
     let limit = query.limit.unwrap_or(100) as usize;
     let page = &filtered[start.min(filtered.len())..filtered.len().min(start + limit)];
 
+    let names: Vec<String> = page.iter().map(|g| g.to_string()).collect();
+    let mut all_counts =
+        media_items::count_genres_by_types(&state.pool, &names, query.parent_id, MUSIC_TYPES)
+            .await
+            .or_log_default("media_items::count_genres_by_types");
     let mut dtos = Vec::with_capacity(page.len());
     for genre_name in page {
         let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes());
-        let counts = media_items::count_items_with_genre_by_types(
-            &state.pool,
-            genre_name,
-            query.parent_id,
-            MUSIC_TYPES,
-        )
-        .await
-        .unwrap_or_default();
+        let counts = all_counts.remove(genre_name.as_str()).unwrap_or_default();
 
         let mut dto = BaseItemDto {
             id,

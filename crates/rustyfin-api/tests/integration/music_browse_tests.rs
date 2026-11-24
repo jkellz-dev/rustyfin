@@ -556,6 +556,8 @@ async fn genres_of_a_music_library_are_music_genres() {
     assert_eq!(items.len(), 1, "{body}");
     assert_eq!(items[0]["Name"], "Electronic");
     assert_eq!(items[0]["Type"], "MusicGenre", "{body}");
+    assert_eq!(items[0]["SongCount"], 1, "{body}");
+    assert_eq!(items[0]["ChildCount"], 1, "{body}");
 
     // A films library keeps its genres.
     let (_, body) = app.get(&format!("/Genres?ParentId={films}"), &token).await;

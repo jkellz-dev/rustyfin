@@ -1600,6 +1600,40 @@ pub async fn count_items_with_genre_by_types(
     .await
 }
 
+/// Counts by item type of the items in each of `genres`, in one query (a
+/// query per genre took 60 ms each, five seconds for Finamp's genre list:
+/// owner, 2026-11-23). Genre -> [(item type, count)].
+pub async fn count_genres_by_types(
+    pool: &PgPool,
+    genres: &[String],
+    parent_id: Option<Uuid>,
+    item_types: &[&str],
+) -> Result<HashMap<String, Vec<(String, i64)>>, sqlx::Error> {
+    if genres.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        r#"
+        SELECT g.genre, m.item_type, COUNT(*)
+        FROM visible_media_items m, unnest(m.genres) AS g(genre)
+        WHERE g.genre = ANY($1)
+          AND m.item_type = ANY($2)
+          AND ($3::uuid IS NULL OR m.library_id = $3)
+        GROUP BY g.genre, m.item_type
+        "#,
+    )
+    .bind(genres)
+    .bind(item_types)
+    .bind(parent_id)
+    .fetch_all(pool)
+    .await?;
+    let mut out: HashMap<String, Vec<(String, i64)>> = HashMap::new();
+    for (genre, item_type, n) in rows {
+        out.entry(genre).or_default().push((item_type, n));
+    }
+    Ok(out)
+}
+
 /// Distinct studio values, optionally scoped to a library.
 pub async fn distinct_studios(
     pool: &PgPool,
