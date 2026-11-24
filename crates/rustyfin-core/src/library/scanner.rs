@@ -29,6 +29,9 @@ pub struct LibraryScanner {
     collection_art_dir: Option<std::path::PathBuf>,
     /// Probes run ahead of ingestion by `prefetch_probes`, taken by `probe`.
     probed: tokio::sync::Mutex<std::collections::HashMap<PathBuf, Option<probe::ProbeResult>>>,
+    /// Where the current scan's time goes, by phase (owner, 2026-11-23: a
+    /// music scan that changes nothing took 45 minutes).
+    timings: std::sync::Mutex<std::collections::BTreeMap<&'static str, std::time::Duration>>,
 }
 
 /// ffprobe runs this many at once while a scan meets new files. One probe
@@ -65,6 +68,45 @@ impl LibraryScanner {
             enrichment,
             collection_art_dir,
             probed: Default::default(),
+            timings: Default::default(),
+        }
+    }
+
+    /// Log and publish where the scan's time went. Track phases are summed
+    /// over tracks read several at once, so they can add up to more than the
+    /// wall time of "tracks".
+    fn report_timings(&self, library: &str, total: std::time::Duration) {
+        let Ok(t) = self.timings.lock() else {
+            return;
+        };
+        let walls: std::time::Duration = t
+            .iter()
+            .filter(|(k, _)| !k.starts_with("track: "))
+            .map(|(_, v)| *v)
+            .sum();
+        let mut parts: Vec<String> = t
+            .iter()
+            .map(|(k, v)| format!("{k} {:.1}s", v.as_secs_f64()))
+            .collect();
+        parts.push(format!(
+            "other {:.1}s",
+            total.saturating_sub(walls).as_secs_f64()
+        ));
+        tracing::info!("Scan of {library} took {total:?}: {}", parts.join(", "));
+        for (phase, took) in t.iter() {
+            metrics::gauge!(
+                "rustyfin_scan_phase_seconds",
+                "library" => library.to_string(),
+                "phase" => phase.to_string()
+            )
+            .set(took.as_secs_f64());
+        }
+    }
+
+    /// Add the time since `since` to a phase of the current scan.
+    fn spent(&self, phase: &'static str, since: Instant) {
+        if let Ok(mut t) = self.timings.lock() {
+            *t.entry(phase).or_default() += since.elapsed();
         }
     }
 
@@ -208,6 +250,9 @@ impl LibraryScanner {
             .ok_or_else(|| anyhow::anyhow!("Library {library_id} not found"))?;
 
         let library_type = lib.library_type.as_str();
+        if let Ok(mut t) = self.timings.lock() {
+            t.clear();
+        }
         let board = ScanBoard::global();
         board.set_parts(library_id, paths.len() as u64);
 
@@ -235,10 +280,13 @@ impl LibraryScanner {
                     continue;
                 }
             }
+            let t = Instant::now();
             self.prune_missing(library_id, &path, &mut result).await;
+            self.spent("prune missing", t);
             board.part_done(library_id);
         }
         board.finishing(library_id);
+        let finishing = Instant::now();
 
         if library_type == "movies" {
             self.sync_movie_collections(library_id).await;
@@ -259,8 +307,10 @@ impl LibraryScanner {
         }
         // Backfill headshot image rows for people with cached headshots
         self.enrichment.backfill_people_headshots().await;
+        self.spent("finish (collections, merge, headshots)", finishing);
 
         result.duration = start.elapsed();
+        self.report_timings(&lib.name, result.duration);
         tracing::info!(
             "Scan complete for library {library_id}: added={}, updated={}, skipped={}, removed={}, errors={}, duration={:?}",
             result.items_added,
@@ -877,6 +927,7 @@ impl LibraryScanner {
         library_id: Uuid,
         result: &mut ScanResult,
     ) -> anyhow::Result<()> {
+        let t = Instant::now();
         let artist_id = self
             .find_or_create_folder(
                 artist_dir,
@@ -890,6 +941,7 @@ impl LibraryScanner {
 
         self.replace_images(artist_id, artist_dir).await;
         self.enrichment.enrich_artist(artist_id, artist_dir).await;
+        self.spent("artists: folder, art, NFO", t);
 
         let Ok(entries) = std::fs::read_dir(artist_dir) else {
             return Ok(());
@@ -985,6 +1037,7 @@ impl LibraryScanner {
         artist_name: &str,
         result: &mut ScanResult,
     ) -> anyhow::Result<()> {
+        let t = Instant::now();
         let album_id = self
             .find_or_create_folder(
                 album_dir,
@@ -998,6 +1051,8 @@ impl LibraryScanner {
 
         self.replace_images(album_id, album_dir).await;
         self.enrichment.enrich_album(album_id, album_dir).await;
+        self.spent("albums: folder, art, NFO", t);
+        let t = Instant::now();
 
         // Build track lookup from album NFO (filename → track metadata)
         let nfo_tracks = rustyfin_common::nfo::find_album_nfo(album_dir)
@@ -1012,6 +1067,8 @@ impl LibraryScanner {
                 .collect();
 
         let audio_files = collect_audio_files(album_dir).await;
+        self.spent("albums: track list", t);
+        let t = Instant::now();
 
         // An album's tracks are ingested several at once: each writes its own
         // row, and the album- and artist-level ids it adds are merged in one
@@ -1041,6 +1098,7 @@ impl LibraryScanner {
             let done = futures_util::future::join_all(futures).await;
             outcomes.extend(chunk.iter().zip(done));
         }
+        self.spent("tracks", t);
         for (audio_file, outcome) in outcomes {
             match outcome {
                 Ok(IngestOutcome::Added) => result.items_added += 1,
@@ -1066,12 +1124,18 @@ impl LibraryScanner {
         nfo_track: Option<&rustyfin_common::nfo::NfoTrack>,
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
+        let t = Instant::now();
         let album_nfo = file_path.parent().and_then(find_album_nfo);
         let etag = compute_etag(file_path, &[album_nfo])?;
+        self.spent("track: file stat", t);
+        let t = Instant::now();
         let existing = media_items::find_by_path(&self.pool, &path_str).await?;
+        self.spent("track: database lookup", t);
+        let t = Instant::now();
         if let Some(existing) = &existing
             && existing.etag.as_deref() == Some(etag.as_str())
         {
+            let _upkeep = SpentOnDrop(self, "track: unchanged upkeep", t);
             self.refresh_stale_streams(existing.id, file_path).await;
             // Tracks scanned before artists, MusicBrainz ids, lyrics or
             // genres were kept get them once.
@@ -1096,6 +1160,7 @@ impl LibraryScanner {
         }
 
         // Prefer NFO track data, fall back to audio tags, then filename parsing
+        let _read = SpentOnDrop(self, "track: read and store", t);
         let resolved = resolve_audio_track(file_path);
 
         let (title, track_num, disc_num, year) = if let Some(nfo) = nfo_track {
@@ -2169,4 +2234,14 @@ pub async fn rebuild_movie_collections(
     let sets = collections::group_auto_sets(all);
     let (created, removed) = collections::sync_auto(pool, library_id, &sets).await?;
     Ok((sets.len(), created, removed))
+}
+
+/// Adds the time since its start to a scan phase when dropped, so every
+/// return path of a step counts.
+struct SpentOnDrop<'a>(&'a LibraryScanner, &'static str, Instant);
+
+impl Drop for SpentOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.spent(self.1, self.2);
+    }
 }

@@ -71,12 +71,15 @@ pub async fn latest_by_task_key(
     .await
 }
 
-/// Mark runs left `Running` by a server that stopped as failed; returns how many.
-pub async fn cleanup_stale_running(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE task_results SET status = 'Error', ended_at = now(), error_message = 'Server shutdown during execution' WHERE status = 'Running'",
+/// Mark runs left `Running` by a server that stopped as `Aborted` (Jellyfin's
+/// status for a run that did not finish), saying why; returns the tasks whose
+/// runs these were, so a library scan can start again (owner, 2026-11-23).
+pub async fn cleanup_stale_running(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "UPDATE task_results SET status = 'Aborted', ended_at = now(), \
+         error_message = 'Interrupted: the server restarted during the run' \
+         WHERE status = 'Running' RETURNING task_key",
     )
-    .execute(pool)
-    .await?;
-    Ok(result.rows_affected())
+    .fetch_all(pool)
+    .await
 }

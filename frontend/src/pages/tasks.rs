@@ -165,19 +165,20 @@ pub fn Tasks() -> View {
                                                 td(class="text-muted", data-label="Last run") { (last_run) }
                                                 td(class="text-muted", data-label="Took") { (took) }
                                                 td(data-label="Result") {
-                                                    (match result_status.as_str() {
-                                                        "Completed" => view! { span(class="badge badge-success") { "Completed" } },
-                                                        "Failed" | "Error" => {
-                                                            let err_msg = result_error.clone().unwrap_or_default();
-                                                            view! {
-                                                                span(class="badge badge-error", title=err_msg) { "Failed" }
-                                                            }
-                                                        }
-                                                        "Cancelled" => view! { span(class="badge badge-warning") { "Cancelled" } },
-                                                        "" => view! { span(class="text-muted") { "\u{2014}" } },
-                                                        other => {
-                                                            let s = other.to_string();
-                                                            view! { span(class="text-muted") { (s) } }
+                                                    (if result_status.is_empty() {
+                                                        view! { span(class="text-muted") { "\u{2014}" } }
+                                                    } else {
+                                                        let (label, class, reason) = dashboard_view::run_result(
+                                                            &result_status,
+                                                            result_error.as_deref(),
+                                                        );
+                                                        let badge = format!("badge {class}");
+                                                        view! {
+                                                            span(class=badge) { (label) }
+                                                            (match reason {
+                                                                Some(why) => view! { br {} span(class="text-muted text-sm") { (why) } },
+                                                                None => view! {},
+                                                            })
                                                         }
                                                     })
                                                 }

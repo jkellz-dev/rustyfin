@@ -71,8 +71,16 @@ pub fn linked_line(sources: &[(String, String)]) -> Option<String> {
 /// The tasks page's result badge: (label, badge class, the reason to show
 /// under it). Jellyfin's "Aborted" (the server stopped the run) reads
 /// "Interrupted" (owner, 2026-11-23).
-pub fn run_result(_status: &str, _error: Option<&str>) -> (String, &'static str, Option<String>) {
-    (String::new(), "", None)
+pub fn run_result(status: &str, error: Option<&str>) -> (String, &'static str, Option<String>) {
+    let (label, class) = match status {
+        "Completed" => ("Completed", "badge-success"),
+        "Aborted" => ("Interrupted", "badge-warning"),
+        "Cancelled" => ("Cancelled", "badge-warning"),
+        "Failed" | "Error" => ("Failed", "badge-error"),
+        other => (other, "badge-idle"),
+    };
+    let reason = error.filter(|e| !e.is_empty()).map(str::to_string);
+    (label.to_string(), class, reason)
 }
 
 /// A dashboard card's line for a library a link fills.

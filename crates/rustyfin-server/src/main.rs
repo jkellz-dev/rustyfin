@@ -126,11 +126,15 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // Clean up stale task results from previous crash
-    if let Err(e) = rustyfin_db::repo::task_results::cleanup_stale_running(&db_pool).await {
-        tracing::error!("Failed to clean up stale task results: {e}");
-        // Continue startup -- don't block on this
-    }
+    // Runs the last server left running were stopped by it: Aborted, and a
+    // stopped library scan starts again once the server is up (below).
+    let interrupted = match rustyfin_db::repo::task_results::cleanup_stale_running(&db_pool).await {
+        Ok(keys) => keys,
+        Err(e) => {
+            tracing::error!("Failed to clean up stale task results: {e}");
+            Vec::new()
+        }
+    };
 
     // Initialize scan in-flight tracking (shared between scheduler and manual scans)
     let scan_in_flight = Arc::new(RwLock::new(HashSet::<uuid::Uuid>::new()));
@@ -337,6 +341,18 @@ async fn main() -> anyhow::Result<()> {
     // A link taken out of the config goes, with what it brought.
     if let Some(scheduler) = &task_scheduler_for_state {
         scheduler.set_links(links.clone());
+        // A library scan the last server stopped starts again, a minute after
+        // start so the server is serving first (owner, 2026-11-23: a restart
+        // during a 45-minute scan left it failed). Unchanged files are
+        // skipped, so it picks up where the work is.
+        if interrupted.iter().any(|k| k == "library_scan") {
+            let scheduler = scheduler.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                tracing::info!("Starting again the library scan a restart interrupted");
+                scheduler.run_task_by_key("library_scan").await;
+            });
+        }
     }
     let configured: Vec<String> = config.links.iter().map(|l| l.name.clone()).collect();
     match rustyfin_db::repo::links::remove_unconfigured(&db_pool, &configured).await {
