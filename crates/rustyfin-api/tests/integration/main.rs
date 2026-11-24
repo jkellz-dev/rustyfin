@@ -59,6 +59,7 @@ mod migration_upgrade_tests;
 mod music_browse_tests;
 mod music_fields_tests;
 mod music_mix_tests;
+mod music_rescan_tests;
 mod musicbrainz_tests;
 mod name_items_tests;
 mod not_found_body_tests;
