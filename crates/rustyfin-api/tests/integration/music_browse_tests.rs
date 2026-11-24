@@ -520,3 +520,46 @@ async fn the_artist_list_stays_fast_in_a_large_library() {
     );
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-23: Finamp's genre tab said "Unsupported operation:
+/// Unexpected BaseItemDto type: Genre". Finamp asks `/Genres` with the music
+/// library as `ParentId`; Jellyfin answers that with music genres
+/// (`GenresController`: a music or music-videos library gives
+/// `GetMusicGenres`), and Finamp opens only a `MusicGenre`.
+#[tokio::test]
+async fn genres_of_a_music_library_are_music_genres() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let music = app.create_library("Music", "music").await;
+    let films = app.create_library("Movies", "movies").await;
+    let track = app
+        .create_media_item("Purple Hat", "Audio", music, None)
+        .await;
+    let film = app.create_media_item("Heat", "Movie", films, None).await;
+    for (id, genre) in [(track, "Electronic"), (film, "Crime")] {
+        sqlx::query("UPDATE media_items SET genres = ARRAY[$2] WHERE id = $1")
+            .bind(id)
+            .bind(genre)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+
+    let (status, body) = app
+        .get(
+            &format!("/Genres?ParentId={music}&SortBy=SortName&SortOrder=Ascending&Recursive=true"),
+            &token,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let items = body["Items"].as_array().unwrap_or_else(|| panic!("{body}"));
+    assert_eq!(items.len(), 1, "{body}");
+    assert_eq!(items[0]["Name"], "Electronic");
+    assert_eq!(items[0]["Type"], "MusicGenre", "{body}");
+
+    // A films library keeps its genres.
+    let (_, body) = app.get(&format!("/Genres?ParentId={films}"), &token).await;
+    assert_eq!(body["Items"][0]["Name"], "Crime", "{body}");
+    assert_eq!(body["Items"][0]["Type"], "Genre", "{body}");
+    app.cleanup().await;
+}
