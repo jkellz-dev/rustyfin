@@ -420,3 +420,103 @@ async fn the_alphabet_bar_filters_artists_by_sort_name() {
     assert_eq!(names(&b), ["!!!"], "{b}");
     app.cleanup().await;
 }
+
+/// Owner, 2026-11-23: "Let's look at the artists list. If we can speed it up
+/// we should." Finamp's artist list (`/Artists/AlbumArtists`, 0.33 s live)
+/// over 3,000 artists, 6,000 albums and 60,000 tracks, timed whole and by
+/// stage.
+#[tokio::test]
+async fn the_artist_list_stays_fast_in_a_large_library() {
+    use rustyfin_db::repo::{images, media_items};
+    let app = common::TestApp::new().await;
+    let (uid, token) = app.create_user("viewer", true).await;
+    let lib = app.create_library("Music", "music").await;
+    sqlx::query(
+        r#"
+        WITH ar AS (
+            INSERT INTO media_items (item_type, name, sort_name, library_id, is_folder)
+            SELECT 'MusicArtist', 'Artist ' || g, 'artist ' || lpad(g::text, 5, '0'), $1, true
+            FROM generate_series(1, 3000) g
+            RETURNING id, name
+        ), al AS (
+            INSERT INTO media_items (item_type, name, sort_name, library_id, parent_id, is_folder)
+            SELECT 'MusicAlbum', ar.name || ' LP ' || n, lower(ar.name) || ' lp ' || n, $1, ar.id, true
+            FROM ar, generate_series(1, 2) n
+            RETURNING id, name, parent_id
+        )
+        INSERT INTO media_items (item_type, name, sort_name, library_id, parent_id, series_id,
+                                 artists, runtime_ticks)
+        SELECT 'Audio', al.name || ' ' || g, lower(al.name) || ' ' || g, $1, al.id, al.parent_id,
+               ARRAY[split_part(al.name, ' LP', 1)], 2000000000
+        FROM al, generate_series(1, 10) g
+        "#,
+    )
+    .bind(lib)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_data (user_id, item_id, play_count, played) \
+         SELECT $1, id, 1, true FROM media_items WHERE item_type = 'Audio' AND random() < 0.3",
+    )
+    .bind(uid)
+    .execute(&app.pool)
+    .await
+    .unwrap();
+    sqlx::query("ANALYZE").execute(&app.pool).await.unwrap();
+
+    let fields =
+        "ChildCount,DateCreated,DateLastMediaAdded,Etag,Genres,ParentId,ProviderIds,Tags,SortName";
+    let url = format!(
+        "/Artists/AlbumArtists?ParentId={lib}&Recursive=true&SortBy=SortName&SortOrder=Ascending&StartIndex=0&Limit=100&UserId={uid}&Fields={fields}&EnableUserData=true"
+    );
+    app.get(&url, &token).await;
+    let started = std::time::Instant::now();
+    let (status, body) = app.get(&url, &token).await;
+    let whole = started.elapsed();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["TotalRecordCount"], 3000, "{body}");
+    assert_eq!(body["Items"].as_array().unwrap().len(), 100);
+    assert_eq!(body["Items"][0]["Name"], "Artist 1");
+
+    // The stages, as the route runs them.
+    let filter = media_items::ArtistFilter {
+        search: None,
+        library_id: Some(lib),
+        name_starts_with: None,
+        name_less_than: None,
+        name_starts_with_or_greater: None,
+        album_artists_only: true,
+        ranked: None,
+    };
+    let t = std::time::Instant::now();
+    let (rows, _) = media_items::list_artists(&app.pool, &filter, 0, 100)
+        .await
+        .unwrap();
+    let list = t.elapsed();
+    let ids: Vec<uuid::Uuid> = rows.iter().map(|r| r.id).collect();
+    let t = std::time::Instant::now();
+    images::list_by_items(&app.pool, &ids).await.unwrap();
+    let imgs = t.elapsed();
+    let t = std::time::Instant::now();
+    media_items::count_albums_and_songs_by_artists(&app.pool, &ids)
+        .await
+        .unwrap();
+    let counts = t.elapsed();
+    let t = std::time::Instant::now();
+    media_items::runtime_totals(&app.pool, &ids).await.unwrap();
+    let runtimes = t.elapsed();
+    let t = std::time::Instant::now();
+    user_data::folder_progress(&app.pool, uid, &ids)
+        .await
+        .unwrap();
+    let progress = t.elapsed();
+    eprintln!(
+        "ARTIST-LIST whole {whole:?}: list {list:?}, images {imgs:?}, counts {counts:?}, runtimes {runtimes:?}, progress {progress:?}"
+    );
+    assert!(
+        whole < std::time::Duration::from_millis(150),
+        "the artist list took {whole:?}: list {list:?}, images {imgs:?}, counts {counts:?}, runtimes {runtimes:?}, progress {progress:?}"
+    );
+    app.cleanup().await;
+}
