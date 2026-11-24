@@ -72,16 +72,20 @@ impl LibraryScanner {
         }
     }
 
-    /// Log and publish where the scan's time went. Track phases are summed
-    /// over tracks read several at once, so they can add up to more than the
-    /// wall time of "tracks".
+    /// Log and publish where the scan's time went. Per-file phases (track,
+    /// film, episode) are summed over files, some read several at once, so
+    /// they are left out of "other" and can add up to more than the wall time.
     fn report_timings(&self, library: &str, total: std::time::Duration) {
         let Ok(t) = self.timings.lock() else {
             return;
         };
         let walls: std::time::Duration = t
             .iter()
-            .filter(|(k, _)| !k.starts_with("track: "))
+            .filter(|(k, _)| {
+                !["track: ", "film: ", "episode: "]
+                    .iter()
+                    .any(|p| k.starts_with(p))
+            })
             .map(|(_, v)| *v)
             .sum();
         let mut parts: Vec<String> = t
@@ -559,11 +563,16 @@ impl LibraryScanner {
             .and_then(rustyfin_common::title_settings::existing);
         let mut sidecars = vec![nfo_path, settings_path];
         sidecars.extend(subtitle_sidecars(file_path));
+        let t = Instant::now();
         let etag = compute_etag(file_path, &sidecars)?;
+        let found = media_items::find_by_path(&self.pool, &path_str).await?;
+        self.spent("film: stat and lookup", t);
+        let t = Instant::now();
 
         // Check if already exists and unchanged
-        if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
+        if let Some(existing) = found {
             if existing.etag.as_deref() == Some(&etag) {
+                let _upkeep = SpentOnDrop(self, "film: unchanged upkeep (streams, art)", t);
                 self.refresh_stale_streams(existing.id, file_path).await;
                 // Art is not in the etag: media managers write it after the
                 // import webhook has started the scan that added the title.
@@ -571,6 +580,7 @@ impl LibraryScanner {
                 return Ok(IngestOutcome::Skipped);
             }
             // File or NFO changed — update
+            let _read = SpentOnDrop(self, "film: read and store", t);
             let resolved = resolve_movie(file_path);
             let probe_result = self.probe(file_path).await;
 
@@ -1379,17 +1389,23 @@ impl LibraryScanner {
         let nfo_path = find_episode_nfo(file_path);
         let mut sidecars = vec![nfo_path];
         sidecars.extend(subtitle_sidecars(file_path));
+        let t = Instant::now();
         let etag = compute_etag(file_path, &sidecars)?;
+        let found = media_items::find_by_path(&self.pool, &path_str).await?;
+        self.spent("episode: stat and lookup", t);
+        let t = Instant::now();
 
         // Check if already exists and unchanged
-        if let Some(existing) = media_items::find_by_path(&self.pool, &path_str).await? {
+        if let Some(existing) = found {
             if existing.etag.as_deref() == Some(&etag) {
+                let _upkeep = SpentOnDrop(self, "episode: unchanged upkeep (streams, still)", t);
                 self.refresh_stale_streams(existing.id, file_path).await;
                 // The still may have been written after the first scan.
                 self.replace_episode_images(existing.id, file_path).await;
                 return Ok(IngestOutcome::Skipped);
             }
 
+            let _read = SpentOnDrop(self, "episode: read and store", t);
             let resolved = resolve_episode(file_path, series_name);
             let probe_result = self.probe(file_path).await;
 

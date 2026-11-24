@@ -106,32 +106,73 @@ pub async fn track_requests(matched: Option<MatchedPath>, req: Request, next: Ne
     response
 }
 
+/// How often the item counts are counted again. They change with scans and
+/// syncs only, and counting every library's items on every scrape (30 s) was
+/// most of Rustyfin's database time while idle (owner, 2026-11-24,
+/// pg_stat_statements: 168 of 234 s overnight).
+const COUNT_EVERY: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// When the counts were last taken, by database (one per server; tests run
+/// many servers in one process); the gauges keep their values between.
+static COUNTED_AT: std::sync::Mutex<Option<std::collections::HashMap<String, Instant>>> =
+    std::sync::Mutex::new(None);
+
+/// True when the counts of `database` are due again (and marks them taken).
+fn counts_due(database: &str) -> bool {
+    let Ok(mut at) = COUNTED_AT.lock() else {
+        return true;
+    };
+    let at = at.get_or_insert_with(Default::default);
+    if at.get(database).is_some_and(|t| t.elapsed() < COUNT_EVERY) {
+        return false;
+    }
+    at.insert(database.to_string(), Instant::now());
+    true
+}
+
 /// Scrape-time gauges.
 async fn collect(state: &AppState) {
     metrics::gauge!("rustyfin_up").set(1.0);
     metrics::gauge!("rustyfin_build_info", "version" => env!("CARGO_PKG_VERSION")).set(1.0);
 
-    let counts: Vec<(String, String, i64)> = sqlx::query_as(
-        "SELECT l.name, m.item_type, COUNT(*) FROM media_items m \
-         JOIN libraries l ON l.id = m.library_id \
-         WHERE m.owner_id IS NULL GROUP BY l.name, m.item_type",
-    )
-    .fetch_all(&state.pool)
-    .await
-    .unwrap_or_default();
-    for (library, item_type, n) in counts {
-        metrics::gauge!("rustyfin_library_items", "library" => library, "type" => item_type)
-            .set(n as f64);
+    let database: String = sqlx::query_scalar("SELECT current_database()::text")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or_default();
+    let count_now = counts_due(&database);
+    if count_now {
+        let counts: Vec<(String, String, i64)> = sqlx::query_as(
+            "SELECT l.name, m.item_type, COUNT(*) FROM media_items m \
+             JOIN libraries l ON l.id = m.library_id \
+             WHERE m.owner_id IS NULL GROUP BY l.name, m.item_type",
+        )
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_default();
+        for (library, item_type, n) in counts {
+            metrics::gauge!("rustyfin_library_items", "library" => library, "type" => item_type)
+                .set(n as f64);
+        }
     }
-    for lib in libraries::stats(&state.pool).await.unwrap_or_default() {
-        if let Some(at) = lib.last_scanned_at {
-            metrics::gauge!("rustyfin_library_last_scan_timestamp_seconds", "library" => lib.name)
+    // Only the scan times: the dashboard's per-library counts are not needed.
+    let scanned: Vec<(String, Option<chrono::DateTime<chrono::Utc>>)> =
+        sqlx::query_as("SELECT name, last_scanned_at FROM libraries")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap_or_default();
+    for (name, at) in scanned {
+        if let Some(at) = at {
+            metrics::gauge!("rustyfin_library_last_scan_timestamp_seconds", "library" => name)
                 .set(at.timestamp() as f64);
         }
     }
     // Per link (roadmap 16b.3): up or down, what it holds, how long ago it
-    // last synced.
-    let held = links::counts(&state.pool).await.unwrap_or_default();
+    // last synced. What it holds is counted with the library items.
+    let held = if count_now {
+        links::counts(&state.pool).await.unwrap_or_default()
+    } else {
+        Default::default()
+    };
     let now = chrono::Utc::now();
     for link in links::list(&state.pool).await.unwrap_or_default() {
         let (titles, copies) = held.get(&link.id).copied().unwrap_or((0, 0));
@@ -143,8 +184,10 @@ async fn collect(state: &AppState) {
                 0.0
             },
         );
-        metrics::gauge!("rustyfin_link_titles", "link" => name.clone()).set(titles as f64);
-        metrics::gauge!("rustyfin_link_copies", "link" => name.clone()).set(copies as f64);
+        if count_now {
+            metrics::gauge!("rustyfin_link_titles", "link" => name.clone()).set(titles as f64);
+            metrics::gauge!("rustyfin_link_copies", "link" => name.clone()).set(copies as f64);
+        }
         if let Some(at) = link.last_sync_at {
             metrics::gauge!("rustyfin_link_last_sync_timestamp_seconds", "link" => name.clone())
                 .set(at.timestamp() as f64);
