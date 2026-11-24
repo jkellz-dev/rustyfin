@@ -566,6 +566,87 @@ async fn genres_of_a_music_library_are_music_genres() {
     app.cleanup().await;
 }
 
+/// Owner, 2026-11-24: Finamp's "Abstract Hip Hop" page counted every album,
+/// track and artist in the library. Finamp opens a genre with `GenreIds`
+/// (the genre's id) on `/Items`, `/Artists` and `/Artists/AlbumArtists`,
+/// and Rustyfin ignored it. An album or artist is in a genre when it or one
+/// of its tracks is (Jellyfin: any of the ids given).
+#[tokio::test]
+async fn a_genre_page_lists_only_that_genre() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let music = app.create_library("Music", "music").await;
+    let mut albums = Vec::new();
+    for (artist, album, track, genre) in [
+        (
+            "Madlib",
+            "Shades of Blue",
+            "Slim's Return",
+            "Abstract Hip Hop",
+        ),
+        ("Pink Floyd", "p.u.l.s.e", "Shine On", "Progressive Rock"),
+    ] {
+        let a = app
+            .create_media_item(artist, "MusicArtist", music, None)
+            .await;
+        let al = app
+            .create_media_item(album, "MusicAlbum", music, Some(a))
+            .await;
+        let t = app.create_media_item(track, "Audio", music, Some(al)).await;
+        sqlx::query("UPDATE media_items SET genres = ARRAY[$2], series_id = $3 WHERE id = $1")
+            .bind(t)
+            .bind(genre)
+            .bind(a)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+        albums.push(al);
+    }
+    let genre = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"Abstract Hip Hop");
+    let g = genre.simple();
+    let names = |body: &serde_json::Value| -> Vec<String> {
+        body["Items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{body}"))
+            .iter()
+            .map(|i| i["Name"].as_str().unwrap().to_string())
+            .collect()
+    };
+
+    for (kind, want) in [("Audio", "Slim's Return"), ("MusicAlbum", "Shades of Blue")] {
+        let (status, body) = app
+            .get(
+                &format!(
+                    "/Items?ParentId={music}&GenreIds={g}&IncludeItemTypes={kind}&Recursive=true"
+                ),
+                &token,
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(names(&body), [want], "{kind}: {body}");
+        assert_eq!(body["TotalRecordCount"], 1, "{kind}: {body}");
+    }
+    for route in ["/Artists", "/Artists/AlbumArtists"] {
+        let (status, body) = app
+            .get(&format!("{route}?ParentId={music}&GenreIds={g}"), &token)
+            .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(names(&body), ["Madlib"], "{route}: {body}");
+    }
+    // An id that names no genre finds nothing, not everything.
+    let nowhere = uuid::Uuid::new_v4().simple();
+    let (_, body) = app
+        .get(
+            &format!(
+                "/Items?ParentId={music}&GenreIds={nowhere}&IncludeItemTypes=Audio&Recursive=true"
+            ),
+            &token,
+        )
+        .await;
+    assert_eq!(body["TotalRecordCount"], 0, "{body}");
+    app.cleanup().await;
+}
+
 /// Owner, 2026-11-23: "regarding genres for music, there are no images in
 /// the genres, its just blank." A music genre's picture is the cover of one
 /// of its albums (one with its own artwork first), as Finamp asks for it:
