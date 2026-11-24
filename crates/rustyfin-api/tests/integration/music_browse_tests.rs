@@ -487,6 +487,7 @@ async fn the_artist_list_stays_fast_in_a_large_library() {
         name_less_than: None,
         name_starts_with_or_greater: None,
         album_artists_only: true,
+        genres_any: None,
         ranked: None,
     };
     let t = std::time::Instant::now();

@@ -1770,6 +1770,8 @@ pub struct ArtistFilter<'a> {
     pub name_less_than: Option<&'a str>,
     pub name_starts_with_or_greater: Option<&'a str>,
     pub album_artists_only: bool,
+    /// `GenreIds`, as names: artists with a track in any of them.
+    pub genres_any: Option<&'a [String]>,
     /// Meilisearch's best matches for `search`, best first: these instead of
     /// matching the name, in this order.
     pub ranked: Option<&'a [Uuid]>,
@@ -1815,6 +1817,9 @@ fn push_artist_where(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, f: &ArtistFilt
     if let Some(lib) = f.library_id {
         qb.push(" AND mi.library_id = ");
         qb.push_bind(lib);
+    }
+    if let Some(any) = f.genres_any {
+        push_genres_any(qb, any);
     }
     if let Some(ids) = f.ranked {
         qb.push(" AND mi.id = ANY(");
@@ -1957,8 +1962,34 @@ pub async fn count_upcoming_episodes(
     Ok(row.0)
 }
 
+/// Items in any of `genres` (`GenreIds`): the item's own genres, or, for an
+/// album or artist, those of one of its tracks (albums carry few of their
+/// own). An empty list (ids that name no genre) matches nothing.
+fn push_genres_any(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, genres: &[String]) {
+    if genres.is_empty() {
+        qb.push(" AND FALSE");
+        return;
+    }
+    qb.push(" AND (mi.genres && ");
+    qb.push_bind(genres.to_vec());
+    qb.push(
+        " OR (mi.item_type = 'MusicAlbum' AND EXISTS (SELECT 1 FROM visible_media_items gt \
+         WHERE gt.parent_id = mi.id AND gt.item_type = 'Audio' AND gt.genres && ",
+    );
+    qb.push_bind(genres.to_vec());
+    qb.push(
+        ")) OR (mi.item_type = 'MusicArtist' AND EXISTS (SELECT 1 FROM visible_media_items gt \
+         WHERE gt.series_id = mi.id AND gt.item_type = 'Audio' AND gt.genres && ",
+    );
+    qb.push_bind(genres.to_vec());
+    qb.push(")))");
+}
+
 /// Dynamic query builder for GET /Items with filtering, sorting, and pagination.
 pub struct ItemQuery {
+    /// `GenreIds`, as names: items in any of them. An album or artist is in
+    /// a genre when it or one of its tracks is.
+    pub genres_any: Option<Vec<String>>,
     // Scoping
     pub parent_id: Option<Uuid>,
     pub library_id: Option<Uuid>,
@@ -2020,6 +2051,7 @@ pub struct ItemQuery {
 impl Default for ItemQuery {
     fn default() -> Self {
         Self {
+            genres_any: None,
             parent_id: None,
             library_id: None,
             recursive: false,
@@ -2229,6 +2261,9 @@ impl ItemQuery {
         if !self.genres.is_empty() {
             qb.push(" AND mi.genres @> ");
             qb.push_bind(&self.genres);
+        }
+        if let Some(any) = &self.genres_any {
+            push_genres_any(qb, any);
         }
         if !self.years.is_empty() {
             qb.push(" AND mi.production_year = ANY(");

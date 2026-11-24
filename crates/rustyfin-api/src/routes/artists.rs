@@ -31,6 +31,8 @@ pub struct ArtistQuery {
     pub name_starts_with: Option<String>,
     pub name_less_than: Option<String>,
     pub name_starts_with_or_greater: Option<String>,
+    /// Genres by id, any of them (Finamp's genre pages).
+    pub genre_ids: Option<String>,
 }
 
 /// `GET /Artists` — Browsable artist list.
@@ -87,7 +89,10 @@ async fn get_artists_inner(
         }
         _ => None,
     };
+    let genres_any =
+        super::music_genres::genre_names_by_ids(&state.pool, params.genre_ids.as_deref()).await;
     let filter = media_items::ArtistFilter {
+        genres_any: genres_any.as_deref(),
         search: params.search_term.as_deref(),
         library_id: params.parent_id,
         name_starts_with: params.name_starts_with.as_deref(),

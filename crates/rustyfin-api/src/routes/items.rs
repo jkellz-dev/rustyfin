@@ -48,6 +48,8 @@ pub struct ItemsQuery {
     pub image_type_limit: Option<i32>,
     // New filter params
     pub genres: Option<String>,
+    /// Genres by id, any of them (Finamp's genre pages).
+    pub genre_ids: Option<String>,
     pub years: Option<String>,
     pub studios: Option<String>,
     pub official_ratings: Option<String>,
@@ -1068,7 +1070,10 @@ pub async fn get_items(
         Some((ids, tiers)) => (Some(ids), tiers),
         None => (None, Vec::new()),
     };
+    let genres_any =
+        super::music_genres::genre_names_by_ids(&state.pool, query.genre_ids.as_deref()).await;
     let item_query = media_items::ItemQuery {
+        genres_any,
         library_id: if is_library { query.parent_id } else { None },
         parent_id: if !is_library && collection_members.is_none() {
             query.parent_id

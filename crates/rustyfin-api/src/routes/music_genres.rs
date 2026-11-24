@@ -155,6 +155,25 @@ type GenreIds = Option<(std::time::Instant, std::collections::HashMap<Uuid, Stri
 static GENRE_IDS: std::sync::Mutex<GenreIds> = std::sync::Mutex::new(None);
 
 /// The genre named by `id` (a Genre or MusicGenre item's id), if any.
+/// `GenreIds` (comma-separated) as genre names; `None` when not given. Ids
+/// that name no genre are left out, so an unknown id matches nothing.
+pub(crate) async fn genre_names_by_ids(
+    pool: &sqlx::PgPool,
+    ids: Option<&str>,
+) -> Option<Vec<String>> {
+    let ids: Vec<Uuid> = ids?
+        .split(',')
+        .filter_map(|s| Uuid::parse_str(s.trim()).ok())
+        .collect();
+    let mut names = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(name) = genre_name_by_id(pool, id).await {
+            names.push(name);
+        }
+    }
+    Some(names)
+}
+
 pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<String> {
     if let Ok(cached) = GENRE_IDS.lock()
         && let Some((at, names)) = cached.as_ref()
