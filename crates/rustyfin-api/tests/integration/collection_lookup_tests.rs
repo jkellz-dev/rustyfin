@@ -6,7 +6,7 @@
 //! `.rustyfin.toml`, the scan makes one collection of all three.
 use crate::common;
 
-use rustyfin_core::LibraryScanner;
+use rustyfin_services::LibraryScanner;
 use std::path::PathBuf;
 use uuid::Uuid;
 

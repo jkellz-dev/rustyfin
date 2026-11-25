@@ -5,8 +5,8 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::libraries;
+use rustyfin_services::LibraryScanner;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -80,7 +80,7 @@ async fn tracks_albums_and_artists_carry_the_files_musicbrainz_ids() {
     std::fs::create_dir_all(&album_dir).unwrap();
     let file = album_dir.join("01 Song.mp3");
     std::fs::write(&file, tagged_mp3()).unwrap();
-    let tags = rustyfin_core::music_tags::read_tags(&file).expect("the fixture reads");
+    let tags = rustyfin_services::music_tags::read_tags(&file).expect("the fixture reads");
     assert_eq!(
         tags.musicbrainz_album_id.as_deref(),
         Some(RELEASE),

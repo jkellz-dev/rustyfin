@@ -1,5 +1,5 @@
 [package]
-name = "rustyfin-core"
+name = "rustyfin-services"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,7 +13,6 @@ rustyfin-models.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 metrics.workspace = true

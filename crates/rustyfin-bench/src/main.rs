@@ -434,7 +434,7 @@ impl Run<'_> {
         let child = Command::new(bin)
             .current_dir(&dir)
             .env("RUSTYFIN_CONFIG", &config_path)
-            .env("RUST_LOG", "warn,rustyfin_core::library=info")
+            .env("RUST_LOG", "warn,rustyfin_services::library=info")
             .stdin(Stdio::null())
             .stdout(log.try_clone()?)
             .stderr(log)

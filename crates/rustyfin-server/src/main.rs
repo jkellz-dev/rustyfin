@@ -18,15 +18,15 @@ use tower_http::trace::TraceLayer;
 use rustyfin_api::router::{AppState, ForwardAuthState, build_router};
 use rustyfin_auth::forward_auth::ForwardAuthHeaders;
 use rustyfin_auth::trusted_proxy::TrustedProxies;
-use rustyfin_core::library::scheduler::{
-    self, LibraryScanScheduleConfig, SearchReindexScheduleConfig,
-};
-use rustyfin_core::library::tasks::SearchReindexTask;
-use rustyfin_core::session::SessionManager;
 use rustyfin_data::pool;
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_models::data::{Data, LinkStore, TaskResultStore};
 use rustyfin_search::SearchService;
+use rustyfin_services::library::scheduler::{
+    self, LibraryScanScheduleConfig, SearchReindexScheduleConfig,
+};
+use rustyfin_services::library::tasks::SearchReindexTask;
+use rustyfin_services::session::SessionManager;
 
 /// How often linked servers are synced.
 const LINK_SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15 * 60);
@@ -163,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Initialize task scheduler
-    let mut task_scheduler_for_state: Option<Arc<rustyfin_core::TaskScheduler>> = None;
+    let mut task_scheduler_for_state: Option<Arc<rustyfin_services::TaskScheduler>> = None;
     if config.tasks.enabled {
         let raw_schedules: std::collections::HashMap<String, (String, Option<u64>)> = config
             .tasks
@@ -187,7 +187,7 @@ async fn main() -> anyhow::Result<()> {
             },
         )?;
 
-        let task_scheduler = Arc::new(rustyfin_core::TaskScheduler::new(
+        let task_scheduler = Arc::new(rustyfin_services::TaskScheduler::new(
             scheduler_config,
             data.clone(),
             scan_in_flight.clone(),
@@ -207,7 +207,7 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler
             .register(
                 config.tasks.activity_log_prune.schedule.clone(),
-                Arc::new(rustyfin_core::ActivityLogPruneTask::new(
+                Arc::new(rustyfin_services::ActivityLogPruneTask::new(
                     data.clone(),
                     config.tasks.activity_log_prune.retention_days,
                 )),
@@ -217,7 +217,7 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler
             .register(
                 config.tasks.session_cleanup.schedule.clone(),
-                Arc::new(rustyfin_core::SessionCleanupTask::new(
+                Arc::new(rustyfin_services::SessionCleanupTask::new(
                     data.clone(),
                     session_manager.clone(),
                     config.tasks.session_cleanup.inactive_days,
@@ -228,7 +228,7 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler
             .register(
                 config.tasks.transcode_temp_cleanup.schedule.clone(),
-                Arc::new(rustyfin_core::TranscodeTempCleanupTask::new(
+                Arc::new(rustyfin_services::TranscodeTempCleanupTask::new(
                     transcode_manager.clone(),
                 )),
             )
@@ -237,14 +237,14 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler
             .register(
                 config.tasks.db_optimize.schedule.clone(),
-                Arc::new(rustyfin_core::DatabaseOptimizeTask::new(data.clone())),
+                Arc::new(rustyfin_services::DatabaseOptimizeTask::new(data.clone())),
             )
             .await;
 
         task_scheduler
             .register(
                 config.tasks.image_cache_prune.schedule.clone(),
-                Arc::new(rustyfin_core::ImageCachePruneTask::new(
+                Arc::new(rustyfin_services::ImageCachePruneTask::new(
                     image_cache_dir.clone(),
                     config.tasks.image_cache_prune.max_age_days,
                 )),
@@ -324,7 +324,7 @@ async fn main() -> anyhow::Result<()> {
     let cors_origins = config.server.cors_allowed_origins.clone();
     // Linked servers (roadmap 16b): registered now, synced shortly after
     // start and then every LINK_SYNC_INTERVAL.
-    let links = Arc::new(rustyfin_core::link::Links::default());
+    let links = Arc::new(rustyfin_services::link::Links::default());
     for link in &config.links {
         match link.settings() {
             Ok(settings) => match links.register(&data, settings).await {

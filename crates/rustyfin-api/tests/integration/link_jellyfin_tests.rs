@@ -18,9 +18,9 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use rustyfin_core::LibraryScanner;
-use rustyfin_core::link::{LibraryMap, LinkKind, LinkSettings};
 use rustyfin_data::repo::media_items;
+use rustyfin_services::LibraryScanner;
+use rustyfin_services::link::{LibraryMap, LinkKind, LinkSettings};
 use serde_json::{Value, json};
 use uuid::Uuid;
 

@@ -5,7 +5,7 @@
 //! again when its file changes, or when its album NFO's content does.
 use crate::common;
 
-use rustyfin_core::LibraryScanner;
+use rustyfin_services::LibraryScanner;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;

@@ -122,14 +122,13 @@ fn a_scans_sql_stays_out_of_its_trace_and_a_requests_is_kept() {
         request.in_scope(|| {
             tracing::debug!(target: "sqlx::query", summary = "select name", elapsed_secs = 0.002, "select name from items");
         });
-        let scan =
-            tracing::info_span!(target: "rustyfin_core::library::scanner", telemetry::SCAN_SPAN);
+        let scan = tracing::info_span!(target: "rustyfin_services::library::scanner", telemetry::SCAN_SPAN);
         scan.in_scope(|| {
-            let album = tracing::info_span!(target: "rustyfin_core::library::scanner", "album");
+            let album = tracing::info_span!(target: "rustyfin_services::library::scanner", "album");
             album.in_scope(|| {
                 tracing::debug!(target: "sqlx::query", summary = "select etag", "select etag from items");
                 // Rustyfin's own events are kept in a scan.
-                tracing::info!(target: "rustyfin_core::library::scanner", "album changed");
+                tracing::info!(target: "rustyfin_services::library::scanner", "album changed");
             });
         });
     });

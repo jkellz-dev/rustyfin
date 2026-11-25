@@ -6,8 +6,8 @@
 use rustyfin_models::data::{Data, DataResult, LinkStore, UserStore};
 use std::collections::HashMap;
 
-use rustyfin_core::link::LinkEvent;
 use rustyfin_models::dto::{GeneralCommand, SessionCommand};
+use rustyfin_services::link::LinkEvent;
 use uuid::Uuid;
 
 use crate::router::AppState;

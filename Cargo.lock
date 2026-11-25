@@ -3359,11 +3359,11 @@ dependencies = [
  "rand 0.10.4",
  "rustyfin-auth",
  "rustyfin-common",
- "rustyfin-core",
  "rustyfin-data",
  "rustyfin-media",
  "rustyfin-models",
  "rustyfin-search",
+ "rustyfin-services",
  "serde",
  "serde_json",
  "sqlx",
@@ -3434,34 +3434,6 @@ dependencies = [
  "toml",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "rustyfin-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "cron",
- "futures-util",
- "metrics",
- "rand 0.10.4",
- "regex",
- "reqwest 0.13.5",
- "rustyfin-common",
- "rustyfin-data",
- "rustyfin-media",
- "rustyfin-models",
- "rustyfin-search",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
- "walkdir",
 ]
 
 [[package]]
@@ -3570,12 +3542,12 @@ dependencies = [
  "ipnet",
  "rustyfin-api",
  "rustyfin-auth",
- "rustyfin-core",
  "rustyfin-data",
  "rustyfin-frontend",
  "rustyfin-media",
  "rustyfin-models",
  "rustyfin-search",
+ "rustyfin-services",
  "serde",
  "serde_json",
  "sqlx",
@@ -3585,6 +3557,33 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "rustyfin-services"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "cron",
+ "futures-util",
+ "metrics",
+ "rand 0.10.4",
+ "regex",
+ "reqwest 0.13.5",
+ "rustyfin-common",
+ "rustyfin-data",
+ "rustyfin-media",
+ "rustyfin-models",
+ "rustyfin-search",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
+ "walkdir",
 ]
 
 [[package]]

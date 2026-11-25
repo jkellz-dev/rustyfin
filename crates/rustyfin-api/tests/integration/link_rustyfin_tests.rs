@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex};
 use axum::extract::Request;
 use axum::http::HeaderValue;
 use axum::response::IntoResponse;
-use rustyfin_core::link::{LibraryMap, LinkKind, LinkSettings};
 use rustyfin_data::repo::{media_items, users};
+use rustyfin_services::link::{LibraryMap, LinkKind, LinkSettings};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -319,7 +319,7 @@ async fn a_rustyfin_behind_an_oidc_proxy_is_reached_with_a_client_credentials_to
     let home = common::TestApp::new().await;
     home.create_library("Movies", "movies").await;
     let mut s = settings(&format!("http://{addr}"));
-    s.oidc = Some(rustyfin_core::link::OidcSettings {
+    s.oidc = Some(rustyfin_services::link::OidcSettings {
         issuer: Some(idp.clone()),
         token_url: None,
         client_id: "home".into(),
@@ -348,7 +348,7 @@ async fn a_rustyfin_behind_an_oidc_proxy_is_reached_with_a_client_credentials_to
     // A wrong secret: the sync says the identity provider refused it.
     let mut s = settings(&format!("http://{addr}"));
     s.name = "Wrong".into();
-    s.oidc = Some(rustyfin_core::link::OidcSettings {
+    s.oidc = Some(rustyfin_services::link::OidcSettings {
         issuer: None,
         token_url: Some(format!("{idp}/token")),
         client_id: "home".into(),

@@ -90,7 +90,7 @@ pub(crate) fn source_name(item: &media_items::MediaItemRow) -> Option<String> {
         return linked_name(item);
     }
     let path = std::path::Path::new(item.path.as_deref()?);
-    rustyfin_core::naming::version_label(path)
+    rustyfin_services::naming::version_label(path)
         .filter(|l| !l.is_empty())
         .or_else(|| {
             path.file_stem()

@@ -109,7 +109,7 @@ pub(crate) fn headshot_path(
     person: &people::PersonRow,
 ) -> Option<std::path::PathBuf> {
     let dir = state.people_cache_dir.as_ref()?;
-    let path = dir.join(rustyfin_core::headshot_file_name(
+    let path = dir.join(rustyfin_services::headshot_file_name(
         person.provider_person_id.as_deref(),
         person.image_url.as_deref(),
     )?);
@@ -440,7 +440,7 @@ pub(crate) async fn serve_image(
     state: &AppState,
     req: &ImageRequest<'_>,
 ) -> Result<Response, ApiError> {
-    if source_path.starts_with(rustyfin_core::link::LINK_SCHEME) {
+    if source_path.starts_with(rustyfin_services::link::LINK_SCHEME) {
         let cache_control = if req.tag.is_some() {
             CACHE_TAGGED
         } else {

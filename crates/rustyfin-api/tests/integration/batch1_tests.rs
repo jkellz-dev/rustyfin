@@ -9,8 +9,8 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::{libraries, user_data};
+use rustyfin_services::LibraryScanner;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -246,7 +246,7 @@ async fn provider_tags_never_show_in_titles() {
 
 #[test]
 fn provider_tags_come_off_names_without_a_year() {
-    use rustyfin_core::split_folder_year;
+    use rustyfin_services::split_folder_year;
     assert_eq!(
         split_folder_year("Andor [tvdbid-393189]"),
         ("Andor".to_string(), None)

@@ -36,7 +36,7 @@ pub struct AppState {
     pub base_url: String,
     pub port: u16,
     pub tmdb_api_key: Option<String>,
-    pub session_manager: Arc<rustyfin_core::session::SessionManager>,
+    pub session_manager: Arc<rustyfin_services::session::SessionManager>,
     pub search_service: Arc<rustyfin_search::SearchService>,
     pub forward_auth_config: Option<ForwardAuthState>,
     pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
@@ -46,14 +46,14 @@ pub struct AppState {
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
     pub scan_schedules: serde_json::Value,
     pub user_image_url_template: Option<String>,
-    pub task_scheduler: Option<Arc<rustyfin_core::TaskScheduler>>,
+    pub task_scheduler: Option<Arc<rustyfin_services::TaskScheduler>>,
     /// Fired by `POST /System/Shutdown` and `/System/Restart`; the server binary
     /// waits on it to begin a graceful exit.
     pub shutdown: Arc<tokio::sync::Notify>,
     /// Failed password logins, per name and per address (roadmap 11e).
     pub login_limiter: Arc<crate::login_limit::LoginLimiter>,
     /// Linked servers, whose copies this server relays (roadmap 16b).
-    pub links: Arc<rustyfin_core::link::Links>,
+    pub links: Arc<rustyfin_services::link::Links>,
     /// `[playback] prefer_direct_play`: of a title's copies, those the app
     /// can play as is come before better ones that would be converted.
     pub prefer_direct_play: bool,

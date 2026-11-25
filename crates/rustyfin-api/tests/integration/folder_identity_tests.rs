@@ -8,8 +8,8 @@
 //! a `Test Artist` folder are two artists.
 use crate::common;
 
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::libraries;
+use rustyfin_services::LibraryScanner;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 

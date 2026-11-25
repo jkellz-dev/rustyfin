@@ -11,12 +11,12 @@ use rustyfin_models::data::{
 };
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::libraries;
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
 };
+use rustyfin_services::LibraryScanner;
 
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
@@ -376,7 +376,7 @@ pub async fn get_virtual_folders(
         .map(|lib| {
             let linked = sources.remove(&lib.id).unwrap_or_default();
             let active = scanning.contains(&lib.id);
-            let board = rustyfin_core::library::progress::ScanBoard::global();
+            let board = rustyfin_services::library::progress::ScanBoard::global();
             let progress = board.percent(lib.id);
             let last = board.last(lib.id);
             let mut info = folder_info(lib);

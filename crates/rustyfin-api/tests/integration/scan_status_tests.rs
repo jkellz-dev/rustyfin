@@ -68,7 +68,7 @@ async fn libraries_say_when_they_are_being_scanned_and_when_they_last_were() {
 /// admin can show progress and say when a scan found errors.
 #[tokio::test]
 async fn a_scan_reports_how_far_it_got_and_how_it_ended() {
-    use rustyfin_core::library::progress::ScanSummary;
+    use rustyfin_services::library::progress::ScanSummary;
     let app = common::TestApp::new().await;
     let (_, admin) = app.create_user("admin", true).await;
     let music = app.create_library("Music", "music").await;

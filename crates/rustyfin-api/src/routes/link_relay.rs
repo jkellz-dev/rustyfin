@@ -105,7 +105,7 @@ pub(crate) async fn image(
     cache_control: &str,
 ) -> Result<Response, ApiError> {
     let (link_id, remote_id, kind, index, tag) =
-        rustyfin_core::link::parse_image_path(source_path).ok_or(ApiError::NotFound)?;
+        rustyfin_services::link::parse_image_path(source_path).ok_or(ApiError::NotFound)?;
     let etag = image_processing::etag_for(source_path, 0, 0, opts);
     if etag_matches(&etag) {
         return Ok(Response::builder()
@@ -157,7 +157,7 @@ pub(crate) async fn image(
 
 fn unreachable(
     state: &AppState,
-    link: &rustyfin_core::link::Link,
+    link: &rustyfin_services::link::Link,
     e: &impl std::fmt::Display,
 ) -> ApiError {
     let name = &link.settings.name;

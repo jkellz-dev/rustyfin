@@ -69,7 +69,9 @@ rustyfin-server            glue: config, startup, builds the data layer, mounts 
 
 ## Migration status
 
-The code is moving to this layout one area at a time. `rustyfin-db` has been renamed to `rustyfin-data`. Route handlers
-in `rustyfin-api` still call the data layer directly and hold Jellyfin's routes; `rustyfin-core` and `rustyfin-auth`
-hold logic that moves to `rustyfin-services`. Code you touch moves towards the layout; never add new direct database
+The code is moving to this layout one area at a time. Done: `rustyfin-db` is now `rustyfin-data`; database rows are
+private to it, behind one trait per area in `rustyfin_models::data`, and every other crate goes through `PgData`;
+`rustyfin-core` is now `rustyfin-services`. Still to move: the logic in `rustyfin-api`'s route handlers and in
+`rustyfin-auth` into services, services generic over `Data` instead of `PgData`, then the split of `rustyfin-api` into
+`rustyfin-jellyfin` and the new `rustyfin-api`. Code you touch moves towards the layout; never add new direct database
 access outside `rustyfin-data`.

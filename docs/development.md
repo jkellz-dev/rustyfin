@@ -80,8 +80,8 @@ rustyfin/
     ├── rustyfin-server/        # Binary
     ├── rustyfin-api/           # Route handlers
     ├── rustyfin-auth/          # Auth extractors
-    ├── rustyfin-core/          # Domain logic
-    ├── rustyfin-data/            # Database layer
+    ├── rustyfin-services/      # Domain logic
+    ├── rustyfin-data/          # Database layer
     ├── rustyfin-models/        # Shared DTOs
     ├── rustyfin-search/        # Search service
     ├── rustyfin-media/         # Probing & streaming
@@ -386,7 +386,7 @@ How changes are tested and landed: [Contributing](contributing.md).
 RUST_LOG=trace cargo run --bin rustyfin-server
 
 # Specific module
-RUST_LOG=rustyfin_core::library::scanner=trace cargo run --bin rustyfin-server
+RUST_LOG=rustyfin_services::library::scanner=trace cargo run --bin rustyfin-server
 
 # SQL queries
 RUST_LOG=sqlx=debug cargo run --bin rustyfin-server

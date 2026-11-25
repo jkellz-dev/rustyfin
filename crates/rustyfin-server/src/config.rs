@@ -35,7 +35,7 @@ pub struct Config {
 #[derive(Clone, Deserialize)]
 pub struct LinkConfig {
     pub name: String,
-    pub kind: rustyfin_core::link::LinkKind,
+    pub kind: rustyfin_services::link::LinkKind,
     pub url: String,
     /// The link user (Jellyfin). A Rustyfin needs none: its forward-auth
     /// proxy says who this server is.
@@ -48,7 +48,7 @@ pub struct LinkConfig {
     #[serde(default)]
     pub password_file: Option<String>,
     #[serde(default)]
-    pub libraries: Vec<rustyfin_core::link::LibraryMap>,
+    pub libraries: Vec<rustyfin_services::link::LibraryMap>,
     /// A client-credentials token for the friend's proxy (`[link.oidc]`).
     #[serde(default)]
     pub oidc: Option<LinkOidcConfig>,
@@ -74,7 +74,7 @@ pub struct LinkOidcConfig {
 }
 
 impl LinkOidcConfig {
-    fn settings(&self, link: &str) -> anyhow::Result<rustyfin_core::link::OidcSettings> {
+    fn settings(&self, link: &str) -> anyhow::Result<rustyfin_services::link::OidcSettings> {
         if self.issuer.is_none() && self.token_url.is_none() {
             anyhow::bail!("link {link}: [link.oidc] needs issuer or token_url");
         }
@@ -86,7 +86,7 @@ impl LinkOidcConfig {
                 .to_string(),
             _ => anyhow::bail!("link {link}: set one of client_secret and client_secret_file"),
         };
-        Ok(rustyfin_core::link::OidcSettings {
+        Ok(rustyfin_services::link::OidcSettings {
             issuer: self.issuer.clone(),
             token_url: self.token_url.clone(),
             client_id: self.client_id.clone(),
@@ -112,17 +112,19 @@ impl std::fmt::Debug for LinkConfig {
 
 impl LinkConfig {
     /// The settings the link runs on, its password read.
-    pub fn settings(&self) -> anyhow::Result<rustyfin_core::link::LinkSettings> {
+    pub fn settings(&self) -> anyhow::Result<rustyfin_services::link::LinkSettings> {
         let password = match (&self.password, &self.password_file) {
             (Some(p), None) => p.clone(),
             (None, Some(file)) => std::fs::read_to_string(file)
                 .map_err(|e| anyhow::anyhow!("link {}: cannot read {file}: {e}", self.name))?
                 .trim_end_matches(['\r', '\n'])
                 .to_string(),
-            (None, None) if self.kind == rustyfin_core::link::LinkKind::Rustyfin => String::new(),
+            (None, None) if self.kind == rustyfin_services::link::LinkKind::Rustyfin => {
+                String::new()
+            }
             _ => anyhow::bail!("link {}: set one of password and password_file", self.name),
         };
-        if self.kind == rustyfin_core::link::LinkKind::Jellyfin && self.user.trim().is_empty() {
+        if self.kind == rustyfin_services::link::LinkKind::Jellyfin && self.user.trim().is_empty() {
             anyhow::bail!(
                 "link {}: name the user the friend made for the link",
                 self.name
@@ -131,7 +133,7 @@ impl LinkConfig {
         if self.libraries.is_empty() {
             anyhow::bail!("link {}: name at least one library to merge", self.name);
         }
-        Ok(rustyfin_core::link::LinkSettings {
+        Ok(rustyfin_services::link::LinkSettings {
             name: self.name.clone(),
             kind: self.kind,
             url: self.url.clone(),

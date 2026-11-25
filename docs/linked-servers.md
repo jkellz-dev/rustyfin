@@ -142,9 +142,9 @@ If a sync fails (wrong password, the friend's server is down, a library name tha
 why and the films from the last good sync stay. The log lines start with `Link <name>`:
 
 ```text
-INFO  rustyfin_core::link: Link Alex: 12 added, 3 updated, 1 removed, 9 merged in 1.2s
-WARN  rustyfin_core::link: Link Alex did not sync: could not sign in to https://jellyfin.alex.example as link-for-sam: 401 Unauthorized
-WARN  rustyfin_core::link: Link Alex did not sync: Alex shares no library named "Films" with its link user (it shares: Movies)
+INFO  rustyfin_services::link: Link Alex: 12 added, 3 updated, 1 removed, 9 merged in 1.2s
+WARN  rustyfin_services::link: Link Alex did not sync: could not sign in to https://jellyfin.alex.example as link-for-sam: 401 Unauthorized
+WARN  rustyfin_services::link: Link Alex did not sync: Alex shares no library named "Films" with its link user (it shares: Movies)
 ```
 
 The admin's **Links** page (`/web/links`) shows each link: whether its last sync worked and why not, when it last

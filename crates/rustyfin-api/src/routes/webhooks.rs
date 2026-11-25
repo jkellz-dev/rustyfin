@@ -10,7 +10,7 @@ use axum::{
 use serde::Deserialize;
 
 use rustyfin_auth::api_key::ApiKeyUser;
-use rustyfin_core::LibraryScanner;
+use rustyfin_services::LibraryScanner;
 
 use crate::error::ApiError;
 use crate::router::AppState;

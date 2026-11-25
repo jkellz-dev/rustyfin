@@ -32,7 +32,7 @@ pub async fn get_lyrics(
     }
     let path = item.path.ok_or(ApiError::NotFound)?;
     let lines = tokio::task::spawn_blocking(move || {
-        rustyfin_core::lyrics::read_lyrics(std::path::Path::new(&path))
+        rustyfin_services::lyrics::read_lyrics(std::path::Path::new(&path))
     })
     .await
     .map_err(|e| ApiError::Internal(format!("reading lyrics: {e}")))?

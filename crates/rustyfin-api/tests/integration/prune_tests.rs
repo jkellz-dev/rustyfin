@@ -8,9 +8,9 @@
 //! user data of everything removed.
 use crate::common;
 
-use rustyfin_core::LibraryScanner;
-use rustyfin_core::library::scanner::ScanResult;
 use rustyfin_data::repo::libraries;
+use rustyfin_services::LibraryScanner;
+use rustyfin_services::library::scanner::ScanResult;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 

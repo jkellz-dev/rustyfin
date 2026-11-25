@@ -49,7 +49,7 @@ rustyfin/
 │   ├── rustyfin-server/        # The server binary: config, startup, wiring
 │   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
 │   ├── rustyfin-auth/          # Who is asking: forward auth, LDAPS, tokens, sessions
-│   ├── rustyfin-core/          # Scanner, enrichment, scheduler, sessions, scan progress
+│   ├── rustyfin-services/      # Scanner, enrichment, scheduler, sessions, scan progress
 │   ├── rustyfin-data/          # Postgres pool, migrations, repositories
 │   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
 │   ├── rustyfin-search/        # Meilisearch, with Postgres as the fallback
@@ -71,7 +71,7 @@ Each crate starts with a `//!` overview of what it holds.
 ```text
 rustyfin-server
 ├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-data, rustyfin-models
-│                  ├── rustyfin-core ──── rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-data, rustyfin-models
+│                  ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-data, rustyfin-models
 │                  ├── rustyfin-media ─── rustyfin-data, rustyfin-models
 │                  ├── rustyfin-search ── rustyfin-data
 │                  └── rustyfin-common
@@ -104,7 +104,7 @@ Turns a request into a user and a session. Identity comes from a trusted forward
 stores no passwords. The `AuthenticatedUser`, `AdminUser` and `OptionalUser` extractors read Jellyfin's
 `Authorization: MediaBrowser ...` header (or `X-Emby-Token`, or `api_key`). See [Authentication](authentication.md).
 
-### `rustyfin-core`
+### `rustyfin-services`
 
 The long-running parts: the library scanner (walks folders, probes files, reads NFOs and sidecar files, prunes what is
 gone), enrichment (NFO files and per-title settings into the database), the task scheduler and its tasks, the session

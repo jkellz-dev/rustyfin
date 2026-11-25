@@ -6,7 +6,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_core::LibraryScanner;
+use rustyfin_services::LibraryScanner;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use uuid::Uuid;

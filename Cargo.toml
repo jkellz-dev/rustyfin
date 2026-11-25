@@ -3,7 +3,7 @@ members = [
     "crates/rustyfin-server",
     "crates/rustyfin-api",
     "crates/rustyfin-auth",
-    "crates/rustyfin-core",
+    "crates/rustyfin-services",
     "crates/rustyfin-data",
     "crates/rustyfin-models",
     "crates/rustyfin-search",
@@ -37,7 +37,7 @@ metrics-exporter-prometheus = { version = "0.18", default-features = false }
 # Internal crates
 rustyfin-api = { path = "crates/rustyfin-api" }
 rustyfin-auth = { path = "crates/rustyfin-auth" }
-rustyfin-core = { path = "crates/rustyfin-core" }
+rustyfin-services = { path = "crates/rustyfin-services" }
 rustyfin-data = { path = "crates/rustyfin-data" }
 rustyfin-models = { path = "crates/rustyfin-models" }
 rustyfin-search = { path = "crates/rustyfin-search" }

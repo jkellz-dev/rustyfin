@@ -13,7 +13,6 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_core::EnrichmentService;
 use rustyfin_data::repo::images::ImageRow;
 use rustyfin_data::repo::{media_items, media_streams, people, user_data};
 use rustyfin_media::image_processing::Placeholder;
@@ -24,6 +23,7 @@ use rustyfin_models::dto::{
     BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, MediaStream, NameGuidPair,
     QueryResult, UserItemDataDto,
 };
+use rustyfin_services::EnrichmentService;
 
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
@@ -130,7 +130,8 @@ fn lyric_stream(
     if item.item_type != "Audio" || item.has_lyrics != Some(true) {
         return None;
     }
-    let file = rustyfin_core::lyrics::sidecar_path(std::path::Path::new(item.path.as_deref()?))?;
+    let file =
+        rustyfin_services::lyrics::sidecar_path(std::path::Path::new(item.path.as_deref()?))?;
     let codec = file.extension()?.to_str()?.to_lowercase();
     Some(MediaStream {
         index: streams.iter().map(|s| s.index + 1).max().unwrap_or(0),
@@ -498,7 +499,7 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
             item.item_type.as_str(),
             "Series" | "MusicArtist" | "MusicAlbum"
         ) {
-            rustyfin_core::strip_provider_tags(&item.name)
+            rustyfin_services::strip_provider_tags(&item.name)
         } else {
             item.name.clone()
         },
@@ -512,7 +513,7 @@ pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &st
         series_name: item
             .series_name
             .as_deref()
-            .map(rustyfin_core::strip_provider_tags),
+            .map(rustyfin_services::strip_provider_tags),
         season_id: item.season_id,
         season_name: item.season_name.clone(),
         index_number: item.index_number,

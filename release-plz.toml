@@ -48,3 +48,8 @@ git_tag_name = "rustyfin-bench-v{{ version }}"
 name = "rustyfin-data"
 release = false
 git_tag_name = "rustyfin-data-v{{ version }}"
+
+[[package]]
+name = "rustyfin-services"
+release = false
+git_tag_name = "rustyfin-services-v{{ version }}"

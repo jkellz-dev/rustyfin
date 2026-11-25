@@ -79,7 +79,7 @@ async fn handle_socket(
     // Subscribe to remote control commands for this session
     let mut cmd_rx = state.session_manager.subscribe(session_id).await;
     // Scan progress, finished scans and new items, for every client.
-    let mut events = rustyfin_core::library::progress::ScanBoard::global().subscribe();
+    let mut events = rustyfin_services::library::progress::ScanBoard::global().subscribe();
 
     // Send initial ForceKeepAlive
     let msg = OutboundWebSocketMessage::new("ForceKeepAlive", 60);

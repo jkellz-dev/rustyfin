@@ -6,10 +6,10 @@ use axum::{
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_core::session::ClientCapabilities;
 use rustyfin_models::dto::{
     BaseItemDto, DeviceProfile, PlayerStateInfo, SessionInfoDto, TranscodingInfo,
 };
+use rustyfin_services::session::ClientCapabilities;
 
 use crate::error::ApiError;
 use crate::router::AppState;

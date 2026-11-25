@@ -8,8 +8,8 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::libraries;
+use rustyfin_services::LibraryScanner;
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -83,7 +83,7 @@ fn both_nfo_set_forms_are_read() {
     .unwrap();
     let none = dir.join("c.nfo");
     std::fs::write(&none, "<movie><title>C</title><set></set></movie>").unwrap();
-    use rustyfin_core::parse_movie_collection as set;
+    use rustyfin_services::parse_movie_collection as set;
     assert_eq!(set(&nested).as_deref(), Some("Alien Collection"));
     assert_eq!(set(&plain).as_deref(), Some("Alien Collection"));
     assert_eq!(set(&none), None);
@@ -264,10 +264,10 @@ fn the_tmdb_collection_id_is_read_from_the_nfo() {
         "<movie><title>B</title><set>Alien Collection</set></movie>",
     )
     .unwrap();
-    let set = rustyfin_core::parse_movie_set(&with_id).unwrap();
+    let set = rustyfin_services::parse_movie_set(&with_id).unwrap();
     assert_eq!(set.name, "Ready or Not Collection");
     assert_eq!(set.tmdb_id.as_deref(), Some("1267164"));
-    let set = rustyfin_core::parse_movie_set(&named).unwrap();
+    let set = rustyfin_services::parse_movie_set(&named).unwrap();
     assert_eq!(set.name, "Alien Collection");
     assert_eq!(set.tmdb_id, None);
     std::fs::remove_dir_all(&dir).unwrap();

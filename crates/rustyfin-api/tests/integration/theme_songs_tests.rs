@@ -6,7 +6,7 @@ use crate::common;
 use std::path::PathBuf;
 
 use axum::http::StatusCode;
-use rustyfin_core::LibraryScanner;
+use rustyfin_services::LibraryScanner;
 use uuid::Uuid;
 
 struct Tree(PathBuf);

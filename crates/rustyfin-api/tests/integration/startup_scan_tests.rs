@@ -7,11 +7,11 @@ use crate::common;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use rustyfin_core::TaskScheduler;
-use rustyfin_core::library::scheduler::{
+use rustyfin_data::repo::task_results;
+use rustyfin_services::TaskScheduler;
+use rustyfin_services::library::scheduler::{
     LibraryScanScheduleConfig, SchedulerConfig, SearchReindexScheduleConfig,
 };
-use rustyfin_data::repo::task_results;
 use tokio::sync::RwLock;
 
 #[tokio::test]

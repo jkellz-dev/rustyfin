@@ -4,8 +4,8 @@ use crate::common;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::libraries;
+use rustyfin_services::LibraryScanner;
 use tower::ServiceExt;
 use uuid::Uuid;
 

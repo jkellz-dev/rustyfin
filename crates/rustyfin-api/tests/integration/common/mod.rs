@@ -15,10 +15,10 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 use rustyfin_api::router::{AppState, build_router};
-use rustyfin_core::session::SessionManager;
 use rustyfin_data::repo::{libraries, media_items, sessions, users};
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_search::SearchService;
+use rustyfin_services::session::SessionManager;
 
 /// Integration test harness providing an isolated database schema and a ready-to-use Axum router.
 pub struct TestApp {
@@ -36,9 +36,9 @@ pub struct TestApp {
     pub transcodes: Arc<TranscodeManager>,
     /// Libraries being scanned (shared with the scheduler and webhooks).
     pub scan_in_flight: Arc<RwLock<HashSet<uuid::Uuid>>>,
-    pub scan_board: rustyfin_core::library::progress::ScanBoard,
+    pub scan_board: rustyfin_services::library::progress::ScanBoard,
     /// Linked servers (roadmap 16b), empty until a test registers one.
-    pub links: Arc<rustyfin_core::link::Links>,
+    pub links: Arc<rustyfin_services::link::Links>,
     /// Search; with Meilisearch in [`TestApp::with_meilisearch`].
     pub search: Arc<SearchService>,
 }
@@ -168,8 +168,8 @@ impl TestApp {
         let transcodes = transcode_manager.clone();
 
         let scan_in_flight = Arc::new(RwLock::new(HashSet::new()));
-        let scan_board = rustyfin_core::library::progress::ScanBoard::global().clone();
-        let links = Arc::new(rustyfin_core::link::Links::default());
+        let scan_board = rustyfin_services::library::progress::ScanBoard::global().clone();
+        let links = Arc::new(rustyfin_services::link::Links::default());
         let state = AppState {
             data: data.clone(),
             pool: pool.clone(),

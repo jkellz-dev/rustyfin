@@ -357,7 +357,7 @@ RUST_LOG="rustyfin=info"
 RUST_LOG="rustyfin=trace,sqlx=debug"
 
 # Specific crate
-RUST_LOG="rustyfin_core::library::scanner=trace"
+RUST_LOG="rustyfin_services::library::scanner=trace"
 ```
 
 ## Migrations

@@ -10,8 +10,8 @@ use crate::common;
 use std::path::PathBuf;
 
 use axum::http::StatusCode;
-use rustyfin_core::LibraryScanner;
 use rustyfin_data::repo::media_streams::{self, NewMediaStream};
+use rustyfin_services::LibraryScanner;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
