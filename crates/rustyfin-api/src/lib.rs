@@ -4,8 +4,7 @@
 //! `routes` holds one module per area (items, playback, HLS, sessions,
 //! users, libraries, play history, devices, WebSocket, ...). Around them:
 //! [`error`] (one `ApiError` mapped to status codes and log levels),
-//! [`query_case`] (Jellyfin's query names in any case), [`play_state`]
-//! (Jellyfin 10.10's played and resume rules), [`request_log`] and
+//! [`query_case`] (Jellyfin's query names in any case), [`request_log`] and
 //! [`metrics`] (what clients ask for, Prometheus), [`health`],
 //! [`login_limit`] and [`cors`].
 
@@ -19,7 +18,6 @@ pub mod link_notices;
 pub mod link_scope;
 pub mod login_limit;
 pub mod metrics;
-pub mod play_state;
 pub mod query_case;
 pub mod request_log;
 pub mod route_case;

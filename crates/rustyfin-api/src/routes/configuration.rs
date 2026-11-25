@@ -30,8 +30,8 @@ fn with(template: &str, overrides: Value) -> Value {
 }
 
 /// The server settings: Jellyfin's defaults where Rustyfin behaves the same
-/// (the resume rules in `play_state` are Jellyfin's), Rustyfin's own values
-/// where it differs.
+/// (the resume rules in `rustyfin_services::play_state` are Jellyfin's),
+/// Rustyfin's own values where it differs.
 pub(crate) fn server_configuration(state: &AppState) -> Value {
     with(
         JELLYFIN_SERVER_CONFIGURATION,

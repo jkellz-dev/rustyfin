@@ -1,64 +1,40 @@
 use axum::{Json, extract::State, http::StatusCode};
-use rustyfin_models::data::{Data, MediaItemStore, UserDataStore};
+use rustyfin_models::data::{Data, MediaItemStore};
+use rustyfin_services::playback::{Heard, Progress};
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_models::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
 
 use crate::error::ApiError;
-use crate::play_state::{self, Kind};
 use crate::router::AppState;
 
-/// The play-state change a report makes.
-enum Report {
-    Start,
-    Position(i64),
-    StopWithoutPosition,
-}
-
-/// Apply a report to the user's played state for the item (Jellyfin's
-/// rules, `play_state`). Failures are logged: playback never fails on them.
-async fn update_play_state(
+/// The start or progress report, for the play history: the session's app and
+/// device come from the session manager.
+async fn heard(
     state: &AppState,
-    user_id: uuid::Uuid,
-    item_id: uuid::Uuid,
-    report: Report,
+    auth: &AuthenticatedUser,
+    item: uuid::Uuid,
+    play_session: Option<&str>,
+    paused: bool,
+    position_ticks: Option<i64>,
+    play_method: Option<&str>,
 ) {
-    let item = match state.data.media_items().find_by_id(item_id).await {
-        Ok(Some(item)) => item,
-        _ => return,
-    };
-    let kind = Kind::of(&item.item_type, item.is_folder, item.extra_type.as_deref());
-    let current = match state.data.user_data().get(user_id, item_id).await {
-        Ok(Some(ud)) => play_state::State {
-            played: ud.played,
-            position_ticks: ud.playback_position_ticks,
-            play_count: ud.play_count,
-        },
-        _ => play_state::State::default(),
-    };
-    let (next, stamp) = match report {
-        Report::Start => (play_state::on_start(current, kind), true),
-        Report::Position(position) => {
-            let (next, _) = play_state::on_position(current, kind, position, item.runtime_ticks);
-            (next, false)
-        }
-        Report::StopWithoutPosition => (play_state::on_stop_without_position(current, kind), true),
-    };
-    if let Err(e) = state
-        .data
-        .user_data()
-        .save_play_state(
-            user_id,
-            item_id,
-            next.played,
-            next.position_ticks,
-            next.play_count,
-            stamp,
-        )
-        .await
-    {
-        tracing::warn!("Play state for {item_id}: {e}");
-    }
+    let session = state.session_manager.get_session(auth.session_id).await;
+    state
+        .services
+        .playback()
+        .heard(Heard {
+            user: auth.user_id,
+            session: auth.session_id,
+            item,
+            play_session,
+            paused,
+            position_ticks,
+            play_method,
+            client: session.as_ref().map(|s| s.app_name.as_str()),
+            device_name: session.as_ref().map(|s| s.device_name.as_str()),
+        })
+        .await;
 }
 
 /// `POST /Sessions/Playing` — Report playback started.
@@ -68,7 +44,11 @@ pub async fn report_playback_start(
     Json(body): Json<PlaybackStartInfo>,
 ) -> Result<StatusCode, ApiError> {
     if let Some(item_id) = body.item_id {
-        update_play_state(&state, auth.user_id, item_id, Report::Start).await;
+        state
+            .services
+            .playback()
+            .progress(auth.user_id, item_id, Progress::Start)
+            .await;
 
         // Look up item for session tracking
         let (item_name, item_type) =
@@ -79,7 +59,7 @@ pub async fn report_playback_start(
             };
 
         state.session_manager.ensure_tracked(auth.session_id).await;
-        super::play_history::record(
+        heard(
             &state,
             &auth,
             item_id,
@@ -119,7 +99,11 @@ pub async fn report_playback_progress(
     if let Some(item_id) = body.item_id
         && let Some(position) = body.position_ticks
     {
-        update_play_state(&state, auth.user_id, item_id, Report::Position(position)).await;
+        state
+            .services
+            .playback()
+            .progress(auth.user_id, item_id, Progress::Position(position))
+            .await;
     }
 
     // A session tracked again after a restart has no playback yet: the start
@@ -152,7 +136,7 @@ pub async fn report_playback_progress(
     }
 
     if let Some(item_id) = body.item_id {
-        super::play_history::record(
+        heard(
             &state,
             &auth,
             item_id,
@@ -189,21 +173,28 @@ pub async fn report_playback_stopped(
         && !body.failed.unwrap_or(false)
     {
         let report = match body.position_ticks {
-            Some(position) => Report::Position(position),
-            None => Report::StopWithoutPosition,
+            Some(position) => Progress::Position(position),
+            None => Progress::StopWithoutPosition,
         };
-        update_play_state(&state, auth.user_id, item_id, report).await;
+        state
+            .services
+            .playback()
+            .progress(auth.user_id, item_id, report)
+            .await;
     }
 
     if let Some(item_id) = body.item_id {
-        super::play_history::record_stop(
-            &state,
-            &auth,
-            item_id,
-            body.play_session_id.as_deref(),
-            body.position_ticks,
-        )
-        .await;
+        state
+            .services
+            .playback()
+            .stopped(
+                auth.user_id,
+                auth.session_id,
+                item_id,
+                body.play_session_id.as_deref(),
+                body.position_ticks,
+            )
+            .await;
     }
 
     // Kill any associated transcode job

@@ -8,92 +8,19 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::play_history;
-use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlayHistoryStore};
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlayFilter};
 use rustyfin_models::dto::QueryResult;
+use rustyfin_services::playback::Viewer;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::router::AppState;
 
-/// The key of a play: the client's play session id, else its session and
-/// the item.
-pub(crate) fn play_key(session_id: Uuid, play_session_id: Option<&str>, item_id: Uuid) -> String {
-    match play_session_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(id) => id.to_string(),
-        None => format!("{session_id}:{item_id}"),
-    }
-}
-
-/// Record a start or progress report in the history. Failures are logged:
-/// playback never fails because of the history.
-pub(crate) async fn record(
-    state: &AppState,
-    auth: &AuthenticatedUser,
-    item_id: Uuid,
-    play_session_id: Option<&str>,
-    paused: bool,
-    position_ticks: Option<i64>,
-    play_method: Option<&str>,
-) {
-    let Ok(Some(item)) = state.data.media_items().find_by_id(item_id).await else {
-        return;
-    };
-    let parent = match item.item_type.as_str() {
-        "Episode" => item.series_name.clone(),
-        "Audio" => item
-            .artists
-            .as_ref()
-            .filter(|a| !a.is_empty())
-            .map(|a| a.join(", ")),
-        _ => None,
-    };
-    let session = state.session_manager.get_session(auth.session_id).await;
-    let key = play_key(auth.session_id, play_session_id, item_id);
-    let report = play_history::Report {
-        user_id: auth.user_id,
-        play_key: &key,
-        item_id,
-        item_type: &item.item_type,
-        item_name: &item.name,
-        parent_name: parent.as_deref(),
-        client: session.as_ref().map(|s| s.app_name.as_str()),
-        device_name: session.as_ref().map(|s| s.device_name.as_str()),
-        play_method,
-        paused,
-        position_ticks,
-    };
-    if let Err(e) = state.data.play_history().report(&report).await {
-        tracing::warn!("Play history: {e}");
-    }
-}
-
-/// Record a stop.
-pub(crate) async fn record_stop(
-    state: &AppState,
-    auth: &AuthenticatedUser,
-    item_id: Uuid,
-    play_session_id: Option<&str>,
-    position_ticks: Option<i64>,
-) {
-    let key = play_key(auth.session_id, play_session_id, item_id);
-    if let Err(e) = state
-        .data
-        .play_history()
-        .stop(auth.user_id, &key, position_ticks)
-        .await
-    {
-        tracing::warn!("Play history: {e}");
-    }
-}
-
-/// Administrators see anyone's; a user sees their own.
-fn may_see(auth: &AuthenticatedUser, user_id: Uuid) -> Result<(), ApiError> {
-    if auth.is_administrator || auth.user_id == user_id {
-        Ok(())
-    } else {
-        Err(ApiError::Forbidden)
+fn viewer(auth: &AuthenticatedUser) -> Viewer {
+    Viewer {
+        user: auth.user_id,
+        is_administrator: auth.is_administrator,
     }
 }
 
@@ -124,18 +51,21 @@ pub async fn get_play_stats(
     auth: AuthenticatedUser,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<PlayStats>, ApiError> {
-    may_see(&auth, user_id)?;
-    let rows = state.data.play_history().stats(user_id).await?;
-    let total_ms: i64 = rows.iter().map(|r| r.1).sum();
+    let rows = state
+        .services
+        .playback()
+        .stats(viewer(&auth), user_id)
+        .await?;
+    let total_ms: i64 = rows.iter().map(|r| r.millis).sum();
     Ok(Json(PlayStats {
         total_minutes: minutes(total_ms),
-        plays: rows.iter().map(|r| r.2).sum(),
+        plays: rows.iter().map(|r| r.plays).sum(),
         by_type: rows
             .into_iter()
-            .map(|(kind, ms, plays)| KindStats {
-                kind,
-                minutes: minutes(ms),
-                plays,
+            .map(|r| KindStats {
+                kind: r.kind,
+                minutes: minutes(r.millis),
+                plays: r.plays,
             })
             .collect(),
     }))
@@ -237,10 +167,8 @@ pub async fn get_play_history(
     Path(user_id): Path<Uuid>,
     Query(q): Query<HistoryQuery>,
 ) -> Result<Json<QueryResult<PlayEntry>>, ApiError> {
-    may_see(&auth, user_id)?;
     let start = q.start_index.unwrap_or(0).max(0);
-    let limit = q.limit.unwrap_or(50).clamp(1, 500);
-    let filter = play_history::Filter {
+    let filter = PlayFilter {
         kinds: q
             .kinds
             .as_deref()
@@ -255,9 +183,15 @@ pub async fn get_play_history(
         max_date: q.max_date,
     };
     let (rows, total) = state
-        .data
-        .play_history()
-        .list(user_id, &filter, start, limit)
+        .services
+        .playback()
+        .history(
+            viewer(&auth),
+            user_id,
+            &filter,
+            start,
+            q.limit.unwrap_or(50),
+        )
         .await?;
     let mut ids: Vec<Uuid> = rows.iter().filter_map(|r| r.item_id).collect();
     ids.sort();
