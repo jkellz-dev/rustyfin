@@ -88,6 +88,7 @@ pub async fn track_requests(matched: Option<MatchedPath>, req: Request, next: Ne
     let method = req.method().to_string();
     let route = matched.map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
     let started = Instant::now();
+    let path = req.uri().path().to_string();
     // The request's span (traces): its route, and its status once answered.
     let span = tracing::info_span!(
         "http.request",
@@ -95,6 +96,8 @@ pub async fn track_requests(matched: Option<MatchedPath>, req: Request, next: Ne
         otel.kind = "server",
         http.request.method = %method,
         http.route = %route,
+        // The path (ids, never the query, which can carry a token).
+        url.path = %path,
         http.response.status_code = tracing::field::Empty,
         otel.status_code = tracing::field::Empty,
     );

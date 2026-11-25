@@ -1237,10 +1237,28 @@ pub async fn get_item_by_id(
         attach_user_data(&state.pool, auth.user_id, &mut folders).await;
         return Ok(Json(folders.remove(0)));
     }
-    let item = media_items::find_by_id(&state.pool, item_id)
+    let Some(item) = media_items::find_by_id(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?
-        .ok_or(ApiError::NotFound)?;
+    else {
+        // A genre is no stored item; clients open it by id (Finamp's genre
+        // page). Music first: a name both kinds use is a music genre there.
+        let Some(genre) = super::music_genres::genre_name_by_id(&state.pool, item_id).await else {
+            return Err(ApiError::NotFound);
+        };
+        return match super::music_genres::get_music_genre(
+            State(state.clone()),
+            auth.clone(),
+            Path(genre.clone()),
+        )
+        .await
+        {
+            Err(ApiError::NotFound) => {
+                super::genres::get_genre(State(state), auth, Path(genre)).await
+            }
+            answer => answer,
+        };
+    };
 
     // Check library access
     if let Some(lib_id) = item.library_id {
