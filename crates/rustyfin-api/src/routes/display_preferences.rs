@@ -6,7 +6,7 @@ use axum::{
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_models::data::DisplayPreferencesStore;
+use rustyfin_models::data::{Data, DisplayPreferencesStore};
 use rustyfin_models::dto::DisplayPreferencesDto;
 
 use crate::error::ApiError;
@@ -29,7 +29,8 @@ pub async fn get_display_preferences(
 
     if let Some(data) = state
         .data()
-        .display_preferences(auth.user_id, &display_prefs_id, client)
+        .display_preferences()
+        .get(auth.user_id, &display_prefs_id, client)
         .await?
     {
         let dto: DisplayPreferencesDto = serde_json::from_value(data)
@@ -53,7 +54,8 @@ pub async fn update_display_preferences(
     let client = query.client.as_deref().unwrap_or("emby");
     state
         .data()
-        .save_display_preferences(auth.user_id, &display_prefs_id, client, &body)
+        .display_preferences()
+        .upsert(auth.user_id, &display_prefs_id, client, &body)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

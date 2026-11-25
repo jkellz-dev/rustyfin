@@ -84,18 +84,7 @@ impl From<UserRecord> for User {
     }
 }
 
-/// The settings `POST /Users/{userId}/Configuration` saves.
-#[derive(Debug, Clone)]
-pub struct UserSettings<'a> {
-    pub audio_language_preference: Option<&'a str>,
-    pub subtitle_language_preference: Option<&'a str>,
-    /// Jellyfin's `SubtitlePlaybackMode` as a number (`Default` is 0).
-    pub subtitle_mode: i32,
-    pub play_default_audio_track: bool,
-    pub enable_next_episode_auto_play: bool,
-    /// Everything else the app sent.
-    pub configuration: &'a serde_json::Value,
-}
+pub use rustyfin_models::data::UserSettings;
 
 /// Save a user's app settings; `false` when there is no such user.
 pub async fn update_settings(

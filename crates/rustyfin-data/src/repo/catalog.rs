@@ -41,17 +41,7 @@ impl From<CatalogChangeRecord> for CatalogChange {
     }
 }
 
-/// A page of the feed.
-#[derive(Debug, Clone)]
-pub struct Page {
-    pub changes: Vec<Change>,
-    /// Removed since the cursor (first page only).
-    pub removed: Vec<Uuid>,
-    /// This page's snapshot: the cursor for the next sync, from its first page.
-    pub snapshot: String,
-    /// Where the next page starts (`xid,id`), when there is one.
-    pub next: Option<String>,
-}
+pub use rustyfin_models::data::CatalogPage as Page;
 
 /// True for a `pg_snapshot` in its text form (`xmin:xmax:xip,...`).
 pub fn is_snapshot(s: &str) -> bool {

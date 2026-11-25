@@ -15,6 +15,7 @@ mod activity_log;
 mod api_keys;
 mod catalog;
 mod chapters;
+mod collections;
 mod device_auth;
 mod display_preferences;
 mod error;
@@ -26,33 +27,123 @@ mod media_streams;
 mod people;
 mod play_history;
 mod playlists;
+mod search_feed;
 mod sessions;
 mod task_results;
 mod user_data;
+mod user_library_access;
 mod users;
 
-pub use activity_log::ActivityLogEntry;
-pub use api_keys::ApiKey;
-pub use catalog::CatalogChange;
-pub use chapters::Chapter;
-pub use device_auth::DeviceAuth;
+pub use activity_log::{ActivityLogEntry, ActivityLogStore};
+pub use api_keys::{ApiKey, ApiKeyStore};
+pub use catalog::{CatalogChange, CatalogPage, CatalogStore};
+pub use chapters::{Chapter, ChapterStore};
+pub use collections::{AutoSet, CollectionStore};
+pub use device_auth::{DeviceAuth, DeviceAuthStore};
 pub use display_preferences::DisplayPreferencesStore;
 pub use error::{DataError, DataResult};
-pub use images::Image;
-pub use libraries::{Library, LibraryStat};
-pub use links::Link;
-pub use media_item::MediaItem;
-pub use media_streams::MediaStream;
-pub use people::{MediaItemPerson, Person};
-pub use play_history::Play;
-pub use playlists::{Playlist, PlaylistItem, PlaylistShare};
-pub use sessions::{Device, Session};
-pub use task_results::TaskResult;
-pub use user_data::UserData;
-pub use users::User;
+pub use images::{Image, ImageStore, NewImage};
+pub use libraries::{Library, LibraryStat, LibraryStore};
+pub use links::{Link, LinkCollection, LinkStore, LinkedItem};
+pub use media_item::{
+    ArtistFilter, ItemMetadata, MediaItem, MediaItemStore, NameKind, NewMediaItem,
+};
+pub use media_streams::{MediaStream, MediaStreamStore, NewMediaStream};
+pub use people::{MediaItemPerson, PeopleStore, Person};
+pub use play_history::{Play, PlayFilter, PlayHistoryStore, PlayReport};
+pub use playlists::{Playlist, PlaylistItem, PlaylistShare, PlaylistStore};
+pub use search_feed::{PeopleFeedPage, SearchFeedPage, SearchFeedStore};
+pub use sessions::{Device, Session, SessionStore};
+pub use task_results::{TaskResult, TaskResultStore};
+pub use user_data::{UserData, UserDataChange, UserDataStore};
+pub use user_library_access::LibraryAccessStore;
+pub use users::{User, UserSettings, UserStore};
 
-/// Everything the data layer provides. Services are generic over this
+/// Everything the data layer provides, one area at a time
+/// (`data.libraries().find_by_id(id)`). Services are generic over this
 /// trait; `rustyfin-server` picks the implementation.
-pub trait Data: DisplayPreferencesStore + Clone + Send + Sync + 'static {}
+pub trait Data: Clone + Send + Sync + 'static {
+    /// Activity log.
+    type ActivityLog: ActivityLogStore + Send + Sync;
+    fn activity_log(&self) -> &Self::ActivityLog;
 
-impl<T> Data for T where T: DisplayPreferencesStore + Clone + Send + Sync + 'static {}
+    /// Api keys.
+    type ApiKeys: ApiKeyStore + Send + Sync;
+    fn api_keys(&self) -> &Self::ApiKeys;
+
+    /// Catalog.
+    type Catalog: CatalogStore + Send + Sync;
+    fn catalog(&self) -> &Self::Catalog;
+
+    /// Chapters.
+    type Chapters: ChapterStore + Send + Sync;
+    fn chapters(&self) -> &Self::Chapters;
+
+    /// Collections.
+    type Collections: CollectionStore + Send + Sync;
+    fn collections(&self) -> &Self::Collections;
+
+    /// Device auth.
+    type DeviceAuth: DeviceAuthStore + Send + Sync;
+    fn device_auth(&self) -> &Self::DeviceAuth;
+
+    /// Display preferences.
+    type DisplayPreferences: DisplayPreferencesStore + Send + Sync;
+    fn display_preferences(&self) -> &Self::DisplayPreferences;
+
+    /// Images.
+    type Images: ImageStore + Send + Sync;
+    fn images(&self) -> &Self::Images;
+
+    /// Libraries.
+    type Libraries: LibraryStore + Send + Sync;
+    fn libraries(&self) -> &Self::Libraries;
+
+    /// Links.
+    type Links: LinkStore + Send + Sync;
+    fn links(&self) -> &Self::Links;
+
+    /// Media items.
+    type MediaItems: MediaItemStore + Send + Sync;
+    fn media_items(&self) -> &Self::MediaItems;
+
+    /// Media streams.
+    type MediaStreams: MediaStreamStore + Send + Sync;
+    fn media_streams(&self) -> &Self::MediaStreams;
+
+    /// People.
+    type People: PeopleStore + Send + Sync;
+    fn people(&self) -> &Self::People;
+
+    /// Play history.
+    type PlayHistory: PlayHistoryStore + Send + Sync;
+    fn play_history(&self) -> &Self::PlayHistory;
+
+    /// Playlists.
+    type Playlists: PlaylistStore + Send + Sync;
+    fn playlists(&self) -> &Self::Playlists;
+
+    /// Search feed.
+    type SearchFeed: SearchFeedStore + Send + Sync;
+    fn search_feed(&self) -> &Self::SearchFeed;
+
+    /// Sessions.
+    type Sessions: SessionStore + Send + Sync;
+    fn sessions(&self) -> &Self::Sessions;
+
+    /// Task results.
+    type TaskResults: TaskResultStore + Send + Sync;
+    fn task_results(&self) -> &Self::TaskResults;
+
+    /// User data.
+    type UserData: UserDataStore + Send + Sync;
+    fn user_data(&self) -> &Self::UserData;
+
+    /// User library access.
+    type UserLibraryAccess: LibraryAccessStore + Send + Sync;
+    fn user_library_access(&self) -> &Self::UserLibraryAccess;
+
+    /// Users.
+    type Users: UserStore + Send + Sync;
+    fn users(&self) -> &Self::Users;
+}

@@ -1,27 +1,24 @@
 use std::future::Future;
 
-use serde_json::Value;
-use uuid::Uuid;
-
 use super::DataResult;
 
 /// The display preferences an app saves per user: opaque to Rustyfin, kept
 /// by app (`client`) and by the app's own preferences id.
 pub trait DisplayPreferencesStore {
-    /// What the app saved for this user, if anything.
-    fn display_preferences(
+    /// An app's saved display preferences for a user, if any.
+    fn get(
         &self,
-        user_id: Uuid,
+        user_id: uuid::Uuid,
         prefs_id: &str,
         client: &str,
-    ) -> impl Future<Output = DataResult<Option<Value>>> + Send;
+    ) -> impl Future<Output = DataResult<Option<serde_json::Value>>> + Send;
 
-    /// Save the app's preferences for this user, replacing earlier ones.
-    fn save_display_preferences(
+    /// Save an app's display preferences for a user, replacing earlier ones.
+    fn upsert(
         &self,
-        user_id: Uuid,
+        user_id: uuid::Uuid,
         prefs_id: &str,
         client: &str,
-        data: &Value,
+        data: &serde_json::Value,
     ) -> impl Future<Output = DataResult<()>> + Send;
 }

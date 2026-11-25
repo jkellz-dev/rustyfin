@@ -1,28 +1,26 @@
-use rustyfin_models::data::{DataResult, DisplayPreferencesStore};
-use serde_json::Value;
-use uuid::Uuid;
+use rustyfin_models::data::*;
 
-use super::{IntoData, PgData};
+use super::{IntoData, PgDisplayPreferences};
 use crate::repo::display_preferences as repo;
 
-impl DisplayPreferencesStore for PgData {
-    async fn display_preferences(
+impl DisplayPreferencesStore for PgDisplayPreferences {
+    async fn get(
         &self,
-        user_id: Uuid,
+        user_id: uuid::Uuid,
         prefs_id: &str,
         client: &str,
-    ) -> DataResult<Option<Value>> {
+    ) -> DataResult<Option<serde_json::Value>> {
         repo::get(&self.pool, user_id, prefs_id, client)
             .await
             .data()
     }
 
-    async fn save_display_preferences(
+    async fn upsert(
         &self,
-        user_id: Uuid,
+        user_id: uuid::Uuid,
         prefs_id: &str,
         client: &str,
-        data: &Value,
+        data: &serde_json::Value,
     ) -> DataResult<()> {
         repo::upsert(&self.pool, user_id, prefs_id, client, data)
             .await

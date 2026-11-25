@@ -43,14 +43,7 @@ pub async fn list_item_ids(pool: &PgPool, collection_id: Uuid) -> Result<Vec<Uui
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
-/// One automatic collection: its name, its TMDB collection id when known,
-/// and the films in it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AutoSet {
-    pub name: String,
-    pub tmdb_id: Option<String>,
-    pub items: Vec<Uuid>,
-}
+pub use rustyfin_models::data::AutoSet;
 
 /// Group films by the series their NFO names. A TMDB collection id (the NFO's
 /// `tmdbcolid`) is the key when known; a film whose NFO only names the set

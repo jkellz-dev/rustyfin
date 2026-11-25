@@ -12,15 +12,7 @@ use uuid::Uuid;
 use super::media_items::{MediaItemRecord, MediaItemRow, models};
 use super::people::{PersonRecord, PersonRow};
 
-/// A page of changes.
-#[derive(Debug, Clone)]
-pub struct Page {
-    pub items: Vec<MediaItemRow>,
-    /// Removed since the cursor (first page only).
-    pub removed: Vec<Uuid>,
-    /// Where the next page starts (`xid,id`), when there is one.
-    pub next: Option<(String, Uuid)>,
-}
+pub use rustyfin_models::data::SearchFeedPage as Page;
 
 /// The snapshot to store once everything up to now is in the index.
 pub async fn snapshot(pool: &PgPool) -> Result<String, sqlx::Error> {
@@ -130,15 +122,7 @@ pub async fn clear_cursor(pool: &PgPool, index: &str) -> Result<(), sqlx::Error>
     Ok(())
 }
 
-/// A page of people changes.
-#[derive(Debug, Clone)]
-pub struct PeoplePage {
-    pub people: Vec<PersonRow>,
-    /// Removed since the cursor (first page only).
-    pub removed: Vec<Uuid>,
-    /// Where the next page starts (`xid,id`), when there is one.
-    pub next: Option<(String, Uuid)>,
-}
+pub use rustyfin_models::data::PeopleFeedPage as PeoplePage;
 
 /// People changed since `since`, `limit` per page from `after`; removals
 /// since `since` on the first page.

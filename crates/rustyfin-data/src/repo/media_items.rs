@@ -694,30 +694,7 @@ pub async fn find_by_name_and_parent(
     }
 }
 
-/// An item for the scanner to insert.
-pub struct NewMediaItem {
-    pub item_type: String,
-    pub library_id: Option<Uuid>,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub sort_name: Option<String>,
-    pub path: Option<String>,
-    pub production_year: Option<i32>,
-    pub runtime_ticks: Option<i64>,
-    pub index_number: Option<i32>,
-    pub parent_index_number: Option<i32>,
-    pub is_folder: bool,
-    pub series_id: Option<Uuid>,
-    pub season_id: Option<Uuid>,
-    pub series_name: Option<String>,
-    pub season_name: Option<String>,
-    pub container: Option<String>,
-    pub total_bitrate: Option<i32>,
-    pub width: Option<i32>,
-    pub height: Option<i32>,
-    pub size: Option<i64>,
-    pub etag: Option<String>,
-}
+pub use rustyfin_models::data::NewMediaItem;
 
 /// Insert a new media item.
 pub async fn insert(pool: &PgPool, item: &NewMediaItem) -> Result<MediaItemRow, sqlx::Error> {
@@ -926,23 +903,7 @@ pub async fn count_children_batch(
     Ok(rows.into_iter().collect())
 }
 
-/// Metadata fields that can be updated independently of structural insert/update.
-pub struct ItemMetadata {
-    pub name: Option<String>,
-    pub sort_name: Option<String>,
-    pub overview: Option<String>,
-    pub original_title: Option<String>,
-    pub community_rating: Option<f32>,
-    pub critic_rating: Option<f32>,
-    pub official_rating: Option<String>,
-    pub genres: Option<Vec<String>>,
-    pub studios: Option<Vec<String>>,
-    pub tags: Option<Vec<String>>,
-    pub premiere_date: Option<DateTime<Utc>>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub production_year: Option<i32>,
-    pub external_ids: Option<serde_json::Value>,
-}
+pub use rustyfin_models::data::ItemMetadata;
 
 /// Update metadata fields on a media item. `None` fields preserve existing values via COALESCE.
 pub async fn update_metadata(
@@ -1613,14 +1574,7 @@ pub async fn first_added_with(
     Ok(row.0)
 }
 
-/// What a name item stands for.
-#[derive(Debug, Clone, Copy)]
-pub enum NameKind<'a> {
-    Genre(&'a str),
-    Studio(&'a str),
-    Year(i32),
-    Person(Uuid),
-}
+pub use rustyfin_models::data::NameKind;
 
 /// An artist's tracks and albums.
 pub async fn artist_counts(pool: &PgPool, artist: Uuid) -> Result<(i64, i64), sqlx::Error> {
@@ -1902,22 +1856,7 @@ pub async fn get_active_series_or_movies(
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
-/// List artist items with optional search and album-artist-only filtering.
-/// Which artists `/Artists` and `/Artists/AlbumArtists` list.
-#[derive(Debug, Default)]
-pub struct ArtistFilter<'a> {
-    pub search: Option<&'a str>,
-    pub library_id: Option<Uuid>,
-    pub name_starts_with: Option<&'a str>,
-    pub name_less_than: Option<&'a str>,
-    pub name_starts_with_or_greater: Option<&'a str>,
-    pub album_artists_only: bool,
-    /// `GenreIds`, as names: artists with a track in any of them.
-    pub genres_any: Option<&'a [String]>,
-    /// Meilisearch's best matches for `search`, best first: these instead of
-    /// matching the name, in this order.
-    pub ranked: Option<&'a [Uuid]>,
-}
+pub use rustyfin_models::data::ArtistFilter;
 
 /// The alphabet-bar filters on an item's sort name (case-insensitive, by
 /// code point so "#" (`NameLessThan=A`) catches digits and punctuation).

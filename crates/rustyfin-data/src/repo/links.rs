@@ -360,63 +360,9 @@ pub async fn ensure_library(
     .await
 }
 
-/// An item as the friend's server describes it: a film (or home video), a
-/// series, a season or an episode.
-#[derive(Debug, Clone, Default)]
-pub struct LinkedItem {
-    /// `Movie`, `Series`, `Season` or `Episode`.
-    pub item_type: String,
-    /// A season's number; an episode's number in its season.
-    pub index_number: Option<i32>,
-    /// An episode's season number.
-    pub parent_index_number: Option<i32>,
-    pub is_folder: bool,
-    pub link_id: Uuid,
-    pub remote_id: String,
-    pub remote_etag: Option<String>,
-    pub library_id: Uuid,
-    pub name: String,
-    pub sort_name: String,
-    pub original_title: Option<String>,
-    pub overview: Option<String>,
-    pub community_rating: Option<f32>,
-    pub critic_rating: Option<f32>,
-    pub official_rating: Option<String>,
-    pub genres: Vec<String>,
-    pub studios: Vec<String>,
-    pub tags: Vec<String>,
-    pub production_year: Option<i32>,
-    pub premiere_date: Option<DateTime<Utc>>,
-    pub date_created: Option<DateTime<Utc>>,
-    pub runtime_ticks: Option<i64>,
-    pub container: Option<String>,
-    pub total_bitrate: Option<i32>,
-    pub width: Option<i32>,
-    pub height: Option<i32>,
-    pub size: Option<i64>,
-    /// Jellyfin's ProviderIds (`{"Tmdb": "603", "Imdb": "tt0133093"}`).
-    pub external_ids: serde_json::Value,
-    /// The link's name, the friend's name for the copy, its media source id
-    /// and the friend's item id, and for seasons and episodes the friend's
-    /// series and season ids: `{"LinkName", "LinkSource", "RemoteSourceId",
-    /// "RemoteItemId", "RemoteSeriesId", "RemoteSeasonId"}`.
-    pub extra_data: serde_json::Value,
-    pub streams: Vec<NewMediaStream>,
-    /// (image type, index, the friend's tag).
-    pub images: Vec<(String, i32, String)>,
-}
+pub use rustyfin_models::data::LinkedItem;
 
-/// A friend's collection as the last sync saw it.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LinkCollection {
-    /// The friend's id for it.
-    pub remote_id: String,
-    pub name: String,
-    /// Its TMDB collection id: the friend's films that name it join it.
-    pub tmdb_id: Option<String>,
-    /// For a collection with no TMDB id, the friend's ids of its films.
-    pub members: Vec<String>,
-}
+pub use rustyfin_models::data::LinkCollection;
 
 /// Make the link's stored collections `sets`; true when that changed them.
 pub async fn set_collections(

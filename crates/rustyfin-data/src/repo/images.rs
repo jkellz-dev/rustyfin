@@ -52,13 +52,7 @@ impl From<ImageRecord> for Image {
     }
 }
 
-/// An image to record for an item or person.
-pub struct NewImage {
-    pub entity_id: Uuid,
-    pub image_type: String,
-    pub path: String,
-    pub image_index: i32,
-}
+pub use rustyfin_models::data::NewImage;
 
 /// Insert an image record.
 pub async fn insert(pool: &PgPool, image: &NewImage) -> Result<ImageRow, sqlx::Error> {

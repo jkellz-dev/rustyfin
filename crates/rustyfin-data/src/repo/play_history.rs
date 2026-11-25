@@ -13,21 +13,7 @@ pub const MAX_GAP_MS: i64 = 5 * 60 * 1000;
 /// Plays shorter than this are not kept (a track skipped, a misclick).
 pub const MIN_PLAY_MS: i64 = 10 * 1000;
 
-/// One playback report.
-#[derive(Debug, Clone)]
-pub struct Report<'a> {
-    pub user_id: Uuid,
-    pub play_key: &'a str,
-    pub item_id: Uuid,
-    pub item_type: &'a str,
-    pub item_name: &'a str,
-    pub parent_name: Option<&'a str>,
-    pub client: Option<&'a str>,
-    pub device_name: Option<&'a str>,
-    pub play_method: Option<&'a str>,
-    pub paused: bool,
-    pub position_ticks: Option<i64>,
-}
+pub use rustyfin_models::data::PlayReport as Report;
 
 /// SQL: the time to credit since the last report.
 const CREDIT: &str = "CASE WHEN paused THEN 0 ELSE LEAST(\
@@ -189,16 +175,7 @@ impl From<PlayRecord> for Play {
     }
 }
 
-/// What the list may be narrowed to.
-#[derive(Debug, Clone, Default)]
-pub struct Filter {
-    /// Kinds (`Movie`, `Episode`, `Audio`, `Other`); none means all.
-    pub kinds: Vec<String>,
-    /// Words in the title or the show/artist.
-    pub search: Option<String>,
-    pub min_date: Option<DateTime<Utc>>,
-    pub max_date: Option<DateTime<Utc>>,
-}
+pub use rustyfin_models::data::PlayFilter as Filter;
 
 const WHERE: &str = "user_id = $1 \
     AND (cardinality($2::text[]) = 0 \

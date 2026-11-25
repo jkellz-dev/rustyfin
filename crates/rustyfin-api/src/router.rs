@@ -61,7 +61,7 @@ impl AppState {
     /// servers). Transitional: handlers move from `pool` to this, one area
     /// at a time (`CLAUDE.md`, "Layers").
     pub fn data(&self) -> rustyfin_data::PgData {
-        rustyfin_data::PgData::from_pool(self.pool.clone())
+        rustyfin_data::PgData::from_pool(&self.pool)
     }
 }
 
