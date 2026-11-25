@@ -48,12 +48,25 @@ jobs:
       # Hurl's .deb wants a libxml2 the runner's Ubuntu no longer ships under
       # that name; its own image works anywhere. A wrapper puts it on PATH,
       # on the host network, with the workspace at the same path.
+      #
+      # Every request carries the proxy's identity headers, as behind
+      # Tailscale: since Tailscale became the authentication, a request
+      # without them is refused (401): the bootstrap's second request failed
+      # (nightly runs of 2026-11-23 and 24). The cases send only the token.
       - name: Install hurl (image) and ffmpeg
         run: |
           docker pull -q "ghcr.io/orange-opensource/hurl:${HURL_VERSION}"
           mkdir -p "$RUNNER_TEMP/bin"
-          printf '#!/bin/sh\nexec docker run --rm -i --network host -v "%s:%s" -w "$PWD" "ghcr.io/orange-opensource/hurl:%s" "$@"\n' \
-            "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE" "$HURL_VERSION" > "$RUNNER_TEMP/bin/hurl"
+          # Unquoted heredoc: the workspace and version expand now, \$PWD and
+          # \$@ when the wrapper runs.
+          cat > "$RUNNER_TEMP/bin/hurl" <<EOF
+          #!/bin/sh
+          exec docker run --rm -i --network host -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "\$PWD" \\
+            "ghcr.io/orange-opensource/hurl:$HURL_VERSION" \\
+            --header "Tailscale-User-Login: parity@example.com" \\
+            --header "Tailscale-User-Name: parity" \\
+            --header "Tailscale-User-Groups: admin" "\$@"
+          EOF
           chmod +x "$RUNNER_TEMP/bin/hurl"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/bin/hurl" --version | head -1
@@ -74,7 +87,7 @@ jobs:
             -v "$PWD/tests/parity/ci/server.toml:/etc/rustyfin/rustyfin.toml:ro" \
             -v "$RUNNER_TEMP/media:/data/media:ro" \
             ghcr.io/jkellz-dev/rustyfin-server:latest
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl -fsS http://localhost:8096/System/Info/Public > /dev/null && break
             sleep 2
           done
