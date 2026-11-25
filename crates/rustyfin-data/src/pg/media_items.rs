@@ -615,4 +615,14 @@ impl MediaItemStore for PgMediaItems {
             .await
             .data()
     }
+
+    async fn query(&self, query: &ItemQuery) -> DataResult<Vec<MediaItem>> {
+        use crate::repo::media_items::ItemQuerySql;
+        query.fetch(&self.pool).await.data()
+    }
+
+    async fn count_query(&self, query: &ItemQuery) -> DataResult<i64> {
+        use crate::repo::media_items::ItemQuerySql;
+        query.count(&self.pool).await.data()
+    }
 }

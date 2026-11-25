@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use rustyfin_models::data::{Data, UserDataStore};
+use rustyfin_models::data::{Data, UserDataChange, UserDataStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -73,12 +73,14 @@ pub async fn update_user_item_data(
         .update_partial(
             auth.user_id,
             item_id,
-            body.played,
-            body.play_count,
-            body.playback_position_ticks,
-            body.is_favorite,
-            rating,
-            body.last_played_date,
+            &UserDataChange {
+                played: body.played,
+                play_count: body.play_count,
+                position_ticks: body.playback_position_ticks,
+                is_favorite: body.is_favorite,
+                rating,
+                last_played_date: body.last_played_date,
+            },
         )
         .await?;
     let mut dto = to_dto(&ud);

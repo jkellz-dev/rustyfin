@@ -11,7 +11,6 @@
 //!   `DefaultAudioStreamIndex` and `DefaultSubtitleStreamIndex` in
 //!   PlaybackInfo, which apps start playback with.
 
-use rustyfin_data::repo::users;
 use rustyfin_models::data::{Data, UserStore};
 use rustyfin_models::dto::{BaseItemDto, MediaStream, PlaybackInfoResponse, UserConfiguration};
 use uuid::Uuid;

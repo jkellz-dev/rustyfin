@@ -15,9 +15,7 @@ use uuid::Uuid;
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::EnrichmentService;
 use rustyfin_data::repo::images::ImageRow;
-use rustyfin_data::repo::{
-    chapters, images, libraries, media_items, media_streams, people, user_data,
-};
+use rustyfin_data::repo::{media_items, media_streams, people, user_data};
 use rustyfin_media::image_processing::Placeholder;
 use rustyfin_media::playback_info::{
     default_audio_stream_index, source_video_type, stream_row_to_dto,
@@ -1134,10 +1132,10 @@ pub async fn get_items(
         limit,
     };
 
-    let items = item_query.fetch(&state.pool).await?;
+    let items = state.data.media_items().query(&item_query).await?;
 
     let total = if query.enable_total_record_count.unwrap_or(true) {
-        item_query.count(&state.pool).await?
+        state.data.media_items().count_query(&item_query).await?
     } else {
         0
     };

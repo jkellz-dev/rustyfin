@@ -9,7 +9,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images as images_repo, media_items};
+use rustyfin_data::repo::media_items;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};

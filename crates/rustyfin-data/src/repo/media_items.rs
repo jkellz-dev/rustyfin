@@ -2069,109 +2069,51 @@ fn push_genres_any(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, genres: &[String
     );
 }
 
-/// Dynamic query builder for GET /Items with filtering, sorting, and pagination.
-pub struct ItemQuery {
-    /// `GenreIds`, as names: items in any of them. An album or artist is in
-    /// a genre when it or one of its tracks is.
-    pub genres_any: Option<Vec<String>>,
-    // Scoping
-    pub parent_id: Option<Uuid>,
-    pub library_id: Option<Uuid>,
-    pub recursive: bool,
-    pub ids: Vec<Uuid>,
-    /// Libraries the caller may see. `None` means all of them. Applied in the query so a
-    /// page is full of visible items instead of being thinned afterwards.
-    pub accessible_libraries: Option<Vec<Uuid>>,
+pub use rustyfin_models::data::ItemQuery;
 
-    // Type filters
-    pub include_item_types: Vec<String>,
-    pub exclude_item_types: Vec<String>,
+/// The SQL behind an [`ItemQuery`]: how its filters, sort and page become
+/// a query, and running it.
+pub(crate) trait ItemQuerySql {
+    const JELLYFIN_SORT_KEY: &'static str;
 
-    // Metadata filters
-    pub genres: Vec<String>,
-    pub years: Vec<i32>,
-    pub studios: Vec<String>,
-    pub official_ratings: Vec<String>,
-    pub tags: Vec<String>,
-    pub person_ids: Vec<Uuid>,
-    /// MusicArtist items: their albums, the tracks on those, and any track
-    /// naming the artist.
-    pub artist_ids: Vec<Uuid>,
-    /// MusicAlbum items: their tracks, also those in disc folders.
-    pub album_ids: Vec<Uuid>,
-    pub min_community_rating: Option<f64>,
-    pub min_critic_rating: Option<f64>,
-    pub name_starts_with: Option<String>,
-    /// Sort name before this (Plezy's "#": `NameLessThan=A`).
-    pub name_less_than: Option<String>,
-    pub name_starts_with_or_greater: Option<String>,
+    /// Check if any sort or filter requires a user_data JOIN.
+    /// The filters read the caller's user data (`ud`).
+    fn filters_need_user_data(&self) -> bool;
 
-    // User data filters
-    pub user_id: Option<Uuid>,
-    pub is_favorite: Option<bool>,
-    pub is_played: Option<bool>,
-    /// Started but not finished (`Filters=IsResumable`).
-    pub is_resumable: bool,
+    /// "Recently played" (`SortBy=DatePlayed…` descending, no user-data
+    /// filter or other user-data sort): the played items, few, are read by
+    /// date, and the rest in the order after it, each only up to the page,
+    /// instead of sorting the whole library by a joined date (owner,
+    /// 2026-11-24: 1.7 s for Finamp's recently played tracks).
+    fn played_first(&self) -> bool;
 
-    // Search
-    pub search_term: Option<String>,
-    /// Meilisearch's best matches for `search_term`, best first: these ids
-    /// instead of matching the name. `None`: the name is matched here.
-    pub ranked_ids: Option<Vec<Uuid>>,
-    /// The score tier of each of `ranked_ids` (equal scores, one tier). A
-    /// search orders by tier before the app's sort, as Jellyfin orders by its
-    /// search score first; without tiers, by Meilisearch's order.
-    pub ranked_tiers: Vec<i32>,
+    /// The ORDER BY terms after the first sort key (as `apply_sorting` writes
+    /// them), with the tiebreaker.
+    fn order_after_first(&self) -> String;
 
-    // Sorting
-    pub sort_by: Vec<String>,
-    pub sort_order: Vec<String>,
+    /// `fetch` for `played_first`: the played items by date (few, through
+    /// the user's data), then, only when the page reaches past them, the
+    /// rest in the order after DatePlayed. A recently played list rarely
+    /// does, so it never sorts the whole library (owner, 2026-11-24: one
+    /// query over both took 2.1 s).
+    async fn fetch_played_first(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error>;
 
-    // Pagination
-    pub start_index: i64,
-    pub limit: i64,
+    fn needs_user_data_join(&self) -> bool;
+
+    fn sort_column(name: &str) -> Option<&'static str>;
+
+    /// Execute the query and return matching items.
+    async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error>;
+
+    /// Count matching items (for TotalRecordCount).
+    async fn count(&self, pool: &PgPool) -> Result<i64, sqlx::Error>;
+
+    fn apply_filters(&self, qb: &mut QueryBuilder<sqlx::Postgres>);
+
+    fn apply_sorting(&self, qb: &mut QueryBuilder<sqlx::Postgres>);
 }
 
-impl Default for ItemQuery {
-    fn default() -> Self {
-        Self {
-            genres_any: None,
-            parent_id: None,
-            library_id: None,
-            recursive: false,
-            ids: Vec::new(),
-            accessible_libraries: None,
-            include_item_types: Vec::new(),
-            exclude_item_types: Vec::new(),
-            genres: Vec::new(),
-            years: Vec::new(),
-            studios: Vec::new(),
-            official_ratings: Vec::new(),
-            tags: Vec::new(),
-            person_ids: Vec::new(),
-            artist_ids: Vec::new(),
-            album_ids: Vec::new(),
-            min_community_rating: None,
-            min_critic_rating: None,
-            name_starts_with: None,
-            name_less_than: None,
-            name_starts_with_or_greater: None,
-            user_id: None,
-            is_favorite: None,
-            is_played: None,
-            is_resumable: false,
-            search_term: None,
-            ranked_ids: None,
-            ranked_tiers: Vec::new(),
-            sort_by: Vec::new(),
-            sort_order: Vec::new(),
-            start_index: 0,
-            limit: 50,
-        }
-    }
-}
-
-impl ItemQuery {
+impl ItemQuerySql for ItemQuery {
     /// Check if any sort or filter requires a user_data JOIN.
     /// The filters read the caller's user data (`ud`).
     fn filters_need_user_data(&self) -> bool {
@@ -2339,7 +2281,7 @@ impl ItemQuery {
     }
 
     /// Execute the query and return matching items.
-    pub async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+    async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
         if self.played_first() {
             return self.fetch_played_first(pool).await;
         }
@@ -2371,7 +2313,7 @@ impl ItemQuery {
     }
 
     /// Count matching items (for TotalRecordCount).
-    pub async fn count(&self, pool: &PgPool) -> Result<i64, sqlx::Error> {
+    async fn count(&self, pool: &PgPool) -> Result<i64, sqlx::Error> {
         let mut qb: QueryBuilder<sqlx::Postgres> =
             QueryBuilder::new("SELECT COUNT(*) FROM visible_media_items mi");
 
@@ -2701,6 +2643,8 @@ pub async fn added_since(
 
 #[cfg(test)]
 mod sort_key_index_tests {
+    use super::ItemQuerySql;
+
     /// Postgres uses the sort key indexes only for the very same expression.
     #[test]
     fn the_sort_key_indexes_repeat_the_query_sort_key() {

@@ -711,4 +711,113 @@ pub trait MediaItemStore {
         library_id: uuid::Uuid,
         since: chrono::DateTime<chrono::Utc>,
     ) -> impl Future<Output = DataResult<Vec<uuid::Uuid>>> + Send;
+
+    /// The page of items `query` asks for.
+    fn query(&self, query: &ItemQuery) -> impl Future<Output = DataResult<Vec<MediaItem>>> + Send;
+
+    /// How many items `query` matches in all (its page ignored).
+    fn count_query(&self, query: &ItemQuery) -> impl Future<Output = DataResult<i64>> + Send;
+}
+
+/// What a list of items asks for: scope, filters, sort and page (`GET
+/// /Items` and the lists built like it).
+pub struct ItemQuery {
+    /// `GenreIds`, as names: items in any of them. An album or artist is in
+    /// a genre when it or one of its tracks is.
+    pub genres_any: Option<Vec<String>>,
+    // Scoping
+    pub parent_id: Option<Uuid>,
+    pub library_id: Option<Uuid>,
+    pub recursive: bool,
+    pub ids: Vec<Uuid>,
+    /// Libraries the caller may see. `None` means all of them. Applied in the query so a
+    /// page is full of visible items instead of being thinned afterwards.
+    pub accessible_libraries: Option<Vec<Uuid>>,
+
+    // Type filters
+    pub include_item_types: Vec<String>,
+    pub exclude_item_types: Vec<String>,
+
+    // Metadata filters
+    pub genres: Vec<String>,
+    pub years: Vec<i32>,
+    pub studios: Vec<String>,
+    pub official_ratings: Vec<String>,
+    pub tags: Vec<String>,
+    pub person_ids: Vec<Uuid>,
+    /// MusicArtist items: their albums, the tracks on those, and any track
+    /// naming the artist.
+    pub artist_ids: Vec<Uuid>,
+    /// MusicAlbum items: their tracks, also those in disc folders.
+    pub album_ids: Vec<Uuid>,
+    pub min_community_rating: Option<f64>,
+    pub min_critic_rating: Option<f64>,
+    pub name_starts_with: Option<String>,
+    /// Sort name before this (Plezy's "#": `NameLessThan=A`).
+    pub name_less_than: Option<String>,
+    pub name_starts_with_or_greater: Option<String>,
+
+    // User data filters
+    pub user_id: Option<Uuid>,
+    pub is_favorite: Option<bool>,
+    pub is_played: Option<bool>,
+    /// Started but not finished (`Filters=IsResumable`).
+    pub is_resumable: bool,
+
+    // Search
+    pub search_term: Option<String>,
+    /// Meilisearch's best matches for `search_term`, best first: these ids
+    /// instead of matching the name. `None`: the name is matched here.
+    pub ranked_ids: Option<Vec<Uuid>>,
+    /// The score tier of each of `ranked_ids` (equal scores, one tier). A
+    /// search orders by tier before the app's sort, as Jellyfin orders by its
+    /// search score first; without tiers, by Meilisearch's order.
+    pub ranked_tiers: Vec<i32>,
+
+    // Sorting
+    pub sort_by: Vec<String>,
+    pub sort_order: Vec<String>,
+
+    // Pagination
+    pub start_index: i64,
+    pub limit: i64,
+}
+
+impl Default for ItemQuery {
+    fn default() -> Self {
+        Self {
+            genres_any: None,
+            parent_id: None,
+            library_id: None,
+            recursive: false,
+            ids: Vec::new(),
+            accessible_libraries: None,
+            include_item_types: Vec::new(),
+            exclude_item_types: Vec::new(),
+            genres: Vec::new(),
+            years: Vec::new(),
+            studios: Vec::new(),
+            official_ratings: Vec::new(),
+            tags: Vec::new(),
+            person_ids: Vec::new(),
+            artist_ids: Vec::new(),
+            album_ids: Vec::new(),
+            min_community_rating: None,
+            min_critic_rating: None,
+            name_starts_with: None,
+            name_less_than: None,
+            name_starts_with_or_greater: None,
+            user_id: None,
+            is_favorite: None,
+            is_played: None,
+            is_resumable: false,
+            search_term: None,
+            ranked_ids: None,
+            ranked_tiers: Vec::new(),
+            sort_by: Vec::new(),
+            sort_order: Vec::new(),
+            start_index: 0,
+            limit: 50,
+        }
+    }
 }
