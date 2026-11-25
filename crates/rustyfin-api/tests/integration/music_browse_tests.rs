@@ -567,6 +567,45 @@ async fn genres_of_a_music_library_are_music_genres() {
     app.cleanup().await;
 }
 
+/// Owner, 2026-11-24: "the api error". Opening a genre in Finamp fetches it by
+/// id (`/Users/{userId}/Items/{genre id}`, a trace), and Rustyfin answered
+/// 404: a genre is no stored item. Jellyfin answers the genre itself; a
+/// music genre is a MusicGenre, a film genre a Genre.
+#[tokio::test]
+async fn a_genre_opens_by_id() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", true).await;
+    let music = app.create_library("Music", "music").await;
+    let films = app.create_library("Movies", "movies").await;
+    let track = app
+        .create_media_item("Purple Hat", "Audio", music, None)
+        .await;
+    let film = app.create_media_item("Heat", "Movie", films, None).await;
+    for (id, genre) in [(track, "Electronic"), (film, "Crime")] {
+        sqlx::query("UPDATE media_items SET genres = ARRAY[$2] WHERE id = $1")
+            .bind(id)
+            .bind(genre)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+    for (genre, kind) in [("Electronic", "MusicGenre"), ("Crime", "Genre")] {
+        let id = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, genre.as_bytes()).simple();
+        for path in [format!("/Users/{user}/Items/{id}"), format!("/Items/{id}")] {
+            let (status, body) = app.get(&path, &token).await;
+            assert_eq!(status, StatusCode::OK, "{path}: {body}");
+            assert_eq!(body["Name"], genre, "{body}");
+            assert_eq!(body["Type"], kind, "{body}");
+        }
+    }
+    let nowhere = uuid::Uuid::new_v4().simple();
+    let (status, _) = app
+        .get(&format!("/Users/{user}/Items/{nowhere}"), &token)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    app.cleanup().await;
+}
+
 /// Owner, 2026-11-24: Finamp's recently played tracks took 1.7 s (a trace):
 /// `SortBy=DatePlayed,SortName` descending sorted every track in the library.
 /// Played tracks now come first by date, then the rest by name, page by page
