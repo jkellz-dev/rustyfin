@@ -24,6 +24,9 @@ pub struct ForwardAuthState {
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
+    /// The data layer over `pool` (`CLAUDE.md`, "Layers"). Transitional:
+    /// both exist while handlers move off the pool.
+    pub data: rustyfin_data::PgData,
     /// Serving a server that links this one: `pool` leaves out what links
     /// hold, and so does everything else (`link_scope`). Set by
     /// [`build_router`] for its second copy of the routes.
@@ -56,15 +59,6 @@ pub struct AppState {
     pub prefer_direct_play: bool,
 }
 
-impl AppState {
-    /// The data layer over this state's pool (the local-only one for linking
-    /// servers). Transitional: handlers move from `pool` to this, one area
-    /// at a time (`CLAUDE.md`, "Layers").
-    pub fn data(&self) -> rustyfin_data::PgData {
-        rustyfin_data::PgData::from_pool(&self.pool)
-    }
-}
-
 impl FromRef<AppState> for PgPool {
     fn from_ref(state: &AppState) -> Self {
         state.pool.clone()
@@ -79,8 +73,10 @@ impl FromRef<AppState> for PgPool {
 /// A server linking this one is served by a second copy of the routes that
 /// sees only this server's own media (`link_scope`).
 pub fn build_router(state: AppState) -> Router {
+    let local_pool = crate::link_scope::local_only_pool(&state.pool);
     let local_state = AppState {
-        pool: crate::link_scope::local_only_pool(&state.pool),
+        data: rustyfin_data::PgData::from_pool(&local_pool),
+        pool: local_pool,
         local_only: true,
         ..state.clone()
     };

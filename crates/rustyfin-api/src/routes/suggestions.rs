@@ -2,11 +2,12 @@ use axum::{
     Json,
     extract::{Query, State},
 };
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images, media_items};
+use rustyfin_data::repo::images;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
@@ -39,10 +40,11 @@ pub async fn get_suggestions(
         .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
-    let items =
-        media_items::get_random_items(&state.pool, auth.user_id, &item_types, &[], limit, offset)
-            .await
-            .map_err(ApiError::Database)?;
+    let items = state
+        .data
+        .media_items()
+        .get_random_items(auth.user_id, &item_types, &[], limit, offset)
+        .await?;
     let items = super::access::retain_accessible(&state, auth.user_id, items).await?;
 
     let total = items.len() as i32;
@@ -53,7 +55,10 @@ pub async fn get_suggestions(
 
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);

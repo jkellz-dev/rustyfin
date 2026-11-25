@@ -1,3 +1,4 @@
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use std::collections::HashMap;
 
 use axum::{
@@ -81,10 +82,11 @@ pub async fn get_next_up(
 
     // Find all series with recent activity
     let fetch_limit = start + limit + 10;
-    let active_series =
-        media_items::get_active_series(&state.pool, auth.user_id, query.parent_id, fetch_limit)
-            .await
-            .map_err(ApiError::Database)?;
+    let active_series = state
+        .data
+        .media_items()
+        .get_active_series(auth.user_id, query.parent_id, fetch_limit)
+        .await?;
 
     // The next episode of every series, in one query
     let active_ids: Vec<Uuid> = active_series
@@ -96,26 +98,27 @@ pub async fn get_next_up(
         })
         .map(|(id, _)| *id)
         .collect();
-    let mut next_episodes = media_items::get_next_episodes(&state.pool, auth.user_id, &active_ids)
-        .await
-        .map_err(ApiError::Database)?;
+    let mut next_episodes = state
+        .data
+        .media_items()
+        .get_next_episodes(auth.user_id, &active_ids)
+        .await?;
 
     // Shows the user never started come after the ones in progress, newest first,
     // unless the client asked to leave them out (DisableFirstEpisode). As in
     // Jellyfin 10.10 the date cutoff does not drop them (owner, 2026-11-15).
     if !query.disable_first_episode.unwrap_or(false) {
-        let fresh = media_items::series_never_started(
-            &state.pool,
-            auth.user_id,
-            query.parent_id,
-            fetch_limit,
-        )
-        .await
-        .map_err(ApiError::Database)?;
+        let fresh = state
+            .data
+            .media_items()
+            .series_never_started(auth.user_id, query.parent_id, fetch_limit)
+            .await?;
         next_episodes.extend(
-            media_items::get_next_episodes(&state.pool, auth.user_id, &fresh)
-                .await
-                .map_err(ApiError::Database)?,
+            state
+                .data
+                .media_items()
+                .get_next_episodes(auth.user_id, &fresh)
+                .await?,
         );
     }
     let total = next_episodes.len() as i32;
@@ -147,9 +150,11 @@ async fn find_next_for_series(
     auth: &AuthenticatedUser,
     series_id: Uuid,
 ) -> Result<Option<media_items::MediaItemRow>, ApiError> {
-    let last_watched = media_items::get_last_watched_episode(&state.pool, auth.user_id, series_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let last_watched = state
+        .data
+        .media_items()
+        .get_last_watched_episode(auth.user_id, series_id)
+        .await?;
 
     let (min_season, min_episode) = if let Some(ref ep) = last_watched {
         (ep.parent_index_number, ep.index_number)
@@ -157,15 +162,12 @@ async fn find_next_for_series(
         (None, None)
     };
 
-    media_items::get_next_episode(
-        &state.pool,
-        auth.user_id,
-        series_id,
-        min_season,
-        min_episode,
-    )
-    .await
-    .map_err(ApiError::Database)
+    state
+        .data
+        .media_items()
+        .get_next_episode(auth.user_id, series_id, min_season, min_episode)
+        .await
+        .map_err(ApiError::from)
 }
 
 async fn enrich_next_up_dtos(
@@ -177,7 +179,10 @@ async fn enrich_next_up_dtos(
 ) {
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -211,9 +216,11 @@ pub async fn get_seasons(
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, series_id).await?;
     let season_types = vec!["Season".to_string()];
-    let items = media_items::list_by_parent(&state.pool, Some(series_id), &season_types, 0, 100)
-        .await
-        .map_err(ApiError::Database)?;
+    let items = state
+        .data
+        .media_items()
+        .list_by_parent(Some(series_id), &season_types, 0, 100)
+        .await?;
 
     let total = items.len() as i32;
     let mut dtos: Vec<BaseItemDto> = items
@@ -224,7 +231,10 @@ pub async fn get_seasons(
     // Batch load images
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -236,7 +246,10 @@ pub async fn get_seasons(
     }
 
     // A season names its series; its row carries only the parent link.
-    let series = media_items::find_by_id(&state.pool, series_id)
+    let series = state
+        .data
+        .media_items()
+        .find_by_id(series_id)
         .await
         .or_log_default("media_items::find_by_id");
     if let Some(series) = series {
@@ -247,7 +260,10 @@ pub async fn get_seasons(
     }
     // Batch load child counts for seasons (they're folders)
     if !item_ids.is_empty() {
-        let counts = media_items::count_children_batch(&state.pool, &item_ids)
+        let counts = state
+            .data
+            .media_items()
+            .count_children_batch(&item_ids)
             .await
             .or_log_default("media_items::count_children_batch");
         for dto in &mut dtos {
@@ -284,10 +300,11 @@ pub async fn get_episodes(
     } else if let Some(season_number) = query.season {
         // Find the Season item by index_number under the series
         let season_types = vec!["Season".to_string()];
-        let seasons =
-            media_items::list_by_parent(&state.pool, Some(series_id), &season_types, 0, 100)
-                .await
-                .map_err(ApiError::Database)?;
+        let seasons = state
+            .data
+            .media_items()
+            .list_by_parent(Some(series_id), &season_types, 0, 100)
+            .await?;
         let season = seasons
             .iter()
             .find(|s| s.index_number == Some(season_number));
@@ -299,17 +316,19 @@ pub async fn get_episodes(
         // No season filter — get all episodes under the series (recursively)
         // First get all seasons, then query episodes from each
         let season_types = vec!["Season".to_string()];
-        let seasons =
-            media_items::list_by_parent(&state.pool, Some(series_id), &season_types, 0, 100)
-                .await
-                .map_err(ApiError::Database)?;
+        let seasons = state
+            .data
+            .media_items()
+            .list_by_parent(Some(series_id), &season_types, 0, 100)
+            .await?;
 
         // Every season's episodes in one query, season by season.
         let season_ids: Vec<Uuid> = seasons.iter().map(|s| s.id).collect();
-        let all_episodes =
-            media_items::list_by_parents(&state.pool, &season_ids, &episode_types, 500)
-                .await
-                .map_err(ApiError::Database)?;
+        let all_episodes = state
+            .data
+            .media_items()
+            .list_by_parents(&season_ids, &episode_types, 500)
+            .await?;
 
         let total = all_episodes.len() as i32;
         let mut dtos: Vec<BaseItemDto> = all_episodes
@@ -322,13 +341,16 @@ pub async fn get_episodes(
         return Ok(Json(QueryResult::new(dtos, total)));
     };
 
-    let items =
-        media_items::list_by_parent(&state.pool, Some(parent_id), &episode_types, start, limit)
-            .await
-            .map_err(ApiError::Database)?;
-    let total = media_items::count_by_parent(&state.pool, Some(parent_id), &episode_types)
-        .await
-        .map_err(ApiError::Database)?;
+    let items = state
+        .data
+        .media_items()
+        .list_by_parent(Some(parent_id), &episode_types, start, limit)
+        .await?;
+    let total = state
+        .data
+        .media_items()
+        .count_by_parent(Some(parent_id), &episode_types)
+        .await?;
 
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
@@ -360,18 +382,25 @@ pub async fn get_upcoming(
     let limit = query.limit.unwrap_or(20).min(100);
     let offset = query.start_index.unwrap_or(0);
 
-    let items = media_items::upcoming_episodes(&state.pool, query.parent_id, limit, offset)
-        .await
-        .map_err(ApiError::Database)?;
+    let items = state
+        .data
+        .media_items()
+        .upcoming_episodes(query.parent_id, limit, offset)
+        .await?;
 
-    let total = media_items::count_upcoming_episodes(&state.pool, query.parent_id)
-        .await
-        .map_err(ApiError::Database)? as i32;
+    let total = state
+        .data
+        .media_items()
+        .count_upcoming_episodes(query.parent_id)
+        .await? as i32;
 
     // Batch image loading
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     let images_map = if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         group_images_by_item(all_images)
@@ -403,7 +432,10 @@ async fn enrich_episode_dtos(
 ) {
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);

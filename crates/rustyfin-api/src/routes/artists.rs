@@ -4,6 +4,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -50,9 +51,11 @@ pub async fn get_artist_by_name(
     auth: AuthenticatedUser,
     Path(name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    let artist = media_items::find_by_name_and_type(&state.pool, &name, "MusicArtist")
-        .await
-        .map_err(ApiError::Database)?
+    let artist = state
+        .data
+        .media_items()
+        .find_by_name_and_type(&name, "MusicArtist")
+        .await?
         .ok_or(ApiError::NotFound)?;
     super::items::get_item_by_id(State(state), auth, Path(artist.id)).await
 }
@@ -101,17 +104,25 @@ async fn get_artists_inner(
         album_artists_only,
         ranked: ranked.as_deref(),
     };
-    let (rows, total) = media_items::list_artists(&state.pool, &filter, start, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let (rows, total) = state
+        .data
+        .media_items()
+        .list_artists(&filter, start, limit)
+        .await?;
 
     let item_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-    let all_images = images_repo::list_by_items(&state.pool, &item_ids)
+    let all_images = state
+        .data
+        .images()
+        .list_by_items(&item_ids)
         .await
         .or_log_default("images_repo::list_by_items");
     let images_map = group_images_by_item(all_images);
 
-    let counts = media_items::count_albums_and_songs_by_artists(&state.pool, &item_ids)
+    let counts = state
+        .data
+        .media_items()
+        .count_albums_and_songs_by_artists(&item_ids)
         .await
         .or_log_default("media_items::count_albums_and_songs_by_artists");
     let mut dtos = Vec::with_capacity(rows.len());
@@ -142,9 +153,11 @@ pub async fn get_artist_image(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     // Artists are media items -- look up by name
-    let artist = media_items::find_by_name_and_type(&state.pool, &name, "MusicArtist")
-        .await
-        .map_err(ApiError::Database)?;
+    let artist = state
+        .data
+        .media_items()
+        .find_by_name_and_type(&name, "MusicArtist")
+        .await?;
 
     let entity_id = match artist {
         Some(a) => a.id,
@@ -164,9 +177,11 @@ pub async fn get_artist_image_by_index(
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let artist = media_items::find_by_name_and_type(&state.pool, &name, "MusicArtist")
-        .await
-        .map_err(ApiError::Database)?;
+    let artist = state
+        .data
+        .media_items()
+        .find_by_name_and_type(&name, "MusicArtist")
+        .await?;
 
     let entity_id = match artist {
         Some(a) => a.id,

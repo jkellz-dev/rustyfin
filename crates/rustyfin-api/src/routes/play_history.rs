@@ -8,7 +8,8 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{media_items, play_history};
+use rustyfin_data::repo::play_history;
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlayHistoryStore};
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -36,7 +37,7 @@ pub(crate) async fn record(
     position_ticks: Option<i64>,
     play_method: Option<&str>,
 ) {
-    let Ok(Some(item)) = media_items::find_by_id(&state.pool, item_id).await else {
+    let Ok(Some(item)) = state.data.media_items().find_by_id(item_id).await else {
         return;
     };
     let parent = match item.item_type.as_str() {
@@ -63,7 +64,7 @@ pub(crate) async fn record(
         paused,
         position_ticks,
     };
-    if let Err(e) = play_history::report(&state.pool, &report).await {
+    if let Err(e) = state.data.play_history().report(&report).await {
         tracing::warn!("Play history: {e}");
     }
 }
@@ -77,7 +78,12 @@ pub(crate) async fn record_stop(
     position_ticks: Option<i64>,
 ) {
     let key = play_key(auth.session_id, play_session_id, item_id);
-    if let Err(e) = play_history::stop(&state.pool, auth.user_id, &key, position_ticks).await {
+    if let Err(e) = state
+        .data
+        .play_history()
+        .stop(auth.user_id, &key, position_ticks)
+        .await
+    {
         tracing::warn!("Play history: {e}");
     }
 }
@@ -119,9 +125,7 @@ pub async fn get_play_stats(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<PlayStats>, ApiError> {
     may_see(&auth, user_id)?;
-    let rows = play_history::stats(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.play_history().stats(user_id).await?;
     let total_ms: i64 = rows.iter().map(|r| r.1).sum();
     Ok(Json(PlayStats {
         total_minutes: minutes(total_ms),
@@ -179,7 +183,10 @@ async fn pictures(
     item_ids: &[Uuid],
 ) -> std::collections::HashMap<Uuid, (Uuid, String)> {
     use super::items;
-    let rows = media_items::find_by_ids(&state.pool, item_ids)
+    let rows = state
+        .data
+        .media_items()
+        .find_by_ids(item_ids)
         .await
         .unwrap_or_default();
     let mut dtos: Vec<_> = rows
@@ -187,7 +194,10 @@ async fn pictures(
         .map(|row| items::media_item_to_dto(row, &state.server_id))
         .collect();
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-    let images = rustyfin_data::repo::images::list_by_items(&state.pool, &ids)
+    let images = state
+        .data
+        .images()
+        .list_by_items(&ids)
         .await
         .unwrap_or_default();
     let by_item = items::group_images_by_item(images);
@@ -244,9 +254,11 @@ pub async fn get_play_history(
         min_date: q.min_date,
         max_date: q.max_date,
     };
-    let (rows, total) = play_history::list(&state.pool, user_id, &filter, start, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let (rows, total) = state
+        .data
+        .play_history()
+        .list(user_id, &filter, start, limit)
+        .await?;
     let mut ids: Vec<Uuid> = rows.iter().filter_map(|r| r.item_id).collect();
     ids.sort();
     ids.dedup();

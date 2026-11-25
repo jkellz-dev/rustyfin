@@ -5,7 +5,8 @@
 use axum::Json;
 use axum::extract::{Query, State};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{catalog, user_library_access, users};
+use rustyfin_data::repo::catalog;
+use rustyfin_models::data::{CatalogStore, Data, LibraryAccessStore, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -57,9 +58,11 @@ pub async fn catalog(
     auth: AuthenticatedUser,
     Query(q): Query<CatalogQuery>,
 ) -> Result<Json<CatalogPage>, ApiError> {
-    let user = users::find_by_id(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .data
+        .users()
+        .find_by_id(auth.user_id)
+        .await?
         .ok_or(ApiError::Unauthorized)?;
     if !user.may_link {
         return Err(ApiError::Forbidden);
@@ -78,18 +81,21 @@ pub async fn catalog(
         None => None,
     };
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let libraries = user_library_access::get_accessible_library_ids(&state.pool, user.id)
-        .await
-        .map_err(ApiError::Database)?;
-    let page = catalog::changes(
-        &state.pool,
-        libraries.as_deref(),
-        since.as_deref(),
-        after.as_ref(),
-        limit,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let libraries = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(user.id)
+        .await?;
+    let page = state
+        .data
+        .catalog()
+        .changes(
+            libraries.as_deref(),
+            since.as_deref(),
+            after.as_ref(),
+            limit,
+        )
+        .await?;
     Ok(Json(CatalogPage {
         more: page.next.is_some(),
         items: page

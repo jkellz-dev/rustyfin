@@ -2,11 +2,12 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images, media_items};
+use rustyfin_data::repo::images;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
@@ -30,14 +31,18 @@ pub async fn get_similar(
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let limit = query.limit.unwrap_or(12).min(50);
 
-    let source = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let source = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
-    let items = media_items::find_similar(&state.pool, item_id, &source.item_type, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let items = state
+        .data
+        .media_items()
+        .find_similar(item_id, &source.item_type, limit)
+        .await?;
 
     let items = super::access::retain_accessible(&state, auth.user_id, items).await?;
 
@@ -49,7 +54,10 @@ pub async fn get_similar(
 
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -69,17 +77,21 @@ pub async fn get_recommendations(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
-    let recent = media_items::get_active_series_or_movies(&state.pool, auth.user_id, "Movie", 5)
-        .await
-        .map_err(ApiError::Database)?;
+    let recent = state
+        .data
+        .media_items()
+        .get_active_series_or_movies(auth.user_id, "Movie", 5)
+        .await?;
 
     let mut all_similar = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
     for movie_id in recent {
-        let similar = media_items::find_similar(&state.pool, movie_id, "Movie", 10)
-            .await
-            .map_err(ApiError::Database)?;
+        let similar = state
+            .data
+            .media_items()
+            .find_similar(movie_id, "Movie", 10)
+            .await?;
         for item in similar {
             if seen_ids.insert(item.id) {
                 all_similar.push(item);
@@ -97,7 +109,10 @@ pub async fn get_recommendations(
 
     let item_ids: Vec<Uuid> = all_similar.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);

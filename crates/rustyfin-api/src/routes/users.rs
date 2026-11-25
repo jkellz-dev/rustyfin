@@ -4,10 +4,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
+use rustyfin_models::data::{ActivityLogStore, Data, LibraryAccessStore, UserStore};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::{activity_log, user_library_access, users};
+use rustyfin_data::repo::{user_library_access, users};
 use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, UserPolicy};
 
 use crate::error::ApiError;
@@ -119,9 +120,11 @@ pub async fn update_user_configuration(
         enable_next_episode_auto_play: config.enable_next_episode_auto_play,
         configuration: &blob,
     };
-    if !users::update_settings(&state.pool, user_id, &settings)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .users()
+        .update_settings(user_id, &settings)
+        .await?
     {
         return Err(ApiError::NotFound);
     }
@@ -143,9 +146,7 @@ pub async fn list_users(
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<UserDto>>, ApiError> {
     let ldap_enabled = state.ldap_config.is_some();
-    let rows = users::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.users().list_all().await?;
     let mut dtos: Vec<UserDto> = rows
         .iter()
         .map(|r| user_row_to_dto(r, &state.server_id, ldap_enabled))
@@ -164,9 +165,11 @@ pub async fn get_current_user(
     auth: AuthenticatedUser,
 ) -> Result<Json<UserDto>, ApiError> {
     let ldap_enabled = state.ldap_config.is_some();
-    let user = users::find_by_id(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .data
+        .users()
+        .find_by_id(auth.user_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     let mut dto = user_row_to_dto(&user, &state.server_id, ldap_enabled);
     populate_enabled_folders(&state.pool, &mut dto).await;
@@ -180,9 +183,11 @@ pub async fn get_user_by_id(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserDto>, ApiError> {
     let ldap_enabled = state.ldap_config.is_some();
-    let user = users::find_by_id(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .data
+        .users()
+        .find_by_id(user_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     let mut dto = user_row_to_dto(&user, &state.server_id, ldap_enabled);
     populate_enabled_folders(&state.pool, &mut dto).await;
@@ -200,9 +205,7 @@ pub async fn get_public_users(
         return Ok(Json(Vec::new()));
     }
 
-    let rows = users::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.users().list_all().await?;
     let dtos: Vec<UserDto> = rows
         .iter()
         .map(|r| user_row_to_dto(r, &state.server_id, true))
@@ -219,23 +222,23 @@ pub async fn delete_user(
     if admin.0.user_id == user_id {
         return Err(ApiError::BadRequest("Cannot delete yourself".to_string()));
     }
-    let deleted = users::delete(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = state.data.users().delete(user_id).await?;
     if !deleted {
         return Err(ApiError::NotFound);
     }
 
-    let _ = activity_log::insert(
-        &state.pool,
-        "User deleted",
-        None,
-        "UserDeleted",
-        "Informational",
-        Some(admin.0.user_id),
-        None,
-    )
-    .await;
+    let _ = state
+        .data
+        .activity_log()
+        .insert(
+            "User deleted",
+            None,
+            "UserDeleted",
+            "Informational",
+            Some(admin.0.user_id),
+            None,
+        )
+        .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -248,14 +251,11 @@ pub async fn update_user_policy(
     Path(user_id): Path<Uuid>,
     Json(req): Json<UpdateUserPolicyRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let updated = users::update_policy(
-        &state.pool,
-        user_id,
-        req.is_administrator,
-        req.enable_all_folders,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let updated = state
+        .data
+        .users()
+        .update_policy(user_id, req.is_administrator, req.enable_all_folders)
+        .await?;
     if !updated {
         return Err(ApiError::NotFound);
     }
@@ -266,9 +266,11 @@ pub async fn update_user_policy(
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
-    user_library_access::set_enabled_libraries(&state.pool, user_id, &lib_ids)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .data
+        .user_library_access()
+        .set_enabled_libraries(user_id, &lib_ids)
+        .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -282,9 +284,11 @@ pub async fn get_user_image(
         return Err(ApiError::NotFound);
     };
 
-    let user = users::find_by_id(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .data
+        .users()
+        .find_by_id(user_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     let url = template

@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
 };
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items;
+use rustyfin_models::data::{Data, MediaItemStore};
 use rustyfin_models::dto::lyrics::{LyricDto, LyricLineDto, LyricMetadata};
 use rustyfin_models::dto::query_result::QueryResult;
 use uuid::Uuid;
@@ -21,7 +21,10 @@ pub async fn get_lyrics(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<LyricDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let item = media_items::find_by_id(&state.pool, item_id)
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
         .await?
         .ok_or(ApiError::NotFound)?;
     if item.item_type != "Audio" {

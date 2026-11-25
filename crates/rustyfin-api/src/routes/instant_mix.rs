@@ -6,11 +6,12 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, ImageStore, LibraryAccessStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images, media_items, user_library_access};
+use rustyfin_data::repo::images;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use super::items::{
@@ -71,9 +72,7 @@ pub async fn from_genre_id(
     Query(query): Query<MixQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let id = query.id.ok_or(ApiError::NotFound)?;
-    let names = media_items::distinct_genres(&state.pool, None)
-        .await
-        .map_err(ApiError::Database)?;
+    let names = state.data.media_items().distinct_genres(None).await?;
     let name = names
         .into_iter()
         .find(|n| Uuid::new_v5(&Uuid::NAMESPACE_OID, n.as_bytes()) == id)
@@ -88,9 +87,7 @@ async fn seeded_by_item(
     query: &MixQuery,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     super::access::require_item_access(state, auth.user_id, item_id).await?;
-    let genres = media_items::mix_seed_genres(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let genres = state.data.media_items().mix_seed_genres(item_id).await?;
     mix(state, auth, &genres, query).await
 }
 
@@ -105,15 +102,19 @@ async fn mix(
         .filter(|l| *l > 0)
         .unwrap_or(DEFAULT_LIMIT)
         .min(1000);
-    let allowed = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let allowed = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
     let rows = if genres.is_empty() {
         Vec::new()
     } else {
-        media_items::instant_mix(&state.pool, genres, allowed.as_deref(), limit)
-            .await
-            .map_err(ApiError::Database)?
+        state
+            .data
+            .media_items()
+            .instant_mix(genres, allowed.as_deref(), limit)
+            .await?
     };
     let mut dtos: Vec<BaseItemDto> = rows
         .iter()
@@ -121,7 +122,10 @@ async fn mix(
         .collect();
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     if !ids.is_empty() {
-        let all = images::list_by_items(&state.pool, &ids)
+        let all = state
+            .data
+            .images()
+            .list_by_items(&ids)
             .await
             .or_log_default("images::list_by_items");
         let by_item = group_images_by_item(all);

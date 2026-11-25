@@ -9,6 +9,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AdminUser;
 use rustyfin_data::repo::sessions;
+use rustyfin_models::data::{Data, SessionStore};
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -84,9 +85,7 @@ pub async fn get_devices(
     _admin: AdminUser,
     Query(q): Query<DevicesQuery>,
 ) -> Result<Json<QueryResult<DeviceInfo>>, ApiError> {
-    let rows = sessions::devices(&state.pool, q.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.sessions().devices(q.user_id).await?;
     let items = device_infos(&state, rows).await;
     let total = items.len() as i32;
     Ok(Json(QueryResult::new(items, total)))
@@ -105,9 +104,7 @@ pub struct DeviceIdQuery {
 }
 
 async fn one_device(state: &AppState, id: &str) -> Result<DeviceInfo, ApiError> {
-    let rows = sessions::devices(&state.pool, None)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.sessions().devices(None).await?;
     let rows: Vec<_> = rows
         .into_iter()
         .filter(|d| d.device_id == id)

@@ -5,10 +5,14 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use rustyfin_models::data::{
+    ActivityLogStore, CollectionStore, Data, LibraryAccessStore, LibraryStore, LinkStore,
+    MediaItemStore, UserStore,
+};
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
-use rustyfin_data::repo::{activity_log, libraries, user_library_access};
+use rustyfin_data::repo::{activity_log, libraries};
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
@@ -38,9 +42,11 @@ pub async fn update_scan_schedule(
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
     Json(req): Json<UpdateScanScheduleRequest>,
 ) -> Result<StatusCode, ApiError> {
-    libraries::update_scan_schedule(&state.pool, id, req.scan_schedule.as_deref())
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .libraries()
+        .update_scan_schedule(id, req.scan_schedule.as_deref())
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     Ok(StatusCode::NO_CONTENT)
@@ -83,10 +89,12 @@ async fn all_views(
         .map(|lib| collection_folder_dto(lib, &state.server_id))
         .collect();
     for dto in &mut dtos {
-        let count =
-            rustyfin_data::repo::media_items::count_top_level_by_library(&state.pool, dto.id, &[])
-                .await
-                .or_log_default("media_items::count_top_level_by_library");
+        let count = state
+            .data
+            .media_items()
+            .count_top_level_by_library(dto.id, &[])
+            .await
+            .or_log_default("media_items::count_top_level_by_library");
         dto.child_count = Some(count as i32);
     }
     let collections = visible_collection_count(&state, auth.user_id).await?;
@@ -115,9 +123,7 @@ pub async fn get_physical_paths(
     State(state): State<AppState>,
     _auth: AdminUser,
 ) -> Result<Json<Vec<String>>, ApiError> {
-    let libs = libraries::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let libs = state.data.libraries().list_all().await?;
     Ok(Json(libs.into_iter().flat_map(|l| l.paths).collect()))
 }
 
@@ -137,12 +143,12 @@ pub async fn get_grouping_options(
     auth: AuthenticatedUser,
     axum::extract::Path(_user_id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<Vec<NameGuidPair>>, ApiError> {
-    let libs = libraries::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let libs = state.data.libraries().list_all().await?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
     Ok(Json(
         libs.into_iter()
             .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
@@ -206,12 +212,17 @@ pub(crate) async fn visible_collection_count(
     state: &AppState,
     user_id: uuid::Uuid,
 ) -> Result<i64, ApiError> {
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(user_id)
+        .await?;
+    state
+        .data
+        .collections()
+        .count_visible(accessible.as_deref())
         .await
-        .map_err(ApiError::Database)?;
-    rustyfin_data::repo::collections::count_visible(&state.pool, accessible.as_deref())
-        .await
-        .map_err(ApiError::Database)
+        .map_err(ApiError::from)
 }
 
 /// The Collections view: a virtual library of every collection the user may
@@ -250,10 +261,12 @@ pub(crate) async fn visible_library_folder(
         return Ok(None);
     };
     let mut dto = collection_folder_dto(&lib, &state.server_id);
-    let count =
-        rustyfin_data::repo::media_items::count_top_level_by_library(&state.pool, lib.id, &[])
-            .await
-            .or_log_default("media_items::count_top_level_by_library");
+    let count = state
+        .data
+        .media_items()
+        .count_top_level_by_library(lib.id, &[])
+        .await
+        .or_log_default("media_items::count_top_level_by_library");
     dto.child_count = Some(count as i32);
     Ok(Some(dto))
 }
@@ -262,16 +275,14 @@ async fn visible_libraries(
     state: &AppState,
     user_id: uuid::Uuid,
 ) -> Result<Vec<libraries::LibraryRow>, ApiError> {
-    let libs = libraries::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let libs = state.data.libraries().list_all().await?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(user_id)
+        .await?;
     // A library made for a friend's, while their server is down: hidden.
-    let offline = rustyfin_data::repo::links::offline_ids(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let offline = state.data.links().offline_ids().await?;
     Ok(libs
         .into_iter()
         .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
@@ -296,9 +307,11 @@ pub async fn get_root_folder_legacy(
     auth: AuthenticatedUser,
     axum::extract::Path(user_id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    rustyfin_data::repo::users::find_by_id(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .users()
+        .find_by_id(user_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     Ok(Json(root_folder_dto(&state, auth.user_id).await?))
 }
@@ -343,9 +356,7 @@ pub async fn get_virtual_folders(
     State(state): State<AppState>,
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<VirtualFolderInfo>>, ApiError> {
-    let libs = libraries::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let libs = state.data.libraries().list_all().await?;
 
     let scanning = state.scan_in_flight.read().await.clone();
     // The linked servers each library syncs (Rustyfin's own).
@@ -440,16 +451,18 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
 
     let pool = state.pool.clone();
 
-    let _ = activity_log::insert(
-        &state.pool,
-        "Library scan started",
-        None,
-        "TaskStarted",
-        "Informational",
-        None,
-        None,
-    )
-    .await;
+    let _ = state
+        .data
+        .activity_log()
+        .insert(
+            "Library scan started",
+            None,
+            "TaskStarted",
+            "Informational",
+            None,
+            None,
+        )
+        .await;
 
     let search_service = state.search_service.clone();
     let scan_in_flight = state.scan_in_flight.clone();
@@ -512,15 +525,15 @@ pub async fn refresh_library(
     axum::extract::Query(query): axum::extract::Query<RefreshLibraryQuery>,
 ) -> Result<StatusCode, ApiError> {
     let libs = if let Some(id) = query.id {
-        let lib = libraries::find_by_id(&state.pool, id)
-            .await
-            .map_err(ApiError::Database)?
+        let lib = state
+            .data
+            .libraries()
+            .find_by_id(id)
+            .await?
             .ok_or(ApiError::NotFound)?;
         vec![lib]
     } else {
-        libraries::list_all(&state.pool)
-            .await
-            .map_err(ApiError::Database)?
+        state.data.libraries().list_all().await?
     };
 
     start_scans(&state, libs).await;
@@ -547,30 +560,36 @@ pub async fn update_virtual_folder(
         ));
     }
 
-    let before = libraries::find_by_id(&state.pool, query.id)
-        .await
-        .map_err(ApiError::Database)?
+    let before = state
+        .data
+        .libraries()
+        .find_by_id(query.id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     refuse_if_linked(&before)?;
-    let lib = libraries::update(&state.pool, query.id, &req.name, &req.paths)
-        .await
-        .map_err(ApiError::Database)?
+    let lib = state
+        .data
+        .libraries()
+        .update(query.id, &req.name, &req.paths)
+        .await?
         .ok_or(ApiError::NotFound)?;
     // New folders mean new media: scan, as Jellyfin does after a path change.
     if before.paths != lib.paths {
         start_scans(&state, vec![lib.clone()]).await;
     }
 
-    let _ = activity_log::insert(
-        &state.pool,
-        "Library updated",
-        Some(&req.name),
-        "LibraryUpdated",
-        "Informational",
-        None,
-        None,
-    )
-    .await;
+    let _ = state
+        .data
+        .activity_log()
+        .insert(
+            "Library updated",
+            Some(&req.name),
+            "LibraryUpdated",
+            "Informational",
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(folder_info(lib)))
 }
@@ -592,16 +611,11 @@ pub async fn delete_virtual_folder(
     } else {
         return Err(ApiError::BadRequest("name or id is required".to_string()));
     };
-    if let Some(lib) = libraries::find_by_id(&state.pool, id)
-        .await
-        .map_err(ApiError::Database)?
-    {
+    if let Some(lib) = state.data.libraries().find_by_id(id).await? {
         refuse_if_linked(&lib)?;
     }
 
-    let deleted = libraries::delete(&state.pool, id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = state.data.libraries().delete(id).await?;
     if !deleted {
         return Err(ApiError::NotFound);
     }
@@ -775,9 +789,11 @@ pub struct UpdateLibraryOptionsRequest {
 }
 
 async fn find_named(state: &AppState, name: &str) -> Result<libraries::LibraryRow, ApiError> {
-    libraries::find_by_name(&state.pool, name)
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .libraries()
+        .find_by_name(name)
+        .await?
         .ok_or(ApiError::NotFound)
 }
 
@@ -842,11 +858,7 @@ pub async fn create_virtual_folder(
         }
     }
 
-    if libraries::find_by_name(&state.pool, &name)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    if state.data.libraries().find_by_name(&name).await?.is_some() {
         return Err(ApiError::Conflict(format!(
             "a library named '{name}' already exists"
         )));
@@ -854,10 +866,11 @@ pub async fn create_virtual_folder(
 
     let options_json = serde_json::to_value(&options)
         .map_err(|e| ApiError::Internal(format!("serialize options: {e}")))?;
-    let lib =
-        libraries::create_with_options(&state.pool, &name, &collection_type, &paths, &options_json)
-            .await
-            .map_err(ApiError::Database)?;
+    let lib = state
+        .data
+        .libraries()
+        .create_with_options(&name, &collection_type, &paths, &options_json)
+        .await?;
 
     log_library_event(&state, "Library created", &name, "LibraryCreated").await;
     if query_flag(&pairs, "RefreshLibrary") {
@@ -867,25 +880,22 @@ pub async fn create_virtual_folder(
 }
 
 async fn log_library_event(state: &AppState, message: &str, name: &str, kind: &str) {
-    let _ = activity_log::insert(
-        &state.pool,
-        message,
-        Some(name),
-        kind,
-        "Informational",
-        None,
-        None,
-    )
-    .await;
+    let _ = state
+        .data
+        .activity_log()
+        .insert(message, Some(name), kind, "Informational", None, None)
+        .await;
 }
 
 async fn create_from_json(
     state: &AppState,
     req: CreateLibraryRequest,
 ) -> Result<Json<VirtualFolderInfo>, ApiError> {
-    let lib = libraries::create(&state.pool, &req.name, &req.collection_type, &req.paths)
-        .await
-        .map_err(ApiError::Database)?;
+    let lib = state
+        .data
+        .libraries()
+        .create(&req.name, &req.collection_type, &req.paths)
+        .await?;
     log_library_event(state, "Library created", &req.name, "LibraryCreated").await;
     Ok(Json(folder_info(lib)))
 }
@@ -901,9 +911,7 @@ pub async fn rename_virtual_folder(
 
     let lib = find_named(&state, name).await?;
     refuse_if_linked(&lib)?;
-    if let Some(other) = libraries::find_by_name(&state.pool, new_name)
-        .await
-        .map_err(ApiError::Database)?
+    if let Some(other) = state.data.libraries().find_by_name(new_name).await?
         && other.id != lib.id
     {
         return Err(ApiError::Conflict(format!(
@@ -911,9 +919,11 @@ pub async fn rename_virtual_folder(
         )));
     }
 
-    libraries::rename(&state.pool, lib.id, new_name)
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .libraries()
+        .rename(lib.id, new_name)
+        .await?
         .ok_or(ApiError::NotFound)?;
     log_library_event(&state, "Library renamed", new_name, "LibraryUpdated").await;
     Ok(StatusCode::NO_CONTENT)
@@ -949,9 +959,11 @@ pub async fn add_media_path(
 
     let mut paths = lib.paths.clone();
     paths.push(path.to_string());
-    libraries::set_paths(&state.pool, lib.id, &paths)
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .libraries()
+        .set_paths(lib.id, &paths)
+        .await?
         .ok_or(ApiError::NotFound)?;
     log_library_event(&state, "Library path added", &lib.name, "LibraryUpdated").await;
     Ok(StatusCode::NO_CONTENT)
@@ -994,9 +1006,11 @@ pub async fn remove_media_path(
     }
 
     let remaining: Vec<String> = lib.paths.iter().filter(|p| *p != path).cloned().collect();
-    libraries::set_paths(&state.pool, lib.id, &remaining)
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .libraries()
+        .set_paths(lib.id, &remaining)
+        .await?
         .ok_or(ApiError::NotFound)?;
     log_library_event(&state, "Library path removed", &lib.name, "LibraryUpdated").await;
     Ok(StatusCode::NO_CONTENT)
@@ -1010,9 +1024,11 @@ pub async fn update_library_options(
 ) -> Result<StatusCode, ApiError> {
     let options = serde_json::to_value(&req.library_options)
         .map_err(|e| ApiError::Internal(format!("serialize options: {e}")))?;
-    let lib = libraries::set_options(&state.pool, req.id, &options)
-        .await
-        .map_err(ApiError::Database)?
+    let lib = state
+        .data
+        .libraries()
+        .set_options(req.id, &options)
+        .await?
         .ok_or(ApiError::NotFound)?;
     log_library_event(
         &state,

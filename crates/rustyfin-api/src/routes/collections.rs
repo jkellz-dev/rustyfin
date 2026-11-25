@@ -2,11 +2,11 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{CollectionStore, Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::collections;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -42,8 +42,7 @@ pub async fn create_collection(
     .bind(&name)
     .bind(query.parent_id)
     .execute(&state.pool)
-    .await
-    .map_err(ApiError::Database)?;
+    .await?;
 
     // Add initial items
     if let Some(ref ids_str) = query.ids {
@@ -52,7 +51,7 @@ pub async fn create_collection(
             .filter_map(|s| s.trim().parse().ok())
             .collect();
         if !item_ids.is_empty() {
-            let _ = collections::add_items(&state.pool, id, &item_ids).await;
+            let _ = state.data.collections().add_items(id, &item_ids).await;
         }
     }
 
@@ -74,9 +73,11 @@ pub async fn add_collection_items(
         .collect();
 
     if !ids.is_empty() {
-        collections::add_items(&state.pool, collection_id, &ids)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .collections()
+            .add_items(collection_id, &ids)
+            .await?;
     }
 
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -97,9 +98,11 @@ pub async fn remove_collection_items(
         .collect();
 
     if !ids.is_empty() {
-        collections::remove_items(&state.pool, collection_id, &ids)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .collections()
+            .remove_items(collection_id, &ids)
+            .await?;
     }
 
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -113,20 +116,14 @@ pub async fn get_item_collections(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<rustyfin_models::dto::QueryResult<rustyfin_models::dto::BaseItemDto>>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ids = collections::list_containing(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
-    let mut rows = rustyfin_data::repo::media_items::find_by_ids(&state.pool, &ids)
-        .await
-        .map_err(ApiError::Database)?;
+    let ids = state.data.collections().list_containing(item_id).await?;
+    let mut rows = state.data.media_items().find_by_ids(&ids).await?;
     rows.sort_by(|a, b| a.sort_name.cmp(&b.sort_name).then(a.name.cmp(&b.name)));
     let mut dtos: Vec<_> = rows
         .iter()
         .map(|row| super::items::media_item_to_dto(row, &state.server_id))
         .collect();
-    let images = rustyfin_data::repo::images::list_by_items(&state.pool, &ids)
-        .await
-        .map_err(ApiError::Database)?;
+    let images = state.data.images().list_by_items(&ids).await?;
     let by_item = super::items::group_images_by_item(images);
     for dto in &mut dtos {
         if let Some(item_images) = by_item.get(&dto.id) {

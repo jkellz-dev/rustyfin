@@ -383,6 +383,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let state = AppState {
+        data: rustyfin_data::PgData::from_pool(&db_pool),
         pool: db_pool,
         local_only: false,
         server_id,

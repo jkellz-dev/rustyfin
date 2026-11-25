@@ -4,11 +4,11 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::Response,
 };
+use rustyfin_models::data::{Data, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items;
 use rustyfin_media::streaming;
 
 use crate::error::ApiError;
@@ -95,9 +95,11 @@ pub async fn download_item(
 ) -> Result<Response, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let mut response = serve_item_file(&state, item_id, &headers).await?;
-    let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     let name = item
         .path
@@ -159,9 +161,11 @@ pub async fn head_stream_container(
 }
 
 async fn head_stream_inner(state: &AppState, item_id: Uuid) -> Result<Response, ApiError> {
-    let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     if item.link_id.is_some() {
         let kind = mime_from_path(&format!(".{}", item.container.as_deref().unwrap_or("")));
@@ -193,9 +197,11 @@ pub(crate) async fn serve_item_file(
     item_id: Uuid,
     headers: &HeaderMap,
 ) -> Result<Response, ApiError> {
-    let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     if item.link_id.is_some() {

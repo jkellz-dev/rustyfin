@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlaylistStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -93,27 +94,33 @@ pub async fn create_playlist(
     let name = body.name.unwrap_or_else(|| "New Playlist".to_string());
     let media_type = body.media_type.as_deref().unwrap_or("Video");
 
-    let playlist = playlists::create(&state.pool, &name, auth.user_id, media_type)
-        .await
-        .map_err(ApiError::Database)?;
+    let playlist = state
+        .data
+        .playlists()
+        .create(&name, auth.user_id, media_type)
+        .await?;
 
     // Add initial items if provided
     if let Some(ref ids) = body.ids {
         let ids = ids.ids();
         if !ids.is_empty() {
-            let _ = playlists::add_items(&state.pool, playlist.id, &ids).await;
+            let _ = state.data.playlists().add_items(playlist.id, &ids).await;
         }
     }
     if let Some(ref users) = body.users {
         let shares: Vec<(Uuid, bool)> = users.iter().map(|u| (u.user_id, u.can_edit)).collect();
-        playlists::replace_shares(&state.pool, playlist.id, &shares)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .playlists()
+            .replace_shares(playlist.id, &shares)
+            .await?;
     }
     if body.is_public == Some(true) {
-        playlists::set_open_access(&state.pool, playlist.id, true)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .playlists()
+            .set_open_access(playlist.id, true)
+            .await?;
     }
 
     Ok(Json(serde_json::json!({ "Id": playlist.id })))
@@ -125,9 +132,11 @@ pub async fn get_playlist_items(
     Path(playlist_id): Path<Uuid>,
     Query(query): Query<PlaylistItemsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    if !playlists::can_access(&state.pool, playlist_id, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_access(playlist_id, auth.user_id)
+        .await?
     {
         return Err(ApiError::Forbidden);
     }
@@ -135,21 +144,24 @@ pub async fn get_playlist_items(
     let limit = query.limit.unwrap_or(100).min(1000);
     let offset = query.start_index.unwrap_or(0);
 
-    let entries = playlists::list_items(&state.pool, playlist_id, limit, offset)
-        .await
-        .map_err(ApiError::Database)?;
+    let entries = state
+        .data
+        .playlists()
+        .list_items(playlist_id, limit, offset)
+        .await?;
 
     let item_ids: Vec<Uuid> = entries.iter().map(|e| e.item_id).collect();
     let mut dtos = Vec::with_capacity(entries.len());
 
     // The items in one query, then in playlist order.
-    let found: std::collections::HashMap<Uuid, media_items::MediaItemRow> =
-        media_items::find_by_ids(&state.pool, &item_ids)
-            .await
-            .map_err(ApiError::Database)?
-            .into_iter()
-            .map(|item| (item.id, item))
-            .collect();
+    let found: std::collections::HashMap<Uuid, media_items::MediaItemRow> = state
+        .data
+        .media_items()
+        .find_by_ids(&item_ids)
+        .await?
+        .into_iter()
+        .map(|item| (item.id, item))
+        .collect();
     for entry in &entries {
         if let Some(item) = found.get(&entry.item_id) {
             let mut dto = media_item_to_dto(item, &state.server_id);
@@ -160,7 +172,10 @@ pub async fn get_playlist_items(
 
     // Batch load images
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -183,9 +198,11 @@ pub async fn add_playlist_items(
     Path(playlist_id): Path<Uuid>,
     Query(query): Query<ItemIdsQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_edit(playlist_id, auth.user_id)
+        .await?
     {
         return Err(ApiError::Forbidden);
     }
@@ -199,9 +216,7 @@ pub async fn add_playlist_items(
         .collect();
 
     if !ids.is_empty() {
-        playlists::add_items(&state.pool, playlist_id, &ids)
-            .await
-            .map_err(ApiError::Database)?;
+        state.data.playlists().add_items(playlist_id, &ids).await?;
     }
 
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -213,9 +228,11 @@ pub async fn remove_playlist_items(
     Path(playlist_id): Path<Uuid>,
     Query(query): Query<ItemIdsQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_edit(playlist_id, auth.user_id)
+        .await?
     {
         return Err(ApiError::Forbidden);
     }
@@ -229,9 +246,7 @@ pub async fn remove_playlist_items(
         .collect();
 
     if !entry_ids.is_empty() {
-        playlists::remove_items(&state.pool, &entry_ids)
-            .await
-            .map_err(ApiError::Database)?;
+        state.data.playlists().remove_items(&entry_ids).await?;
     }
 
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -242,16 +257,20 @@ pub async fn move_playlist_item(
     auth: AuthenticatedUser,
     Path((playlist_id, item_id, new_index)): Path<(Uuid, Uuid, i32)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_edit(playlist_id, auth.user_id)
+        .await?
     {
         return Err(ApiError::Forbidden);
     }
 
-    playlists::move_item(&state.pool, playlist_id, item_id, new_index)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .data
+        .playlists()
+        .move_item(playlist_id, item_id, new_index)
+        .await?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -263,13 +282,17 @@ async fn visible_playlist(
     playlist_id: Uuid,
     user_id: Uuid,
 ) -> Result<playlists::PlaylistRow, ApiError> {
-    let playlist = playlists::find_by_id(&state.pool, playlist_id)
-        .await
-        .map_err(ApiError::Database)?
+    let playlist = state
+        .data
+        .playlists()
+        .find_by_id(playlist_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
-    if !playlists::can_access(&state.pool, playlist_id, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_access(playlist_id, user_id)
+        .await?
     {
         return Err(ApiError::NotFound);
     }
@@ -277,9 +300,7 @@ async fn visible_playlist(
 }
 
 async fn share_list(state: &AppState, playlist_id: Uuid) -> Result<Vec<SharePermission>, ApiError> {
-    let mut shares = playlists::get_shares(&state.pool, playlist_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let mut shares = state.data.playlists().get_shares(playlist_id).await?;
     shares.sort_by_key(|s| s.user_id);
     Ok(shares
         .into_iter()
@@ -298,9 +319,7 @@ pub async fn get_playlist(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let playlist = visible_playlist(&state, playlist_id, auth.user_id).await?;
     let shares = share_list(&state, playlist_id).await?;
-    let item_ids = playlists::list_item_ids(&state.pool, playlist_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let item_ids = state.data.playlists().list_item_ids(playlist_id).await?;
     Ok(Json(serde_json::json!({
         "OpenAccess": playlist.open_access,
         "Shares": shares,
@@ -317,32 +336,42 @@ pub async fn update_playlist(
     Json(body): Json<UpdatePlaylistRequest>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     visible_playlist(&state, playlist_id, auth.user_id).await?;
-    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_edit(playlist_id, auth.user_id)
+        .await?
     {
         return Err(ApiError::Forbidden);
     }
     if let Some(ids) = body.ids {
-        playlists::replace_items(&state.pool, playlist_id, &ids.ids())
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .playlists()
+            .replace_items(playlist_id, &ids.ids())
+            .await?;
     }
     if let Some(name) = body.name {
-        playlists::update_name(&state.pool, playlist_id, &name)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .playlists()
+            .update_name(playlist_id, &name)
+            .await?;
     }
     if let Some(users) = body.users {
         let shares: Vec<(Uuid, bool)> = users.iter().map(|u| (u.user_id, u.can_edit)).collect();
-        playlists::replace_shares(&state.pool, playlist_id, &shares)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .playlists()
+            .replace_shares(playlist_id, &shares)
+            .await?;
     }
     if let Some(open) = body.is_public {
-        playlists::set_open_access(&state.pool, playlist_id, open)
-            .await
-            .map_err(ApiError::Database)?;
+        state
+            .data
+            .playlists()
+            .set_open_access(playlist_id, open)
+            .await?;
     }
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -375,9 +404,11 @@ pub async fn get_playlist_user(
         }));
     }
     let may_ask = user_id == auth.user_id
-        || playlists::can_edit(&state.pool, playlist_id, auth.user_id)
-            .await
-            .map_err(ApiError::Database)?;
+        || state
+            .data
+            .playlists()
+            .can_edit(playlist_id, auth.user_id)
+            .await?;
     if !may_ask {
         return Err(ApiError::Forbidden);
     }
@@ -400,14 +431,11 @@ pub async fn set_playlist_user(
     if playlist.owner_user_id != auth.user_id {
         return Err(ApiError::Forbidden);
     }
-    if !playlists::share_with(
-        &state.pool,
-        playlist_id,
-        user_id,
-        body.can_edit.unwrap_or(false),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .share_with(playlist_id, user_id, body.can_edit.unwrap_or(false))
+        .await?
     {
         return Err(ApiError::NotFound);
     }
@@ -421,9 +449,11 @@ pub async fn remove_playlist_user(
     Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     visible_playlist(&state, playlist_id, auth.user_id).await?;
-    if !playlists::can_edit(&state.pool, playlist_id, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    if !state
+        .data
+        .playlists()
+        .can_edit(playlist_id, auth.user_id)
+        .await?
     {
         return Err(ApiError::Forbidden);
     }
@@ -434,8 +464,10 @@ pub async fn remove_playlist_user(
     {
         return Err(ApiError::NotFound);
     }
-    playlists::remove_share(&state.pool, playlist_id, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .data
+        .playlists()
+        .remove_share(playlist_id, user_id)
+        .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

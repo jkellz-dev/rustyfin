@@ -4,6 +4,7 @@
 //! scans, logins); gauges (libraries, sessions, health) are read at scrape
 //! time.
 
+use rustyfin_models::data::{Data, LibraryStore, LinkStore, UserStore};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -14,7 +15,6 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use rustyfin_data::repo::{libraries, links, users};
 
 use crate::router::AppState;
 
@@ -187,12 +187,12 @@ async fn collect(state: &AppState) {
     // Per link (roadmap 16b.3): up or down, what it holds, how long ago it
     // last synced. What it holds is counted with the library items.
     let held = if count_now {
-        links::counts(&state.pool).await.unwrap_or_default()
+        state.data.links().counts().await.unwrap_or_default()
     } else {
         Default::default()
     };
     let now = chrono::Utc::now();
-    for link in links::list(&state.pool).await.unwrap_or_default() {
+    for link in state.data.links().list().await.unwrap_or_default() {
         let (titles, copies) = held.get(&link.id).copied().unwrap_or((0, 0));
         let name = link.name;
         metrics::gauge!("rustyfin_link_up", "link" => name.clone()).set(
@@ -213,7 +213,7 @@ async fn collect(state: &AppState) {
                 .set((now - at).num_milliseconds().max(0) as f64 / 1000.0);
         }
     }
-    if let Ok(n) = users::count(&state.pool).await {
+    if let Ok(n) = state.data.users().count().await {
         metrics::gauge!("rustyfin_users").set(n as f64);
     }
     let sessions = state.session_manager.get_sessions(Some(960)).await;
@@ -223,7 +223,7 @@ async fn collect(state: &AppState) {
     metrics::gauge!("rustyfin_transcodes_active")
         .set(state.transcode_manager.active_job_count().await as f64);
 
-    let libs = libraries::list_all(&state.pool).await.unwrap_or_default();
+    let libs = state.data.libraries().list_all().await.unwrap_or_default();
     let health = crate::health::system_health(state, &libs).await;
     let db = &health.database;
     metrics::gauge!("rustyfin_db_up").set(if db.ok { 1.0 } else { 0.0 });

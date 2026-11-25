@@ -5,11 +5,15 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::Response,
 };
+use rustyfin_models::data::{
+    CollectionStore, Data, ImageStore, LibraryAccessStore, LibraryStore, MediaItemStore,
+    PeopleStore,
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AuthenticatedUser, OptionalUser};
-use rustyfin_data::repo::{images, libraries, media_items, people, user_library_access};
+use rustyfin_data::repo::people;
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 
@@ -40,9 +44,11 @@ pub async fn get_item_image(
     check_image_access(&state, &user, item_id).await?;
     let opts = build_options(&params, &headers);
     let req = ImageRequest::new(&params, &headers);
-    match images::find_by_item_and_type(&state.pool, item_id, &image_type, 0)
-        .await
-        .map_err(ApiError::Database)?
+    match state
+        .data
+        .images()
+        .find_by_item_and_type(item_id, &image_type, 0)
+        .await?
     {
         // Missing or unreadable artwork falls back as if there were none.
         Some(image) => match serve_image(&image.path, &opts, &state, &req).await {
@@ -67,17 +73,21 @@ async fn check_image_access(
     let Some(user) = &user.0 else {
         return Ok(());
     };
-    if media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    if state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .is_some()
     {
         return super::access::require_item_access(state, user.user_id, item_id).await;
     }
     // Otherwise it may be a library (a collection folder's image).
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(user.user_id)
+        .await?;
     match accessible {
         // A genre's picture is anyone's (its albums are checked when opened).
         Some(allowed)
@@ -130,10 +140,7 @@ async fn serve_placeholder(
     if !image_type.eq_ignore_ascii_case("Primary") {
         return Err(ApiError::NotFound);
     }
-    let shape = if let Some(item) = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
-    {
+    let shape = if let Some(item) = state.data.media_items().find_by_id(item_id).await? {
         // An episode without a thumb: a frame from the video, grabbed once into
         // the image cache. If that fails (unreadable file, no ffmpeg), the
         // landscape placeholder below stands in.
@@ -164,9 +171,11 @@ async fn serve_placeholder(
             let tracks = if item.item_type == "Audio" {
                 vec![item.clone()]
             } else {
-                media_items::list_by_parents(&state.pool, &[item.id], &["Audio".to_string()], 5)
-                    .await
-                    .map_err(ApiError::Database)?
+                state
+                    .data
+                    .media_items()
+                    .list_by_parents(&[item.id], &["Audio".to_string()], 5)
+                    .await?
             };
             let key = super::items::cover_tag(item.id, item.etag.as_deref());
             for track in &tracks {
@@ -186,16 +195,10 @@ async fn serve_placeholder(
         }
         // A collection without a cover shows its earliest film's poster.
         if item.item_type == "BoxSet" {
-            let members = rustyfin_data::repo::collections::list_item_ids(&state.pool, item.id)
-                .await
-                .map_err(ApiError::Database)?;
-            let mut films = media_items::find_by_ids(&state.pool, &members)
-                .await
-                .map_err(ApiError::Database)?;
+            let members = state.data.collections().list_item_ids(item.id).await?;
+            let mut films = state.data.media_items().find_by_ids(&members).await?;
             films.sort_by_key(|f| (f.production_year.unwrap_or(i32::MAX), f.name.clone()));
-            let posters = images::list_by_items(&state.pool, &members)
-                .await
-                .map_err(ApiError::Database)?;
+            let posters = state.data.images().list_by_items(&members).await?;
             let poster = films.iter().find_map(|film| {
                 posters.iter().find(|i| {
                     i.entity_id == Some(film.id) && i.image_type == "Primary" && i.image_index == 0
@@ -208,45 +211,46 @@ async fn serve_placeholder(
         // A season without a cover shows its show's.
         if item.item_type == "Season"
             && let Some(series) = item.series_id.or(item.parent_id)
-            && let Some(poster) = images::find_by_item_and_type(&state.pool, series, "Primary", 0)
-                .await
-                .map_err(ApiError::Database)?
+            && let Some(poster) = state
+                .data
+                .images()
+                .find_by_item_and_type(series, "Primary", 0)
+                .await?
         {
             return serve_image(&poster.path, opts, state, req).await;
         }
         Placeholder::for_item_type(&item.item_type)
-    } else if libraries::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    } else if state.data.libraries().find_by_id(item_id).await?.is_some() {
         Placeholder::Landscape
-    } else if let Some(person) = people::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
-    {
+    } else if let Some(person) = state.data.people().find_by_id(item_id).await? {
         // People: the headshot from the shared folder, or nothing (clients
         // draw initials).
         let path = headshot_path(state, &person).ok_or(ApiError::NotFound)?;
         return serve_image(&path.to_string_lossy(), opts, state, req).await;
     } else if let Some(genre) = super::music_genres::genre_name_by_id(&state.pool, item_id).await {
         // A genre: one of its albums' covers, else a title's art (films).
-        let album = media_items::genre_albums(&state.pool, std::slice::from_ref(&genre), None)
-            .await
-            .map_err(ApiError::Database)?
+        let album = state
+            .data
+            .media_items()
+            .genre_albums(std::slice::from_ref(&genre), None)
+            .await?
             .remove(&genre);
         if let Some(album) = album {
-            if let Some(cover) = images::find_by_item_and_type(&state.pool, album, "Primary", 0)
-                .await
-                .map_err(ApiError::Database)?
+            if let Some(cover) = state
+                .data
+                .images()
+                .find_by_item_and_type(album, "Primary", 0)
+                .await?
             {
                 return serve_image(&cover.path, opts, state, req).await;
             }
             return Box::pin(serve_placeholder(state, album, image_type, opts, req)).await;
         }
-        let image = media_items::genre_image(&state.pool, &genre, None)
-            .await
-            .map_err(ApiError::Database)?
+        let image = state
+            .data
+            .media_items()
+            .genre_image(&genre, None)
+            .await?
             .ok_or(ApiError::NotFound)?;
         return serve_image(&image.path, opts, state, req).await;
     } else {
@@ -299,9 +303,11 @@ pub async fn get_item_image_by_index(
     check_image_access(&state, &user, item_id).await?;
     let opts = build_options(&params, &headers);
     let req = ImageRequest::new(&params, &headers);
-    match images::find_by_item_and_type(&state.pool, item_id, &image_type, image_index)
-        .await
-        .map_err(ApiError::Database)?
+    match state
+        .data
+        .images()
+        .find_by_item_and_type(item_id, &image_type, image_index)
+        .await?
     {
         Some(image) => serve_image(&image.path, &opts, &state, &req).await,
         None if image_index == 0 => {
@@ -317,9 +323,7 @@ pub async fn get_item_images_list(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<Vec<ImageInfo>>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let item_images = images::list_by_item(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let item_images = state.data.images().list_by_item(item_id).await?;
 
     let mut infos = Vec::with_capacity(item_images.len());
     for img in &item_images {
@@ -360,9 +364,11 @@ pub(crate) async fn serve_entity_image(
     params: &ImageParams,
     headers: &HeaderMap,
 ) -> Result<Response, ApiError> {
-    let image = images::find_by_item_and_type(&state.pool, entity_id, image_type, image_index)
-        .await
-        .map_err(ApiError::Database)?
+    let image = state
+        .data
+        .images()
+        .find_by_item_and_type(entity_id, image_type, image_index)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     let opts = build_options(params, headers);

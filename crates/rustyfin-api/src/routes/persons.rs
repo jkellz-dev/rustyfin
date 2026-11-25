@@ -4,6 +4,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PeopleStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -61,39 +62,34 @@ pub async fn get_persons(
         _ => None,
     };
     let (persons, total) = if let Some(ids) = ranked {
-        let persons = people::list_people_by_ids(
-            &state.pool,
-            &ids,
-            &person_types,
-            &exclude_types,
-            limit,
-            offset,
-        )
-        .await
-        .map_err(ApiError::Database)?;
-        let total = people::count_people_by_ids(&state.pool, &ids, &person_types, &exclude_types)
-            .await
-            .map_err(ApiError::Database)?;
+        let persons = state
+            .data
+            .people()
+            .list_people_by_ids(&ids, &person_types, &exclude_types, limit, offset)
+            .await?;
+        let total = state
+            .data
+            .people()
+            .count_people_by_ids(&ids, &person_types, &exclude_types)
+            .await?;
         (persons, total)
     } else {
-        let persons = people::list_people(
-            &state.pool,
-            &person_types,
-            &exclude_types,
-            query.search_term.as_deref(),
-            limit,
-            offset,
-        )
-        .await
-        .map_err(ApiError::Database)?;
-        let total = people::count_people(
-            &state.pool,
-            &person_types,
-            &exclude_types,
-            query.search_term.as_deref(),
-        )
-        .await
-        .map_err(ApiError::Database)?;
+        let persons = state
+            .data
+            .people()
+            .list_people(
+                &person_types,
+                &exclude_types,
+                query.search_term.as_deref(),
+                limit,
+                offset,
+            )
+            .await?;
+        let total = state
+            .data
+            .people()
+            .count_people(&person_types, &exclude_types, query.search_term.as_deref())
+            .await?;
         (persons, total)
     };
     let total = total as i32;
@@ -102,7 +98,10 @@ pub async fn get_persons(
 
     // Batch-check which persons have Primary images
     let person_ids: Vec<uuid::Uuid> = persons.iter().map(|p| p.id).collect();
-    let person_images = images::list_by_items(&state.pool, &person_ids)
+    let person_images = state
+        .data
+        .images()
+        .list_by_items(&person_ids)
         .await
         .or_log_default("images::list_by_items");
     let people_with_images: std::collections::HashSet<uuid::Uuid> = person_images
@@ -130,7 +129,10 @@ pub async fn get_persons(
         };
 
         if include_counts {
-            let counts = people::count_items_by_person(&state.pool, person.id)
+            let counts = state
+                .data
+                .people()
+                .count_items_by_person(person.id)
                 .await
                 .or_log_default("people::count_items_by_person");
             let mut total_children = 0i32;
@@ -162,21 +164,32 @@ pub async fn get_person(
     auth: AuthenticatedUser,
     Path(person_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    let person = people::find_by_name(&state.pool, &person_name)
-        .await
-        .map_err(ApiError::Database)?
+    let person = state
+        .data
+        .people()
+        .find_by_name(&person_name)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
-    let has_image = images::find_by_item_and_type(&state.pool, person.id, "Primary", 0)
+    let has_image = state
+        .data
+        .images()
+        .find_by_item_and_type(person.id, "Primary", 0)
         .await
         .ok()
         .flatten()
         .is_some();
 
-    let counts = people::count_items_by_person(&state.pool, person.id)
+    let counts = state
+        .data
+        .people()
+        .count_items_by_person(person.id)
         .await
         .or_log_default("people::count_items_by_person");
-    let added = media_items::first_added_with(&state.pool, NameKind::Person(person.id))
+    let added = state
+        .data
+        .media_items()
+        .first_added_with(NameKind::Person(person.id))
         .await
         .or_log_default("media_items::first_added_with");
     let mut dto = BaseItemDto {
@@ -228,15 +241,19 @@ pub async fn get_person_image(
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let person = people::find_by_name(&state.pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let person = state
+        .data
+        .people()
+        .find_by_name(&name)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     if image_type.eq_ignore_ascii_case("Primary")
-        && images::find_by_item_and_type(&state.pool, person.id, "Primary", 0)
-            .await
-            .map_err(ApiError::Database)?
+        && state
+            .data
+            .images()
+            .find_by_item_and_type(person.id, "Primary", 0)
+            .await?
             .is_none()
         && let Some(path) = image_routes::headshot_path(&state, &person)
     {
@@ -254,9 +271,11 @@ pub async fn get_person_image_by_index(
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let person = people::find_by_name(&state.pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let person = state
+        .data
+        .people()
+        .find_by_name(&name)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     image_routes::serve_entity_image(

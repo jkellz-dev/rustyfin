@@ -6,7 +6,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::users;
+use rustyfin_models::data::{Data, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -32,9 +32,7 @@ pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<Vec<UserPermissions>>, ApiError> {
-    let users = users::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let users = state.data.users().list_all().await?;
     Ok(Json(
         users
             .into_iter()
@@ -55,9 +53,11 @@ pub struct PermissionsPatch {
 }
 
 async fn current(state: &AppState, id: Uuid) -> Result<Permissions, ApiError> {
-    let user = users::find_by_id(&state.pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .data
+        .users()
+        .find_by_id(id)
+        .await?
         .ok_or(ApiError::NotFound)?;
     Ok(Permissions {
         may_link: user.may_link,
@@ -84,9 +84,7 @@ pub async fn patch(
     Json(change): Json<PermissionsPatch>,
 ) -> Result<Json<Permissions>, ApiError> {
     if let Some(may_link) = change.may_link
-        && !users::set_may_link(&state.pool, id, may_link)
-            .await
-            .map_err(ApiError::Database)?
+        && !state.data.users().set_may_link(id, may_link).await?
     {
         return Err(ApiError::NotFound);
     }

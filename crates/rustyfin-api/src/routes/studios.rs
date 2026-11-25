@@ -4,6 +4,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
+use rustyfin_models::data::{Data, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -32,9 +33,11 @@ pub async fn get_studios(
     auth: AuthenticatedUser,
     Query(query): Query<StudiosQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    let studios = media_items::distinct_studios(&state.pool, query.parent_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let studios = state
+        .data
+        .media_items()
+        .distinct_studios(query.parent_id)
+        .await?;
 
     let filtered: Vec<&String> = if let Some(ref term) = query.search_term {
         let lower = term.to_lowercase();
@@ -65,10 +68,12 @@ pub async fn get_studios(
         };
 
         if include_counts {
-            let counts =
-                media_items::count_items_with_studio(&state.pool, studio_name, query.parent_id)
-                    .await
-                    .or_log_default("media_items::count_items_with_studio");
+            let counts = state
+                .data
+                .media_items()
+                .count_items_with_studio(studio_name, query.parent_id)
+                .await
+                .or_log_default("media_items::count_items_with_studio");
             let mut total_children = 0i32;
             for (item_type, cnt) in &counts {
                 let c = *cnt as i32;
@@ -99,9 +104,11 @@ pub async fn get_studio(
     auth: AuthenticatedUser,
     Path(studio_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    let counts = media_items::count_items_with_studio(&state.pool, &studio_name, None)
-        .await
-        .map_err(ApiError::Database)?;
+    let counts = state
+        .data
+        .media_items()
+        .count_items_with_studio(&studio_name, None)
+        .await?;
 
     let total_children: i32 = counts.iter().map(|(_, c)| *c as i32).sum();
 
@@ -130,7 +137,10 @@ pub async fn get_studio(
         }
     }
 
-    let added = media_items::first_added_with(&state.pool, NameKind::Studio(&studio_name))
+    let added = state
+        .data
+        .media_items()
+        .first_added_with(NameKind::Studio(&studio_name))
         .await
         .or_log_default("media_items::first_added_with");
     Ok(Json(

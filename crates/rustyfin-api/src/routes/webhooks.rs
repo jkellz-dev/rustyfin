@@ -1,3 +1,4 @@
+use rustyfin_models::data::{Data, LibraryStore, MediaItemStore};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -10,7 +11,7 @@ use serde::Deserialize;
 
 use rustyfin_auth::api_key::ApiKeyUser;
 use rustyfin_core::LibraryScanner;
-use rustyfin_data::repo::{activity_log, libraries, media_items};
+use rustyfin_data::repo::activity_log;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -63,9 +64,11 @@ pub async fn post_updated_movies(
         (None, Some(tmdb)) => ("Tmdb", tmdb),
         (None, None) => return Ok(StatusCode::NO_CONTENT),
     };
-    let paths = media_items::paths_by_external_id(&state.pool, "Movie", key, &value)
-        .await
-        .map_err(ApiError::Database)?;
+    let paths = state
+        .data
+        .media_items()
+        .paths_by_external_id("Movie", key, &value)
+        .await?;
     rescan(&state, &paths).await
 }
 
@@ -79,18 +82,18 @@ pub async fn post_updated_series(
     let Some(tvdb) = given(q.tvdb_id) else {
         return Ok(StatusCode::NO_CONTENT);
     };
-    let paths = media_items::paths_by_external_id(&state.pool, "Series", "Tvdb", &tvdb)
-        .await
-        .map_err(ApiError::Database)?;
+    let paths = state
+        .data
+        .media_items()
+        .paths_by_external_id("Series", "Tvdb", &tvdb)
+        .await?;
     rescan(&state, &paths).await
 }
 
 /// Rescan the folders of `paths` (a file's folder, or the folder itself) and
 /// drop the items whose path is gone: what every library notification asks.
 async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiError> {
-    let libs = libraries::list_scannable(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let libs = state.data.libraries().list_scannable().await?;
 
     // Collect scan targets: library_id -> set of directories to scan
     let mut scan_targets: HashMap<uuid::Uuid, Vec<String>> = HashMap::new();
@@ -125,7 +128,7 @@ async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiErr
 
     // Handle deletions
     for path in &delete_paths {
-        match media_items::delete_by_path(&state.pool, path).await {
+        match state.data.media_items().delete_by_path(path).await {
             Ok(true) => {
                 tracing::info!("Deleted media item for removed path: {path}");
             }

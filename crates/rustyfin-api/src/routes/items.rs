@@ -1,3 +1,7 @@
+use rustyfin_models::data::{
+    ChapterStore, CollectionStore, Data, ImageStore, LibraryAccessStore, LibraryStore,
+    MediaItemStore, MediaStreamStore, PeopleStore, UserDataStore,
+};
 use std::collections::HashMap;
 
 use axum::{
@@ -12,7 +16,7 @@ use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::EnrichmentService;
 use rustyfin_data::repo::images::ImageRow;
 use rustyfin_data::repo::{
-    chapters, images, libraries, media_items, media_streams, people, user_data, user_library_access,
+    chapters, images, libraries, media_items, media_streams, people, user_data,
 };
 use rustyfin_media::image_processing::Placeholder;
 use rustyfin_media::playback_info::{
@@ -968,9 +972,11 @@ pub async fn get_items(
     let limit = query.limit.unwrap_or(50).min(500);
     let recursive = query.recursive.unwrap_or(false);
 
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
 
     // The Collections view lists every collection the user may see.
     if query.parent_id == Some(super::libraries::collections_view_id(&state.server_id)) {
@@ -991,10 +997,7 @@ pub async fn get_items(
 
     // Determine if parent_id is a library
     let is_library = if let Some(pid) = query.parent_id {
-        libraries::find_by_id(&state.pool, pid)
-            .await
-            .map_err(ApiError::Database)?
-            .is_some()
+        state.data.libraries().find_by_id(pid).await?.is_some()
     } else {
         false
     };
@@ -1012,15 +1015,11 @@ pub async fn get_items(
     let mut collection_members: Option<Vec<Uuid>> = None;
     if !is_library
         && let Some(pid) = query.parent_id
-        && let Some(parent) = media_items::find_by_id(&state.pool, pid)
-            .await
-            .map_err(ApiError::Database)?
+        && let Some(parent) = state.data.media_items().find_by_id(pid).await?
         && parent.item_type == "BoxSet"
     {
         super::access::require_item_access(&state, auth.user_id, pid).await?;
-        let members = rustyfin_data::repo::collections::list_item_ids(&state.pool, pid)
-            .await
-            .map_err(ApiError::Database)?;
+        let members = state.data.collections().list_item_ids(pid).await?;
         // An empty id list means "no filter" to the query: match nothing instead.
         collection_members = Some(if members.is_empty() {
             vec![Uuid::nil()]
@@ -1111,16 +1110,10 @@ pub async fn get_items(
         limit,
     };
 
-    let items = item_query
-        .fetch(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let items = item_query.fetch(&state.pool).await?;
 
     let total = if query.enable_total_record_count.unwrap_or(true) {
-        item_query
-            .count(&state.pool)
-            .await
-            .map_err(ApiError::Database)?
+        item_query.count(&state.pool).await?
     } else {
         0
     };
@@ -1136,7 +1129,10 @@ pub async fn get_items(
     // Batch load images
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -1150,7 +1146,10 @@ pub async fn get_items(
     // Batch load child counts for folders
     let folder_ids: Vec<Uuid> = items.iter().filter(|i| i.is_folder).map(|i| i.id).collect();
     if !folder_ids.is_empty() {
-        let mut counts = media_items::count_children_batch(&state.pool, &folder_ids)
+        let mut counts = state
+            .data
+            .media_items()
+            .count_children_batch(&folder_ids)
             .await
             .or_log_default("media_items::count_children_batch");
         let boxsets: Vec<Uuid> = items
@@ -1160,7 +1159,10 @@ pub async fn get_items(
             .collect();
         if !boxsets.is_empty() {
             counts.extend(
-                rustyfin_data::repo::collections::count_items_batch(&state.pool, &boxsets)
+                state
+                    .data
+                    .collections()
+                    .count_items_batch(&boxsets)
                     .await
                     .or_log_default("collections::count_items_batch"),
             );
@@ -1199,12 +1201,16 @@ pub async fn get_item_counts(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<rustyfin_models::dto::ItemCounts>, ApiError> {
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
-    let rows = media_items::count_by_type(&state.pool, accessible.as_deref())
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
+    let rows = state
+        .data
+        .media_items()
+        .count_by_type(accessible.as_deref())
+        .await?;
     Ok(Json(rustyfin_models::dto::ItemCounts::from_type_counts(
         rows.iter().map(|(t, n)| (t.as_str(), *n)),
     )))
@@ -1237,10 +1243,7 @@ pub async fn get_item_by_id(
         attach_user_data(&state.pool, auth.user_id, &mut folders).await;
         return Ok(Json(folders.remove(0)));
     }
-    let Some(item) = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
-    else {
+    let Some(item) = state.data.media_items().find_by_id(item_id).await? else {
         // A genre is no stored item; clients open it by id (Finamp's genre
         // page). Music first: a name both kinds use is a music genre there.
         let Some(genre) = super::music_genres::genre_name_by_id(&state.pool, item_id).await else {
@@ -1262,9 +1265,11 @@ pub async fn get_item_by_id(
 
     // Check library access
     if let Some(lib_id) = item.library_id {
-        let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-            .await
-            .map_err(ApiError::Database)?;
+        let accessible = state
+            .data
+            .user_library_access()
+            .get_accessible_library_ids(auth.user_id)
+            .await?;
         if let Some(ref allowed) = accessible
             && !allowed.contains(&lib_id)
         {
@@ -1275,13 +1280,19 @@ pub async fn get_item_by_id(
     let mut dto = media_item_to_dto(&item, &state.server_id);
 
     // Load images
-    let item_images = images::list_by_item(&state.pool, item_id)
+    let item_images = state
+        .data
+        .images()
+        .list_by_item(item_id)
         .await
         .or_log_default("images::list_by_item");
     apply_images_to_dto(&mut dto, &item_images);
 
     // Load people for single-item detail
-    let people_rows = people::list_by_item(&state.pool, item_id)
+    let people_rows = state
+        .data
+        .people()
+        .list_by_item(item_id)
         .await
         .or_log_default("people::list_by_item");
     if !people_rows.is_empty() {
@@ -1290,19 +1301,28 @@ pub async fn get_item_by_id(
 
     // Child count for folders (a collection counts its films)
     if item.item_type == "BoxSet" {
-        let count = rustyfin_data::repo::collections::list_item_ids(&state.pool, item_id)
+        let count = state
+            .data
+            .collections()
+            .list_item_ids(item_id)
             .await
             .map(|ids| ids.len())
             .unwrap_or(0);
         dto.child_count = Some(count as i32);
     } else if item.is_folder {
-        let count = media_items::count_by_parent(&state.pool, Some(item_id), &[])
+        let count = state
+            .data
+            .media_items()
+            .count_by_parent(Some(item_id), &[])
             .await
             .unwrap_or(0);
         dto.child_count = Some(count as i32);
     }
     if item.item_type == "MusicArtist" {
-        let (songs, albums) = media_items::artist_counts(&state.pool, item_id)
+        let (songs, albums) = state
+            .data
+            .media_items()
+            .artist_counts(item_id)
             .await
             .or_log_default("media_items::artist_counts");
         dto.song_count = Some(songs as i32);
@@ -1315,14 +1335,20 @@ pub async fn get_item_by_id(
         item.item_type.as_str(),
         "MusicAlbum" | "MusicArtist" | "Series" | "Season"
     ) {
-        dto.cumulative_run_time_ticks = media_items::cumulative_runtime_ticks(&state.pool, item_id)
+        dto.cumulative_run_time_ticks = state
+            .data
+            .media_items()
+            .cumulative_runtime_ticks(item_id)
             .await
             .or_log_default("media_items::cumulative_runtime_ticks");
     }
 
     // Media streams for non-folder items
     if !item.is_folder {
-        let streams = media_streams::list_by_item(&state.pool, item_id)
+        let streams = state
+            .data
+            .media_streams()
+            .list_by_item(item_id)
             .await
             .or_log_default("media_streams::list_by_item");
         attach_media_source(&mut dto, &item, &streams, auth.is_administrator);
@@ -1337,7 +1363,10 @@ pub async fn get_item_by_id(
 
     // Load chapters for non-folder items
     if !item.is_folder {
-        let chapter_rows = chapters::list_by_item(&state.pool, item_id)
+        let chapter_rows = state
+            .data
+            .chapters()
+            .list_by_item(item_id)
             .await
             .or_log_default("chapters::list_by_item");
         if !chapter_rows.is_empty() {
@@ -1363,19 +1392,28 @@ pub async fn get_item_by_id(
     .await;
     attach_series_art(&state.pool, std::slice::from_mut(&mut dto)).await;
     // The caller's user data, zeros when they never touched the item.
-    let row = user_data::get(&state.pool, auth.user_id, item_id)
+    let row = state
+        .data
+        .user_data()
+        .get(auth.user_id, item_id)
         .await
         .or_log_default("user_data::get");
     let mut ud = user_data_dto(item_id, row.as_ref());
     if counts_children(&dto) {
-        let progress = user_data::folder_progress(&state.pool, auth.user_id, &[item_id])
+        let progress = state
+            .data
+            .user_data()
+            .folder_progress(auth.user_id, &[item_id])
             .await
             .or_log_default("user_data::folder_progress");
         let (total, unplayed) = progress.get(&item_id).copied().unwrap_or((0, 0));
         folder_user_data(&mut ud, total, unplayed);
         dto.recursive_item_count = Some(total as i32);
     }
-    if let Some((trailers, features)) = media_items::count_extras(&state.pool, &[item_id])
+    if let Some((trailers, features)) = state
+        .data
+        .media_items()
+        .count_extras(&[item_id])
         .await
         .or_log_default("media_items::count_extras")
         .get(&item_id)
@@ -1407,7 +1445,10 @@ pub(crate) async fn people_dtos(
         return Vec::new();
     }
     let person_ids: Vec<Uuid> = people_rows.iter().map(|(p, _, _)| p.id).collect();
-    let person_images = images::list_by_items(&state.pool, &person_ids)
+    let person_images = state
+        .data
+        .images()
+        .list_by_items(&person_ids)
         .await
         .or_log_default("images::list_by_items");
     let people_with_images: std::collections::HashSet<Uuid> = person_images
@@ -1445,7 +1486,10 @@ pub(crate) async fn attach_people_if_asked(
         return;
     }
     let ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
-    let rows = people::list_by_items(&state.pool, &ids)
+    let rows = state
+        .data
+        .people()
+        .list_by_items(&ids)
         .await
         .or_log_default("people::list_by_items");
     // One photo lookup for the whole page, then each title takes its own.
@@ -1471,9 +1515,11 @@ pub async fn get_latest_items(
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
 
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
 
     // One library's latest, or across all of them: the media added, then (as
     // Jellyfin) tracks grouped into their album and a show's new episodes into
@@ -1499,14 +1545,18 @@ pub async fn get_latest_items(
     } else {
         limit
     };
-    let mut added =
-        media_items::latest_by_library(&state.pool, query.parent_id, &fetch_types, fetch_limit)
-            .await
-            .map_err(ApiError::Database)?;
+    let mut added = state
+        .data
+        .media_items()
+        .latest_by_library(query.parent_id, &fetch_types, fetch_limit)
+        .await?;
     added.retain(|i| i.library_id.is_none_or(|l| !left_out.contains(&l)));
     if hide_played {
         let ids: Vec<Uuid> = added.iter().map(|i| i.id).collect();
-        let data = user_data::get_many(&state.pool, auth.user_id, &ids)
+        let data = state
+            .data
+            .user_data()
+            .get_many(auth.user_id, &ids)
             .await
             .or_log_default("user_data::get_many");
         added.retain(|i| !data.get(&i.id).is_some_and(|d| d.played));
@@ -1538,7 +1588,10 @@ pub async fn get_latest_items(
     // Batch load images
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -1555,7 +1608,10 @@ pub async fn get_latest_items(
     let counts = if folder_ids.is_empty() {
         HashMap::new()
     } else {
-        media_items::count_children_batch(&state.pool, &folder_ids)
+        state
+            .data
+            .media_items()
+            .count_children_batch(&folder_ids)
             .await
             .or_log_default("media_items::count_children_batch")
     };
@@ -1618,8 +1674,7 @@ async fn group_latest(
         .collect();
     let parents: HashMap<Uuid, media_items::MediaItemRow> =
         media_items::find_by_ids(pool, &parent_ids)
-            .await
-            .map_err(ApiError::Database)?
+            .await?
             .into_iter()
             .map(|r| (r.id, r))
             .collect();
@@ -1670,8 +1725,7 @@ async fn group_latest(
         .collect();
     let mut folders: HashMap<Uuid, media_items::MediaItemRow> =
         media_items::find_by_ids(pool, &folder_ids)
-            .await
-            .map_err(ApiError::Database)?
+            .await?
             .into_iter()
             .map(|r| (r.id, r))
             .collect();
@@ -1720,27 +1774,32 @@ pub async fn get_resume_items(
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(12).min(100);
 
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
 
     // Filtered below by library, folder and type, so read past `limit`.
-    let resume_data = user_data::get_resume_items(&state.pool, auth.user_id, RESUME_SCAN)
-        .await
-        .map_err(ApiError::Database)?;
+    let resume_data = state
+        .data
+        .user_data()
+        .get_resume_items(auth.user_id, RESUME_SCAN)
+        .await?;
     let wanted_types = parse_comma_delimited(&query.include_item_types);
     let excluded_types = parse_comma_delimited(&query.exclude_item_types);
     let wanted_media = parse_comma_delimited(&query.media_types);
 
     // The items in one query, then in resume order.
     let resume_ids: Vec<Uuid> = resume_data.iter().map(|(_, id)| *id).collect();
-    let resume_items: HashMap<Uuid, media_items::MediaItemRow> =
-        media_items::find_by_ids(&state.pool, &resume_ids)
-            .await
-            .map_err(ApiError::Database)?
-            .into_iter()
-            .map(|item| (item.id, item))
-            .collect();
+    let resume_items: HashMap<Uuid, media_items::MediaItemRow> = state
+        .data
+        .media_items()
+        .find_by_ids(&resume_ids)
+        .await?
+        .into_iter()
+        .map(|item| (item.id, item))
+        .collect();
     let mut dtos = Vec::new();
     for (ud, item_id) in &resume_data {
         if let Some(item) = resume_items.get(item_id) {
@@ -1792,7 +1851,10 @@ pub async fn get_resume_items(
     // Batch load images for resume items
     let item_ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
         let images_map = group_images_by_item(all_images);
@@ -1855,9 +1917,11 @@ pub async fn refresh_item(
     Path(item_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     // Verify item exists
-    media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     let pool = state.pool.clone();

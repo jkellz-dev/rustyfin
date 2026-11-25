@@ -4,9 +4,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, UserStore};
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::{libraries, media_items, users};
 use rustyfin_models::dto::{
     CastReceiverApplication, DashboardStats, EndPointInfo, LogFileInfo, PublicSystemInfo,
     StartupConfiguration, SystemInfo,
@@ -17,7 +17,10 @@ use crate::router::AppState;
 
 /// Check if startup wizard is considered complete (any libraries exist).
 async fn is_wizard_complete(state: &AppState) -> bool {
-    libraries::list_all(&state.pool)
+    state
+        .data
+        .libraries()
+        .list_all()
         .await
         .map(|libs| !libs.is_empty())
         .unwrap_or(false)
@@ -120,9 +123,11 @@ pub async fn get_startup_user(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<StartupUser>, ApiError> {
-    let first = users::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?
+    let first = state
+        .data
+        .users()
+        .list_all()
+        .await?
         .into_iter()
         .min_by_key(|u| u.created_at);
     Ok(Json(StartupUser {
@@ -152,20 +157,12 @@ pub async fn get_stats(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<DashboardStats>, ApiError> {
-    let library_stats = libraries::stats(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
-    let library_rows = libraries::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let library_stats = state.data.libraries().stats().await?;
+    let library_rows = state.data.libraries().list_all().await?;
     let health = crate::health::system_health(&state, &library_rows).await;
     let library_count = library_stats.len() as i64;
-    let user_count = users::count(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
-    let item_count = media_items::count_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let user_count = state.data.users().count().await?;
+    let item_count = state.data.media_items().count_all().await?;
 
     Ok(Json(DashboardStats {
         library_count,

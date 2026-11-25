@@ -3,9 +3,9 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
+use rustyfin_models::data::{Data, TaskResultStore};
 
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_data::repo::task_results;
 use rustyfin_models::dto::{TaskInfoDto, TaskResultDto, TaskTriggerDto};
 
 use crate::error::ApiError;
@@ -23,7 +23,10 @@ pub async fn get_tasks(
     let mut dtos = Vec::with_capacity(task_infos.len());
 
     for info in &task_infos {
-        let last_result = task_results::latest_by_task_key(&state.pool, &info.key)
+        let last_result = state
+            .data
+            .task_results()
+            .latest_by_task_key(&info.key)
             .await
             .ok()
             .flatten()
@@ -79,7 +82,10 @@ pub async fn get_task(
         .find(|t| t.key == task_id)
         .ok_or(ApiError::NotFound)?;
 
-    let last_result = task_results::latest_by_task_key(&state.pool, &info.key)
+    let last_result = state
+        .data
+        .task_results()
+        .latest_by_task_key(&info.key)
         .await
         .ok()
         .flatten()

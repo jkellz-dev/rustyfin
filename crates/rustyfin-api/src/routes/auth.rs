@@ -1,3 +1,4 @@
+use rustyfin_models::data::{ActivityLogStore, Data, SessionStore, UserStore};
 use std::net::SocketAddr;
 
 use axum::{
@@ -57,10 +58,7 @@ pub async fn authenticate_by_name(
         );
     }
 
-    let is_first_user = users::count(&state.pool)
-        .await
-        .map_err(ApiError::Database)?
-        == 0;
+    let is_first_user = state.data.users().count().await? == 0;
 
     // Logins a trusted forward-auth proxy vouches for are never throttled;
     // every other attempt (passwords, untrusted callers) is.
@@ -108,22 +106,24 @@ pub async fn authenticate_by_name(
     // Signing in is a no-op (owner, 2026-11-22): a device that has a session
     // keeps it and its token, so addresses an app built with the token (a
     // queue of tracks) keep working.
-    let existing =
-        rustyfin_data::repo::sessions::find_active_for_device(&state.pool, user.id, device_id)
-            .await
-            .map_err(ApiError::Database)?;
+    let existing = state
+        .data
+        .sessions()
+        .find_active_for_device(user.id, device_id)
+        .await?;
     let (token, session_id) = match existing {
         Some(s) => (s.access_token, s.id),
-        None => session::create_session(
-            &state.pool,
-            user.id,
-            device_id,
-            device_name,
-            app_name,
-            app_version,
-        )
-        .await
-        .map_err(ApiError::Database)?,
+        None => {
+            session::create_session(
+                &state.pool,
+                user.id,
+                device_id,
+                device_name,
+                app_name,
+                app_version,
+            )
+            .await?
+        }
     };
 
     // Register session with in-memory manager
@@ -195,16 +195,18 @@ pub async fn authenticate_by_name(
     };
 
     // Log authentication
-    let _ = activity_log::insert(
-        &state.pool,
-        "User authenticated",
-        None,
-        "AuthenticationSucceeded",
-        "Informational",
-        Some(user.id),
-        None,
-    )
-    .await;
+    let _ = state
+        .data
+        .activity_log()
+        .insert(
+            "User authenticated",
+            None,
+            "AuthenticationSucceeded",
+            "Informational",
+            Some(user.id),
+            None,
+        )
+        .await;
 
     Ok(Json(AuthenticationResult {
         user: user_dto,
@@ -228,19 +230,23 @@ async fn resolve_login(
             && fa_config.trusted_proxies.is_trusted(&addr.ip())
             && let Some(identity) = forward_auth::extract_identity(headers, &fa_config.headers)
         {
-            let user = users::upsert_from_forward_auth(
-                &state.pool,
-                &identity.remote_user,
-                &identity.remote_user,
-                identity.display_name.as_deref(),
-                identity.email.as_deref(),
-            )
-            .await
-            .map_err(ApiError::Database)?;
+            let user = state
+                .data
+                .users()
+                .upsert_from_forward_auth(
+                    &identity.remote_user,
+                    &identity.remote_user,
+                    identity.display_name.as_deref(),
+                    identity.email.as_deref(),
+                )
+                .await?;
 
             // First user becomes admin
             if is_first_user {
-                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                let _ = state
+                    .data
+                    .users()
+                    .update_policy(user.id, true, user.enable_all_libraries)
                     .await;
             }
 
@@ -249,7 +255,10 @@ async fn resolve_login(
                 && identity.groups.iter().any(|g| g == admin_group)
                 && !user.is_administrator
             {
-                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                let _ = state
+                    .data
+                    .users()
+                    .update_policy(user.id, true, user.enable_all_libraries)
                     .await;
             }
 
@@ -281,14 +290,15 @@ async fn resolve_login(
                     ApiError::Unauthorized
                 })?;
 
-            let user = users::upsert_from_ldap(
-                &state.pool,
-                &ldap_result.username,
-                ldap_result.display_name.as_deref(),
-                ldap_result.email.as_deref(),
-            )
-            .await
-            .map_err(ApiError::Database)?;
+            let user = state
+                .data
+                .users()
+                .upsert_from_ldap(
+                    &ldap_result.username,
+                    ldap_result.display_name.as_deref(),
+                    ldap_result.email.as_deref(),
+                )
+                .await?;
 
             // Reject disabled users
             if user.is_disabled {
@@ -297,13 +307,19 @@ async fn resolve_login(
 
             // First user becomes admin
             if is_first_user {
-                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                let _ = state
+                    .data
+                    .users()
+                    .update_policy(user.id, true, user.enable_all_libraries)
                     .await;
             }
 
             // Auto-admin from LDAP group membership
             if ldap_result.is_admin && !user.is_administrator {
-                let _ = users::update_policy(&state.pool, user.id, true, user.enable_all_libraries)
+                let _ = state
+                    .data
+                    .users()
+                    .update_policy(user.id, true, user.enable_all_libraries)
                     .await;
             }
 

@@ -9,6 +9,7 @@ use axum::response::Response;
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_data::repo::media_items::MediaItemRow;
 use rustyfin_media::image_processing::{self, ImageOptions};
+use rustyfin_models::data::{Data, LinkStore, MediaItemStore};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -185,8 +186,7 @@ pub(crate) async fn offer_transcodes(
         let Ok(id) = uuid::Uuid::parse_str(&source.id) else {
             continue;
         };
-        let Ok(Some(row)) = rustyfin_data::repo::media_items::find_by_id(&state.pool, id).await
-        else {
+        let Ok(Some(row)) = state.data.media_items().find_by_id(id).await else {
             continue;
         };
         let (Some(link_id), Some(remote_id)) = (row.link_id, row.remote_id.as_deref()) else {
@@ -277,9 +277,11 @@ pub async fn relay_media(
     if !matches!(kind.as_str(), "videos" | "audio") || remote.is_empty() || parts.next().is_none() {
         return Err(ApiError::NotFound);
     }
-    let copy = rustyfin_data::repo::links::find_copy(&state.pool, link_id, remote)
-        .await
-        .map_err(ApiError::Database)?
+    let copy = state
+        .data
+        .links()
+        .find_copy(link_id, remote)
+        .await?
         .ok_or(ApiError::NotFound)?;
     super::access::require_item_access(&state, auth.user_id, copy).await?;
     let link = state.links.get(link_id).await.ok_or(ApiError::NotFound)?;

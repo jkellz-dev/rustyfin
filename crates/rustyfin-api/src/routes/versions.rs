@@ -6,6 +6,7 @@
 
 use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::quality::Quality;
+use rustyfin_models::data::{Data, MediaItemStore};
 use rustyfin_models::dto::{BaseItemDto, DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use uuid::Uuid;
 
@@ -25,29 +26,19 @@ pub(crate) async fn source_item(
     if id == item_id {
         return Ok(item_id);
     }
-    Ok(
-        match media_items::find_by_id(&state.pool, id)
-            .await
-            .map_err(ApiError::Database)?
-        {
-            Some(v) if is_version_of(&v, item_id) => v.id,
-            _ => item_id,
-        },
-    )
+    Ok(match state.data.media_items().find_by_id(id).await? {
+        Some(v) if is_version_of(&v, item_id) => v.id,
+        _ => item_id,
+    })
 }
 
 /// The film's best copy: itself, or one of its versions if better.
 async fn best_copy(state: &AppState, item_id: Uuid) -> Result<Uuid, ApiError> {
-    let versions = media_items::list_versions(&state.pool, &[item_id])
-        .await
-        .map_err(ApiError::Database)?;
+    let versions = state.data.media_items().list_versions(&[item_id]).await?;
     if versions.is_empty() {
         return Ok(item_id);
     }
-    let Some(film) = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
-    else {
+    let Some(film) = state.data.media_items().find_by_id(item_id).await? else {
         return Ok(item_id);
     };
     let mut ids: Vec<Uuid> = vec![item_id];
@@ -236,9 +227,7 @@ pub(crate) async fn add_playback_versions(
     if !matches!(item.item_type.as_str(), "Movie" | "Episode") || item.owner_id.is_some() {
         return Ok(Ranks::new());
     }
-    let versions = media_items::list_versions(&state.pool, &[item.id])
-        .await
-        .map_err(ApiError::Database)?;
+    let versions = state.data.media_items().list_versions(&[item.id]).await?;
     if versions.is_empty() {
         return Ok(Ranks::new());
     }

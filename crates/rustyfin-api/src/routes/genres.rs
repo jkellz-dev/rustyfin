@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, LibraryStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -32,9 +33,7 @@ pub async fn get_genres(
     // A music (or music videos) library's genres are music genres, as
     // Jellyfin answers them (GenresController); Finamp opens only those.
     if let Some(parent) = query.parent_id
-        && let Some(lib) = rustyfin_data::repo::libraries::find_by_id(&state.pool, parent)
-            .await
-            .map_err(ApiError::Database)?
+        && let Some(lib) = state.data.libraries().find_by_id(parent).await?
         && matches!(lib.library_type.as_str(), "music" | "musicvideos")
     {
         return super::music_genres::get_music_genres(
@@ -49,9 +48,11 @@ pub async fn get_genres(
         )
         .await;
     }
-    let genres = media_items::distinct_genres(&state.pool, query.parent_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let genres = state
+        .data
+        .media_items()
+        .distinct_genres(query.parent_id)
+        .await?;
 
     let filtered: Vec<&String> = if let Some(ref term) = query.search_term {
         let lower = term.to_lowercase();
@@ -82,7 +83,10 @@ pub async fn get_genres(
         };
 
         // A title's art stands in for the genre's picture.
-        if let Some(image) = media_items::genre_image(&state.pool, genre_name, query.parent_id)
+        if let Some(image) = state
+            .data
+            .media_items()
+            .genre_image(genre_name, query.parent_id)
             .await
             .or_log_default("media_items::genre_image")
         {
@@ -93,10 +97,12 @@ pub async fn get_genres(
         }
 
         if include_counts {
-            let counts =
-                media_items::count_items_with_genre(&state.pool, genre_name, query.parent_id)
-                    .await
-                    .or_log_default("media_items::count_items_with_genre");
+            let counts = state
+                .data
+                .media_items()
+                .count_items_with_genre(genre_name, query.parent_id)
+                .await
+                .or_log_default("media_items::count_items_with_genre");
             let mut total_children = 0i32;
             for (item_type, cnt) in &counts {
                 let c = *cnt as i32;
@@ -127,9 +133,11 @@ pub async fn get_genre(
     auth: AuthenticatedUser,
     Path(genre_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    let counts = media_items::count_items_with_genre(&state.pool, &genre_name, None)
-        .await
-        .map_err(ApiError::Database)?;
+    let counts = state
+        .data
+        .media_items()
+        .count_items_with_genre(&genre_name, None)
+        .await?;
 
     let total_children: i32 = counts.iter().map(|(_, c)| *c as i32).sum();
 
@@ -158,7 +166,10 @@ pub async fn get_genre(
         }
     }
 
-    let added = media_items::first_added_with(&state.pool, NameKind::Genre(&genre_name))
+    let added = state
+        .data
+        .media_items()
+        .first_added_with(NameKind::Genre(&genre_name))
         .await
         .or_log_default("media_items::first_added_with");
     Ok(Json(
@@ -174,9 +185,11 @@ pub async fn get_genre_image(
     axum::extract::Query(params): axum::extract::Query<super::images::ImageParams>,
     headers: axum::http::HeaderMap,
 ) -> Result<axum::response::Response, ApiError> {
-    let image = media_items::genre_image(&state.pool, &name, None)
-        .await
-        .map_err(ApiError::Database)?
+    let image = state
+        .data
+        .media_items()
+        .genre_image(&name, None)
+        .await?
         .ok_or(ApiError::NotFound)?;
     let opts = super::images::build_options(&params, &headers);
     let req = super::images::ImageRequest::new(&params, &headers);

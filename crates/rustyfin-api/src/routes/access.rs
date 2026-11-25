@@ -5,10 +5,10 @@
 //! apply the same rule. Jellyfin answers 404 for an item the user may not see, so
 //! that is what a hidden item gets here too: a 403 would confirm it exists.
 
+use rustyfin_models::data::{Data, LibraryAccessStore};
 use uuid::Uuid;
 
 use rustyfin_data::repo::media_items::{self, MediaItemRow};
-use rustyfin_data::repo::user_library_access;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -22,16 +22,17 @@ pub async fn require_item_access(
     item_id: Uuid,
 ) -> Result<(), ApiError> {
     let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     let Some(library_id) = item.library_id else {
         return Ok(());
     };
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(user_id)
+        .await?;
     match accessible {
         Some(allowed) if !allowed.contains(&library_id) => Err(ApiError::NotFound),
         _ => Ok(()),
@@ -45,9 +46,11 @@ pub async fn retain_accessible(
     user_id: Uuid,
     items: Vec<MediaItemRow>,
 ) -> Result<Vec<MediaItemRow>, ApiError> {
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(user_id)
+        .await?;
     let Some(allowed) = accessible else {
         return Ok(items);
     };

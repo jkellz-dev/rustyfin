@@ -1,3 +1,4 @@
+use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,7 +14,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{media_items, media_streams};
+use rustyfin_data::repo::media_streams;
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_media::transcode::{
     hls::{
@@ -85,14 +86,14 @@ pub async fn get_master_playlist(
     let file =
         super::versions::source_item(&state, item_id, params.media_source_id.as_deref()).await?;
 
-    let item = media_items::find_by_id(&state.pool, file)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(file)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
-    let streams = media_streams::list_by_item(&state.pool, file)
-        .await
-        .map_err(ApiError::Database)?;
+    let streams = state.data.media_streams().list_by_item(file).await?;
 
     let stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
     let video_stream = stream_dtos.iter().find(|s| s.stream_type == "Video");
@@ -190,16 +191,16 @@ pub async fn get_variant_playlist(
     if !tm.has_active_job(&play_session_id).await {
         let file = super::versions::source_item(&state, item_id, params.media_source_id.as_deref())
             .await?;
-        let item = media_items::find_by_id(&state.pool, file)
-            .await
-            .map_err(ApiError::Database)?
+        let item = state
+            .data
+            .media_items()
+            .find_by_id(file)
+            .await?
             .ok_or(ApiError::NotFound)?;
 
         let input_path = item.path.ok_or(ApiError::NotFound)?;
 
-        let streams = media_streams::list_by_item(&state.pool, file)
-            .await
-            .map_err(ApiError::Database)?;
+        let streams = state.data.media_streams().list_by_item(file).await?;
         let source = source_video(&streams);
         let video_codec =
             decide_video(tm, Some(input_path.as_str()), source.as_ref(), &params).await;
@@ -444,9 +445,11 @@ pub async fn get_audio_master_playlist(
     let play_session_id = session_id_param(params.play_session_id.as_deref())?;
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
 
-    let _item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let _item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
     let audio_codec = parse_audio_codec(params.audio_codec.as_deref());
@@ -501,9 +504,11 @@ pub async fn get_audio_variant_playlist(
     }
 
     if !tm.has_active_job(&play_session_id).await {
-        let item = media_items::find_by_id(&state.pool, item_id)
-            .await
-            .map_err(ApiError::Database)?
+        let item = state
+            .data
+            .media_items()
+            .find_by_id(item_id)
+            .await?
             .ok_or(ApiError::NotFound)?;
 
         let input_path = item.path.ok_or(ApiError::NotFound)?;

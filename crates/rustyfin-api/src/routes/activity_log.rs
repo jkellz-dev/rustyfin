@@ -3,10 +3,10 @@ use axum::{
     extract::{Query, State},
 };
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::{ActivityLogStore, Data};
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_data::repo::activity_log;
 use rustyfin_models::dto::{ActivityLogEntryDto, QueryResult};
 
 use crate::error::ApiError;
@@ -30,19 +30,17 @@ pub async fn get_log_entries(
     let start_index = query.start_index.unwrap_or(0);
     let limit = query.limit.unwrap_or(25).min(100);
 
-    let rows = activity_log::list_paginated(
-        &state.pool,
-        start_index,
-        limit,
-        query.min_date,
-        query.has_user_id,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let rows = state
+        .data
+        .activity_log()
+        .list_paginated(start_index, limit, query.min_date, query.has_user_id)
+        .await?;
 
-    let total = activity_log::count(&state.pool, query.min_date, query.has_user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let total = state
+        .data
+        .activity_log()
+        .count(query.min_date, query.has_user_id)
+        .await?;
 
     let dtos: Vec<ActivityLogEntryDto> = rows
         .into_iter()

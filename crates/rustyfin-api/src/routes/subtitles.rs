@@ -4,10 +4,10 @@ use axum::{
     http::{StatusCode, header},
     response::Response,
 };
+use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::transcode::subtitles;
 
 use crate::error::ApiError;
@@ -83,14 +83,14 @@ async fn serve_subtitle(
     stream_index: i32,
     output_format: &str,
 ) -> Result<Response, ApiError> {
-    let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
-    let streams = media_streams::list_by_item(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let streams = state.data.media_streams().list_by_item(item_id).await?;
 
     // Find the subtitle stream
     let sub_stream = streams

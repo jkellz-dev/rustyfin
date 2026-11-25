@@ -2,11 +2,11 @@ use axum::{
     Json,
     extract::{Query, State},
 };
+use rustyfin_models::data::{Data, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items;
 use rustyfin_models::dto::{NameGuidPair, QueryFilters, QueryFiltersLegacy};
 
 use crate::error::ApiError;
@@ -27,18 +27,14 @@ pub async fn get_filters_legacy(
 ) -> Result<Json<QueryFiltersLegacy>, ApiError> {
     let parent_id = query.parent_id;
 
-    let genres = media_items::distinct_genres(&state.pool, parent_id)
-        .await
-        .map_err(ApiError::Database)?;
-    let years = media_items::distinct_years(&state.pool, parent_id)
-        .await
-        .map_err(ApiError::Database)?;
-    let official_ratings = media_items::distinct_official_ratings(&state.pool, parent_id)
-        .await
-        .map_err(ApiError::Database)?;
-    let tags = media_items::distinct_tags(&state.pool, parent_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let genres = state.data.media_items().distinct_genres(parent_id).await?;
+    let years = state.data.media_items().distinct_years(parent_id).await?;
+    let official_ratings = state
+        .data
+        .media_items()
+        .distinct_official_ratings(parent_id)
+        .await?;
+    let tags = state.data.media_items().distinct_tags(parent_id).await?;
 
     Ok(Json(QueryFiltersLegacy {
         genres,
@@ -56,9 +52,7 @@ pub async fn get_filters(
 ) -> Result<Json<QueryFilters>, ApiError> {
     let parent_id = query.parent_id;
 
-    let genre_names = media_items::distinct_genres(&state.pool, parent_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let genre_names = state.data.media_items().distinct_genres(parent_id).await?;
 
     let genres = genre_names
         .into_iter()
@@ -68,8 +62,6 @@ pub async fn get_filters(
         })
         .collect();
 
-    let tags = media_items::distinct_tags(&state.pool, parent_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let tags = state.data.media_items().distinct_tags(parent_id).await?;
     Ok(Json(QueryFilters { genres, tags }))
 }

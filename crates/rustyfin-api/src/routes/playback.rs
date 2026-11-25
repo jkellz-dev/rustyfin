@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode};
+use rustyfin_models::data::{Data, MediaItemStore, UserDataStore};
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{media_items, user_data};
 use rustyfin_models::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
 
 use crate::error::ApiError;
@@ -23,12 +23,12 @@ async fn update_play_state(
     item_id: uuid::Uuid,
     report: Report,
 ) {
-    let item = match media_items::find_by_id(&state.pool, item_id).await {
+    let item = match state.data.media_items().find_by_id(item_id).await {
         Ok(Some(item)) => item,
         _ => return,
     };
     let kind = Kind::of(&item.item_type, item.is_folder, item.extra_type.as_deref());
-    let current = match user_data::get(&state.pool, user_id, item_id).await {
+    let current = match state.data.user_data().get(user_id, item_id).await {
         Ok(Some(ud)) => play_state::State {
             played: ud.played,
             position_ticks: ud.playback_position_ticks,
@@ -44,16 +44,18 @@ async fn update_play_state(
         }
         Report::StopWithoutPosition => (play_state::on_stop_without_position(current, kind), true),
     };
-    if let Err(e) = user_data::save_play_state(
-        &state.pool,
-        user_id,
-        item_id,
-        next.played,
-        next.position_ticks,
-        next.play_count,
-        stamp,
-    )
-    .await
+    if let Err(e) = state
+        .data
+        .user_data()
+        .save_play_state(
+            user_id,
+            item_id,
+            next.played,
+            next.position_ticks,
+            next.play_count,
+            stamp,
+        )
+        .await
     {
         tracing::warn!("Play state for {item_id}: {e}");
     }
@@ -70,7 +72,7 @@ pub async fn report_playback_start(
 
         // Look up item for session tracking
         let (item_name, item_type) =
-            if let Ok(Some(item)) = media_items::find_by_id(&state.pool, item_id).await {
+            if let Ok(Some(item)) = state.data.media_items().find_by_id(item_id).await {
                 (item.name, item.item_type)
             } else {
                 ("Unknown".to_string(), "Unknown".to_string())
@@ -126,7 +128,7 @@ pub async fn report_playback_progress(
     if let Some(item_id) = body.item_id
         && !state.session_manager.has_playback(auth.session_id).await
     {
-        let (item_name, item_type) = match media_items::find_by_id(&state.pool, item_id).await {
+        let (item_name, item_type) = match state.data.media_items().find_by_id(item_id).await {
             Ok(Some(item)) => (item.name, item.item_type),
             _ => ("Unknown".to_string(), "Unknown".to_string()),
         };

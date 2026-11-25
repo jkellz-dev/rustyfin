@@ -3,10 +3,10 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, Uri},
 };
+use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::playback_info;
 use rustyfin_models::dto::{PlaybackInfoRequest, PlaybackInfoResponse};
 
@@ -22,14 +22,14 @@ pub async fn get_playback_info(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<PlaybackInfoResponse>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
-    let streams = media_streams::list_by_item(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let streams = state.data.media_streams().list_by_item(item_id).await?;
 
     let stored_profile = state
         .session_manager
@@ -79,14 +79,14 @@ pub async fn post_playback_info(
     let body: PlaybackInfoRequest = serde_json::from_value(raw.clone())
         .map_err(|e| ApiError::BadRequest(format!("PlaybackInfo: {e}")))?;
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let item = media_items::find_by_id(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
+        .await?
         .ok_or(ApiError::NotFound)?;
 
-    let streams = media_streams::list_by_item(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let streams = state.data.media_streams().list_by_item(item_id).await?;
 
     let stored_profile = if body.device_profile.is_none() {
         state

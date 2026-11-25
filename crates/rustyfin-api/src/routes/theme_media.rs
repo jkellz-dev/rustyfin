@@ -8,10 +8,11 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use rustyfin_models::data::{Data, ImageStore, LibraryStore, MediaItemStore};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images, media_items};
+use rustyfin_data::repo::media_items;
 use rustyfin_models::dto::{AllThemeMediaResult, BaseItemDto, ThemeMediaResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
@@ -60,15 +61,15 @@ pub async fn get_ancestors(
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
 
-    let ancestors = media_items::list_ancestors(&state.pool, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let ancestors = state.data.media_items().list_ancestors(item_id).await?;
     // Jellyfin ends the chain at the library and the user's root folder.
     let library_id = match ancestors.last() {
         Some(top) => top.library_id,
-        None => media_items::find_by_id(&state.pool, item_id)
-            .await
-            .map_err(ApiError::Database)?
+        None => state
+            .data
+            .media_items()
+            .find_by_id(item_id)
+            .await?
             .and_then(|i| i.library_id),
     };
     let mut dtos: Vec<BaseItemDto> = ancestors
@@ -78,9 +79,7 @@ pub async fn get_ancestors(
 
     let ids: Vec<Uuid> = ancestors.iter().map(|item| item.id).collect();
     if !ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &ids)
-            .await
-            .map_err(ApiError::Database)?;
+        let all_images = state.data.images().list_by_items(&ids).await?;
         let images_map = group_images_by_item(all_images);
         for dto in &mut dtos {
             if let Some(item_images) = images_map.get(&dto.id) {
@@ -91,7 +90,10 @@ pub async fn get_ancestors(
 
     super::items::name_series_for_seasons(&state.pool, &mut dtos).await;
     super::items::attach_music_fields(&state.pool, &ancestors, &mut dtos).await;
-    let totals = media_items::runtime_totals(&state.pool, &ids)
+    let totals = state
+        .data
+        .media_items()
+        .runtime_totals(&ids)
         .await
         .or_log_default("media_items::runtime_totals");
     for (row, dto) in ancestors.iter().zip(dtos.iter_mut()) {
@@ -111,20 +113,24 @@ pub async fn get_ancestors(
     }
 
     // Like Jellyfin, each ancestor has its child count and the user's data.
-    let counts = media_items::count_children_batch(&state.pool, &ids)
+    let counts = state
+        .data
+        .media_items()
+        .count_children_batch(&ids)
         .await
         .or_log_default("media_items::count_children_batch");
     for dto in &mut dtos {
         dto.child_count = Some(counts.get(&dto.id).copied().unwrap_or(0) as i32);
     }
     if let Some(lib) = match library_id {
-        Some(id) => rustyfin_data::repo::libraries::find_by_id(&state.pool, id)
-            .await
-            .map_err(ApiError::Database)?,
+        Some(id) => state.data.libraries().find_by_id(id).await?,
         None => None,
     } {
         let mut folder = super::libraries::collection_folder_dto(&lib, &state.server_id);
-        let count = media_items::count_top_level_by_library(&state.pool, lib.id, &[])
+        let count = state
+            .data
+            .media_items()
+            .count_top_level_by_library(lib.id, &[])
             .await
             .or_log_default("media_items::count_top_level_by_library");
         folder.child_count = Some(count as i32);

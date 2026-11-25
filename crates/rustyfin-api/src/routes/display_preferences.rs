@@ -28,7 +28,7 @@ pub async fn get_display_preferences(
     let client = query.client.as_deref().unwrap_or("emby");
 
     if let Some(data) = state
-        .data()
+        .data
         .display_preferences()
         .get(auth.user_id, &display_prefs_id, client)
         .await?
@@ -53,7 +53,7 @@ pub async fn update_display_preferences(
 ) -> Result<StatusCode, ApiError> {
     let client = query.client.as_deref().unwrap_or("emby");
     state
-        .data()
+        .data
         .display_preferences()
         .upsert(auth.user_id, &display_prefs_id, client, &body)
         .await?;

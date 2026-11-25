@@ -6,7 +6,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_data::repo::links;
+use rustyfin_models::data::{Data, LinkStore};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -48,10 +48,8 @@ pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<Vec<LinkInfo>>, ApiError> {
-    let rows = links::list(&state.pool).await.map_err(ApiError::Database)?;
-    let counts = links::counts(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.links().list().await?;
+    let counts = state.data.links().counts().await?;
     let configured = state.links.ids().await;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {

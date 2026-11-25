@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, LibraryStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -106,7 +107,10 @@ pub fn spawn_genre_list_builder(state: AppState) {
     tokio::spawn(async move {
         loop {
             let started = std::time::Instant::now();
-            let libraries = rustyfin_data::repo::libraries::list_all(&state.pool)
+            let libraries = state
+                .data
+                .libraries()
+                .list_all()
                 .await
                 .or_log_default("libraries::list_all");
             let targets = std::iter::once(None).chain(
@@ -133,15 +137,22 @@ async fn build_music_genres(
     state: &AppState,
     parent_id: Option<Uuid>,
 ) -> Result<Vec<BaseItemDto>, ApiError> {
-    let names = media_items::distinct_genres_by_item_types(&state.pool, parent_id, MUSIC_TYPES)
+    let names = state
+        .data
+        .media_items()
+        .distinct_genres_by_item_types(parent_id, MUSIC_TYPES)
+        .await?;
+    let mut all_counts = state
+        .data
+        .media_items()
+        .count_genres_by_types(&names, parent_id, MUSIC_TYPES)
         .await
-        .map_err(ApiError::Database)?;
-    let mut all_counts =
-        media_items::count_genres_by_types(&state.pool, &names, parent_id, MUSIC_TYPES)
-            .await
-            .or_log_default("media_items::count_genres_by_types");
+        .or_log_default("media_items::count_genres_by_types");
     // Each genre's picture: one of its albums' covers (owner, 2026-11-23).
-    let covers = media_items::genre_albums(&state.pool, &names, parent_id)
+    let covers = state
+        .data
+        .media_items()
+        .genre_albums(&names, parent_id)
         .await
         .or_log_default("media_items::genre_albums");
     let mut dtos = Vec::with_capacity(names.len());
@@ -186,10 +197,11 @@ pub async fn get_music_genre(
     auth: AuthenticatedUser,
     Path(genre_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    let counts =
-        media_items::count_items_with_genre_by_types(&state.pool, &genre_name, None, MUSIC_TYPES)
-            .await
-            .map_err(ApiError::Database)?;
+    let counts = state
+        .data
+        .media_items()
+        .count_items_with_genre_by_types(&genre_name, None, MUSIC_TYPES)
+        .await?;
 
     let total_children: i32 = counts.iter().map(|(_, c)| *c as i32).sum();
     if total_children == 0 {
@@ -215,7 +227,10 @@ pub async fn get_music_genre(
         }
     }
 
-    let added = media_items::first_added_with(&state.pool, NameKind::Genre(&genre_name))
+    let added = state
+        .data
+        .media_items()
+        .first_added_with(NameKind::Genre(&genre_name))
         .await
         .or_log_default("media_items::first_added_with");
     Ok(Json(

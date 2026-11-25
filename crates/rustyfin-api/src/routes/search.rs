@@ -2,11 +2,14 @@ use axum::{
     Json,
     extract::{Query, State},
 };
+use rustyfin_models::data::{
+    CollectionStore, Data, ImageStore, LibraryAccessStore, MediaItemStore,
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images, user_library_access};
+use rustyfin_data::repo::images;
 use rustyfin_models::dto::{SearchHint, SearchHintResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -51,9 +54,11 @@ pub async fn search_hints(
         })
     };
 
-    let accessible = user_library_access::get_accessible_library_ids(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let accessible = state
+        .data
+        .user_library_access()
+        .get_accessible_library_ids(auth.user_id)
+        .await?;
 
     // Results are filtered below (access, library), so ask for more.
     let wanted = if query.parent_id.is_some() {
@@ -73,17 +78,16 @@ pub async fn search_hints(
         .filter(|h| h.item_type == "BoxSet")
         .map(|h| h.id)
         .collect();
-    let hidden = rustyfin_data::repo::collections::hidden_among(&state.pool, &boxsets)
-        .await
-        .map_err(ApiError::Database)?;
+    let hidden = state.data.collections().hidden_among(&boxsets).await?;
     // Titles of a linked server that is down are not shown.
     let hit_ids: Vec<Uuid> = hits.iter().map(|h| h.id).collect();
-    let shown: std::collections::HashSet<Uuid> =
-        rustyfin_data::repo::media_items::visible_ids(&state.pool, &hit_ids)
-            .await
-            .map_err(ApiError::Database)?
-            .into_iter()
-            .collect();
+    let shown: std::collections::HashSet<Uuid> = state
+        .data
+        .media_items()
+        .visible_ids(&hit_ids)
+        .await?
+        .into_iter()
+        .collect();
     // Filter by library access, and to the library asked for.
     let hits: Vec<_> = hits
         .into_iter()
@@ -183,7 +187,10 @@ pub async fn search_hints(
     // Batch load images for search results
     let item_ids: Vec<Uuid> = hints.iter().map(|h| h.id).collect();
     if !item_ids.is_empty() {
-        let all_images = images::list_by_items(&state.pool, &item_ids)
+        let all_images = state
+            .data
+            .images()
+            .list_by_items(&item_ids)
             .await
             .or_log_default("images::list_by_items");
 

@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, UserDataStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -46,9 +47,7 @@ pub async fn get_user_item_data(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::get(&state.pool, auth.user_id, item_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state.data.user_data().get(auth.user_id, item_id).await?;
     let mut dto = ud.as_ref().map(to_dto).unwrap_or_default();
     dto.item_id = Some(item_id.simple().to_string());
     dto.key = Some(item_id.simple().to_string());
@@ -68,19 +67,20 @@ pub async fn update_user_item_data(
     let rating = body
         .rating
         .or(body.likes.map(|l| if l { 10.0 } else { 1.0 }));
-    let ud = user_data::update_partial(
-        &state.pool,
-        auth.user_id,
-        item_id,
-        body.played,
-        body.play_count,
-        body.playback_position_ticks,
-        body.is_favorite,
-        rating,
-        body.last_played_date,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .update_partial(
+            auth.user_id,
+            item_id,
+            body.played,
+            body.play_count,
+            body.playback_position_ticks,
+            body.is_favorite,
+            rating,
+            body.last_played_date,
+        )
+        .await?;
     let mut dto = to_dto(&ud);
     dto.item_id = Some(item_id.simple().to_string());
     dto.key = Some(item_id.simple().to_string());
@@ -112,9 +112,11 @@ pub async fn mark_favorite(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::set_favorite(&state.pool, auth.user_id, item_id, true)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .set_favorite(auth.user_id, item_id, true)
+        .await?;
     Ok(Json(to_dto(&ud)))
 }
 
@@ -125,9 +127,11 @@ pub async fn unmark_favorite(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::set_favorite(&state.pool, auth.user_id, item_id, false)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .set_favorite(auth.user_id, item_id, false)
+        .await?;
     Ok(Json(to_dto(&ud)))
 }
 
@@ -138,9 +142,11 @@ pub async fn mark_played(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::set_played(&state.pool, auth.user_id, item_id, true)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .set_played(auth.user_id, item_id, true)
+        .await?;
     Ok(Json(to_dto(&ud)))
 }
 
@@ -151,9 +157,11 @@ pub async fn mark_unplayed(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::set_played(&state.pool, auth.user_id, item_id, false)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .set_played(auth.user_id, item_id, false)
+        .await?;
     Ok(Json(to_dto(&ud)))
 }
 
@@ -202,9 +210,11 @@ pub async fn update_rating(
     Query(params): Query<RatingParams>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::set_rating(&state.pool, auth.user_id, item_id, params.likes)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .set_rating(auth.user_id, item_id, params.likes)
+        .await?;
     Ok(Json(to_dto(&ud)))
 }
 
@@ -214,9 +224,11 @@ pub async fn delete_rating(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = user_data::set_rating(&state.pool, auth.user_id, item_id, None)
-        .await
-        .map_err(ApiError::Database)?;
+    let ud = state
+        .data
+        .user_data()
+        .set_rating(auth.user_id, item_id, None)
+        .await?;
     Ok(Json(to_dto(&ud)))
 }
 

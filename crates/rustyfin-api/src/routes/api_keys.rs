@@ -1,11 +1,11 @@
 use axum::{Json, extract::State, http::StatusCode};
 use rand::RngExt;
+use rustyfin_models::data::{ApiKeyStore, Data};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use rustyfin_auth::api_key::hash_api_key;
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_data::repo::api_keys;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -56,9 +56,7 @@ pub async fn create_api_key(
     let plaintext_key = generate_api_key();
     let key_hash = hash_api_key(&plaintext_key);
 
-    let row = api_keys::create(&state.pool, &req.name, &key_hash)
-        .await
-        .map_err(ApiError::Database)?;
+    let row = state.data.api_keys().create(&req.name, &key_hash).await?;
 
     Ok(Json(CreateApiKeyResponse {
         id: row.id,
@@ -73,9 +71,7 @@ pub async fn list_api_keys(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<rustyfin_models::dto::QueryResult<ApiKeyDto>>, ApiError> {
-    let rows = api_keys::list_all(&state.pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = state.data.api_keys().list_all().await?;
 
     let dtos: Vec<ApiKeyDto> = rows
         .into_iter()
@@ -98,9 +94,7 @@ pub async fn delete_api_key(
     _admin: AdminUser,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = api_keys::delete(&state.pool, id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = state.data.api_keys().delete(id).await?;
 
     if !deleted {
         return Err(ApiError::NotFound);

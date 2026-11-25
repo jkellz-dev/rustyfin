@@ -6,7 +6,8 @@ use axum::{
     extract::{Path, State},
 };
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::{images, media_items};
+use rustyfin_data::repo::images;
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use rustyfin_models::dto::{BaseItemDto, ThemeMediaResult};
 use uuid::Uuid;
 
@@ -35,14 +36,17 @@ async fn extras(
     types: &[&str],
 ) -> Result<Vec<BaseItemDto>, ApiError> {
     super::access::require_item_access(state, auth.user_id, owner).await?;
-    let rows = media_items::list_extras(&state.pool, owner, types).await?;
+    let rows = state.data.media_items().list_extras(owner, types).await?;
     let mut dtos: Vec<BaseItemDto> = rows
         .iter()
         .map(|r| media_item_to_dto(r, &state.server_id))
         .collect();
     if !rows.is_empty() {
         let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let found = images::list_by_items(&state.pool, &ids)
+        let found = state
+            .data
+            .images()
+            .list_by_items(&ids)
             .await
             .or_log_default("images::list_by_items");
         let by_item = group_images_by_item(found);

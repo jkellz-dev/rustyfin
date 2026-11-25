@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::{Data, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -27,16 +28,21 @@ pub async fn get_years(
     auth: AuthenticatedUser,
     Query(query): Query<YearsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    let years = media_items::distinct_years(&state.pool, query.parent_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let years = state
+        .data
+        .media_items()
+        .distinct_years(query.parent_id)
+        .await?;
 
     let total = years.len() as i32;
     let start = query.start_index.unwrap_or(0) as usize;
     let limit = query.limit.unwrap_or(100) as usize;
     let page = &years[start.min(years.len())..years.len().min(start + limit)];
 
-    let mut counts_by_year = media_items::count_items_by_years(&state.pool, page, query.parent_id)
+    let mut counts_by_year = state
+        .data
+        .media_items()
+        .count_items_by_years(page, query.parent_id)
         .await
         .or_log_default("media_items::count_items_by_years");
     let mut dtos = Vec::with_capacity(page.len());
@@ -83,9 +89,11 @@ pub async fn get_year(
     auth: AuthenticatedUser,
     Path(year): Path<i32>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    let counts = media_items::count_items_by_year(&state.pool, year, None)
-        .await
-        .map_err(ApiError::Database)?;
+    let counts = state
+        .data
+        .media_items()
+        .count_items_by_year(year, None)
+        .await?;
 
     let total_children: i32 = counts.iter().map(|(_, c)| *c as i32).sum();
     if total_children == 0 {
@@ -115,7 +123,10 @@ pub async fn get_year(
         }
     }
 
-    let added = media_items::first_added_with(&state.pool, NameKind::Year(year))
+    let added = state
+        .data
+        .media_items()
+        .first_added_with(NameKind::Year(year))
         .await
         .or_log_default("media_items::first_added_with");
     Ok(Json(

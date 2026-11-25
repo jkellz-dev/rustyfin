@@ -3,6 +3,7 @@ use axum::{
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
+use rustyfin_models::data::{Data, SessionStore};
 use uuid::Uuid;
 
 use rustyfin_auth::session::{TokenError, resolve_token};
@@ -105,7 +106,7 @@ async fn handle_socket(
                     Some(token) => token_still_valid(&state, token).await,
                     // Vouched for: open while its session is.
                     None => !matches!(
-                        rustyfin_data::repo::sessions::find_active_by_id(&state.pool, session_id).await,
+                        state.data.sessions().find_active_by_id(session_id).await,
                         Ok(None)
                     ),
                 };
