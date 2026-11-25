@@ -90,7 +90,6 @@ impl Scans<'_> {
         imdb: Option<&str>,
         tmdb: Option<&str>,
     ) -> ServiceResult<()> {
-        let given = |id: Option<&str>| id.filter(|s| !s.trim().is_empty());
         let (key, value) = match (given(imdb), given(tmdb)) {
             (Some(imdb), _) => ("Imdb", imdb),
             (None, Some(tmdb)) => ("Tmdb", tmdb),
@@ -107,7 +106,7 @@ impl Scans<'_> {
     /// Jellyfin's older notification for shows: the series with this TVDB
     /// id are rescanned.
     pub async fn series_changed(&self, tvdb: Option<&str>) -> ServiceResult<()> {
-        let Some(tvdb) = tvdb.filter(|s| !s.trim().is_empty()) else {
+        let Some(tvdb) = given(tvdb) else {
             return Ok(());
         };
         let paths = self
@@ -278,4 +277,9 @@ impl Scans<'_> {
         }
         claimed
     }
+}
+
+/// A provider id a notification gave: present and not blank.
+fn given(id: Option<&str>) -> Option<&str> {
+    id.filter(|s| !s.trim().is_empty())
 }
