@@ -11,10 +11,15 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// A cache folder of the test's own. The tests run in parallel and one
+/// removes its folder at the end, so two must never share one: a clock
+/// reading alone can repeat, hence the counter.
 fn cache() -> PathBuf {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let d = std::env::temp_dir().join(format!(
-        "rustyfin-cover-{}-{}",
+        "rustyfin-cover-{}-{}-{}",
         std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
