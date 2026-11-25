@@ -567,6 +567,82 @@ async fn genres_of_a_music_library_are_music_genres() {
     app.cleanup().await;
 }
 
+/// Owner, 2026-11-24: Finamp's recently played tracks took 1.7 s (a trace):
+/// `SortBy=DatePlayed,SortName` descending sorted every track in the library.
+/// Played tracks now come first by date, then the rest by name, page by page
+/// across the boundary, with the same total; a favourite filter still works.
+#[tokio::test]
+async fn recently_played_pages_across_played_and_unplayed() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", true).await;
+    let music = app.create_library("Music", "music").await;
+    let mut ids = std::collections::HashMap::new();
+    for name in ["Alpha", "Bravo", "Charlie", "Delta", "Echo"] {
+        ids.insert(
+            name,
+            app.create_media_item(name, "Audio", music, None).await,
+        );
+    }
+    // Played: Delta (newest), then Bravo; Echo has user data but no play date.
+    for (name, minutes_ago) in [("Delta", 1), ("Bravo", 5)] {
+        sqlx::query(
+            "INSERT INTO user_data (user_id, item_id, played, play_count, last_played_date) \
+             VALUES ($1, $2, true, 1, now() - make_interval(mins => $3))",
+        )
+        .bind(user)
+        .bind(ids[name])
+        .bind(minutes_ago)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    }
+    sqlx::query("INSERT INTO user_data (user_id, item_id, is_favorite) VALUES ($1, $2, true)")
+        .bind(user)
+        .bind(ids["Echo"])
+        .execute(&app.pool)
+        .await
+        .unwrap();
+
+    let page = |start: i64, limit: i64, extra: &'static str| {
+        let app = &app;
+        let token = &token;
+        async move {
+            let (status, body) = app
+                .get(
+                    &format!(
+                        "/Users/{user}/Items?ParentId={music}&IncludeItemTypes=Audio&Recursive=true\
+                         &SortBy=DatePlayed,SortName&SortOrder=Descending&StartIndex={start}&Limit={limit}{extra}"
+                    ),
+                    token,
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+            let names: Vec<String> = body["Items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i["Name"].as_str().unwrap().to_string())
+                .collect();
+            (names, body["TotalRecordCount"].as_i64().unwrap())
+        }
+    };
+    // Played by date (newest first), then the rest by name, descending.
+    let all = ["Delta", "Bravo", "Echo", "Charlie", "Alpha"];
+    let (names, total) = page(0, 10, "").await;
+    assert_eq!(names, all);
+    assert_eq!(total, 5);
+    let (first, _) = page(0, 3, "").await;
+    let (second, total) = page(3, 3, "").await;
+    assert_eq!([first, second].concat(), all);
+    assert_eq!(total, 5);
+    let (one, _) = page(1, 2, "").await;
+    assert_eq!(one, ["Bravo", "Echo"]);
+    // A filter on user data keeps working.
+    let (favs, total) = page(0, 10, "&IsFavorite=true").await;
+    assert_eq!((favs, total), (vec!["Echo".to_string()], 1));
+    app.cleanup().await;
+}
+
 /// Owner, 2026-11-24: Finamp's "Abstract Hip Hop" page counted every album,
 /// track and artist in the library. Finamp opens a genre with `GenreIds`
 /// (the genre's id) on `/Items`, `/Artists` and `/Artists/AlbumArtists`,
