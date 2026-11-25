@@ -149,10 +149,11 @@ async fn collect(state: &AppState) {
     metrics::gauge!("rustyfin_up").set(1.0);
     metrics::gauge!("rustyfin_build_info", "version" => env!("CARGO_PKG_VERSION")).set(1.0);
 
-    let database: String = sqlx::query_scalar("SELECT current_database()::text")
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or_default();
+    let database: String =
+        sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
+            .fetch_one(&state.pool)
+            .await
+            .unwrap_or_default();
     let count_now = counts_due(&database);
     if count_now {
         let counts: Vec<(String, String, i64)> = sqlx::query_as(

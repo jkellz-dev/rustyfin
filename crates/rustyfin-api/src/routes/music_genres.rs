@@ -149,7 +149,7 @@ pub(crate) fn genre_image_tag(album: Uuid) -> String {
 }
 
 /// Genre ids are made from their names (UUID v5); the names of every genre,
-/// by id, per database (tests run many in one process), kept for five
+/// by id, per database and schema (tests run many in one process), kept for five
 /// minutes. An id not in the list reads the names again (a genre added
 /// since), but at most every ten seconds: every image or access check for an
 /// id that is no item asks here, and reading the names takes 0.1 s on a large
@@ -183,11 +183,12 @@ pub(crate) async fn genre_names_by_ids(
 }
 
 pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<String> {
-    let database = pool
-        .connect_options()
-        .get_database()
-        .unwrap_or_default()
-        .to_string();
+    // The database and schema: tests share one database, a schema each.
+    let database: String =
+        sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
+            .fetch_one(pool)
+            .await
+            .unwrap_or_default();
     if let Ok(cached) = GENRE_IDS.lock()
         && let Some((at, names)) = cached.as_ref().and_then(|c| c.get(&database))
     {
