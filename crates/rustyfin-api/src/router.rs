@@ -27,6 +27,8 @@ pub struct AppState {
     /// The data layer over `pool` (`CLAUDE.md`, "Layers"). Transitional:
     /// both exist while handlers move off the pool.
     pub data: rustyfin_data::PgData,
+    /// The rules over `data` (`rustyfin-services`).
+    pub services: rustyfin_services::Services<rustyfin_data::PgData>,
     /// Serving a server that links this one: `pool` leaves out what links
     /// hold, and so does everything else (`link_scope`). Set by
     /// [`build_router`] for its second copy of the routes.
@@ -74,8 +76,10 @@ impl FromRef<AppState> for rustyfin_data::PgData {
 /// sees only this server's own media (`link_scope`).
 pub fn build_router(state: AppState) -> Router {
     let local_pool = crate::link_scope::local_only_pool(&state.pool);
+    let local_data = rustyfin_data::PgData::from_pool(&local_pool);
     let local_state = AppState {
-        data: rustyfin_data::PgData::from_pool(&local_pool),
+        services: rustyfin_services::Services::new(local_data.clone()),
+        data: local_data,
         pool: local_pool,
         local_only: true,
         ..state.clone()

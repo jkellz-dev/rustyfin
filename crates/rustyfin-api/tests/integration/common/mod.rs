@@ -171,6 +171,7 @@ impl TestApp {
         let scan_board = rustyfin_services::library::progress::ScanBoard::global().clone();
         let links = Arc::new(rustyfin_services::link::Links::default());
         let state = AppState {
+            services: rustyfin_services::Services::new(data.clone()),
             data: data.clone(),
             pool: pool.clone(),
             local_only: false,

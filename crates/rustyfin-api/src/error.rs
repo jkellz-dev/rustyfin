@@ -38,6 +38,18 @@ pub enum ApiError {
     TooManyRequests(u64),
 }
 
+impl From<rustyfin_services::ServiceError> for ApiError {
+    fn from(e: rustyfin_services::ServiceError) -> Self {
+        use rustyfin_services::ServiceError;
+        match e {
+            ServiceError::NotFound => ApiError::NotFound,
+            ServiceError::Forbidden => ApiError::Forbidden,
+            ServiceError::Invalid(why) => ApiError::BadRequest(why),
+            ServiceError::Data(e) => ApiError::Data(e),
+        }
+    }
+}
+
 /// Lets a handler carry on without optional data (images, counts, people) when its
 /// query fails, while saying so in the log.
 ///

@@ -6,11 +6,39 @@
 //! is connected and what they are playing, and the commands sent to them.
 //! [`image`]: resizing and caching of artwork. [`link`]: linked servers,
 //! whose shared libraries merge into this one's.
+//!
+//! [`Services`] is the entry point for the rules route handlers used to
+//! hold: `services.playlists().update(user, id, change)`. Each area takes
+//! the data layer through the `Data` trait and answers with a
+//! [`ServiceError`] the API crates turn into their own error shapes.
 
+pub mod error;
 pub mod image;
 pub mod library;
 pub mod link;
+pub mod playlists;
 pub mod session;
+
+pub use error::{ServiceError, ServiceResult};
+
+use rustyfin_models::data::Data;
+
+/// The services over one data layer. Cheap to clone when the data layer is.
+#[derive(Clone)]
+pub struct Services<D> {
+    data: D,
+}
+
+impl<D: Data> Services<D> {
+    pub fn new(data: D) -> Self {
+        Self { data }
+    }
+
+    /// Playlists: who may see and change them.
+    pub fn playlists(&self) -> playlists::Playlists<'_, D> {
+        playlists::Playlists { data: &self.data }
+    }
+}
 
 pub use library::EnrichmentService;
 pub use library::LibraryScanner;

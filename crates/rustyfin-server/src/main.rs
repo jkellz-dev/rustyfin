@@ -384,6 +384,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let state = AppState {
+        services: rustyfin_services::Services::new(data.clone()),
         data: data.clone(),
         pool: db_pool,
         local_only: false,
