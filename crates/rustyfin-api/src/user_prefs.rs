@@ -12,14 +12,15 @@
 //!   PlaybackInfo, which apps start playback with.
 
 use rustyfin_data::repo::users;
+use rustyfin_models::data::{Data, UserStore};
 use rustyfin_models::dto::{BaseItemDto, MediaStream, PlaybackInfoResponse, UserConfiguration};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 /// The user's settings, or Jellyfin's defaults for a user who never saved any
 /// (or cannot be read).
-pub async fn load(pool: &PgPool, user_id: Uuid) -> UserConfiguration {
-    match users::find_by_id(pool, user_id).await {
+pub async fn load(data: &rustyfin_data::PgData, user_id: Uuid) -> UserConfiguration {
+    match data.users().find_by_id(user_id).await {
         Ok(Some(row)) => crate::routes::users::user_configuration(&row),
         Ok(None) => UserConfiguration::default(),
         Err(e) => {

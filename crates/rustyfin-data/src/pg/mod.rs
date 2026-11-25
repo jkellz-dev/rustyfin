@@ -316,7 +316,10 @@ impl<T> IntoData<T> for Result<T, sqlx::Error> {
 const PG_FOREIGN_KEY_VIOLATION: &str = "23503";
 
 /// What kind of failure a sqlx error is, without the sqlx type.
-pub(crate) fn data_error(e: sqlx::Error) -> DataError {
+///
+/// Transitional: public only while code outside this crate still runs its
+/// own queries.
+pub fn data_error(e: sqlx::Error) -> DataError {
     if crate::pool::is_unavailable(&e) {
         return DataError::Unavailable(e.to_string());
     }

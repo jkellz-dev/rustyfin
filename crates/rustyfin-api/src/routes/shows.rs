@@ -194,7 +194,7 @@ async fn enrich_next_up_dtos(
     }
 
     attach_media_sources_if_asked(
-        &state.pool,
+        &state.data,
         &query.fields,
         items,
         dtos,
@@ -203,7 +203,7 @@ async fn enrich_next_up_dtos(
     .await;
 
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, dtos).await;
+        attach_user_data(&state.data, auth.user_id, dtos).await;
     }
 }
 
@@ -275,7 +275,7 @@ pub async fn get_seasons(
 
     // User data
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     }
 
     Ok(Json(QueryResult::new(dtos, total)))
@@ -447,7 +447,7 @@ async fn enrich_episode_dtos(
     }
 
     attach_media_sources_if_asked(
-        &state.pool,
+        &state.data,
         &query.fields,
         items,
         dtos,
@@ -456,6 +456,6 @@ async fn enrich_episode_dtos(
     .await;
 
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, dtos).await;
+        attach_user_data(&state.data, auth.user_id, dtos).await;
     }
 }

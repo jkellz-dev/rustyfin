@@ -135,8 +135,8 @@ async fn mix(
             }
         }
     }
-    attach_music_fields(&state.pool, &rows, &mut dtos).await;
-    attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    attach_music_fields(&state.data, &rows, &mut dtos).await;
+    attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     let total = dtos.len() as i32;
     Ok(Json(QueryResult::new(dtos, total)))
 }

@@ -130,7 +130,7 @@ pub async fn get_item_collections(
             super::items::apply_images_to_dto(dto, item_images);
         }
     }
-    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     let total = dtos.len() as i32;
     Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
 }

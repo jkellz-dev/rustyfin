@@ -232,7 +232,7 @@ fn numbered_sort_name(item: &media_items::MediaItemRow) -> Option<String> {
 /// `Fields=MediaSources` or `Fields=MediaStreams` on a list: clients decide direct
 /// play from the list without a request per item. One query for all the items.
 pub(crate) async fn attach_media_sources_if_asked(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     fields: &Option<String>,
     items: &[media_items::MediaItemRow],
     dtos: &mut [BaseItemDto],
@@ -250,7 +250,9 @@ pub(crate) async fn attach_media_sources_if_asked(
         .filter(|i| !i.is_folder)
         .map(|i| i.id)
         .collect();
-    let rows = media_streams::list_by_items(pool, &ids)
+    let rows = data
+        .media_streams()
+        .list_by_items(&ids)
         .await
         .or_log_default("media_streams::list_by_items");
     let mut by_item: HashMap<Uuid, Vec<media_streams::MediaStreamRow>> = HashMap::new();
@@ -262,7 +264,7 @@ pub(crate) async fn attach_media_sources_if_asked(
             attach_media_source(dto, item, streams, reveal_path);
         }
     }
-    super::versions::attach_versions(pool, items, dtos, reveal_path).await;
+    super::versions::attach_versions(data, items, dtos, reveal_path).await;
 }
 
 /// Jellyfin's `MediaType` for an item type: what kind of stream it plays, or
@@ -310,7 +312,10 @@ fn folder_user_data(ud: &mut UserItemDataDto, total: i64, unplayed: i64) {
 }
 
 /// Seasons carry only their parent link; name the series for them in one query.
-pub(crate) async fn name_series_for_seasons(pool: &sqlx::PgPool, dtos: &mut [BaseItemDto]) {
+pub(crate) async fn name_series_for_seasons(
+    data: &rustyfin_data::PgData,
+    dtos: &mut [BaseItemDto],
+) {
     let wanted: Vec<Uuid> = dtos
         .iter()
         .filter(|d| d.item_type == "Season" && d.series_id.is_none())
@@ -319,7 +324,9 @@ pub(crate) async fn name_series_for_seasons(pool: &sqlx::PgPool, dtos: &mut [Bas
     if wanted.is_empty() {
         return;
     }
-    let series: HashMap<Uuid, String> = media_items::find_by_ids(pool, &wanted)
+    let series: HashMap<Uuid, String> = data
+        .media_items()
+        .find_by_ids(&wanted)
         .await
         .or_log_default("media_items::find_by_ids")
         .into_iter()
@@ -340,9 +347,15 @@ pub(crate) async fn name_series_for_seasons(pool: &sqlx::PgPool, dtos: &mut [Bas
 /// Attach the caller's `UserData` to every item in two queries (their rows, then
 /// the unplayed counts for folders). A failing lookup leaves the zeros in place
 /// and logs: the list is the answer, the user data is an extra.
-pub(crate) async fn attach_user_data(pool: &sqlx::PgPool, user_id: Uuid, dtos: &mut [BaseItemDto]) {
+pub(crate) async fn attach_user_data(
+    data: &rustyfin_data::PgData,
+    user_id: Uuid,
+    dtos: &mut [BaseItemDto],
+) {
     let ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
-    let rows = user_data::get_many(pool, user_id, &ids)
+    let rows = data
+        .user_data()
+        .get_many(user_id, &ids)
         .await
         .or_log_default("user_data::get_many");
     let folder_ids: Vec<Uuid> = dtos
@@ -350,7 +363,9 @@ pub(crate) async fn attach_user_data(pool: &sqlx::PgPool, user_id: Uuid, dtos: &
         .filter(|d| counts_children(d))
         .map(|d| d.id)
         .collect();
-    let progress = user_data::folder_progress(pool, user_id, &folder_ids)
+    let progress = data
+        .user_data()
+        .folder_progress(user_id, &folder_ids)
         .await
         .or_log_default("user_data::folder_progress");
     for dto in dtos.iter_mut() {
@@ -641,7 +656,7 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow
 
 /// Seasons and episodes name their show's poster (`SeriesPrimaryImageTag`), and a
 /// season without a cover of its own shows the show's (owner, 2026-11-14).
-pub(crate) async fn attach_series_art(pool: &sqlx::PgPool, dtos: &mut [BaseItemDto]) {
+pub(crate) async fn attach_series_art(data: &rustyfin_data::PgData, dtos: &mut [BaseItemDto]) {
     let series_of = |d: &BaseItemDto| match d.item_type.as_str() {
         "Season" => d.series_id.or(d.parent_id),
         "Episode" => d.series_id,
@@ -653,7 +668,9 @@ pub(crate) async fn attach_series_art(pool: &sqlx::PgPool, dtos: &mut [BaseItemD
     }
     series_ids.sort();
     series_ids.dedup();
-    let posters: HashMap<Uuid, ImageRow> = images::list_by_items(pool, &series_ids)
+    let posters: HashMap<Uuid, ImageRow> = data
+        .images()
+        .list_by_items(&series_ids)
         .await
         .or_log_default("images::list_by_items")
         .into_iter()
@@ -698,7 +715,7 @@ pub(crate) async fn attach_series_art(pool: &sqlx::PgPool, dtos: &mut [BaseItemD
 /// queries for the whole page. Artist names link to artist folders of the same
 /// library only, so a hidden library's artists never show up.
 pub(crate) async fn attach_music_fields(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     items: &[media_items::MediaItemRow],
     dtos: &mut [BaseItemDto],
 ) {
@@ -721,20 +738,23 @@ pub(crate) async fn attach_music_fields(
     }
     related_ids.sort();
     related_ids.dedup();
-    let related: HashMap<Uuid, media_items::MediaItemRow> =
-        media_items::find_by_ids(pool, &related_ids)
-            .await
-            .or_log_default("media_items::find_by_ids")
-            .into_iter()
-            .map(|r| (r.id, r))
-            .collect();
+    let related: HashMap<Uuid, media_items::MediaItemRow> = data
+        .media_items()
+        .find_by_ids(&related_ids)
+        .await
+        .or_log_default("media_items::find_by_ids")
+        .into_iter()
+        .map(|r| (r.id, r))
+        .collect();
 
     let album_ids: Vec<Uuid> = related
         .values()
         .filter(|r| r.item_type == "MusicAlbum")
         .map(|r| r.id)
         .collect();
-    let album_art: HashMap<Uuid, String> = images::list_by_items(pool, &album_ids)
+    let album_art: HashMap<Uuid, String> = data
+        .images()
+        .list_by_items(&album_ids)
         .await
         .or_log_default("images::list_by_items")
         .into_iter()
@@ -763,7 +783,9 @@ pub(crate) async fn attach_music_fields(
         .collect();
     names.sort();
     names.dedup();
-    let artist_rows = media_items::find_artists_by_names(pool, &names)
+    let artist_rows = data
+        .media_items()
+        .find_artists_by_names(&names)
         .await
         .or_log_default("media_items::find_artists_by_names");
     let link = |name: &str, library: Option<Uuid>| -> Option<NameGuidPair> {
@@ -781,7 +803,9 @@ pub(crate) async fn attach_music_fields(
         .filter(|d| matches!(d.item_type.as_str(), "MusicAlbum" | "MusicArtist"))
         .map(|d| d.id)
         .collect();
-    let totals = media_items::runtime_totals(pool, &folder_ids)
+    let totals = data
+        .media_items()
+        .runtime_totals(&folder_ids)
         .await
         .or_log_default("media_items::runtime_totals");
 
@@ -1174,11 +1198,11 @@ pub async fn get_items(
         }
     }
 
-    name_series_for_seasons(&state.pool, &mut dtos).await;
-    attach_music_fields(&state.pool, &items, &mut dtos).await;
-    attach_series_art(&state.pool, &mut dtos).await;
+    name_series_for_seasons(&state.data, &mut dtos).await;
+    attach_music_fields(&state.data, &items, &mut dtos).await;
+    attach_series_art(&state.data, &mut dtos).await;
     attach_media_sources_if_asked(
-        &state.pool,
+        &state.data,
         &query.fields,
         &items,
         &mut dtos,
@@ -1188,7 +1212,7 @@ pub async fn get_items(
     attach_people_if_asked(&state, &query.fields, &mut dtos).await;
     // Attach user data if requested
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     }
 
     let mut result = QueryResult::new(dtos, total as i32);
@@ -1240,7 +1264,7 @@ pub async fn get_item_by_id(
         super::libraries::visible_library_folder(&state, auth.user_id, item_id).await?
     {
         let mut folders = vec![folder];
-        attach_user_data(&state.pool, auth.user_id, &mut folders).await;
+        attach_user_data(&state.data, auth.user_id, &mut folders).await;
         return Ok(Json(folders.remove(0)));
     }
     let Some(item) = state.data.media_items().find_by_id(item_id).await? else {
@@ -1329,7 +1353,7 @@ pub async fn get_item_by_id(
         dto.album_count = Some(albums as i32);
         dto.music_video_count = Some(0);
     }
-    name_series_for_seasons(&state.pool, std::slice::from_mut(&mut dto)).await;
+    name_series_for_seasons(&state.data, std::slice::from_mut(&mut dto)).await;
     // By type, not is_folder: what the scanner marks a folder is not the point.
     if matches!(
         item.item_type.as_str(),
@@ -1353,7 +1377,7 @@ pub async fn get_item_by_id(
             .or_log_default("media_streams::list_by_item");
         attach_media_source(&mut dto, &item, &streams, auth.is_administrator);
         super::versions::attach_versions(
-            &state.pool,
+            &state.data,
             std::slice::from_ref(&item),
             std::slice::from_mut(&mut dto),
             auth.is_administrator,
@@ -1385,12 +1409,12 @@ pub async fn get_item_by_id(
     }
 
     attach_music_fields(
-        &state.pool,
+        &state.data,
         std::slice::from_ref(&item),
         std::slice::from_mut(&mut dto),
     )
     .await;
-    attach_series_art(&state.pool, std::slice::from_mut(&mut dto)).await;
+    attach_series_art(&state.data, std::slice::from_mut(&mut dto)).await;
     // The caller's user data, zeros when they never touched the item.
     let row = state
         .data
@@ -1532,7 +1556,7 @@ pub async fn get_latest_items(
     }
     // The user's settings: across libraries, not those they keep out of
     // Latest; and (Jellyfin's default) not what they have played.
-    let config = crate::user_prefs::load(&state.pool, auth.user_id).await;
+    let config = crate::user_prefs::load(&state.data, auth.user_id).await;
     let left_out = if query.parent_id.is_none() {
         crate::user_prefs::ids(&config.latest_items_excludes)
     } else {
@@ -1565,7 +1589,7 @@ pub async fn get_latest_items(
         added.truncate(limit as usize);
     }
     let items = if group {
-        group_latest(&state.pool, added, &wanted, limit).await?
+        group_latest(&state.data, added, &wanted, limit).await?
     } else {
         added
     };
@@ -1618,11 +1642,11 @@ pub async fn get_latest_items(
     for dto in &mut dtos {
         dto.child_count = Some(counts.get(&dto.id).copied().unwrap_or(0) as i32);
     }
-    attach_music_fields(&state.pool, &items, &mut dtos).await;
+    attach_music_fields(&state.data, &items, &mut dtos).await;
 
     // Badges: clients fall back to ChildCount (a show's seasons) without it.
     if query.enable_user_data.unwrap_or(true) {
-        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     }
     Ok(Json(dtos))
 }
@@ -1659,7 +1683,7 @@ enum LatestSlot {
 /// folders), a show with several new episodes becomes the show, one new
 /// episode stays an episode. Newest first, `limit` entries.
 async fn group_latest(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     added: Vec<media_items::MediaItemRow>,
     wanted: &[String],
     limit: i64,
@@ -1672,12 +1696,13 @@ async fn group_latest(
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let parents: HashMap<Uuid, media_items::MediaItemRow> =
-        media_items::find_by_ids(pool, &parent_ids)
-            .await?
-            .into_iter()
-            .map(|r| (r.id, r))
-            .collect();
+    let parents: HashMap<Uuid, media_items::MediaItemRow> = data
+        .media_items()
+        .find_by_ids(&parent_ids)
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r))
+        .collect();
     let album_of = |track: &media_items::MediaItemRow| -> Option<Uuid> {
         let parent = parents.get(&track.parent_id?)?;
         if parent.item_type == "MusicAlbum" {
@@ -1723,12 +1748,13 @@ async fn group_latest(
             _ => None,
         })
         .collect();
-    let mut folders: HashMap<Uuid, media_items::MediaItemRow> =
-        media_items::find_by_ids(pool, &folder_ids)
-            .await?
-            .into_iter()
-            .map(|r| (r.id, r))
-            .collect();
+    let mut folders: HashMap<Uuid, media_items::MediaItemRow> = data
+        .media_items()
+        .find_by_ids(&folder_ids)
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r))
+        .collect();
     let wants = |t: &str| {
         wanted.is_empty()
             || wanted.iter().any(|w| {

@@ -1,4 +1,4 @@
-use rustyfin_models::data::{Data, LibraryStore, MediaItemStore};
+use rustyfin_models::data::{ActivityLogStore, Data, LibraryStore, MediaItemStore};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -162,6 +162,8 @@ async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiErr
         state.scan_in_flight.write().await.insert(library_id);
 
         let pool = state.pool.clone();
+
+        let data = state.data.clone();
         let scan_in_flight = state.scan_in_flight.clone();
         let search_service = state.search_service.clone();
         let people_cache_dir = state.people_cache_dir.clone();
@@ -183,19 +185,20 @@ async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiErr
                         result.items_skipped,
                         result.errors,
                     );
-                    let _ = activity_log::insert(
-                        &pool,
-                        &format!(
-                            "Webhook scan completed (added={}, updated={})",
-                            result.items_added, result.items_updated
-                        ),
-                        None,
-                        "TaskCompleted",
-                        "Informational",
-                        None,
-                        None,
-                    )
-                    .await;
+                    let _ = data
+                        .activity_log()
+                        .insert(
+                            &format!(
+                                "Webhook scan completed (added={}, updated={})",
+                                result.items_added, result.items_updated
+                            ),
+                            None,
+                            "TaskCompleted",
+                            "Informational",
+                            None,
+                            None,
+                        )
+                        .await;
                 }
                 Err(e) => {
                     tracing::error!("Webhook scan failed for library {library_id}: {e}");

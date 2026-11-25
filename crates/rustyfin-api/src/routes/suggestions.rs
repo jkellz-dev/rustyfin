@@ -71,7 +71,7 @@ pub async fn get_suggestions(
 
     // Jellyfin sends suggestions with their media sources.
     super::items::attach_media_sources_if_asked(
-        &state.pool,
+        &state.data,
         &Some("MediaSources".to_string()),
         &items,
         &mut dtos,
@@ -79,6 +79,6 @@ pub async fn get_suggestions(
     )
     .await;
     // Badges: clients fall back to ChildCount (a show's seasons) without it.
-    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     Ok(Json(QueryResult::new(dtos, total)))
 }

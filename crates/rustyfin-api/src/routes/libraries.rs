@@ -72,7 +72,7 @@ pub async fn get_user_views(
     let include_hidden = query.include_hidden.unwrap_or(false);
     let user = auth.user_id;
     let Json(mut views) = all_views(state.clone(), auth).await?;
-    let config = crate::user_prefs::load(&state.pool, user).await;
+    let config = crate::user_prefs::load(&state.data, user).await;
     crate::user_prefs::arrange_views(&mut views.items, &config, include_hidden);
     views.total_record_count = views.items.len() as i32;
     Ok(Json(views))
@@ -101,7 +101,7 @@ async fn all_views(
     if collections > 0 {
         dtos.push(collections_view_dto(&state.server_id, collections));
     }
-    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
 
     let total = dtos.len() as i32;
     Ok(Json(QueryResult::new(dtos, total)))
@@ -195,7 +195,7 @@ pub(crate) async fn root_folder_dto(
     };
     dto.etag = Some(dto.id.simple().to_string());
     super::items::with_jellyfin_defaults(&mut dto);
-    super::items::attach_user_data(&state.pool, user_id, std::slice::from_mut(&mut dto)).await;
+    super::items::attach_user_data(&state.data, user_id, std::slice::from_mut(&mut dto)).await;
     Ok(dto)
 }
 
@@ -451,6 +451,8 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
 
     let pool = state.pool.clone();
 
+    let data = state.data.clone();
+
     let _ = state
         .data
         .activity_log()
@@ -493,16 +495,17 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
         for lib in filled {
             scan_in_flight.write().await.remove(&lib.id);
         }
-        let _ = activity_log::insert(
-            &pool,
-            "Library scan completed",
-            None,
-            "TaskCompleted",
-            "Informational",
-            None,
-            None,
-        )
-        .await;
+        let _ = data
+            .activity_log()
+            .insert(
+                "Library scan completed",
+                None,
+                "TaskCompleted",
+                "Informational",
+                None,
+                None,
+            )
+            .await;
 
         // What the scans changed, into the search index now rather than at
         // the next periodic sync.

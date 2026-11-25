@@ -55,9 +55,9 @@ async fn extras(
                 apply_images_to_dto(dto, imgs);
             }
         }
-        attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+        attach_user_data(&state.data, auth.user_id, &mut dtos).await;
         super::items::attach_media_sources_if_asked(
-            &state.pool,
+            &state.data,
             &Some("MediaSources".to_string()),
             &rows,
             &mut dtos,

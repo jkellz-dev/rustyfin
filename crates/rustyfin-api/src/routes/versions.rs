@@ -6,7 +6,7 @@
 
 use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::quality::Quality;
-use rustyfin_models::data::{Data, MediaItemStore};
+use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use rustyfin_models::dto::{BaseItemDto, DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use uuid::Uuid;
 
@@ -43,7 +43,7 @@ async fn best_copy(state: &AppState, item_id: Uuid) -> Result<Uuid, ApiError> {
     };
     let mut ids: Vec<Uuid> = vec![item_id];
     ids.extend(versions.iter().map(|v| v.id));
-    let streams = streams_by_item(&state.pool, &ids).await;
+    let streams = streams_by_item(&state.data, &ids).await;
     let none = Vec::new();
     let mut best = (
         quality(&film, streams.get(&film.id).unwrap_or(&none)),
@@ -63,12 +63,14 @@ fn quality(row: &media_items::MediaItemRow, streams: &[media_streams::MediaStrea
 }
 
 async fn streams_by_item(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     ids: &[Uuid],
 ) -> std::collections::HashMap<Uuid, Vec<media_streams::MediaStreamRow>> {
     let mut streams: std::collections::HashMap<Uuid, Vec<media_streams::MediaStreamRow>> =
         std::collections::HashMap::new();
-    for row in media_streams::list_by_items(pool, ids)
+    for row in data
+        .media_streams()
+        .list_by_items(ids)
         .await
         .or_log_default("media_streams::list_by_items")
     {
@@ -120,7 +122,7 @@ fn mark_linked(source: &mut rustyfin_models::dto::MediaSourceInfo) {
 /// on a tie the film's own) and `MediaSourceCount`, as Jellyfin does. One
 /// query for the page.
 pub(crate) async fn attach_versions(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     items: &[media_items::MediaItemRow],
     dtos: &mut [BaseItemDto],
     reveal_path: bool,
@@ -144,7 +146,9 @@ pub(crate) async fn attach_versions(
     if films.is_empty() {
         return;
     }
-    let versions = media_items::list_versions(pool, &films)
+    let versions = data
+        .media_items()
+        .list_versions(&films)
         .await
         .or_log_default("media_items::list_versions");
     if versions.is_empty() {
@@ -152,7 +156,7 @@ pub(crate) async fn attach_versions(
     }
     let mut ids: Vec<Uuid> = versions.iter().map(|v| v.id).collect();
     ids.extend(films.iter().copied());
-    let streams = streams_by_item(pool, &ids).await;
+    let streams = streams_by_item(data, &ids).await;
     for (item, dto) in items.iter().zip(dtos.iter_mut()) {
         let mine: Vec<&media_items::MediaItemRow> = versions
             .iter()
@@ -236,7 +240,7 @@ pub(crate) async fn add_playback_versions(
     }
     let mut ids: Vec<Uuid> = vec![item.id];
     ids.extend(versions.iter().map(|v| v.id));
-    let all_streams = streams_by_item(&state.pool, &ids).await;
+    let all_streams = streams_by_item(&state.data, &ids).await;
     let none = Vec::new();
     let mut ranks = Ranks::new();
     ranks.insert(

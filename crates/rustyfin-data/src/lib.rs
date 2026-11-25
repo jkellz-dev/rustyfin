@@ -16,5 +16,5 @@ mod pg;
 pub mod pool;
 pub mod repo;
 
-pub use pg::PgData;
+pub use pg::{PgData, data_error};
 pub use pool::DbPool;

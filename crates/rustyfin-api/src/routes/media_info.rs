@@ -61,7 +61,7 @@ pub async fn get_playback_info(
         token.as_deref(),
     );
     // The user's languages pick each copy's starting tracks.
-    let config = crate::user_prefs::load(&state.pool, auth.user_id).await;
+    let config = crate::user_prefs::load(&state.data, auth.user_id).await;
     crate::user_prefs::choose_tracks(&mut info, &config);
     Ok(Json(info))
 }
@@ -121,7 +121,7 @@ pub async fn post_playback_info(
     let profile = body.device_profile.as_ref().or(stored_profile.as_ref());
     playback_info::apply_subtitle_delivery(&mut info, item_id, profile, token.as_deref());
     // The user's languages pick each copy's starting tracks.
-    let config = crate::user_prefs::load(&state.pool, auth.user_id).await;
+    let config = crate::user_prefs::load(&state.data, auth.user_id).await;
     crate::user_prefs::choose_tracks(&mut info, &config);
     Ok(Json(info))
 }

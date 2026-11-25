@@ -138,8 +138,8 @@ async fn get_artists_inner(
         dto.child_count = Some(albums);
         dtos.push(dto);
     }
-    attach_music_fields(&state.pool, &rows, &mut dtos).await;
-    attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    attach_music_fields(&state.data, &rows, &mut dtos).await;
+    attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     let mut result = QueryResult::new(dtos, total as i32);
     result.start_index = start as i32;
     Ok(Json(result))

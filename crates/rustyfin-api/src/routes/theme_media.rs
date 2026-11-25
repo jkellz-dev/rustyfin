@@ -88,8 +88,8 @@ pub async fn get_ancestors(
         }
     }
 
-    super::items::name_series_for_seasons(&state.pool, &mut dtos).await;
-    super::items::attach_music_fields(&state.pool, &ancestors, &mut dtos).await;
+    super::items::name_series_for_seasons(&state.data, &mut dtos).await;
+    super::items::attach_music_fields(&state.data, &ancestors, &mut dtos).await;
     let totals = state
         .data
         .media_items()
@@ -137,7 +137,7 @@ pub async fn get_ancestors(
         dtos.push(folder);
     }
     dtos.push(super::libraries::root_folder_dto(&state, auth.user_id).await?);
-    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
 
     Ok(Json(dtos))
 }

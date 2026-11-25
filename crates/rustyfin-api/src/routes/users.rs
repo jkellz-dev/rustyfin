@@ -132,9 +132,12 @@ pub async fn update_user_configuration(
 }
 
 /// Populate the `enabled_folders` field on a user DTO if the user is restricted.
-async fn populate_enabled_folders(pool: &sqlx::PgPool, dto: &mut UserDto) {
+async fn populate_enabled_folders(data: &rustyfin_data::PgData, dto: &mut UserDto) {
     if !dto.policy.enable_all_folders
-        && let Ok(ids) = user_library_access::get_enabled_libraries(pool, dto.id).await
+        && let Ok(ids) = data
+            .user_library_access()
+            .get_enabled_libraries(dto.id)
+            .await
     {
         dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();
     }
@@ -153,7 +156,7 @@ pub async fn list_users(
         .collect();
 
     for dto in &mut dtos {
-        populate_enabled_folders(&state.pool, dto).await;
+        populate_enabled_folders(&state.data, dto).await;
     }
 
     Ok(Json(dtos))
@@ -172,7 +175,7 @@ pub async fn get_current_user(
         .await?
         .ok_or(ApiError::NotFound)?;
     let mut dto = user_row_to_dto(&user, &state.server_id, ldap_enabled);
-    populate_enabled_folders(&state.pool, &mut dto).await;
+    populate_enabled_folders(&state.data, &mut dto).await;
     Ok(Json(dto))
 }
 
@@ -190,7 +193,7 @@ pub async fn get_user_by_id(
         .await?
         .ok_or(ApiError::NotFound)?;
     let mut dto = user_row_to_dto(&user, &state.server_id, ldap_enabled);
-    populate_enabled_folders(&state.pool, &mut dto).await;
+    populate_enabled_folders(&state.data, &mut dto).await;
     Ok(Json(dto))
 }
 

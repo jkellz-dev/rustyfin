@@ -187,7 +187,7 @@ pub async fn get_playlist_items(
     }
 
     // Badges: clients fall back to ChildCount (a show's seasons) without it.
-    super::items::attach_user_data(&state.pool, auth.user_id, &mut dtos).await;
+    super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     let total = dtos.len() as i32;
     Ok(Json(QueryResult::new(dtos, total)))
 }

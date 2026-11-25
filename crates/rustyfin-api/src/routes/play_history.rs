@@ -207,8 +207,8 @@ async fn pictures(
             None => items::ensure_primary_placeholder(dto),
         }
     }
-    items::attach_series_art(&state.pool, &mut dtos).await;
-    items::attach_music_fields(&state.pool, &rows, &mut dtos).await;
+    items::attach_series_art(&state.data, &mut dtos).await;
+    items::attach_music_fields(&state.data, &rows, &mut dtos).await;
     dtos.into_iter()
         .filter_map(|dto| {
             let show = dto

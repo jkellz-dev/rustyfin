@@ -30,7 +30,7 @@ use rustyfin_auth::{
     middleware::{AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token},
     session,
 };
-use rustyfin_data::repo::{sessions, users};
+use rustyfin_models::data::{Data, DataError, SessionStore, UserStore};
 
 use crate::router::{AppState, ForwardAuthState};
 
@@ -62,7 +62,7 @@ pub async fn vouch(State(state): State<AppState>, mut req: Request, next: Next) 
             Ok(None) => {
                 req.extensions_mut().insert(Unvouched);
             }
-            Err(e) if rustyfin_data::pool::is_unavailable(&e) => {
+            Err(DataError::Unavailable(_)) => {
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
             Err(e) => {
@@ -80,24 +80,31 @@ async fn vouched_user(
     identity: &ForwardAuthIdentity,
     headers: &axum::http::HeaderMap,
     query: Option<&str>,
-) -> Result<Option<AuthenticatedUser>, sqlx::Error> {
-    let pool = &state.pool;
-    let user = match users::find_by_remote_user_id(pool, &identity.remote_user).await? {
+) -> Result<Option<AuthenticatedUser>, DataError> {
+    let data = &state.data;
+    let user = match data
+        .users()
+        .find_by_remote_user_id(&identity.remote_user)
+        .await?
+    {
         Some(user) => user,
         None => {
             // A new server's first user is its administrator.
-            let first = users::count(pool).await? == 0;
-            let user = users::upsert_from_forward_auth(
-                pool,
-                &identity.remote_user,
-                &identity.remote_user,
-                identity.display_name.as_deref(),
-                identity.email.as_deref(),
-            )
-            .await?;
+            let first = data.users().count().await? == 0;
+            let user = data
+                .users()
+                .upsert_from_forward_auth(
+                    &identity.remote_user,
+                    &identity.remote_user,
+                    identity.display_name.as_deref(),
+                    identity.email.as_deref(),
+                )
+                .await?;
             if first && !user.is_administrator {
-                users::update_policy(pool, user.id, true, user.enable_all_libraries).await?;
-                users::find_by_id(pool, user.id).await?.unwrap_or(user)
+                data.users()
+                    .update_policy(user.id, true, user.enable_all_libraries)
+                    .await?;
+                data.users().find_by_id(user.id).await?.unwrap_or(user)
             } else {
                 user
             }
@@ -113,14 +120,18 @@ async fn vouched_user(
             .as_ref()
             .is_some_and(|g| identity.groups.iter().any(|x| x == g))
     {
-        users::update_policy(pool, user.id, true, user.enable_all_libraries).await?;
+        data.users()
+            .update_policy(user.id, true, user.enable_all_libraries)
+            .await?;
         is_administrator = true;
     }
 
     // The session the token names, if it is this user's and still active;
     // else the device's; else a new one for the device.
     let by_token = match request_token(headers, query) {
-        Some(token) => sessions::find_by_token(pool, &token)
+        Some(token) => data
+            .sessions()
+            .find_by_token(&token)
             .await?
             .filter(|s| s.user_id == user.id)
             .filter(|s| s.expires_at.is_none_or(|t| t > chrono::Utc::now())),
@@ -140,26 +151,34 @@ async fn vouched_user(
                 .clone()
                 .filter(|d| !d.is_empty())
                 .unwrap_or_else(|| "forward-auth".to_string());
-            match sessions::find_active_for_device(pool, user.id, &device_id).await? {
+            match data
+                .sessions()
+                .find_active_for_device(user.id, &device_id)
+                .await?
+            {
                 Some(session) => session,
                 None => {
                     let (_, id) = session::create_session(
-                        pool,
+                        &state.pool,
                         user.id,
                         &device_id,
                         mb.device.as_deref().unwrap_or("Browser"),
                         mb.client.as_deref().unwrap_or("Web"),
                         mb.version.as_deref(),
                     )
-                    .await?;
-                    sessions::find_active_by_id(pool, id)
+                    .await
+                    .map_err(rustyfin_data::data_error)?;
+                    data.sessions()
+                        .find_active_by_id(id)
                         .await?
-                        .ok_or(sqlx::Error::RowNotFound)?
+                        .ok_or_else(|| {
+                            DataError::Other("the session just made is missing".into())
+                        })?
                 }
             }
         }
     };
-    let _ = sessions::touch(pool, session.id).await;
+    let _ = data.sessions().touch(session.id).await;
     Ok(Some(AuthenticatedUser {
         user_id: user.id,
         username: user.username,
