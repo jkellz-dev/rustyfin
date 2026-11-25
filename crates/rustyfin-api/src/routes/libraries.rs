@@ -6,8 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use rustyfin_models::data::{
-    ActivityLogStore, CollectionStore, Data, LibraryAccessStore, LibraryStore, LinkStore,
-    MediaItemStore, UserStore,
+    CollectionStore, Data, LibraryAccessStore, LibraryStore, LinkStore, MediaItemStore, UserStore,
 };
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
@@ -16,7 +15,6 @@ use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
 };
-use rustyfin_services::LibraryScanner;
 use rustyfin_services::libraries::NewLibrary;
 
 use crate::error::{ApiError, DegradeExt};
@@ -405,115 +403,6 @@ pub async fn get_virtual_folders(
     Ok(Json(folders))
 }
 
-/// Start background scans for `libs`, skipping any already in flight.
-async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
-    // A library a client switched off (LibraryOptions.Enabled = false) is not scanned,
-    // even when it is asked for by id.
-    let libs: Vec<_> = libs
-        .into_iter()
-        .filter(|lib| {
-            if !lib.scanning_enabled() {
-                tracing::info!(
-                    "Skipping manual scan for '{}': library is disabled",
-                    lib.name
-                );
-            }
-            lib.scanning_enabled()
-        })
-        .collect();
-
-    // Filter out libraries already being scanned
-    let mut libs_to_scan = Vec::new();
-    {
-        let in_flight = state.scan_in_flight.read().await;
-        for lib in libs {
-            if in_flight.contains(&lib.id) {
-                tracing::info!(
-                    "Skipping manual scan for '{}' — already in flight",
-                    lib.name
-                );
-            } else {
-                libs_to_scan.push(lib);
-            }
-        }
-    }
-
-    if libs_to_scan.is_empty() {
-        return;
-    }
-
-    // Mark all as in-flight before spawning
-    {
-        let mut in_flight = state.scan_in_flight.write().await;
-        for lib in &libs_to_scan {
-            in_flight.insert(lib.id);
-        }
-    }
-
-    let data = state.data.clone();
-
-    let _ = state
-        .data
-        .activity_log()
-        .insert(
-            "Library scan started",
-            None,
-            "TaskStarted",
-            "Informational",
-            None,
-            None,
-        )
-        .await;
-
-    let search_service = state.search_service.clone();
-    let scan_in_flight = state.scan_in_flight.clone();
-    let people_cache_dir = state.people_cache_dir.clone();
-    let links = state.links.clone();
-    tokio::spawn(async move {
-        let scanner = LibraryScanner::new(data.clone(), people_cache_dir);
-        // Owner, 2026-11-23: a scan of a library is followed by a sync of the
-        // links that fill it, each once; a library a link made has no
-        // folders, so its sync is its scan. A library stays "scanning" until
-        // its links have synced.
-        let mut filled = Vec::new();
-        for lib in libs_to_scan {
-            if !lib.paths.is_empty()
-                && let Err(e) = scanner.scan(lib.id, &lib.paths).await
-            {
-                tracing::error!("Scan failed for library {}: {e}", lib.id);
-            }
-            if links.sources(&lib.name, lib.link_id).await.is_empty() {
-                scan_in_flight.write().await.remove(&lib.id);
-            } else {
-                filled.push(lib);
-            }
-        }
-        let named: Vec<(String, Option<uuid::Uuid>)> =
-            filled.iter().map(|l| (l.name.clone(), l.link_id)).collect();
-        links.sync_for(&data, &named).await;
-        for lib in filled {
-            scan_in_flight.write().await.remove(&lib.id);
-        }
-        let _ = data
-            .activity_log()
-            .insert(
-                "Library scan completed",
-                None,
-                "TaskCompleted",
-                "Informational",
-                None,
-                None,
-            )
-            .await;
-
-        // What the scans changed, into the search index now rather than at
-        // the next periodic sync.
-        if let Err(e) = search_service.sync().await {
-            tracing::error!("Search index sync failed: {e}");
-        }
-    });
-}
-
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct RefreshLibraryQuery {
@@ -538,7 +427,7 @@ pub async fn refresh_library(
         state.data.libraries().list_all().await?
     };
 
-    start_scans(&state, libs).await;
+    state.services.scans().start(libs).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -563,7 +452,7 @@ pub async fn update_virtual_folder(
         .await?;
     // New folders mean new media: scan, as Jellyfin does after a path change.
     if moved {
-        start_scans(&state, vec![lib.clone()]).await;
+        state.services.scans().start(vec![lib.clone()]).await;
     }
     Ok(Json(folder_info(lib)))
 }
@@ -769,7 +658,7 @@ pub async fn create_virtual_folder(
         .await?;
 
     if query_flag(&pairs, "RefreshLibrary") {
-        start_scans(&state, vec![lib]).await;
+        state.services.scans().start(vec![lib]).await;
     }
     Ok(StatusCode::NO_CONTENT.into_response())
 }

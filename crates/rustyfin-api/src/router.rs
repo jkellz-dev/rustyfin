@@ -78,7 +78,7 @@ pub fn build_router(state: AppState) -> Router {
     let local_pool = crate::link_scope::local_only_pool(&state.pool);
     let local_data = rustyfin_data::PgData::from_pool(&local_pool);
     let local_state = AppState {
-        services: rustyfin_services::Services::new(local_data.clone()),
+        services: state.services.with_data(local_data.clone()),
         data: local_data,
         pool: local_pool,
         local_only: true,

@@ -21,6 +21,7 @@ pub mod link;
 pub mod play_state;
 pub mod playback;
 pub mod playlists;
+pub mod scans;
 pub mod session;
 pub mod user_data;
 
@@ -32,11 +33,21 @@ use rustyfin_models::data::Data;
 #[derive(Clone)]
 pub struct Services<D> {
     data: D,
+    scans: scans::ScanRuntime,
 }
 
 impl<D: Data> Services<D> {
-    pub fn new(data: D) -> Self {
-        Self { data }
+    pub fn new(data: D, scans: scans::ScanRuntime) -> Self {
+        Self { data, scans }
+    }
+
+    /// The same services over another data layer (the linking servers'
+    /// narrower view).
+    pub fn with_data(&self, data: D) -> Self {
+        Self {
+            data,
+            scans: self.scans.clone(),
+        }
     }
 
     /// Which items a user may see.
@@ -62,6 +73,16 @@ impl<D: Data> Services<D> {
     /// Playlists: who may see and change them.
     pub fn playlists(&self) -> playlists::Playlists<'_, D> {
         playlists::Playlists { data: &self.data }
+    }
+}
+
+impl Services<rustyfin_data::PgData> {
+    /// Starting library scans (Postgres only for now, see [`scans`]).
+    pub fn scans(&self) -> scans::Scans<'_> {
+        scans::Scans {
+            data: &self.data,
+            runtime: &self.scans,
+        }
     }
 }
 

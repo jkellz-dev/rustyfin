@@ -383,8 +383,17 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    let services = rustyfin_services::Services::new(
+        data.clone(),
+        rustyfin_services::scans::ScanRuntime {
+            in_flight: scan_in_flight.clone(),
+            links: links.clone(),
+            search: search_service.clone(),
+            people_cache_dir: people_cache_dir.clone(),
+        },
+    );
     let state = AppState {
-        services: rustyfin_services::Services::new(data.clone()),
+        services,
         data: data.clone(),
         pool: db_pool,
         local_only: false,
