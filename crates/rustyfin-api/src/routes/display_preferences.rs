@@ -6,7 +6,7 @@ use axum::{
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::display_preferences as prefs_repo;
+use rustyfin_models::data::DisplayPreferencesStore;
 use rustyfin_models::dto::DisplayPreferencesDto;
 
 use crate::error::ApiError;
@@ -27,9 +27,10 @@ pub async fn get_display_preferences(
 ) -> Result<Json<DisplayPreferencesDto>, ApiError> {
     let client = query.client.as_deref().unwrap_or("emby");
 
-    if let Some(data) = prefs_repo::get(&state.pool, auth.user_id, &display_prefs_id, client)
-        .await
-        .map_err(ApiError::Database)?
+    if let Some(data) = state
+        .data()
+        .display_preferences(auth.user_id, &display_prefs_id, client)
+        .await?
     {
         let dto: DisplayPreferencesDto = serde_json::from_value(data)
             .unwrap_or_else(|_| DisplayPreferencesDto::default_for(&display_prefs_id, client));
@@ -50,8 +51,9 @@ pub async fn update_display_preferences(
     Json(body): Json<serde_json::Value>,
 ) -> Result<StatusCode, ApiError> {
     let client = query.client.as_deref().unwrap_or("emby");
-    prefs_repo::upsert(&state.pool, auth.user_id, &display_prefs_id, client, &body)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .data()
+        .save_display_preferences(auth.user_id, &display_prefs_id, client, &body)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }

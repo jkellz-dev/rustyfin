@@ -56,6 +56,15 @@ pub struct AppState {
     pub prefer_direct_play: bool,
 }
 
+impl AppState {
+    /// The data layer over this state's pool (the local-only one for linking
+    /// servers). Transitional: handlers move from `pool` to this, one area
+    /// at a time (`CLAUDE.md`, "Layers").
+    pub fn data(&self) -> rustyfin_data::PgData {
+        rustyfin_data::PgData::from_pool(self.pool.clone())
+    }
+}
+
 impl FromRef<AppState> for PgPool {
     fn from_ref(state: &AppState) -> Self {
         state.pool.clone()

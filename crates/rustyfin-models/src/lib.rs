@@ -1,9 +1,14 @@
-//! The shapes on the wire: Jellyfin's JSON objects as Rust types.
+//! Shared models.
 //!
-//! [`dto`] holds the request and response types (`BaseItemDto`,
+//! [`data`] is the contract between services and the data layer: the traits
+//! `rustyfin-data` implements, their models and their one error type.
+//!
+//! [`dto`] holds Jellyfin's request and response types (`BaseItemDto`,
 //! `MediaSourceInfo`, `PlaybackInfoRequest`, session and user objects, ...)
-//! serialized in Jellyfin's PascalCase; [`enums`] the shared enumerations
-//! (item kinds, image types, play methods).
+//! serialized in Jellyfin's PascalCase, and [`enums`] the shared enumerations
+//! (item kinds, image types, play methods). Both move to `rustyfin-jellyfin`
+//! as the layered split goes on (`CLAUDE.md`, "Layers").
 
+pub mod data;
 pub mod dto;
 pub mod enums;

@@ -3469,6 +3469,7 @@ name = "rustyfin-data"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "rustyfin-models",
  "serde",
  "serde_json",
  "sqlx",

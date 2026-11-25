@@ -2,6 +2,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use rustyfin_models::data::DataError;
 
 /// API error type.
 #[derive(Debug, thiserror::Error)]
@@ -24,6 +25,11 @@ pub enum ApiError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
+    /// A data-layer failure (`rustyfin_models::data`). Replaces `Database`
+    /// as handlers move off the pool and onto the data-layer traits.
+    #[error("{0}")]
+    Data(#[from] DataError),
+
     #[error("Internal error: {0}")]
     Internal(String),
 
@@ -43,6 +49,15 @@ pub trait DegradeExt<T> {
 }
 
 impl<T: Default> DegradeExt<T> for Result<T, sqlx::Error> {
+    fn or_log_default(self, what: &str) -> T {
+        self.unwrap_or_else(|e| {
+            tracing::warn!("{what} failed, continuing without it: {e}");
+            T::default()
+        })
+    }
+}
+
+impl<T: Default> DegradeExt<T> for Result<T, DataError> {
     fn or_log_default(self, what: &str) -> T {
         self.unwrap_or_else(|e| {
             tracing::warn!("{what} failed, continuing without it: {e}");
@@ -97,6 +112,10 @@ impl IntoResponse for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE
             }
             ApiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            // Same answers as the database cases above.
+            ApiError::Data(DataError::MissingReference(_)) => StatusCode::NOT_FOUND,
+            ApiError::Data(DataError::Unavailable(_)) => StatusCode::SERVICE_UNAVAILABLE,
+            ApiError::Data(DataError::Other(_)) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
         };
@@ -133,6 +152,23 @@ mod tests {
     #[test]
     fn non_database_sqlx_error_is_not_fk_violation() {
         assert!(!is_foreign_key_violation(&sqlx::Error::RowNotFound));
+    }
+
+    #[test]
+    fn data_errors_answer_like_database_errors() {
+        let status = |e| ApiError::Data(e).into_response().status();
+        assert_eq!(
+            status(DataError::MissingReference("fk".into())),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            status(DataError::Unavailable("pool".into())),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            status(DataError::Other("bad".into())),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
