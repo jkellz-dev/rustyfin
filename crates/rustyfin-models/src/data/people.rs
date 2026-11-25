@@ -1,7 +1,7 @@
 use std::future::Future;
 use uuid::Uuid;
 
-use super::{DataResult, Link};
+use super::DataResult;
 
 /// A person (actor, director, writer, ...).
 #[derive(Debug, Clone)]

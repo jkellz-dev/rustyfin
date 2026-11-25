@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use std::future::Future;
 use uuid::Uuid;
 
-use super::{DataResult, Image, Person};
+use super::{DataResult, Image};
 
 /// An item in the library: a film, show, season, episode, artist, album,
 /// track, folder or extra.

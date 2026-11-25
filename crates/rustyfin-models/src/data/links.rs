@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use std::future::Future;
 use uuid::Uuid;
 
-use super::DataResult;
+use super::{DataResult, NewMediaStream};
 
 #[derive(Debug, Clone)]
 pub struct Link {
