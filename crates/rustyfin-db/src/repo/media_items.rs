@@ -1662,13 +1662,13 @@ pub async fn genre_albums(
             FROM visible_media_items t
             CROSS JOIN unnest(t.genres) AS g(genre)
             JOIN media_items p ON p.id = t.parent_id
-            WHERE t.item_type = 'Audio' AND g.genre = ANY($1)
+            WHERE t.item_type = 'Audio' AND t.genres && $1 AND g.genre = ANY($1)
               AND ($2::uuid IS NULL OR t.library_id = $2)
             UNION
             SELECT g.genre, m.id
             FROM visible_media_items m
             CROSS JOIN unnest(m.genres) AS g(genre)
-            WHERE m.item_type = 'MusicAlbum' AND g.genre = ANY($1)
+            WHERE m.item_type = 'MusicAlbum' AND m.genres && $1 AND g.genre = ANY($1)
               AND ($2::uuid IS NULL OR m.library_id = $2)
         )
         SELECT DISTINCT ON (h.genre) h.genre, a.id
@@ -1970,19 +1970,20 @@ fn push_genres_any(qb: &mut sqlx::QueryBuilder<sqlx::Postgres>, genres: &[String
         qb.push(" AND FALSE");
         return;
     }
-    qb.push(" AND (mi.genres && ");
-    qb.push_bind(genres.to_vec());
+    // One set of ids, found through the genres index once (not a check per
+    // row): items in the genres, and the albums and artists of tracks in them.
     qb.push(
-        " OR (mi.item_type = 'MusicAlbum' AND EXISTS (SELECT 1 FROM visible_media_items gt \
-         WHERE gt.parent_id = mi.id AND gt.item_type = 'Audio' AND gt.genres && ",
+        " AND mi.id IN (SELECT g.id FROM ( \
+         SELECT gt.id, gt.parent_id, gt.series_id, gt.item_type \
+         FROM visible_media_items gt WHERE gt.genres && ",
     );
     qb.push_bind(genres.to_vec());
     qb.push(
-        ")) OR (mi.item_type = 'MusicArtist' AND EXISTS (SELECT 1 FROM visible_media_items gt \
-         WHERE gt.series_id = mi.id AND gt.item_type = 'Audio' AND gt.genres && ",
+        ") t CROSS JOIN LATERAL (VALUES (t.id), \
+         (CASE WHEN t.item_type = 'Audio' THEN t.parent_id END), \
+         (CASE WHEN t.item_type = 'Audio' THEN t.series_id END)) AS g(id) \
+         WHERE g.id IS NOT NULL)",
     );
-    qb.push_bind(genres.to_vec());
-    qb.push(")))");
 }
 
 /// Dynamic query builder for GET /Items with filtering, sorting, and pagination.
