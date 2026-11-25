@@ -160,15 +160,13 @@ async fn rescan(state: &AppState, paths: &[String]) -> Result<StatusCode, ApiErr
 
         state.scan_in_flight.write().await.insert(library_id);
 
-        let pool = state.pool.clone();
-
         let data = state.data.clone();
         let scan_in_flight = state.scan_in_flight.clone();
         let search_service = state.search_service.clone();
         let people_cache_dir = state.people_cache_dir.clone();
 
         tokio::spawn(async move {
-            let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
+            let scanner = LibraryScanner::new(data.clone(), people_cache_dir);
             tracing::info!(
                 "Webhook scan starting: library={library_id}, dirs={}",
                 unique_dirs.join(", ")

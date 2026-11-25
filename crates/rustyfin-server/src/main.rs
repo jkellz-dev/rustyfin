@@ -25,6 +25,7 @@ use rustyfin_core::library::tasks::SearchReindexTask;
 use rustyfin_core::session::SessionManager;
 use rustyfin_data::pool;
 use rustyfin_media::transcode::TranscodeManager;
+use rustyfin_models::data::{Data, LinkStore, TaskResultStore};
 use rustyfin_search::SearchService;
 
 /// How often linked servers are synced.
@@ -62,17 +63,18 @@ async fn main() -> anyhow::Result<()> {
     // Run migrations
     tracing::info!("Running database migrations...");
     pool::run_migrations(&db_pool).await?;
+    let data = rustyfin_data::PgData::from_pool(&db_pool);
     tracing::info!("Migrations complete");
 
     // Generate a stable server ID (based on hostname or random)
     let server_id = uuid::Uuid::new_v4().simple().to_string();
 
     // Initialize session manager
-    let session_manager = Arc::new(SessionManager::new(db_pool.clone()));
+    let session_manager = Arc::new(SessionManager::new(data.clone()));
 
     // Initialize search service
     let search_service = Arc::new(SearchService::new(
-        db_pool.clone(),
+        data.clone(),
         config.search.as_ref().map(|s| s.meilisearch_url.as_str()),
         config
             .search
@@ -122,8 +124,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Runs the last server left running were stopped by it: Aborted, and a
     // stopped library scan starts again once the server is up (below).
-    let interrupted = match rustyfin_data::repo::task_results::cleanup_stale_running(&db_pool).await
-    {
+    let interrupted = match data.task_results().cleanup_stale_running().await {
         Ok(keys) => keys,
         Err(e) => {
             tracing::error!("Failed to clean up stale task results: {e}");
@@ -188,7 +189,7 @@ async fn main() -> anyhow::Result<()> {
 
         let task_scheduler = Arc::new(rustyfin_core::TaskScheduler::new(
             scheduler_config,
-            db_pool.clone(),
+            data.clone(),
             scan_in_flight.clone(),
             people_cache_dir.clone(),
         ));
@@ -207,7 +208,7 @@ async fn main() -> anyhow::Result<()> {
             .register(
                 config.tasks.activity_log_prune.schedule.clone(),
                 Arc::new(rustyfin_core::ActivityLogPruneTask::new(
-                    db_pool.clone(),
+                    data.clone(),
                     config.tasks.activity_log_prune.retention_days,
                 )),
             )
@@ -217,7 +218,7 @@ async fn main() -> anyhow::Result<()> {
             .register(
                 config.tasks.session_cleanup.schedule.clone(),
                 Arc::new(rustyfin_core::SessionCleanupTask::new(
-                    db_pool.clone(),
+                    data.clone(),
                     session_manager.clone(),
                     config.tasks.session_cleanup.inactive_days,
                 )),
@@ -236,7 +237,7 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler
             .register(
                 config.tasks.db_optimize.schedule.clone(),
-                Arc::new(rustyfin_core::DatabaseOptimizeTask::new(db_pool.clone())),
+                Arc::new(rustyfin_core::DatabaseOptimizeTask::new(data.clone())),
             )
             .await;
 
@@ -326,7 +327,7 @@ async fn main() -> anyhow::Result<()> {
     let links = Arc::new(rustyfin_core::link::Links::default());
     for link in &config.links {
         match link.settings() {
-            Ok(settings) => match links.register(&db_pool, settings).await {
+            Ok(settings) => match links.register(&data, settings).await {
                 Ok(_) => tracing::info!("Link {} to {}", link.name, link.url),
                 Err(e) => tracing::error!("Link {}: {e:#}", link.name),
             },
@@ -350,7 +351,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     let configured: Vec<String> = config.links.iter().map(|l| l.name.clone()).collect();
-    match rustyfin_data::repo::links::remove_unconfigured(&db_pool, &configured).await {
+    match data.links().remove_unconfigured(&configured).await {
         Ok(removed) => {
             for (name, copies) in removed {
                 tracing::warn!(
@@ -362,28 +363,28 @@ async fn main() -> anyhow::Result<()> {
     }
     if !config.links.is_empty() {
         let syncing = links.clone();
-        let pool = db_pool.clone();
+        let data = data.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             loop {
-                syncing.sync_all(&pool).await;
+                syncing.sync_all(&data).await;
                 tokio::time::sleep(LINK_SYNC_INTERVAL).await;
             }
         });
         // A link that is down is tried every minute, so its titles come
         // back soon after its server does.
         let rechecking = links.clone();
-        let pool = db_pool.clone();
+        let data = data.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                rechecking.recheck_offline(&pool).await;
+                rechecking.recheck_offline(&data).await;
             }
         });
     }
 
     let state = AppState {
-        data: rustyfin_data::PgData::from_pool(&db_pool),
+        data: data.clone(),
         pool: db_pool,
         local_only: false,
         server_id,

@@ -16,11 +16,12 @@ pub use jellyfin::LinkStats;
 mod oidc;
 mod sync;
 
+use rustyfin_models::data::{ActivityLogStore, Data, LinkStore};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use rustyfin_data::PgData;
 use serde::Deserialize;
-use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -140,11 +141,12 @@ impl Default for Links {
 
 impl Links {
     /// Record a link (by name) and keep a client for it.
-    pub async fn register(&self, pool: &PgPool, settings: LinkSettings) -> anyhow::Result<Uuid> {
+    pub async fn register(&self, data: &PgData, settings: LinkSettings) -> anyhow::Result<Uuid> {
         let url = settings.url.trim_end_matches('/').to_string();
-        let id =
-            rustyfin_data::repo::links::upsert(pool, &settings.name, settings.kind.as_str(), &url)
-                .await?;
+        let id = data
+            .links()
+            .upsert(&settings.name, settings.kind.as_str(), &url)
+            .await?;
         let client = JellyfinClient::new(&url, &settings.user, &settings.password, id)?
             .with_oidc(settings.oidc.clone())
             .named(&settings.name);
@@ -167,8 +169,8 @@ impl Links {
     /// stood for move to a copy that is up (going down) or the shows are
     /// placed again (coming back), the activity log says so, and
     /// subscribers hear of it.
-    async fn mark(&self, pool: &PgPool, link: &Link, online: bool) {
-        let changed = match rustyfin_data::repo::links::set_offline(pool, link.id, !online).await {
+    async fn mark(&self, data: &PgData, link: &Link, online: bool) {
+        let changed = match data.links().set_offline(link.id, !online).await {
             Ok(changed) => changed,
             Err(e) => {
                 tracing::warn!(
@@ -183,9 +185,9 @@ impl Links {
         }
         let name = &link.settings.name;
         let moved = if online {
-            rustyfin_data::repo::links::merge(pool).await
+            data.links().merge().await
         } else {
-            rustyfin_data::repo::links::rehome(pool, link.id).await
+            data.links().rehome(link.id).await
         };
         if let Err(e) = moved {
             tracing::warn!("Link {name}: could not rearrange its copies: {e}");
@@ -203,16 +205,10 @@ impl Links {
         } else {
             tracing::warn!("{text}");
         }
-        let _ = rustyfin_data::repo::activity_log::insert(
-            pool,
-            &text,
-            None,
-            "LinkedServerStatus",
-            severity,
-            None,
-            None,
-        )
-        .await;
+        let _ = data
+            .activity_log()
+            .insert(&text, None, "LinkedServerStatus", severity, None, None)
+            .await;
         let _ = self.events.send(LinkEvent {
             link_id: link.id,
             name: name.clone(),
@@ -222,7 +218,7 @@ impl Links {
 
     /// Check a link that just failed to answer (a stream, say): mark it down
     /// if it does not answer now. Skipped while it syncs.
-    pub async fn check(&self, pool: &PgPool, id: Uuid) {
+    pub async fn check(&self, data: &PgData, id: Uuid) {
         let Some(link) = self.get(id).await else {
             return;
         };
@@ -230,19 +226,19 @@ impl Links {
             return;
         };
         if link.client.libraries().await.is_err() {
-            self.mark(pool, &link, false).await;
+            self.mark(data, &link, false).await;
         }
     }
 
     /// Sync each link whose server is down, which brings back those that
     /// answer again. Returns how many came back.
-    pub async fn recheck_offline(&self, pool: &PgPool) -> usize {
-        let Ok(offline) = rustyfin_data::repo::links::offline_ids(pool).await else {
+    pub async fn recheck_offline(&self, data: &PgData) -> usize {
+        let Ok(offline) = data.links().offline_ids().await else {
             return 0;
         };
         let mut back = 0;
         for id in offline {
-            if self.get(id).await.is_some() && self.sync(pool, id).await.is_ok() {
+            if self.get(id).await.is_some() && self.sync(data, id).await.is_ok() {
                 back += 1;
             }
         }
@@ -301,7 +297,7 @@ impl Links {
     /// Sync, one after another, each link that fills any of `libraries`
     /// ((name, the link that made it)), each once: a library's scan is
     /// followed by its links' syncs (owner, 2026-11-23).
-    pub async fn sync_for(&self, pool: &PgPool, libraries: &[(String, Option<Uuid>)]) {
+    pub async fn sync_for(&self, data: &PgData, libraries: &[(String, Option<Uuid>)]) {
         let mut ids: Vec<Uuid> = Vec::new();
         for (name, made_by) in libraries {
             for (id, _, _) in self.sources(name, *made_by).await {
@@ -311,7 +307,7 @@ impl Links {
             }
         }
         for id in ids {
-            let _ = self.sync(pool, id).await;
+            let _ = self.sync(data, id).await;
         }
     }
 
@@ -320,7 +316,7 @@ impl Links {
     }
 
     /// Bring the link's copies up to date, and record how it went.
-    pub async fn sync(&self, pool: &PgPool, id: Uuid) -> anyhow::Result<SyncReport> {
+    pub async fn sync(&self, data: &PgData, id: Uuid) -> anyhow::Result<SyncReport> {
         let link = self
             .get(id)
             .await
@@ -331,12 +327,12 @@ impl Links {
         // while it is not (owner, 2026-11-19).
         let result = match link.client.libraries().await {
             Err(e) => {
-                self.mark(pool, &link, false).await;
+                self.mark(data, &link, false).await;
                 Err(e)
             }
             Ok(_) => {
-                self.mark(pool, &link, true).await;
-                sync::sync_link(pool, &link).await
+                self.mark(data, &link, true).await;
+                sync::sync_link(data, &link).await
             }
         };
         let error = match &result {
@@ -354,7 +350,7 @@ impl Links {
         metrics::histogram!("rustyfin_link_sync_duration_seconds", "link" => name)
             .record(started.elapsed().as_secs_f64());
         link.client.record_sync(started.elapsed(), error.is_none());
-        if let Err(e) = rustyfin_data::repo::links::record_sync(pool, id, error.as_deref()).await {
+        if let Err(e) = data.links().record_sync(id, error.as_deref()).await {
             tracing::warn!(
                 "Could not record the sync of link {}: {e}",
                 link.settings.name
@@ -381,9 +377,9 @@ impl Links {
     }
 
     /// Sync every link; failures are logged and recorded, not returned.
-    pub async fn sync_all(&self, pool: &PgPool) {
+    pub async fn sync_all(&self, data: &PgData) {
         for id in self.ids().await {
-            let _ = self.sync(pool, id).await;
+            let _ = self.sync(data, id).await;
         }
     }
 }

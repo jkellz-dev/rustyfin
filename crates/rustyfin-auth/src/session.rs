@@ -1,5 +1,6 @@
 use rand::RngExt;
-use sqlx::PgPool;
+use rustyfin_data::PgData;
+use rustyfin_models::data::{Data, DataError, SessionStore, UserStore};
 use uuid::Uuid;
 
 use rustyfin_data::repo::{sessions, users};
@@ -13,24 +14,25 @@ pub fn generate_token() -> String {
 
 /// Create a new session for a user and return (access_token, session_id).
 pub async fn create_session(
-    pool: &PgPool,
+    data: &PgData,
     user_id: Uuid,
     device_id: &str,
     device_name: &str,
     app_name: &str,
     app_version: Option<&str>,
-) -> Result<(String, Uuid), sqlx::Error> {
+) -> Result<(String, Uuid), DataError> {
     let token = generate_token();
-    let session = sessions::create(
-        pool,
-        &token,
-        user_id,
-        device_id,
-        device_name,
-        app_name,
-        app_version,
-    )
-    .await?;
+    let session = data
+        .sessions()
+        .create(
+            &token,
+            user_id,
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+        )
+        .await?;
     Ok((token, session.id))
 }
 
@@ -50,7 +52,7 @@ pub enum TokenError {
     #[error("user is disabled")]
     UserDisabled,
     #[error("database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] DataError),
 }
 
 /// A token that passed every check.
@@ -65,8 +67,10 @@ pub struct ResolvedToken {
 /// Used by the HTTP extractor on every request and by the WebSocket, both when it
 /// connects and while it stays open, so a session that expires, is logged out, or
 /// belongs to a user who is then disabled stops working everywhere at once.
-pub async fn resolve_token(pool: &PgPool, token: &str) -> Result<ResolvedToken, TokenError> {
-    let session = sessions::find_by_token(pool, token)
+pub async fn resolve_token(data: &PgData, token: &str) -> Result<ResolvedToken, TokenError> {
+    let session = data
+        .sessions()
+        .find_by_token(token)
         .await?
         .ok_or(TokenError::Unknown)?;
 
@@ -76,7 +80,9 @@ pub async fn resolve_token(pool: &PgPool, token: &str) -> Result<ResolvedToken, 
         return Err(TokenError::Expired);
     }
 
-    let user = users::find_by_id(pool, session.user_id)
+    let user = data
+        .users()
+        .find_by_id(session.user_id)
         .await?
         .ok_or(TokenError::UserMissing)?;
     if user.is_disabled {

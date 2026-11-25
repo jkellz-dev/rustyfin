@@ -1,14 +1,15 @@
+use rustyfin_models::data::{Data, SessionStore, UserStore};
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use rustyfin_data::PgData;
 use rustyfin_models::dto::{DeviceProfile, SessionCommand};
-use sqlx::PgPool;
 use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 /// Tracks active session state and playback in memory.
 pub struct SessionManager {
-    pool: PgPool,
+    data: PgData,
     sessions: RwLock<HashMap<Uuid, TrackedSession>>,
     channels: RwLock<HashMap<Uuid, broadcast::Sender<SessionCommand>>>,
 }
@@ -54,16 +55,16 @@ pub struct ClientCapabilities {
 }
 
 impl SessionManager {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(data: PgData) -> Self {
         Self {
-            pool,
+            data,
             sessions: RwLock::new(HashMap::new()),
             channels: RwLock::new(HashMap::new()),
         }
     }
 
-    pub fn pool(&self) -> &PgPool {
-        &self.pool
+    pub fn data(&self) -> &PgData {
+        &self.data
     }
 
     /// Register or update a session in the in-memory map.
@@ -104,16 +105,18 @@ impl SessionManager {
         if self.sessions.read().await.contains_key(&session_id) {
             return;
         }
-        let row =
-            match rustyfin_data::repo::sessions::find_active_by_id(&self.pool, session_id).await {
-                Ok(Some(row)) => row,
-                Ok(None) => return,
-                Err(e) => {
-                    tracing::warn!("Could not load session {session_id} to track it: {e}");
-                    return;
-                }
-            };
-        let user_name = rustyfin_data::repo::users::find_by_id(&self.pool, row.user_id)
+        let row = match self.data.sessions().find_active_by_id(session_id).await {
+            Ok(Some(row)) => row,
+            Ok(None) => return,
+            Err(e) => {
+                tracing::warn!("Could not load session {session_id} to track it: {e}");
+                return;
+            }
+        };
+        let user_name = self
+            .data
+            .users()
+            .find_by_id(row.user_id)
             .await
             .ok()
             .flatten()

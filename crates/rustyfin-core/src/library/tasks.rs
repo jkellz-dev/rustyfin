@@ -1,9 +1,10 @@
+use rustyfin_models::data::{ActivityLogStore, Data, SessionStore, StatusStore};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use sqlx::PgPool;
+use rustyfin_data::PgData;
 
 use super::scheduler::ScheduledTask;
 
@@ -42,14 +43,14 @@ impl ScheduledTask for SearchReindexTask {
 // ── ActivityLogPruneTask ─────────────────────────────────────────────
 
 pub struct ActivityLogPruneTask {
-    pool: PgPool,
+    data: PgData,
     retention_days: u32,
 }
 
 impl ActivityLogPruneTask {
-    pub fn new(pool: PgPool, retention_days: u32) -> Self {
+    pub fn new(data: PgData, retention_days: u32) -> Self {
         Self {
-            pool,
+            data,
             retention_days,
         }
     }
@@ -70,9 +71,11 @@ impl ScheduledTask for ActivityLogPruneTask {
     }
 
     async fn run(&self) -> anyhow::Result<()> {
-        let deleted =
-            rustyfin_data::repo::activity_log::delete_older_than(&self.pool, self.retention_days)
-                .await?;
+        let deleted = self
+            .data
+            .activity_log()
+            .delete_older_than(self.retention_days)
+            .await?;
         if deleted > 0 {
             tracing::info!(
                 deleted,
@@ -87,19 +90,19 @@ impl ScheduledTask for ActivityLogPruneTask {
 // ── SessionCleanupTask ───────────────────────────────────────────────
 
 pub struct SessionCleanupTask {
-    pool: PgPool,
+    data: PgData,
     session_manager: Arc<crate::session::SessionManager>,
     inactive_days: u32,
 }
 
 impl SessionCleanupTask {
     pub fn new(
-        pool: PgPool,
+        data: PgData,
         session_manager: Arc<crate::session::SessionManager>,
         inactive_days: u32,
     ) -> Self {
         Self {
-            pool,
+            data,
             session_manager,
             inactive_days,
         }
@@ -121,8 +124,11 @@ impl ScheduledTask for SessionCleanupTask {
     }
 
     async fn run(&self) -> anyhow::Result<()> {
-        let deactivated =
-            rustyfin_data::repo::sessions::deactivate_stale(&self.pool, self.inactive_days).await?;
+        let deactivated = self
+            .data
+            .sessions()
+            .deactivate_stale(self.inactive_days)
+            .await?;
         if !deactivated.is_empty() {
             tracing::info!(
                 count = deactivated.len(),
@@ -208,12 +214,12 @@ impl ScheduledTask for TranscodeTempCleanupTask {
 // ── DatabaseOptimizeTask ─────────────────────────────────────────────
 
 pub struct DatabaseOptimizeTask {
-    pool: PgPool,
+    data: PgData,
 }
 
 impl DatabaseOptimizeTask {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(data: PgData) -> Self {
+        Self { data }
     }
 }
 
@@ -232,23 +238,9 @@ impl ScheduledTask for DatabaseOptimizeTask {
     }
 
     async fn run(&self) -> anyhow::Result<()> {
-        const TABLES: &[&str] = &[
-            "media_items",
-            "media_streams",
-            "user_data",
-            "sessions",
-            "activity_log",
-        ];
+        let tables = self.data.status().refresh_statistics().await?;
 
-        for table in TABLES {
-            let sql = format!("ANALYZE {table}");
-            // Table names come from the constant list above.
-            sqlx::query(sqlx::AssertSqlSafe(sql))
-                .execute(&self.pool)
-                .await?;
-        }
-
-        tracing::info!(tables = ?TABLES, "database ANALYZE completed");
+        tracing::info!(?tables, "database ANALYZE completed");
         Ok(())
     }
 }

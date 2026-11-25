@@ -449,8 +449,6 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
         }
     }
 
-    let pool = state.pool.clone();
-
     let data = state.data.clone();
 
     let _ = state
@@ -471,7 +469,7 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
     let people_cache_dir = state.people_cache_dir.clone();
     let links = state.links.clone();
     tokio::spawn(async move {
-        let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
+        let scanner = LibraryScanner::new(data.clone(), people_cache_dir);
         // Owner, 2026-11-23: a scan of a library is followed by a sync of the
         // links that fill it, each once; a library a link made has no
         // folders, so its sync is its scan. A library stays "scanning" until
@@ -491,7 +489,7 @@ async fn start_scans(state: &AppState, libs: Vec<libraries::LibraryRow>) {
         }
         let named: Vec<(String, Option<uuid::Uuid>)> =
             filled.iter().map(|l| (l.name.clone(), l.link_id)).collect();
-        links.sync_for(&pool, &named).await;
+        links.sync_for(&data, &named).await;
         for lib in filled {
             scan_in_flight.write().await.remove(&lib.id);
         }

@@ -2,7 +2,8 @@ use axum::{
     extract::{FromRef, FromRequestParts},
     http::{StatusCode, header, request::Parts},
 };
-use sqlx::PgPool;
+use rustyfin_data::PgData;
+use rustyfin_models::data::{Data, DataError, SessionStore};
 use uuid::Uuid;
 
 use rustyfin_data::repo::sessions;
@@ -41,7 +42,7 @@ pub fn socket_token(headers: &axum::http::HeaderMap, query: Option<&str>) -> Opt
 }
 
 /// Authenticated user extracted from the MediaBrowser auth header.
-/// Used as an Axum extractor on any state `S` where `PgPool: FromRef<S>`.
+/// Used as an Axum extractor on any state `S` where `PgData: FromRef<S>`.
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
     pub user_id: Uuid,
@@ -108,7 +109,7 @@ pub fn parse_mediabrowser_header(value: &str) -> MediaBrowserAuth {
 
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
-    PgPool: FromRef<S>,
+    PgData: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = StatusCode;
@@ -123,19 +124,17 @@ where
         if parts.extensions.get::<Unvouched>().is_some() {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        let pool = PgPool::from_ref(state);
+        let data = PgData::from_ref(state);
 
         let token = request_token(&parts.headers, parts.uri.query());
 
         let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
 
         let ResolvedToken { session, user } =
-            resolve_token(&pool, &token).await.map_err(|e| match e {
+            resolve_token(&data, &token).await.map_err(|e| match e {
                 // Busy or unreachable database: 503, never a 401 that would
                 // sign the client out.
-                TokenError::Database(e) if rustyfin_data::pool::is_unavailable(&e) => {
-                    StatusCode::SERVICE_UNAVAILABLE
-                }
+                TokenError::Database(DataError::Unavailable(_)) => StatusCode::SERVICE_UNAVAILABLE,
                 TokenError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
                 TokenError::Unknown
                 | TokenError::Expired
@@ -144,7 +143,7 @@ where
             })?;
 
         // Touch session activity
-        let _ = sessions::touch(&pool, session.id).await;
+        let _ = data.sessions().touch(session.id).await;
 
         Ok(AuthenticatedUser {
             user_id: user.id,
@@ -167,7 +166,7 @@ pub struct AdminUser(pub AuthenticatedUser);
 
 impl<S> FromRequestParts<S> for AdminUser
 where
-    PgPool: FromRef<S>,
+    PgData: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = StatusCode;
@@ -187,7 +186,7 @@ pub struct OptionalUser(pub Option<AuthenticatedUser>);
 
 impl<S> FromRequestParts<S> for OptionalUser
 where
-    PgPool: FromRef<S>,
+    PgData: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = StatusCode;
@@ -388,7 +387,7 @@ mod tests {
         //   2. X-Emby-Token header
         //   3. X-MediaBrowser-Token header
         //   4. ?api_key= query parameter
-        // from_request_parts requires a DB pool so it cannot be unit-tested
+        // from_request_parts requires a DB data so it cannot be unit-tested
         // here; this test validates the header-parsing leg of that chain.
         let header = r#"MediaBrowser Client="Web", Token="my-secret-access-token-12345""#;
         let auth = parse_mediabrowser_header(header);

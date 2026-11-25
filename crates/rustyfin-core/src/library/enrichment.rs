@@ -1,6 +1,7 @@
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PeopleStore};
 use std::path::{Path, PathBuf};
 
-use sqlx::PgPool;
+use rustyfin_data::PgData;
 use uuid::Uuid;
 
 use rustyfin_data::repo::{media_items, people};
@@ -12,14 +13,14 @@ use rustyfin_common::nfo::{
 };
 
 pub struct EnrichmentService {
-    pool: PgPool,
+    data: PgData,
     people_cache_dir: Option<PathBuf>,
 }
 
 impl EnrichmentService {
-    pub fn new(pool: PgPool, people_cache_dir: Option<PathBuf>) -> Self {
+    pub fn new(data: PgData, people_cache_dir: Option<PathBuf>) -> Self {
         Self {
-            pool,
+            data,
             people_cache_dir,
         }
     }
@@ -73,7 +74,7 @@ impl EnrichmentService {
 
     /// Re-enrich an item by loading it from DB and dispatching by type.
     pub async fn refresh_item(&self, item_id: Uuid) {
-        let item = match media_items::find_by_id(&self.pool, item_id).await {
+        let item = match self.data.media_items().find_by_id(item_id).await {
             Ok(Some(item)) => item,
             _ => return,
         };
@@ -88,8 +89,11 @@ impl EnrichmentService {
             "Series" => {
                 // Series items don't have a path, but we can try to find one from children
                 // For now, try the parent dir of any child episode
-                if let Ok(children) =
-                    media_items::list_by_parent(&self.pool, Some(item_id), &[], 0, 1).await
+                if let Ok(children) = self
+                    .data
+                    .media_items()
+                    .list_by_parent(Some(item_id), &[], 0, 1)
+                    .await
                     && let Some(child) = children.first()
                     && let Some(ref child_path) = child.path
                     && let Some(series_dir) =
@@ -104,8 +108,11 @@ impl EnrichmentService {
                 }
             }
             "MusicArtist" => {
-                if let Ok(children) =
-                    media_items::list_by_parent(&self.pool, Some(item_id), &[], 0, 1).await
+                if let Ok(children) = self
+                    .data
+                    .media_items()
+                    .list_by_parent(Some(item_id), &[], 0, 1)
+                    .await
                     && let Some(child) = children.first()
                     && let Some(ref child_path) = child.path
                     && let Some(artist_dir) =
@@ -115,8 +122,11 @@ impl EnrichmentService {
                 }
             }
             "MusicAlbum" => {
-                if let Ok(children) =
-                    media_items::list_by_parent(&self.pool, Some(item_id), &[], 0, 1).await
+                if let Ok(children) = self
+                    .data
+                    .media_items()
+                    .list_by_parent(Some(item_id), &[], 0, 1)
+                    .await
                     && let Some(child) = children.first()
                     && let Some(ref child_path) = child.path
                     && let Some(album_dir) = Path::new(child_path).parent()
@@ -163,37 +173,46 @@ impl EnrichmentService {
             external_ids,
         };
 
-        if let Err(e) = media_items::update_metadata(&self.pool, item_id, &item_meta).await {
+        if let Err(e) = self
+            .data
+            .media_items()
+            .update_metadata(item_id, &item_meta)
+            .await
+        {
             tracing::error!("Failed to update metadata for {item_id}: {e}");
             return;
         }
 
         // Handle people: clear and re-link
         if !meta.people.is_empty() {
-            if let Err(e) = people::delete_links_by_item(&self.pool, item_id).await {
+            if let Err(e) = self.data.people().delete_links_by_item(item_id).await {
                 tracing::error!("Failed to delete people links for {item_id}: {e}");
                 return;
             }
 
             for person in &meta.people {
-                match people::find_or_create(
-                    &self.pool,
-                    &person.name,
-                    &person.person_type,
-                    person.image_url.as_deref(),
-                    person.provider_person_id.as_deref(),
-                )
-                .await
+                match self
+                    .data
+                    .people()
+                    .find_or_create(
+                        &person.name,
+                        &person.person_type,
+                        person.image_url.as_deref(),
+                        person.provider_person_id.as_deref(),
+                    )
+                    .await
                 {
                     Ok(person_row) => {
-                        if let Err(e) = people::link_to_item(
-                            &self.pool,
-                            item_id,
-                            person_row.id,
-                            person.role.as_deref(),
-                            person.sort_order,
-                        )
-                        .await
+                        if let Err(e) = self
+                            .data
+                            .people()
+                            .link_to_item(
+                                item_id,
+                                person_row.id,
+                                person.role.as_deref(),
+                                person.sort_order,
+                            )
+                            .await
                         {
                             tracing::error!(
                                 "Failed to link person {} to {item_id}: {e}",
@@ -210,13 +229,11 @@ impl EnrichmentService {
                         {
                             let headshot_path = cache_dir.join(file);
                             if headshot_path.is_file() {
-                                let existing = rustyfin_data::repo::images::find_by_item_and_type(
-                                    &self.pool,
-                                    person_row.id,
-                                    "Primary",
-                                    0,
-                                )
-                                .await;
+                                let existing = self
+                                    .data
+                                    .images()
+                                    .find_by_item_and_type(person_row.id, "Primary", 0)
+                                    .await;
                                 if matches!(existing, Ok(None)) {
                                     let new_image = rustyfin_data::repo::images::NewImage {
                                         entity_id: person_row.id,
@@ -224,10 +241,7 @@ impl EnrichmentService {
                                         path: headshot_path.to_string_lossy().into_owned(),
                                         image_index: 0,
                                     };
-                                    if let Err(e) =
-                                        rustyfin_data::repo::images::insert(&self.pool, &new_image)
-                                            .await
-                                    {
+                                    if let Err(e) = self.data.images().insert(&new_image).await {
                                         tracing::error!(
                                             "Failed to insert headshot image for {}: {e}",
                                             person.name
@@ -254,7 +268,7 @@ impl EnrichmentService {
             return;
         };
 
-        let people = match people::list_missing_headshots(&self.pool).await {
+        let people = match self.data.people().list_missing_headshots().await {
             Ok(p) => p,
             Err(e) => {
                 tracing::error!("Failed to list people missing headshots: {e}");
@@ -280,7 +294,7 @@ impl EnrichmentService {
                 path: headshot_path.to_string_lossy().into_owned(),
                 image_index: 0,
             };
-            if let Err(e) = rustyfin_data::repo::images::insert(&self.pool, &new_image).await {
+            if let Err(e) = self.data.images().insert(&new_image).await {
                 tracing::error!("Failed to insert headshot for {}: {e}", person.name);
             } else {
                 inserted += 1;

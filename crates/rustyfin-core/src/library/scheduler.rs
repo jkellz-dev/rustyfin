@@ -1,3 +1,4 @@
+use rustyfin_models::data::{ActivityLogStore, Data, LibraryStore, TaskResultStore};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -7,7 +8,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cron::Schedule;
 use rand::RngExt;
-use sqlx::PgPool;
+use rustyfin_data::PgData;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -76,7 +77,7 @@ pub struct SearchReindexScheduleConfig {
 
 pub struct TaskScheduler {
     config: SchedulerConfig,
-    pool: PgPool,
+    data: PgData,
     in_flight: Arc<RwLock<HashSet<Uuid>>>,
     people_cache_dir: Option<std::path::PathBuf>,
     static_tasks: RwLock<Vec<(String, Arc<dyn ScheduledTask>)>>, // (schedule_name, task)
@@ -88,13 +89,13 @@ pub struct TaskScheduler {
 impl TaskScheduler {
     pub fn new(
         config: SchedulerConfig,
-        pool: PgPool,
+        data: PgData,
         in_flight: Arc<RwLock<HashSet<Uuid>>>,
         people_cache_dir: Option<std::path::PathBuf>,
     ) -> Self {
         Self {
             config,
-            pool,
+            data,
             in_flight,
             people_cache_dir,
             static_tasks: RwLock::new(Vec::new()),
@@ -232,7 +233,7 @@ impl TaskScheduler {
                 let task = task.clone();
                 let task_name = task.name().to_string();
                 let task_key = task.key().to_string();
-                let pool = self.pool.clone();
+                let data = self.data.clone();
                 let jitter_secs = self.resolve_static_task_jitter(schedule_name, &task_name);
                 tokio::spawn(async move {
                     if jitter_secs > 0 {
@@ -240,7 +241,9 @@ impl TaskScheduler {
                         tokio::time::sleep(Duration::from_secs(delay)).await;
                     }
                     tracing::info!("Running scheduled task: {task_name}");
-                    let result_id = task_results::insert_running(&pool, &task_key, &task_name)
+                    let result_id = data
+                        .task_results()
+                        .insert_running(&task_key, &task_name)
                         .await
                         .unwrap_or(-1);
                     match tracing::Instrument::instrument(
@@ -252,13 +255,15 @@ impl TaskScheduler {
                         Ok(()) => {
                             tracing::info!("Scheduled task '{task_name}' completed");
                             if result_id >= 0 {
-                                let _ = task_results::mark_completed(&pool, result_id).await;
+                                let _ = data.task_results().mark_completed(result_id).await;
                             }
                         }
                         Err(e) => {
                             tracing::error!("Scheduled task '{task_name}' failed: {e}");
                             if result_id >= 0 {
-                                let _ = task_results::mark_error(&pool, result_id, &e.to_string())
+                                let _ = data
+                                    .task_results()
+                                    .mark_error(result_id, &e.to_string())
                                     .await;
                             }
                         }
@@ -286,7 +291,7 @@ impl TaskScheduler {
 
     /// Fire library scans for all libraries assigned to a given schedule.
     async fn fire_library_scans_for_schedule(&self, schedule_name: &str, jitter: u64) {
-        let libraries = match libraries::list_scannable(&self.pool).await {
+        let libraries = match self.data.libraries().list_scannable().await {
             Ok(libs) => libs,
             Err(e) => {
                 tracing::error!("Failed to query libraries for scheduled scan: {e}");
@@ -315,7 +320,7 @@ impl TaskScheduler {
             // Mark in-flight
             self.in_flight.write().await.insert(lib.id);
 
-            let pool = self.pool.clone();
+            let data = self.data.clone();
             let in_flight = self.in_flight.clone();
             let people_cache_dir = self.people_cache_dir.clone();
             let lib_id = lib.id;
@@ -330,18 +335,19 @@ impl TaskScheduler {
                 }
 
                 tracing::info!("Scheduled scan starting: {lib_name}");
-                let _ = activity_log::insert(
-                    &pool,
-                    &format!("Scheduled scan started: {lib_name}"),
-                    Some(&lib_name),
-                    "TaskStarted",
-                    "Informational",
-                    None,
-                    None,
-                )
-                .await;
+                let _ = data
+                    .activity_log()
+                    .insert(
+                        &format!("Scheduled scan started: {lib_name}"),
+                        Some(&lib_name),
+                        "TaskStarted",
+                        "Informational",
+                        None,
+                        None,
+                    )
+                    .await;
 
-                let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
+                let scanner = LibraryScanner::new(data.clone(), people_cache_dir);
                 match scanner.scan(lib_id, &lib_paths).await {
                     Ok(result) => {
                         tracing::info!(
@@ -352,16 +358,17 @@ impl TaskScheduler {
                             result.items_skipped,
                             result.errors,
                         );
-                        let _ = activity_log::insert(
-                            &pool,
-                            &format!("Scheduled scan completed: {lib_name}"),
-                            Some(&lib_name),
-                            "TaskCompleted",
-                            "Informational",
-                            None,
-                            None,
-                        )
-                        .await;
+                        let _ = data
+                            .activity_log()
+                            .insert(
+                                &format!("Scheduled scan completed: {lib_name}"),
+                                Some(&lib_name),
+                                "TaskCompleted",
+                                "Informational",
+                                None,
+                                None,
+                            )
+                            .await;
                     }
                     Err(e) => {
                         tracing::error!("Scheduled scan failed for '{lib_name}': {e}");
@@ -378,16 +385,21 @@ impl TaskScheduler {
     /// "Scan All Libraries" so the tasks page says when it ran and how long
     /// it took. The returned handle ends when every scan has.
     pub async fn fire_all_library_scans(&self) -> tokio::task::JoinHandle<()> {
-        let pool = self.pool.clone();
-        let result_id = task_results::insert_running(&pool, "library_scan", "Scan All Libraries")
+        let data = self.data.clone();
+        let result_id = data
+            .task_results()
+            .insert_running("library_scan", "Scan All Libraries")
             .await
             .unwrap_or(-1);
-        let libraries = match libraries::list_scannable(&pool).await {
+        let libraries = match data.libraries().list_scannable().await {
             Ok(libs) => libs,
             Err(e) => {
                 tracing::error!("Failed to query libraries for startup scan: {e}");
                 if result_id >= 0 {
-                    let _ = task_results::mark_error(&pool, result_id, &e.to_string()).await;
+                    let _ = data
+                        .task_results()
+                        .mark_error(result_id, &e.to_string())
+                        .await;
                 }
                 return tokio::spawn(async {});
             }
@@ -398,7 +410,7 @@ impl TaskScheduler {
             // No jitter on startup -- user expects immediate action
             self.in_flight.write().await.insert(lib.id);
 
-            let pool = pool.clone();
+            let data = data.clone();
             let in_flight = self.in_flight.clone();
             let people_cache_dir = self.people_cache_dir.clone();
             let lib_id = lib.id;
@@ -407,7 +419,7 @@ impl TaskScheduler {
 
             scans.push(tokio::spawn(async move {
                 tracing::info!("Startup scan starting: {lib_name}");
-                let scanner = LibraryScanner::new(pool.clone(), people_cache_dir);
+                let scanner = LibraryScanner::new(data.clone(), people_cache_dir);
                 let ok = match scanner.scan(lib_id, &lib_paths).await {
                     Ok(result) => {
                         tracing::info!(
@@ -436,9 +448,10 @@ impl TaskScheduler {
             }
             if result_id >= 0 {
                 let _ = if all_ok {
-                    task_results::mark_completed(&pool, result_id).await
+                    data.task_results().mark_completed(result_id).await
                 } else {
-                    task_results::mark_error(&pool, result_id, "One or more library scans failed")
+                    data.task_results()
+                        .mark_error(result_id, "One or more library scans failed")
                         .await
                 };
             }
@@ -452,10 +465,12 @@ impl TaskScheduler {
             let task = task.clone();
             let task_name = task.name().to_string();
             let task_key = task.key().to_string();
-            let pool = self.pool.clone();
+            let data = self.data.clone();
             tokio::spawn(async move {
                 tracing::info!("Running startup task: {task_name}");
-                let result_id = task_results::insert_running(&pool, &task_key, &task_name)
+                let result_id = data
+                    .task_results()
+                    .insert_running(&task_key, &task_name)
                     .await
                     .unwrap_or(-1);
                 match tracing::Instrument::instrument(
@@ -466,14 +481,16 @@ impl TaskScheduler {
                 {
                     Ok(()) => {
                         if result_id >= 0 {
-                            let _ = task_results::mark_completed(&pool, result_id).await;
+                            let _ = data.task_results().mark_completed(result_id).await;
                         }
                     }
                     Err(e) => {
                         tracing::error!("Startup task '{task_name}' failed: {e}");
                         if result_id >= 0 {
-                            let _ =
-                                task_results::mark_error(&pool, result_id, &e.to_string()).await;
+                            let _ = data
+                                .task_results()
+                                .mark_error(result_id, &e.to_string())
+                                .await;
                         }
                     }
                 }
@@ -540,28 +557,31 @@ impl TaskScheduler {
     pub async fn run_task_by_key(&self, task_key: &str) -> bool {
         // Special case: library_scan
         if task_key == "library_scan" {
-            let pool = self.pool.clone();
+            let data = self.data.clone();
             let links = self.links.get().cloned();
             let in_flight = self.in_flight.clone();
             let people_cache_dir = self.people_cache_dir.clone();
             tokio::spawn(async move {
-                let result_id =
-                    task_results::insert_running(&pool, "library_scan", "Scan All Libraries")
-                        .await
-                        .unwrap_or(-1);
-                let libs = match libraries::list_scannable(&pool).await {
+                let result_id = data
+                    .task_results()
+                    .insert_running("library_scan", "Scan All Libraries")
+                    .await
+                    .unwrap_or(-1);
+                let libs = match data.libraries().list_scannable().await {
                     Ok(libs) => libs,
                     Err(e) => {
                         tracing::error!("Manual library scan failed to query libraries: {e}");
                         if result_id >= 0 {
-                            let _ =
-                                task_results::mark_error(&pool, result_id, &e.to_string()).await;
+                            let _ = data
+                                .task_results()
+                                .mark_error(result_id, &e.to_string())
+                                .await;
                         }
                         return;
                     }
                 };
                 let scanner =
-                    crate::library::scanner::LibraryScanner::new(pool.clone(), people_cache_dir);
+                    crate::library::scanner::LibraryScanner::new(data.clone(), people_cache_dir);
                 let mut had_error = false;
                 let named: Vec<(String, Option<Uuid>)> =
                     libs.iter().map(|l| (l.name.clone(), l.link_id)).collect();
@@ -582,18 +602,16 @@ impl TaskScheduler {
                 }
                 // Then the links that fill them, each once.
                 if let Some(links) = links {
-                    links.sync_for(&pool, &named).await;
+                    links.sync_for(&data, &named).await;
                 }
                 if result_id >= 0 {
                     if had_error {
-                        let _ = task_results::mark_error(
-                            &pool,
-                            result_id,
-                            "One or more library scans failed",
-                        )
-                        .await;
+                        let _ = data
+                            .task_results()
+                            .mark_error(result_id, "One or more library scans failed")
+                            .await;
                     } else {
-                        let _ = task_results::mark_completed(&pool, result_id).await;
+                        let _ = data.task_results().mark_completed(result_id).await;
                     }
                 }
             });
@@ -607,13 +625,14 @@ impl TaskScheduler {
                 let task = task.clone();
                 let task_name = task.name().to_string();
                 let task_key_owned = task_key.to_string();
-                let pool = self.pool.clone();
+                let data = self.data.clone();
                 tokio::spawn(async move {
                     tracing::info!("Running manual task: {task_name}");
-                    let result_id =
-                        task_results::insert_running(&pool, &task_key_owned, &task_name)
-                            .await
-                            .unwrap_or(-1);
+                    let result_id = data
+                        .task_results()
+                        .insert_running(&task_key_owned, &task_name)
+                        .await
+                        .unwrap_or(-1);
                     match tracing::Instrument::instrument(
                         task.run(),
                         tracing::info_span!("task", rustyfin.task = %task.key()),
@@ -623,13 +642,15 @@ impl TaskScheduler {
                         Ok(()) => {
                             tracing::info!("Manual task '{task_name}' completed");
                             if result_id >= 0 {
-                                let _ = task_results::mark_completed(&pool, result_id).await;
+                                let _ = data.task_results().mark_completed(result_id).await;
                             }
                         }
                         Err(e) => {
                             tracing::error!("Manual task '{task_name}' failed: {e}");
                             if result_id >= 0 {
-                                let _ = task_results::mark_error(&pool, result_id, &e.to_string())
+                                let _ = data
+                                    .task_results()
+                                    .mark_error(result_id, &e.to_string())
                                     .await;
                             }
                         }

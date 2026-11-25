@@ -21,4 +21,7 @@ pub trait StatusStore {
 
     /// The connections open now.
     fn connections(&self) -> Connections;
+
+    /// Refresh the query planner's statistics; returns what it refreshed.
+    fn refresh_statistics(&self) -> impl Future<Output = DataResult<Vec<String>>> + Send;
 }

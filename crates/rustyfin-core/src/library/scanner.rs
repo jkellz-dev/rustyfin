@@ -1,7 +1,11 @@
+use rustyfin_models::data::{
+    ActivityLogStore, ChapterStore, CollectionStore, Data, DataError, ImageStore, LibraryStore,
+    LinkStore, MediaItemStore, MediaStreamStore,
+};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use sqlx::PgPool;
+use rustyfin_data::PgData;
 use uuid::Uuid;
 
 use rustyfin_data::repo::{
@@ -23,7 +27,7 @@ use rustyfin_common::naming::{
 use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
 pub struct LibraryScanner {
-    pool: PgPool,
+    data: PgData,
     enrichment: EnrichmentService,
     /// Collection art (`<tmdb-id>/poster.jpg`, ...), beside the people folder.
     collection_art_dir: Option<std::path::PathBuf>,
@@ -58,13 +62,13 @@ pub struct ScanResult {
 }
 
 impl LibraryScanner {
-    pub fn new(pool: PgPool, people_cache_dir: Option<std::path::PathBuf>) -> Self {
+    pub fn new(data: PgData, people_cache_dir: Option<std::path::PathBuf>) -> Self {
         let collection_art_dir = people_cache_dir
             .as_deref()
             .map(rustyfin_common::images::collection_art_dir);
-        let enrichment = EnrichmentService::new(pool.clone(), people_cache_dir);
+        let enrichment = EnrichmentService::new(data.clone(), people_cache_dir);
         Self {
-            pool,
+            data,
             enrichment,
             collection_art_dir,
             probed: Default::default(),
@@ -136,12 +140,14 @@ impl LibraryScanner {
             .iter()
             .map(|p| p.to_string_lossy().to_string())
             .collect();
-        let known: std::collections::HashSet<String> =
-            media_items::existing_paths(&self.pool, &paths)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .collect();
+        let known: std::collections::HashSet<String> = self
+            .data
+            .media_items()
+            .existing_paths(&paths)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         let new: Vec<PathBuf> = files
             .iter()
             .zip(&paths)
@@ -169,7 +175,10 @@ impl LibraryScanner {
         let outcome = self.scan_library(library_id, paths).await;
         // Prometheus: scans by library and result, how long they took, and
         // what they changed.
-        let library = libraries::find_by_id(&self.pool, library_id)
+        let library = self
+            .data
+            .libraries()
+            .find_by_id(library_id)
             .await
             .ok()
             .flatten()
@@ -196,7 +205,10 @@ impl LibraryScanner {
         }
         // Progress, the outcome and the new items for connected clients; a
         // scan with errors leaves a warning in the activity log (roadmap 12b).
-        let added_ids = media_items::added_since(&self.pool, library_id, started_at)
+        let added_ids = self
+            .data
+            .media_items()
+            .added_since(library_id, started_at)
             .await
             .unwrap_or_default();
         let summary = match &outcome {
@@ -225,16 +237,18 @@ impl LibraryScanner {
             )),
         };
         if let Some(text) = problem {
-            let _ = activity_log::insert(
-                &self.pool,
-                &text,
-                None,
-                "LibraryScanErrors",
-                "Warning",
-                None,
-                Some(library_id),
-            )
-            .await;
+            let _ = self
+                .data
+                .activity_log()
+                .insert(
+                    &text,
+                    None,
+                    "LibraryScanErrors",
+                    "Warning",
+                    None,
+                    Some(library_id),
+                )
+                .await;
         }
         board.finish(library_id, summary);
         outcome
@@ -251,7 +265,10 @@ impl LibraryScanner {
             duration: std::time::Duration::ZERO,
         };
 
-        let lib = libraries::find_by_id(&self.pool, library_id)
+        let lib = self
+            .data
+            .libraries()
+            .find_by_id(library_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Library {library_id} not found"))?;
 
@@ -300,15 +317,22 @@ impl LibraryScanner {
         // A title this scan found may be one a linked server shares: merge
         // now, not at the link's next sync, so it is never listed twice.
         if library_type != "music"
-            && let Err(e) = rustyfin_data::repo::links::merge(&self.pool).await
+            && let Err(e) = self.data.links().merge().await
         {
             tracing::warn!("Could not merge linked copies after the scan: {e}");
         }
 
-        libraries::touch_updated_at(&self.pool, library_id)
+        self.data
+            .libraries()
+            .touch_updated_at(library_id)
             .await
             .ok();
-        if let Err(e) = libraries::mark_scanned(&self.pool, library_id, start.elapsed()).await {
+        if let Err(e) = self
+            .data
+            .libraries()
+            .mark_scanned(library_id, start.elapsed())
+            .await
+        {
             tracing::warn!("cannot record the scan time of library {library_id}: {e}");
         }
         // Backfill headshot image rows for people with cached headshots
@@ -384,8 +408,11 @@ impl LibraryScanner {
                 continue;
             };
             if owner_dirs.contains(dir)
-                && let Ok(Some(row)) =
-                    media_items::find_by_path(&self.pool, &file_path.to_string_lossy()).await
+                && let Ok(Some(row)) = self
+                    .data
+                    .media_items()
+                    .find_by_path(&file_path.to_string_lossy())
+                    .await
             {
                 owners
                     .entry(dir.to_path_buf())
@@ -401,8 +428,11 @@ impl LibraryScanner {
             self.prefetch_probes(chunk).await;
         }
         for (version, film) in &versions {
-            let Ok(Some(row)) =
-                media_items::find_by_path(&self.pool, &film.to_string_lossy()).await
+            let Ok(Some(row)) = self
+                .data
+                .media_items()
+                .find_by_path(&film.to_string_lossy())
+                .await
             else {
                 continue;
             };
@@ -491,7 +521,7 @@ impl LibraryScanner {
     ) -> anyhow::Result<IngestOutcome> {
         let path_str = file_path.to_string_lossy().to_string();
         let etag = compute_etag(file_path, &subtitle_sidecars(file_path))?;
-        let existing = media_items::find_by_path(&self.pool, &path_str).await?;
+        let existing = self.data.media_items().find_by_path(&path_str).await?;
         if let Some(e) = &existing
             && e.etag.as_deref() == Some(etag.as_str())
             && e.owner_id == Some(owner)
@@ -540,15 +570,18 @@ impl LibraryScanner {
         };
         let (id, outcome) = match existing {
             Some(e) => (
-                media_items::update(&self.pool, e.id, &item).await?.id,
+                self.data.media_items().update(e.id, &item).await?.id,
                 IngestOutcome::Updated,
             ),
             None => (
-                media_items::insert(&self.pool, &item).await?.id,
+                self.data.media_items().insert(&item).await?.id,
                 IngestOutcome::Added,
             ),
         };
-        media_items::set_extra(&self.pool, id, Some(owner), Some(extra_type)).await?;
+        self.data
+            .media_items()
+            .set_extra(id, Some(owner), Some(extra_type))
+            .await?;
         self.replace_streams(id, file_path, &probe_result).await;
         Ok(outcome)
     }
@@ -568,7 +601,7 @@ impl LibraryScanner {
         sidecars.extend(subtitle_sidecars(file_path));
         let t = Instant::now();
         let etag = compute_etag(file_path, &sidecars)?;
-        let found = media_items::find_by_path(&self.pool, &path_str).await?;
+        let found = self.data.media_items().find_by_path(&path_str).await?;
         self.spent("film: stat and lookup", t);
         let t = Instant::now();
 
@@ -615,7 +648,7 @@ impl LibraryScanner {
                 etag: Some(etag),
             };
 
-            let updated = media_items::update(&self.pool, existing.id, &item).await?;
+            let updated = self.data.media_items().update(existing.id, &item).await?;
             self.replace_streams(updated.id, file_path, &probe_result)
                 .await;
             self.replace_chapters(updated.id, &probe_result).await;
@@ -663,7 +696,7 @@ impl LibraryScanner {
             etag: Some(etag),
         };
 
-        let inserted = media_items::insert(&self.pool, &item).await?;
+        let inserted = self.data.media_items().insert(&item).await?;
         self.replace_streams(inserted.id, file_path, &probe_result)
             .await;
         self.replace_chapters(inserted.id, &probe_result).await;
@@ -1074,10 +1107,13 @@ impl LibraryScanner {
         // (owner, 2026-11-24: every scan re-read 66,000 tracks). An album
         // scanned before this kept nothing, so it only records it.
         let nfo_tag = album_nfo_tag(album_dir);
-        let nfo_changed = match media_items::find_by_id(&self.pool, album_id).await {
+        let nfo_changed = match self.data.media_items().find_by_id(album_id).await {
             Ok(Some(row)) if row.etag != nfo_tag => {
-                if let Err(e) =
-                    media_items::set_etag(&self.pool, album_id, nfo_tag.as_deref()).await
+                if let Err(e) = self
+                    .data
+                    .media_items()
+                    .set_etag(album_id, nfo_tag.as_deref())
+                    .await
                 {
                     tracing::warn!("Could not store the NFO tag of album {album_id}: {e}");
                 }
@@ -1172,7 +1208,7 @@ impl LibraryScanner {
         let etag = compute_etag(file_path, &[])?;
         self.spent("track: file stat", t);
         let t = Instant::now();
-        let existing = media_items::find_by_path(&self.pool, &path_str).await?;
+        let existing = self.data.media_items().find_by_path(&path_str).await?;
         self.spent("track: database lookup", t);
         let t = Instant::now();
         if let Some(existing) = &existing
@@ -1201,7 +1237,12 @@ impl LibraryScanner {
                 // A lyrics file added since (a stat, not a change of the
                 // track: putting it in the etag would re-probe every track
                 // that has one).
-                if let Err(e) = media_items::set_has_lyrics(&self.pool, existing.id, true).await {
+                if let Err(e) = self
+                    .data
+                    .media_items()
+                    .set_has_lyrics(existing.id, true)
+                    .await
+                {
                     tracing::warn!("Could not store that {} has lyrics: {e}", existing.id);
                 }
             }
@@ -1261,7 +1302,7 @@ impl LibraryScanner {
                 etag: Some(etag),
             };
 
-            let updated = media_items::update(&self.pool, existing.id, &item).await?;
+            let updated = self.data.media_items().update(existing.id, &item).await?;
             self.replace_streams(updated.id, file_path, &probe_result)
                 .await;
             self.replace_images(updated.id, file_path).await;
@@ -1297,7 +1338,7 @@ impl LibraryScanner {
             etag: Some(etag),
         };
 
-        let inserted = media_items::insert(&self.pool, &item).await?;
+        let inserted = self.data.media_items().insert(&item).await?;
         self.replace_streams(inserted.id, file_path, &probe_result)
             .await;
         self.replace_images(inserted.id, file_path).await;
@@ -1326,14 +1367,18 @@ impl LibraryScanner {
             (raw_name.to_string(), None)
         };
         let dir_str = dir.to_string_lossy().to_string();
-        let mut existing =
-            media_items::find_folder_by_path(&self.pool, &dir_str, item_type, parent_id).await?;
+        let mut existing = self
+            .data
+            .media_items()
+            .find_folder_by_path(&dir_str, item_type, parent_id)
+            .await?;
         if existing.is_none() {
             for candidate in [raw_name, name.as_str()] {
-                existing = media_items::find_folder_by_name(
-                    &self.pool, library_id, candidate, item_type, parent_id,
-                )
-                .await?;
+                existing = self
+                    .data
+                    .media_items()
+                    .find_folder_by_name(library_id, candidate, item_type, parent_id)
+                    .await?;
                 if existing.is_some() {
                     break;
                 }
@@ -1344,15 +1389,10 @@ impl LibraryScanner {
                 || row.path.as_deref() != Some(dir_str.as_str())
                 || (row.production_year.is_none() && year.is_some());
             if stale {
-                media_items::update_folder_identity(
-                    &self.pool,
-                    row.id,
-                    &name,
-                    &make_sort_name(&name),
-                    year,
-                    &dir_str,
-                )
-                .await?;
+                self.data
+                    .media_items()
+                    .update_folder_identity(row.id, &name, &make_sort_name(&name), year, &dir_str)
+                    .await?;
             }
             return Ok(row.id);
         }
@@ -1380,7 +1420,7 @@ impl LibraryScanner {
             etag: None,
         };
 
-        let row = media_items::insert(&self.pool, &item).await?;
+        let row = self.data.media_items().insert(&item).await?;
         Ok(row.id)
     }
 
@@ -1399,7 +1439,7 @@ impl LibraryScanner {
         sidecars.extend(subtitle_sidecars(file_path));
         let t = Instant::now();
         let etag = compute_etag(file_path, &sidecars)?;
-        let found = media_items::find_by_path(&self.pool, &path_str).await?;
+        let found = self.data.media_items().find_by_path(&path_str).await?;
         self.spent("episode: stat and lookup", t);
         let t = Instant::now();
 
@@ -1466,7 +1506,7 @@ impl LibraryScanner {
                 etag: Some(etag),
             };
 
-            let updated = media_items::update(&self.pool, existing.id, &item).await?;
+            let updated = self.data.media_items().update(existing.id, &item).await?;
             self.replace_streams(updated.id, file_path, &probe_result)
                 .await;
             self.replace_chapters(updated.id, &probe_result).await;
@@ -1528,7 +1568,7 @@ impl LibraryScanner {
             etag: Some(etag),
         };
 
-        let inserted = media_items::insert(&self.pool, &item).await?;
+        let inserted = self.data.media_items().insert(&item).await?;
         self.replace_streams(inserted.id, file_path, &probe_result)
             .await;
         self.replace_chapters(inserted.id, &probe_result).await;
@@ -1553,7 +1593,7 @@ impl LibraryScanner {
     /// picked up without a file change.
     #[tracing::instrument(skip_all, fields(rustyfin.task = "library_scan"))]
     async fn sync_movie_collections(&self, library_id: Uuid) {
-        match rebuild_movie_collections(&self.pool, library_id).await {
+        match rebuild_movie_collections(&self.data, library_id).await {
             Ok((_, 0, 0)) => {}
             Ok((all, created, removed)) => tracing::info!(
                 "Collections in library {library_id}: {all} in all, {created} new, {removed} removed"
@@ -1564,7 +1604,7 @@ impl LibraryScanner {
         let Some(art_dir) = self.collection_art_dir.as_ref() else {
             return;
         };
-        match collections::list_auto_tmdb_ids(&self.pool, library_id).await {
+        match self.data.collections().list_auto_tmdb_ids(library_id).await {
             Ok(ids) => {
                 for (collection, tmdb_id) in ids {
                     let found = discover_images(&art_dir.join(&tmdb_id), "");
@@ -1592,7 +1632,12 @@ impl LibraryScanner {
                 return;
             }
         }
-        let rows = match media_items::list_paths_in_library(&self.pool, library_id).await {
+        let rows = match self
+            .data
+            .media_items()
+            .list_paths_in_library(library_id)
+            .await
+        {
             Ok(rows) => rows,
             Err(e) => {
                 tracing::error!("Not pruning {}: {e}", root.display());
@@ -1612,7 +1657,7 @@ impl LibraryScanner {
             .map(|(id, _, _)| *id)
             .collect();
         if !junk.is_empty() {
-            match media_items::delete_ids(&self.pool, &junk).await {
+            match self.data.media_items().delete_ids(&junk).await {
                 Ok(n) => {
                     tracing::info!(
                         "Removed {n} items made from hidden files under {}",
@@ -1649,7 +1694,7 @@ impl LibraryScanner {
             .collect();
         let mut removed = 0;
         for (what, ids) in [("files", &gone_files), ("folders", &gone_folders)] {
-            match media_items::delete_ids(&self.pool, ids).await {
+            match self.data.media_items().delete_ids(ids).await {
                 Ok(n) => removed += n,
                 Err(e) => {
                     tracing::error!("Pruning {what} under {} failed: {e}", root.display());
@@ -1657,7 +1702,12 @@ impl LibraryScanner {
                 }
             }
         }
-        match media_items::delete_empty_pathless_folders(&self.pool, library_id).await {
+        match self
+            .data
+            .media_items()
+            .delete_empty_pathless_folders(library_id)
+            .await
+        {
             Ok(n) => removed += n,
             Err(e) => {
                 tracing::error!("Pruning empty folders failed: {e}");
@@ -1687,7 +1737,12 @@ impl LibraryScanner {
         let tags = music_tags::read_tags(file_path).unwrap_or_default();
         let has_lyrics =
             tags.has_lyrics || rustyfin_common::lyrics::sidecar_path(file_path).is_some();
-        if let Err(e) = media_items::set_has_lyrics(&self.pool, item_id, has_lyrics).await {
+        if let Err(e) = self
+            .data
+            .media_items()
+            .set_has_lyrics(item_id, has_lyrics)
+            .await
+        {
             tracing::warn!("Could not store whether {item_id} has lyrics: {e}");
         }
         let artists = tags
@@ -1695,7 +1750,7 @@ impl LibraryScanner {
             .as_deref()
             .map(music_tags::split_artists)
             .unwrap_or_default();
-        if let Err(e) = media_items::set_artists(&self.pool, item_id, &artists).await {
+        if let Err(e) = self.data.media_items().set_artists(item_id, &artists).await {
             tracing::warn!("Could not store the artists of {item_id}: {e}");
         }
         // An empty list for an untagged track, so it is not read again.
@@ -1704,7 +1759,7 @@ impl LibraryScanner {
             .as_deref()
             .map(music_tags::split_genres)
             .unwrap_or_default();
-        if let Err(e) = media_items::set_genres(&self.pool, item_id, &genres).await {
+        if let Err(e) = self.data.media_items().set_genres(item_id, &genres).await {
             tracing::warn!("Could not store the genres of {item_id}: {e}");
         }
         let ids = music_tags::musicbrainz_ids(&tags);
@@ -1716,7 +1771,10 @@ impl LibraryScanner {
                     .collect(),
             )
         };
-        let album = media_items::album_of(&self.pool, folder_id)
+        let album = self
+            .data
+            .media_items()
+            .album_of(folder_id)
             .await
             .ok()
             .flatten();
@@ -1728,7 +1786,7 @@ impl LibraryScanner {
             writes.push((artist_id, as_json(&ids.artist)));
         }
         for (id, json) in writes {
-            if let Err(e) = media_items::add_external_ids(&self.pool, id, &json).await {
+            if let Err(e) = self.data.media_items().add_external_ids(id, &json).await {
                 tracing::warn!("Could not store the MusicBrainz ids of {id}: {e}");
             }
         }
@@ -1737,7 +1795,7 @@ impl LibraryScanner {
     /// Streams stored before the details existed (no time base) are probed again
     /// even though the file is unchanged.
     async fn refresh_stale_streams(&self, item_id: Uuid, file_path: &Path) {
-        match media_streams::lacks_details(&self.pool, item_id).await {
+        match self.data.media_streams().lacks_details(item_id).await {
             Ok(true) => {
                 let probe_result = self.probe(file_path).await;
                 self.replace_streams(item_id, file_path, &probe_result)
@@ -1755,7 +1813,7 @@ impl LibraryScanner {
         probe_result: &Option<probe::ProbeResult>,
     ) {
         // Delete existing streams
-        if let Err(e) = media_streams::delete_by_item(&self.pool, item_id).await {
+        if let Err(e) = self.data.media_streams().delete_by_item(item_id).await {
             tracing::error!("Failed to delete streams for {item_id}: {e}");
             return;
         }
@@ -1796,7 +1854,7 @@ impl LibraryScanner {
                 path: None,
             };
 
-            if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
+            if let Err(e) = self.data.media_streams().insert(&new_stream).await {
                 tracing::error!("Failed to insert stream for {item_id}: {e}");
             }
         }
@@ -1828,14 +1886,14 @@ impl LibraryScanner {
                 path: Some(file.path.to_string_lossy().to_string()),
                 ..Default::default()
             };
-            if let Err(e) = media_streams::insert(&self.pool, &new_stream).await {
+            if let Err(e) = self.data.media_streams().insert(&new_stream).await {
                 tracing::error!("Failed to insert subtitle file for {item_id}: {e}");
             }
         }
     }
 
     async fn replace_chapters(&self, item_id: Uuid, probe_result: &Option<probe::ProbeResult>) {
-        if let Err(e) = chapters::delete_by_item(&self.pool, item_id).await {
+        if let Err(e) = self.data.chapters().delete_by_item(item_id).await {
             tracing::error!("Failed to delete chapters for {item_id}: {e}");
             return;
         }
@@ -1843,14 +1901,11 @@ impl LibraryScanner {
         let Some(pr) = probe_result else { return };
 
         for ch in &pr.chapters {
-            if let Err(e) = chapters::insert(
-                &self.pool,
-                item_id,
-                ch.index,
-                ch.start_ticks,
-                ch.name.as_deref(),
-            )
-            .await
+            if let Err(e) = self
+                .data
+                .chapters()
+                .insert(item_id, ch.index, ch.start_ticks, ch.name.as_deref())
+                .await
             {
                 tracing::error!("Failed to insert chapter for {item_id}: {e}");
             }
@@ -1898,7 +1953,7 @@ impl LibraryScanner {
             })
             .collect();
         wanted.sort();
-        match images_repo::list_by_item(&self.pool, item_id).await {
+        match self.data.images().list_by_item(item_id).await {
             Ok(rows) => {
                 let mut have: Vec<(String, i32, String, Option<i64>)> = rows
                     .into_iter()
@@ -1914,7 +1969,7 @@ impl LibraryScanner {
                 return;
             }
         }
-        if let Err(e) = images_repo::delete_by_item(&self.pool, item_id).await {
+        if let Err(e) = self.data.images().delete_by_item(item_id).await {
             tracing::error!("Failed to delete images for {item_id}: {e}");
             return;
         }
@@ -1925,7 +1980,12 @@ impl LibraryScanner {
                 path,
                 image_index,
             };
-            if let Err(e) = images_repo::insert_scanned(&self.pool, &new_image, file_mtime).await {
+            if let Err(e) = self
+                .data
+                .images()
+                .insert_scanned(&new_image, file_mtime)
+                .await
+            {
                 tracing::error!("Failed to insert image for {item_id}: {e}");
             }
         }
@@ -2246,12 +2306,12 @@ async fn probe_file_graceful(path: &Path) -> Option<probe::ProbeResult> {
 /// collection. Collections made by hand are never touched. Returns (how
 /// many, created, removed).
 pub async fn rebuild_movie_collections(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     library_id: Uuid,
-) -> Result<(usize, usize, usize), sqlx::Error> {
+) -> Result<(usize, usize, usize), DataError> {
     // Films only: a film's extras and other versions share its folder and
     // NFO, and must not join its collection beside it.
-    let items = media_items::list_film_paths(pool, library_id).await?;
+    let items = data.media_items().list_film_paths(library_id).await?;
     let found: Vec<(Uuid, String, Option<String>)> = items
         .into_iter()
         .filter_map(|(id, path)| {
@@ -2282,7 +2342,7 @@ pub async fn rebuild_movie_collections(
             names.entry(tmdb.clone()).or_insert_with(|| name.clone());
         }
     }
-    let linked = rustyfin_data::repo::links::collection_members(pool, library_id).await?;
+    let linked = data.links().collection_members(library_id).await?;
     for (_, name, tmdb) in &linked {
         if let Some(tmdb) = tmdb
             && !name.is_empty()
@@ -2310,7 +2370,7 @@ pub async fn rebuild_movie_collections(
     // This server's own last: its id-bearing names win.
     all.extend(found);
     let sets = collections::group_auto_sets(all);
-    let (created, removed) = collections::sync_auto(pool, library_id, &sets).await?;
+    let (created, removed) = data.collections().sync_auto(library_id, &sets).await?;
     Ok((sets.len(), created, removed))
 }
 

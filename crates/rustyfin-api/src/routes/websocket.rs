@@ -34,7 +34,7 @@ pub async fn websocket_handler(
     // The same check HTTP requests get: an unknown, logged-out or expired session,
     // or a disabled user, must not be able to open a socket.
     let token = rustyfin_auth::middleware::socket_token(&headers, uri.query()).unwrap_or_default();
-    let session = match resolve_token(&state.pool, &token).await {
+    let session = match resolve_token(&state.data, &token).await {
         Ok(resolved) => Some(resolved.session),
         Err(TokenError::Database(e)) => {
             tracing::error!("WebSocket token lookup failed: {e}");
@@ -60,7 +60,7 @@ pub async fn websocket_handler(
 /// brief outage should not drop every connected client.
 async fn token_still_valid(state: &AppState, token: &str) -> bool {
     !matches!(
-        resolve_token(&state.pool, token).await,
+        resolve_token(&state.data, token).await,
         Err(TokenError::Unknown
             | TokenError::Expired
             | TokenError::UserMissing

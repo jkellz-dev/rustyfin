@@ -2,14 +2,15 @@
 //! details of the new and changed ones, remove the ones gone, then merge. A
 //! Rustyfin friend says what changed itself (its change feed).
 
+use rustyfin_models::data::{Data, LibraryStore};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
+use rustyfin_data::PgData;
 use rustyfin_data::repo::links::{self, LinkedItem};
 use rustyfin_data::repo::media_streams::NewMediaStream;
 use serde_json::{Value, json};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{Link, SyncReport};
@@ -17,14 +18,14 @@ use super::{Link, SyncReport};
 /// Details are fetched this many at a time.
 const DETAIL_BATCH: usize = 100;
 
-pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport> {
+pub(super) async fn sync_link(data: &PgData, link: &Link) -> anyhow::Result<SyncReport> {
     if link.settings.kind == super::LinkKind::Rustyfin {
-        return sync_rustyfin(pool, link).await;
+        return sync_rustyfin(data, link).await;
     }
     let client = &link.client;
     // Signing in and listing the friend's libraries must work, or nothing can.
     let remote_libraries = client.libraries().await?;
-    let stored = links::stored_copies(pool, link.id).await?;
+    let stored = links::stored_copies(data, link.id).await?;
     // The friend's item -> its stored copies' tags (one per version).
     let mut stored_tags: HashMap<&str, Vec<&Option<String>>> = HashMap::new();
     for (remote_id, (_, tag)) in &stored {
@@ -39,7 +40,7 @@ pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<Sync
     };
     let mut progress = Progress::default();
     for map in &link.settings.libraries {
-        let mapped = sync_library(pool, link, map, &remote_libraries, &stored, &mut progress).await;
+        let mapped = sync_library(data, link, map, &remote_libraries, &stored, &mut progress).await;
         if let Err(e) = mapped {
             progress
                 .report
@@ -56,17 +57,17 @@ pub(super) async fn sync_link(pool: &PgPool, link: &Link) -> anyhow::Result<Sync
             .filter(|id| !kept.contains(*id))
             .cloned()
             .collect();
-        report.removed = links::delete_copies(pool, link.id, &gone).await?;
+        report.removed = links::delete_copies(data, link.id, &gone).await?;
     }
-    report.merged = links::merge(pool).await?;
-    sync_collections(pool, link, &mut report).await?;
+    report.merged = links::merge(data).await?;
+    sync_collections(data, link, &mut report).await?;
     Ok(report)
 }
 
 /// The friend's collections: store them, and when they or the link's films
 /// changed, make the collections of the films libraries the link fills again.
 async fn sync_collections(
-    pool: &PgPool,
+    data: &PgData,
     link: &Link,
     report: &mut SyncReport,
 ) -> anyhow::Result<()> {
@@ -77,11 +78,11 @@ async fn sync_collections(
             return Ok(());
         }
     };
-    let changed = links::set_collections(pool, link.id, &sets).await?;
+    let changed = links::set_collections(data, link.id, &sets).await?;
     let films_changed = report.added + report.updated + report.removed + report.merged > 0;
     if changed || films_changed {
-        for library in links::movie_libraries(pool, link.id).await? {
-            crate::library::scanner::rebuild_movie_collections(pool, library).await?;
+        for library in links::movie_libraries(data, link.id).await? {
+            crate::library::scanner::rebuild_movie_collections(data, library).await?;
         }
     }
     Ok(())
@@ -107,7 +108,7 @@ struct Progress {
 /// One `[[link.libraries]]`: find (or make) the local library, list the
 /// friend's items with their tags, store the new and changed ones.
 async fn sync_library(
-    pool: &PgPool,
+    data: &PgData,
     link: &Link,
     map: &super::LibraryMap,
     remote_libraries: &[(String, String, String)],
@@ -116,7 +117,7 @@ async fn sync_library(
 ) -> anyhow::Result<()> {
     let started = std::time::Instant::now();
     let client = &link.client;
-    let (remote_id, local_library, shows) = target(pool, link, map, remote_libraries).await?;
+    let (remote_id, local_library, shows) = target(data, link, map, remote_libraries).await?;
     let types = if shows {
         "Series,Season,Episode"
     } else {
@@ -146,7 +147,7 @@ async fn sync_library(
         for item in client.items_by_id(batch).await? {
             for film in items_from_jellyfin(&item, link.id, &link.settings.name, local_library) {
                 progress.kept.insert(film.remote_id.clone());
-                let (_, new) = links::upsert_item(pool, &film).await?;
+                let (_, new) = links::upsert_item(data, &film).await?;
                 if new {
                     progress.report.added += 1;
                 } else {
@@ -157,7 +158,8 @@ async fn sync_library(
     }
     // A library of its own has no folders to scan: this sync is what fills it.
     if map.local.is_none() {
-        rustyfin_data::repo::libraries::mark_scanned(pool, local_library, started.elapsed())
+        data.libraries()
+            .mark_scanned(local_library, started.elapsed())
             .await?;
     }
     Ok(())
@@ -167,7 +169,7 @@ async fn sync_library(
 /// library (made for the link when there is no `local`), and whether it holds
 /// shows.
 async fn target(
-    pool: &PgPool,
+    data: &PgData,
     link: &Link,
     map: &super::LibraryMap,
     remote_libraries: &[(String, String, String)],
@@ -190,14 +192,15 @@ async fn target(
     let shows = collection == "tvshows";
     let local_library = match &map.local {
         Some(local) => {
-            rustyfin_data::repo::libraries::find_by_name(pool, local.trim())
+            data.libraries()
+                .find_by_name(local.trim())
                 .await?
                 .with_context(|| format!("there is no local library named \"{local}\""))?
                 .id
         }
         None => {
             links::ensure_library(
-                pool,
+                data,
                 link.id,
                 &format!("{remote_name} · {}", link.settings.name),
                 if shows { "tvshows" } else { "movies" },
@@ -218,7 +221,7 @@ fn plain(id: &str) -> String {
 /// from its change feed (`/api/v1/catalog`), so a quiet sync is one call and a
 /// busy one fetches only what changed. The first sync (or one after the
 /// friend refused the cursor) takes everything and removes what it lacks.
-async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport> {
+async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport> {
     let started = std::time::Instant::now();
     let client = &link.client;
     let remote_libraries = client.libraries().await?;
@@ -228,7 +231,7 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
     // Libraries of their own, which only this sync fills.
     let mut own: Vec<Uuid> = Vec::new();
     for map in &link.settings.libraries {
-        match target(pool, link, map, &remote_libraries).await {
+        match target(data, link, map, &remote_libraries).await {
             Ok((remote, local, shows)) => {
                 targets.insert(plain(&remote), (local, shows));
                 if map.local.is_none() {
@@ -238,7 +241,7 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
             Err(e) => report.errors.push(format!("{}: {e:#}", map.remote)),
         }
     }
-    let mut since = links::catalog_cursor(pool, link.id).await?;
+    let mut since = links::catalog_cursor(data, link.id).await?;
     let feed = match client.catalog(since.as_deref()).await? {
         Some(feed) => feed,
         None => {
@@ -250,7 +253,7 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
         }
     };
     let full = since.is_none();
-    let stored = links::stored_copies(pool, link.id).await?;
+    let stored = links::stored_copies(data, link.id).await?;
     // What to fetch, per local library.
     let mut wanted: HashMap<Uuid, Vec<String>> = HashMap::new();
     for changed in &feed.changed {
@@ -276,7 +279,7 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
                 let copies = items_from_jellyfin(&item, link.id, &link.settings.name, *local);
                 let written: HashSet<String> = copies.iter().map(|c| c.remote_id.clone()).collect();
                 for copy in copies {
-                    let (_, new) = links::upsert_item(pool, &copy).await?;
+                    let (_, new) = links::upsert_item(data, &copy).await?;
                     if new {
                         report.added += 1;
                     } else {
@@ -289,7 +292,7 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
                     .filter(|r| plain(links::remote_item(r)) == item_id && !written.contains(*r))
                     .cloned()
                     .collect();
-                report.removed += links::delete_copies(pool, link.id, &stale).await?;
+                report.removed += links::delete_copies(data, link.id, &stale).await?;
                 kept.extend(written);
             }
         }
@@ -313,15 +316,17 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
             .cloned()
             .collect()
     };
-    report.removed += links::delete_copies(pool, link.id, &gone).await?;
+    report.removed += links::delete_copies(data, link.id, &gone).await?;
     // With a mapping failing, its changes come again next time.
     if report.errors.is_empty() {
-        links::set_catalog_cursor(pool, link.id, &feed.cursor).await?;
+        links::set_catalog_cursor(data, link.id, &feed.cursor).await?;
         for library in own {
-            rustyfin_data::repo::libraries::mark_scanned(pool, library, started.elapsed()).await?;
+            data.libraries()
+                .mark_scanned(library, started.elapsed())
+                .await?;
         }
     }
-    report.merged = links::merge(pool).await?;
+    report.merged = links::merge(data).await?;
     Ok(report)
 }
 

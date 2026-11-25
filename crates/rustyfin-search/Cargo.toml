@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 rustyfin-data.workspace = true
+rustyfin-models.workspace = true
 
 tokio.workspace = true
 serde.workspace = true

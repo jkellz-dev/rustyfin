@@ -1,6 +1,7 @@
 use chrono::Utc;
 use rand::RngExt;
-use sqlx::PgPool;
+use rustyfin_data::PgData;
+use rustyfin_models::data::{Data, DataError, DeviceAuthStore};
 
 use rustyfin_data::repo::device_auth;
 use rustyfin_models::dto::{DeviceCodeResponse, DeviceTokenPending, DeviceTokenResponse};
@@ -27,15 +28,17 @@ fn generate_user_code() -> String {
 
 /// Initiate device authorization flow.
 pub async fn initiate(
-    pool: &PgPool,
+    data: &PgData,
     client_info: &serde_json::Value,
     base_url: &str,
-) -> Result<DeviceCodeResponse, sqlx::Error> {
+) -> Result<DeviceCodeResponse, DataError> {
     let device_code = generate_device_code();
     let user_code = generate_user_code();
     let expires_at = Utc::now() + chrono::Duration::minutes(15);
 
-    device_auth::create(pool, &device_code, &user_code, client_info, expires_at).await?;
+    data.device_auth()
+        .create(&device_code, &user_code, client_info, expires_at)
+        .await?;
 
     Ok(DeviceCodeResponse {
         device_code,
@@ -49,10 +52,10 @@ pub async fn initiate(
 
 /// Poll for device authorization result.
 pub async fn poll_token(
-    pool: &PgPool,
+    data: &PgData,
     device_code: &str,
-) -> Result<(DeviceTokenResponse, Option<uuid::Uuid>), sqlx::Error> {
-    let request = device_auth::find_by_device_code(pool, device_code).await?;
+) -> Result<(DeviceTokenResponse, Option<uuid::Uuid>), DataError> {
+    let request = data.device_auth().find_by_device_code(device_code).await?;
 
     match request {
         None => Ok((

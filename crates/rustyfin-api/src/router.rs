@@ -59,9 +59,9 @@ pub struct AppState {
     pub prefer_direct_play: bool,
 }
 
-impl FromRef<AppState> for PgPool {
+impl FromRef<AppState> for rustyfin_data::PgData {
     fn from_ref(state: &AppState) -> Self {
-        state.pool.clone()
+        state.data.clone()
     }
 }
 
@@ -80,7 +80,7 @@ pub fn build_router(state: AppState) -> Router {
         local_only: true,
         ..state.clone()
     };
-    let scope = crate::link_scope::LinkScope::new(state.pool.clone(), routes(local_state));
+    let scope = crate::link_scope::LinkScope::new(state.data.clone(), routes(local_state));
     let vouch_state = state.clone();
     let routes = routes(state);
     Router::new().fallback_service(

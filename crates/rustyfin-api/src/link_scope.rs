@@ -52,17 +52,17 @@ pub fn local_only_pool(pool: &PgPool) -> PgPool {
         .connect_lazy_with(options)
 }
 
-/// What [`dispatch`] needs: the full pool to look tokens up, and the routes
+/// What [`dispatch`] needs: the full data layer to look tokens up, and the routes
 /// for linking servers.
 #[derive(Clone)]
 pub struct LinkScope {
-    pub pool: PgPool,
+    pub data: rustyfin_data::PgData,
     pub local_routes: Router,
 }
 
 impl LinkScope {
-    pub fn new(pool: PgPool, local_routes: Router) -> Self {
-        Self { pool, local_routes }
+    pub fn new(data: rustyfin_data::PgData, local_routes: Router) -> Self {
+        Self { data, local_routes }
     }
 
     /// Whether `token` is a linking server's (remembered, see [`SEEN`]).
@@ -70,7 +70,7 @@ impl LinkScope {
         if let Some(linking) = SEEN.lock().unwrap().get(token) {
             return *linking;
         }
-        let linking = match rustyfin_auth::session::resolve_token(&self.pool, token).await {
+        let linking = match rustyfin_auth::session::resolve_token(&self.data, token).await {
             Ok(r) => r.user.may_link || r.session.device_name == LINK_DEVICE,
             // Unknown or failing: the routes answer as they would.
             Err(_) => return false,

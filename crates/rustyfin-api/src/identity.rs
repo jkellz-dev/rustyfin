@@ -159,15 +159,14 @@ async fn vouched_user(
                 Some(session) => session,
                 None => {
                     let (_, id) = session::create_session(
-                        &state.pool,
+                        &state.data,
                         user.id,
                         &device_id,
                         mb.device.as_deref().unwrap_or("Browser"),
                         mb.client.as_deref().unwrap_or("Web"),
                         mb.version.as_deref(),
                     )
-                    .await
-                    .map_err(rustyfin_data::data_error)?;
+                    .await?;
                     data.sessions()
                         .find_active_by_id(id)
                         .await?

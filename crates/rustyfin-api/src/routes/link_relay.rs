@@ -163,8 +163,8 @@ fn unreachable(
     let name = &link.settings.name;
     tracing::warn!("Link {name}: {e:#}");
     // Is it down? Then its titles leave the views until it is back.
-    let (links, pool, id) = (state.links.clone(), state.pool.clone(), link.id);
-    tokio::spawn(async move { links.check(&pool, id).await });
+    let (links, data, id) = (state.links.clone(), state.data.clone(), link.id);
+    tokio::spawn(async move { links.check(&data, id).await });
     ApiError::Internal(format!("The linked server {name} is unreachable"))
 }
 

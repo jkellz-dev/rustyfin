@@ -8,7 +8,7 @@ use axum::{
 };
 
 use rustyfin_auth::{forward_auth, ldap, middleware::parse_mediabrowser_header, session};
-use rustyfin_data::repo::{activity_log, users};
+use rustyfin_data::repo::users;
 use rustyfin_models::dto::{
     AuthenticateByNameRequest, AuthenticationResult, SessionInfoDto, UserConfiguration, UserDto,
     UserPolicy,
@@ -115,7 +115,7 @@ pub async fn authenticate_by_name(
         Some(s) => (s.access_token, s.id),
         None => {
             session::create_session(
-                &state.pool,
+                &state.data,
                 user.id,
                 device_id,
                 device_name,
@@ -273,19 +273,20 @@ async fn resolve_login(
                 .map_err(|e| {
                     tracing::warn!("LDAP auth failed for '{username}': {e}");
                     // Log failed attempt
-                    let pool = state.pool.clone();
+                    let data = state.data.clone();
                     let username = username.to_string();
                     tokio::spawn(async move {
-                        let _ = activity_log::insert(
-                            &pool,
-                            &format!("Authentication failed for {username}"),
-                            None,
-                            "AuthenticationFailed",
-                            "Error",
-                            None,
-                            None,
-                        )
-                        .await;
+                        let _ = data
+                            .activity_log()
+                            .insert(
+                                &format!("Authentication failed for {username}"),
+                                None,
+                                "AuthenticationFailed",
+                                "Error",
+                                None,
+                                None,
+                            )
+                            .await;
                     });
                     ApiError::Unauthorized
                 })?;

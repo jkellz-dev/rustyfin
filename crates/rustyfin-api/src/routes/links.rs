@@ -87,9 +87,9 @@ pub async fn sync_now(
         return Err(ApiError::NotFound);
     }
     let links = state.links.clone();
-    let pool = state.pool.clone();
+    let data = state.data.clone();
     tokio::spawn(async move {
-        let _ = links.sync(&pool, id).await;
+        let _ = links.sync(&data, id).await;
     });
     Ok(StatusCode::NO_CONTENT)
 }

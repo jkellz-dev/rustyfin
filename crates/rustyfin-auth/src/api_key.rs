@@ -2,8 +2,9 @@ use axum::{
     extract::{FromRef, FromRequestParts},
     http::{StatusCode, request::Parts},
 };
+use rustyfin_data::PgData;
+use rustyfin_models::data::{ApiKeyStore, Data};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 
 use rustyfin_data::repo::api_keys;
 
@@ -23,13 +24,13 @@ fn hash_key(key: &str) -> String {
 
 impl<S> FromRequestParts<S> for ApiKeyUser
 where
-    PgPool: FromRef<S>,
+    PgData: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let pool = PgPool::from_ref(state);
+        let data = PgData::from_ref(state);
 
         // Try X-Api-Key header
         let key = parts
@@ -49,13 +50,15 @@ where
         let key = key.ok_or(StatusCode::UNAUTHORIZED)?;
         let key_hash = hash_key(&key);
 
-        let row = api_keys::find_by_hash(&pool, &key_hash)
+        let row = data
+            .api_keys()
+            .find_by_hash(&key_hash)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
         // Touch last_used_at (fire-and-forget)
-        let pool_clone = pool.clone();
+        let pool_clone = data.clone();
         let key_id = row.id;
         tokio::spawn(async move {
             let _ = api_keys::touch_last_used(&pool_clone, key_id).await;
