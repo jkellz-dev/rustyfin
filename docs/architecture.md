@@ -4,6 +4,42 @@ Rustyfin is one server binary (`rustyfin-server`), one metadata tool (`rustyfin`
 WebAssembly and embedded in the server. State lives in Postgres; search can use Meilisearch; media files are only
 read, never written, by the server.
 
+## Layers
+
+The server is being split into layers. Each layer depends only on the ones below it. New code follows this layout,
+and existing code moves to it one area at a time.
+
+```text
+rustyfin-server            glue: config, startup, builds the data layer, mounts the API routers
+├── rustyfin-jellyfin      the Jellyfin API and everything Jellyfin compatibility needs
+├── rustyfin-api           the Rustyfin API
+└── rustyfin-services      all runtime business logic and rules
+    └── rustyfin-data      the only crate that talks to a database
+        rustyfin-models    models and data-layer traits shared by services and data
+```
+
+- **`rustyfin-data`** is the only crate that touches the database, and database types never leave it. It implements
+  the data traits that `rustyfin-services` consumes, so another data layer can be written later, and it has its own
+  data-only models. SQL stays SQL: filtering, joining and sorting belong in queries. The search index lives here too.
+- **`rustyfin-models`** holds the models shared by services and data, and the data traits. When a service needs a
+  differently shaped model, the service gets its own.
+- **`rustyfin-services`** holds all runtime business logic and rules. It has no HTTP, returns typed results and its own
+  error type, and is generic over the data traits.
+- **`rustyfin-jellyfin`** holds the Jellyfin API and everything Jellyfin compatibility needs, with its own models:
+  routes, JSON shapes, error shape, ID format, case rules, stubs and no-op sign-in. It only translates and calls
+  services. Removing Jellyfin support is removing this crate.
+- **`rustyfin-api`** is the Rustyfin API under `/api/v1`. It only serialises and calls services. Its models are
+  completely separate from the data models, and it makes its own design decisions; nothing in it is inherited from
+  Jellyfin.
+- The two API crates share no HTTP code (identity, errors, routing rules); they share only services and models.
+  `rustyfin-server` applies metrics and tracing to both.
+
+Where new code goes: SQL in `rustyfin-data` behind a trait method, logic in `rustyfin-services` (never in a route
+handler), Jellyfin behaviour in `rustyfin-jellyfin`, Rustyfin routes in `rustyfin-api`. An API crate never depends on
+`rustyfin-data`.
+
+The workspace below is today's layout, part-way through the move.
+
 ## Workspace
 
 ```text
@@ -14,7 +50,7 @@ rustyfin/
 │   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
 │   ├── rustyfin-auth/          # Who is asking: forward auth, LDAPS, tokens, sessions
 │   ├── rustyfin-core/          # Scanner, enrichment, scheduler, sessions, scan progress
-│   ├── rustyfin-data/            # Postgres pool, migrations, repositories
+│   ├── rustyfin-data/          # Postgres pool, migrations, repositories
 │   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
 │   ├── rustyfin-search/        # Meilisearch, with Postgres as the fallback
 │   ├── rustyfin-media/         # Probing, play-method decisions, streaming, HLS transcoding
