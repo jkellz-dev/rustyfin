@@ -13,6 +13,11 @@ pub enum ServiceError {
     #[error("forbidden")]
     Forbidden,
 
+    /// It would clash with what is there (a name in use, a library a link
+    /// owns).
+    #[error("conflict: {0}")]
+    Conflict(String),
+
     /// The request makes no sense as asked.
     #[error("invalid: {0}")]
     Invalid(String),

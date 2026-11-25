@@ -17,6 +17,7 @@ use rustyfin_models::dto::{
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
 };
 use rustyfin_services::LibraryScanner;
+use rustyfin_services::libraries::NewLibrary;
 
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
@@ -555,43 +556,15 @@ pub async fn update_virtual_folder(
     axum::extract::Query(query): axum::extract::Query<UpdateLibraryQuery>,
     Json(req): Json<UpdateLibraryRequest>,
 ) -> Result<Json<VirtualFolderInfo>, ApiError> {
-    if req.paths.is_empty() {
-        return Err(ApiError::BadRequest(
-            "At least one path is required".to_string(),
-        ));
-    }
-
-    let before = state
-        .data
-        .libraries()
-        .find_by_id(query.id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    refuse_if_linked(&before)?;
-    let lib = state
-        .data
+    let (lib, moved) = state
+        .services
         .libraries()
         .update(query.id, &req.name, &req.paths)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+        .await?;
     // New folders mean new media: scan, as Jellyfin does after a path change.
-    if before.paths != lib.paths {
+    if moved {
         start_scans(&state, vec![lib.clone()]).await;
     }
-
-    let _ = state
-        .data
-        .activity_log()
-        .insert(
-            "Library updated",
-            Some(&req.name),
-            "LibraryUpdated",
-            "Informational",
-            None,
-            None,
-        )
-        .await;
-
     Ok(Json(folder_info(lib)))
 }
 
@@ -601,41 +574,18 @@ pub async fn delete_virtual_folder(
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
 ) -> Result<StatusCode, ApiError> {
-    let (id, name) = if let Some(raw) = query_value(&pairs, "Name") {
-        let lib = find_named(&state, require_name(raw)?).await?;
-        (lib.id, lib.name)
+    let libraries = state.services.libraries();
+    if let Some(raw) = query_value(&pairs, "Name") {
+        libraries.delete_named(raw).await?;
     } else if let Some(raw) = query_value(&pairs, "Id") {
         let id: uuid::Uuid = raw
             .parse()
             .map_err(|_| ApiError::BadRequest("id is not a valid UUID".to_string()))?;
-        (id, String::new())
+        libraries.delete_by_id(id).await?;
     } else {
         return Err(ApiError::BadRequest("name or id is required".to_string()));
-    };
-    if let Some(lib) = state.data.libraries().find_by_id(id).await? {
-        refuse_if_linked(&lib)?;
     }
-
-    let deleted = state.data.libraries().delete(id).await?;
-    if !deleted {
-        return Err(ApiError::NotFound);
-    }
-
-    log_library_event(&state, "Library deleted", &name, "LibraryDeleted").await;
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// A library a link made is the link's: it is set in `rustyfin.toml`
-/// (`[[link]]`), and the next sync would make it again, so it is not renamed,
-/// deleted or given folders here.
-fn refuse_if_linked(lib: &libraries::LibraryRow) -> Result<(), ApiError> {
-    if lib.link_id.is_some() {
-        return Err(ApiError::Conflict(format!(
-            "'{}' is filled by a linked server; change it in rustyfin.toml ([[link]])",
-            lib.name
-        )));
-    }
-    Ok(())
 }
 
 // ── Jellyfin LibraryStructureController parity ───────────────────────
@@ -735,30 +685,6 @@ fn query_flag(pairs: &[(String, String)], key: &str) -> bool {
     query_value(pairs, key).is_some_and(|v| v.eq_ignore_ascii_case("true"))
 }
 
-/// A library name taken from the request: trimmed, and not blank.
-fn require_name(raw: &str) -> Result<&str, ApiError> {
-    let name = raw.trim();
-    if name.is_empty() {
-        return Err(ApiError::BadRequest("name must not be blank".to_string()));
-    }
-    Ok(name)
-}
-
-/// A name a library may be given. Jellyfin uses the name as a directory, so it
-/// rejects anything that could escape the libraries root; we keep the same rule.
-fn require_new_name(raw: &str) -> Result<&str, ApiError> {
-    let name = require_name(raw)?;
-    if name == "." || name == ".." || name.contains('/') || name.contains('\\') {
-        return Err(ApiError::BadRequest(
-            "name must not contain path separators".to_string(),
-        ));
-    }
-    Ok(name)
-}
-
-/// Collection types the scanner can index.
-const SUPPORTED_COLLECTION_TYPES: [&str; 3] = ["movies", "tvshows", "music"];
-
 #[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "PascalCase", default)]
 struct AddVirtualFolderRequest {
@@ -789,15 +715,6 @@ pub struct UpdateLibraryOptionsRequest {
     pub library_options: LibraryOptions,
 }
 
-async fn find_named(state: &AppState, name: &str) -> Result<libraries::LibraryRow, ApiError> {
-    state
-        .data
-        .libraries()
-        .find_by_name(name)
-        .await?
-        .ok_or(ApiError::NotFound)
-}
-
 /// `POST /Library/VirtualFolders` — Create a library (admin only).
 ///
 /// Jellyfin form: `?name=&collectionType=&paths=&refreshLibrary=` with an optional
@@ -818,17 +735,6 @@ pub async fn create_virtual_folder(
             .map(IntoResponse::into_response);
     };
 
-    let name = require_new_name(raw_name)?.to_string();
-    let collection_type = query_value(&pairs, "CollectionType")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if !SUPPORTED_COLLECTION_TYPES.contains(&collection_type.as_str()) {
-        return Err(ApiError::BadRequest(format!(
-            "collectionType must be one of: {}",
-            SUPPORTED_COLLECTION_TYPES.join(", ")
-        )));
-    }
-
     let request: AddVirtualFolderRequest = match serde_json::from_slice::<serde_json::Value>(&body)
     {
         Ok(serde_json::Value::Null) | Err(_) if body.iter().all(u8::is_ascii_whitespace) => {
@@ -841,51 +747,31 @@ pub async fn create_virtual_folder(
     };
     let options = request.library_options.unwrap_or_default();
 
-    let mut paths: Vec<String> = Vec::new();
-    for path in pairs
+    let paths: Vec<String> = pairs
         .iter()
         .filter(|(k, _)| k == "Paths")
-        .map(|(_, v)| v.as_str())
-        .chain(options.path_infos.iter().map(|p| p.path.as_str()))
-    {
-        let path = path.trim();
-        if !path.is_empty() && !paths.iter().any(|p| p == path) {
-            paths.push(path.to_string());
-        }
-    }
-    for path in &paths {
-        if !std::path::Path::new(path).is_dir() {
-            return Err(ApiError::NotFound);
-        }
-    }
-
-    if state.data.libraries().find_by_name(&name).await?.is_some() {
-        return Err(ApiError::Conflict(format!(
-            "a library named '{name}' already exists"
-        )));
-    }
-
+        .map(|(_, v)| v.clone())
+        .chain(options.path_infos.iter().map(|p| p.path.clone()))
+        .collect();
     let options_json = serde_json::to_value(&options)
         .map_err(|e| ApiError::Internal(format!("serialize options: {e}")))?;
     let lib = state
-        .data
+        .services
         .libraries()
-        .create_with_options(&name, &collection_type, &paths, &options_json)
+        .create(NewLibrary {
+            name: raw_name.to_string(),
+            kind: query_value(&pairs, "CollectionType")
+                .unwrap_or_default()
+                .to_string(),
+            paths,
+            options: options_json,
+        })
         .await?;
 
-    log_library_event(&state, "Library created", &name, "LibraryCreated").await;
     if query_flag(&pairs, "RefreshLibrary") {
         start_scans(&state, vec![lib]).await;
     }
     Ok(StatusCode::NO_CONTENT.into_response())
-}
-
-async fn log_library_event(state: &AppState, message: &str, name: &str, kind: &str) {
-    let _ = state
-        .data
-        .activity_log()
-        .insert(message, Some(name), kind, "Informational", None, None)
-        .await;
 }
 
 async fn create_from_json(
@@ -893,11 +779,10 @@ async fn create_from_json(
     req: CreateLibraryRequest,
 ) -> Result<Json<VirtualFolderInfo>, ApiError> {
     let lib = state
-        .data
+        .services
         .libraries()
-        .create(&req.name, &req.collection_type, &req.paths)
+        .create_as_given(&req.name, &req.collection_type, &req.paths)
         .await?;
-    log_library_event(state, "Library created", &req.name, "LibraryCreated").await;
     Ok(Json(folder_info(lib)))
 }
 
@@ -907,26 +792,14 @@ pub async fn rename_virtual_folder(
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
 ) -> Result<StatusCode, ApiError> {
-    let name = require_name(query_value(&pairs, "Name").unwrap_or_default())?;
-    let new_name = require_new_name(query_value(&pairs, "NewName").unwrap_or_default())?;
-
-    let lib = find_named(&state, name).await?;
-    refuse_if_linked(&lib)?;
-    if let Some(other) = state.data.libraries().find_by_name(new_name).await?
-        && other.id != lib.id
-    {
-        return Err(ApiError::Conflict(format!(
-            "a library named '{new_name}' already exists"
-        )));
-    }
-
     state
-        .data
+        .services
         .libraries()
-        .rename(lib.id, new_name)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    log_library_event(&state, "Library renamed", new_name, "LibraryUpdated").await;
+        .rename(
+            query_value(&pairs, "Name").unwrap_or_default(),
+            query_value(&pairs, "NewName").unwrap_or_default(),
+        )
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -936,37 +809,15 @@ pub async fn add_media_path(
     _admin: AdminUser,
     Json(req): Json<AddMediaPathRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let name = require_name(&req.name)?;
     let path = req
         .path
         .or_else(|| req.path_info.map(|p| p.path))
         .unwrap_or_default();
-    let path = path.trim();
-    if path.is_empty() {
-        return Err(ApiError::BadRequest("path must not be blank".to_string()));
-    }
-
-    let lib = find_named(&state, name).await?;
-    refuse_if_linked(&lib)?;
-    if !std::path::Path::new(path).is_dir() {
-        return Err(ApiError::NotFound);
-    }
-    if lib.paths.iter().any(|p| p == path) {
-        return Err(ApiError::Conflict(format!(
-            "'{path}' is already part of '{}'",
-            lib.name
-        )));
-    }
-
-    let mut paths = lib.paths.clone();
-    paths.push(path.to_string());
     state
-        .data
+        .services
         .libraries()
-        .set_paths(lib.id, &paths)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    log_library_event(&state, "Library path added", &lib.name, "LibraryUpdated").await;
+        .add_path(&req.name, &path)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -979,11 +830,11 @@ pub async fn update_media_path(
     _admin: AdminUser,
     Json(req): Json<UpdateMediaPathRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let name = require_name(&req.name)?;
-    let lib = find_named(&state, name).await?;
-    if !lib.paths.contains(&req.path_info.path) {
-        return Err(ApiError::NotFound);
-    }
+    state
+        .services
+        .libraries()
+        .has_path(&req.name, &req.path_info.path)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -993,27 +844,14 @@ pub async fn remove_media_path(
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
 ) -> Result<StatusCode, ApiError> {
-    let name = require_name(query_value(&pairs, "Name").unwrap_or_default())?;
-    let path = query_value(&pairs, "Path").unwrap_or_default();
-
-    let lib = find_named(&state, name).await?;
-    if !lib.paths.iter().any(|p| p == path) {
-        return Err(ApiError::NotFound);
-    }
-    if lib.paths.len() == 1 {
-        return Err(ApiError::BadRequest(
-            "a library needs at least one path".to_string(),
-        ));
-    }
-
-    let remaining: Vec<String> = lib.paths.iter().filter(|p| *p != path).cloned().collect();
     state
-        .data
+        .services
         .libraries()
-        .set_paths(lib.id, &remaining)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    log_library_event(&state, "Library path removed", &lib.name, "LibraryUpdated").await;
+        .remove_path(
+            query_value(&pairs, "Name").unwrap_or_default(),
+            query_value(&pairs, "Path").unwrap_or_default(),
+        )
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1025,18 +863,10 @@ pub async fn update_library_options(
 ) -> Result<StatusCode, ApiError> {
     let options = serde_json::to_value(&req.library_options)
         .map_err(|e| ApiError::Internal(format!("serialize options: {e}")))?;
-    let lib = state
-        .data
+    state
+        .services
         .libraries()
         .set_options(req.id, &options)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    log_library_event(
-        &state,
-        "Library options updated",
-        &lib.name,
-        "LibraryUpdated",
-    )
-    .await;
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }

@@ -15,6 +15,7 @@
 pub mod access;
 pub mod error;
 pub mod image;
+pub mod libraries;
 pub mod library;
 pub mod link;
 pub mod play_state;
@@ -46,6 +47,11 @@ impl<D: Data> Services<D> {
     /// A user's own state on items: played, position, favourite, rating.
     pub fn user_data(&self) -> user_data::UserItemData<'_, D> {
         user_data::UserItemData { data: &self.data }
+    }
+
+    /// Making, renaming, re-foldering and deleting libraries.
+    pub fn libraries(&self) -> libraries::Libraries<'_, D> {
+        libraries::Libraries { data: &self.data }
     }
 
     /// What playback reports change, and play history.

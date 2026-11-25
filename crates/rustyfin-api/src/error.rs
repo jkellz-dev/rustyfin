@@ -44,6 +44,7 @@ impl From<rustyfin_services::ServiceError> for ApiError {
         match e {
             ServiceError::NotFound => ApiError::NotFound,
             ServiceError::Forbidden => ApiError::Forbidden,
+            ServiceError::Conflict(why) => ApiError::Conflict(why),
             ServiceError::Invalid(why) => ApiError::BadRequest(why),
             ServiceError::Data(e) => ApiError::Data(e),
         }
