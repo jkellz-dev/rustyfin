@@ -2147,39 +2147,49 @@ impl ItemQuery {
         terms.join(", ")
     }
 
-    /// `fetch` for `played_first`: the played items by date, then the rest.
+    /// `fetch` for `played_first`: the played items by date (few, through
+    /// the user's data), then, only when the page reaches past them, the
+    /// rest in the order after DatePlayed. A recently played list rarely
+    /// does, so it never sorts the whole library (owner, 2026-11-24: one
+    /// query over both took 2.1 s).
     async fn fetch_played_first(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
         let Some(user_id) = self.user_id else {
             return Ok(Vec::new());
         };
         let rest = self.order_after_first();
-        let upto = self.start_index.saturating_add(self.limit);
+        let start = self.start_index.max(0);
+        let upto = start.saturating_add(self.limit.max(0));
         let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-            "SELECT mi.* FROM ((SELECT mi.*, ud.last_played_date AS rf_played \
-             FROM visible_media_items mi JOIN user_data ud ON ud.item_id = mi.id AND ud.user_id = ",
+            "SELECT mi.* FROM visible_media_items mi \
+             JOIN user_data ud ON ud.item_id = mi.id AND ud.user_id = ",
         );
         qb.push_bind(user_id);
         qb.push(" WHERE ud.last_played_date IS NOT NULL");
         self.apply_filters(&mut qb);
         qb.push(format!(" ORDER BY ud.last_played_date DESC, {rest} LIMIT "));
         qb.push_bind(upto);
-        qb.push(
-            ") UNION ALL (SELECT mi.*, NULL::timestamptz AS rf_played FROM visible_media_items mi \
-             WHERE NOT EXISTS (SELECT 1 FROM user_data ud WHERE ud.item_id = mi.id \
-             AND ud.last_played_date IS NOT NULL AND ud.user_id = ",
+        let played = qb.build_query_as::<MediaItemRow>().fetch_all(pool).await?;
+        let have = played.len() as i64;
+        let mut page: Vec<MediaItemRow> = played.into_iter().skip(start as usize).collect();
+        if have >= upto {
+            return Ok(page);
+        }
+        // The page runs past the played items: the rest, from where it starts.
+        let skip = (start - have).max(0);
+        let take = upto - have - skip;
+        let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+            "SELECT mi.* FROM visible_media_items mi WHERE NOT EXISTS (SELECT 1 FROM user_data ud \
+             WHERE ud.item_id = mi.id AND ud.last_played_date IS NOT NULL AND ud.user_id = ",
         );
         qb.push_bind(user_id);
         qb.push(")");
         self.apply_filters(&mut qb);
         qb.push(format!(" ORDER BY {rest} LIMIT "));
-        qb.push_bind(upto);
-        qb.push(format!(
-            ")) mi ORDER BY mi.rf_played DESC NULLS LAST, {rest} LIMIT "
-        ));
-        qb.push_bind(self.limit);
+        qb.push_bind(take);
         qb.push(" OFFSET ");
-        qb.push_bind(self.start_index);
-        qb.build_query_as::<MediaItemRow>().fetch_all(pool).await
+        qb.push_bind(skip);
+        page.extend(qb.build_query_as::<MediaItemRow>().fetch_all(pool).await?);
+        Ok(page)
     }
 
     fn needs_user_data_join(&self) -> bool {
@@ -2290,8 +2300,15 @@ impl ItemQuery {
         // Scoping. Extras belong to their title and are never listed on
         // their own, unless asked for by id.
         if self.ids.is_empty() {
-            qb.push(" AND mi.owner_id IS NULL AND NOT ");
-            qb.push(super::collections::hidden_single_sql("mi"));
+            qb.push(" AND mi.owner_id IS NULL");
+            // Only a list that can hold collections needs the check (a
+            // count of tracks then reads the index alone).
+            if self.include_item_types.is_empty()
+                || self.include_item_types.iter().any(|t| t == "BoxSet")
+            {
+                qb.push(" AND NOT ");
+                qb.push(super::collections::hidden_single_sql("mi"));
+            }
         }
         if !self.ids.is_empty() {
             qb.push(" AND mi.id = ANY(");

@@ -24,12 +24,57 @@ pub struct MusicGenresQuery {
     pub limit: Option<i64>,
 }
 
+/// A genre list page as last built (before the caller's own data), by
+/// database and schema, library, search and page. Genres, their counts and
+/// pictures change only with scans; building a page reads most of the
+/// library (owner, 2026-11-24: 0.5 s, 0.34 s of it the pictures).
+type GenrePages = std::collections::HashMap<String, (std::time::Instant, Vec<BaseItemDto>, i32)>;
+static GENRE_PAGES: std::sync::Mutex<Option<GenrePages>> = std::sync::Mutex::new(None);
+const GENRE_PAGES_FRESH: std::time::Duration = std::time::Duration::from_secs(300);
+
 /// `GET /MusicGenres` — Browsable music genre list with per-type counts.
 pub async fn get_music_genres(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
     Query(query): Query<MusicGenresQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
+    let schema: String = sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or_default();
+    let key = format!(
+        "{schema}|{:?}|{:?}|{:?}|{:?}",
+        query.parent_id, query.search_term, query.start_index, query.limit
+    );
+    let cached = GENRE_PAGES.lock().ok().and_then(|c| {
+        c.as_ref()
+            .and_then(|c| c.get(&key))
+            .filter(|(at, _, _)| at.elapsed() < GENRE_PAGES_FRESH)
+            .map(|(_, dtos, total)| (dtos.clone(), *total))
+    });
+    let (mut dtos, total) = match cached {
+        Some(hit) => hit,
+        None => {
+            let built = build_music_genres(&state, &query).await?;
+            if let Ok(mut c) = GENRE_PAGES.lock() {
+                let c = c.get_or_insert_with(Default::default);
+                c.retain(|_, (at, _, _)| at.elapsed() < GENRE_PAGES_FRESH);
+                c.insert(key, (std::time::Instant::now(), built.0.clone(), built.1));
+            }
+            built
+        }
+    };
+    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, false).await;
+    let mut result = QueryResult::new(dtos, total);
+    result.start_index = query.start_index.unwrap_or(0) as i32;
+    Ok(Json(result))
+}
+
+/// A page of the genre list (without the caller's own data), and the total.
+async fn build_music_genres(
+    state: &AppState,
+    query: &MusicGenresQuery,
+) -> Result<(Vec<BaseItemDto>, i32), ApiError> {
     let genres =
         media_items::distinct_genres_by_item_types(&state.pool, query.parent_id, MUSIC_TYPES)
             .await
@@ -92,11 +137,7 @@ pub async fn get_music_genres(
         dto.child_count = Some(total_children);
         dtos.push(dto);
     }
-
-    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, false).await;
-    let mut result = QueryResult::new(dtos, total);
-    result.start_index = start as i32;
-    Ok(Json(result))
+    Ok((dtos, total))
 }
 
 /// `GET /MusicGenres/{genreName}` — Get a specific music genre by name.
