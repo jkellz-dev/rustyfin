@@ -143,12 +143,12 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
         .unwrap();
     let link = home
         .links
-        .register(&home.pool, settings(&url))
+        .register(&home.data, settings(&url))
         .await
         .unwrap();
 
     // First sync: everything jonathan can see, nothing he cannot.
-    let report = home.links.sync(&home.pool, link).await.expect("first sync");
+    let report = home.links.sync(&home.data, link).await.expect("first sync");
     assert!(report.errors.is_empty(), "{report:?}");
     assert_eq!(report.added, 2, "{report:?}");
     assert_eq!(names(&home, link).await, vec!["Only Theirs", "Shared Film"]);
@@ -169,7 +169,7 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
 
     // Nothing changed: no details fetched again.
     seen.lock().unwrap().clear();
-    let report = home.links.sync(&home.pool, link).await.expect("quiet sync");
+    let report = home.links.sync(&home.data, link).await.expect("quiet sync");
     assert_eq!(
         (report.added, report.updated, report.removed),
         (0, 0, 0),
@@ -187,7 +187,7 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
         .execute(&friend.pool)
         .await
         .unwrap();
-    let report = home.links.sync(&home.pool, link).await.expect("sync");
+    let report = home.links.sync(&home.data, link).await.expect("sync");
     assert_eq!((report.added, report.updated), (0, 1), "{report:?}");
     {
         let seen = seen.lock().unwrap();
@@ -208,7 +208,7 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
         .execute(&friend.pool)
         .await
         .unwrap();
-    let report = home.links.sync(&home.pool, link).await.expect("sync");
+    let report = home.links.sync(&home.data, link).await.expect("sync");
     assert_eq!(report.removed, 1, "{report:?}");
     assert_eq!(names(&home, link).await, vec!["Shared Film"]);
 
@@ -217,7 +217,7 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
     users::set_may_link(&friend.pool, jonathan.id, false)
         .await
         .unwrap();
-    let failed = home.links.sync(&home.pool, link).await;
+    let failed = home.links.sync(&home.data, link).await;
     let why = match failed {
         Err(e) => format!("{e:#}"),
         Ok(report) => report.errors.join("; "),
@@ -327,12 +327,12 @@ async fn a_rustyfin_behind_an_oidc_proxy_is_reached_with_a_client_credentials_to
         scope: Some("rustyfin".into()),
         audience: None,
     });
-    let link = home.links.register(&home.pool, s).await.unwrap();
-    let report = home.links.sync(&home.pool, link).await.expect("sync");
+    let link = home.links.register(&home.data, s).await.unwrap();
+    let report = home.links.sync(&home.data, link).await.expect("sync");
     assert!(report.errors.is_empty(), "{report:?}");
     assert_eq!(report.added, 1, "{report:?}");
     home.links
-        .sync(&home.pool, link)
+        .sync(&home.data, link)
         .await
         .expect("second sync");
     assert_eq!(*issued.lock().unwrap(), 1, "one token, reused");
@@ -356,8 +356,8 @@ async fn a_rustyfin_behind_an_oidc_proxy_is_reached_with_a_client_credentials_to
         scope: Some("rustyfin".into()),
         audience: None,
     });
-    let wrong = home.links.register(&home.pool, s).await.unwrap();
-    let why = match home.links.sync(&home.pool, wrong).await {
+    let wrong = home.links.register(&home.data, s).await.unwrap();
+    let why = match home.links.sync(&home.data, wrong).await {
         Err(e) => format!("{e:#}"),
         Ok(r) => r.errors.join("; "),
     };

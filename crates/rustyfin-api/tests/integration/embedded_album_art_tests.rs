@@ -54,7 +54,7 @@ async fn an_album_without_a_cover_file_shows_its_first_tracks_cover() {
         .await
         .unwrap()
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[t.root()])
         .await
         .unwrap();

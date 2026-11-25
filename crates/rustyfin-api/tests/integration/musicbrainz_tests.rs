@@ -92,7 +92,7 @@ async fn tracks_albums_and_artists_carry_the_files_musicbrainz_ids() {
         .await
         .unwrap()
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root_s])
         .await
         .expect("scan");

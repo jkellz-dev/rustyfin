@@ -93,7 +93,7 @@ async fn fixture() -> Fixture {
         .unwrap()
         .id;
     for (lib, kind) in [(tv, "tv"), (movies, "movies")] {
-        LibraryScanner::new(app.pool.clone(), None)
+        LibraryScanner::new(app.data.clone(), None)
             .scan(lib, &[tree.root(kind)])
             .await
             .expect("scan");

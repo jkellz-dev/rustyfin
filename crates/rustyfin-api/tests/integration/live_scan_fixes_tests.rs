@@ -48,7 +48,7 @@ async fn scan_library(app: &common::TestApp, kind: &str, root: &Path) -> Uuid {
         .await
         .expect("library")
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root_s])
         .await
         .expect("scan");
@@ -116,7 +116,7 @@ async fn items_already_made_from_hidden_files_go_on_the_next_scan() {
         .await
         .unwrap();
 
-    let result = LibraryScanner::new(app.pool.clone(), None)
+    let result = LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[tree.path("movies").to_string_lossy().to_string()])
         .await
         .expect("scan");

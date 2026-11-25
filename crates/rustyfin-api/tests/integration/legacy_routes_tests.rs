@@ -34,7 +34,7 @@ async fn the_arrs_older_notifications_rescan_the_title_they_name() {
     std::fs::create_dir_all(&season).unwrap();
     std::fs::write(film.join("Film (2020).mkv"), b"").unwrap();
     std::fs::write(season.join("Show S01E01.mkv"), b"").unwrap();
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     for (name, kind, dir) in [("Movies", "movies", "films"), ("TV", "tvshows", "shows")] {
         let path = root.join(dir).to_string_lossy().to_string();
         let id = libraries::create(&app.pool, name, kind, std::slice::from_ref(&path))

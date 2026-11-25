@@ -46,7 +46,7 @@ impl Drop for Tree {
 }
 
 async fn scan(app: &common::TestApp, lib: Uuid, tree: &Tree) {
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[tree.root()])
         .await
         .expect("scan");
@@ -298,7 +298,7 @@ async fn a_collection_shows_its_art_from_the_cache_volume() {
         .unwrap()
         .id;
     let scan_with_cache = || async {
-        LibraryScanner::new(app.pool.clone(), Some(people.clone()))
+        LibraryScanner::new(app.data.clone(), Some(people.clone()))
             .scan(lib, &[tree.root()])
             .await
             .expect("scan")

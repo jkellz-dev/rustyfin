@@ -72,7 +72,7 @@ async fn a_collection_recorded_from_tmdb_joins_films_with_stale_nfos() {
         .await
         .unwrap()
         .id;
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     scanner.scan(lib, &[t.root()]).await.unwrap();
     // Without a lookup, the stale names stay apart (as before); the new
     // name's collection has one film, so it is not listed.

@@ -64,7 +64,7 @@ async fn collections_get_their_own_view_once_one_exists() {
         .unwrap()
         .id;
     let scan = || async {
-        LibraryScanner::new(app.pool.clone(), None)
+        LibraryScanner::new(app.data.clone(), None)
             .scan(lib, &[tree.root()])
             .await
             .expect("scan")
@@ -128,7 +128,7 @@ async fn the_view_only_shows_collections_from_libraries_the_user_may_see() {
         .unwrap()
         .id;
     let other = app.create_library("Shows", "tvshows").await;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[tree.root()])
         .await
         .expect("scan");
@@ -162,7 +162,7 @@ async fn collections_are_found_by_search_also_inside_the_collections_view() {
         .await
         .unwrap()
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[tree.root()])
         .await
         .expect("scan");

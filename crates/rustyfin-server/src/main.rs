@@ -363,22 +363,22 @@ async fn main() -> anyhow::Result<()> {
     }
     if !config.links.is_empty() {
         let syncing = links.clone();
-        let data = data.clone();
+        let sync_data = data.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             loop {
-                syncing.sync_all(&data).await;
+                syncing.sync_all(&sync_data).await;
                 tokio::time::sleep(LINK_SYNC_INTERVAL).await;
             }
         });
         // A link that is down is tried every minute, so its titles come
         // back soon after its server does.
         let rechecking = links.clone();
-        let data = data.clone();
+        let recheck_data = data.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                rechecking.recheck_offline(&data).await;
+                rechecking.recheck_offline(&recheck_data).await;
             }
         });
     }

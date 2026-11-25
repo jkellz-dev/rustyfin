@@ -56,7 +56,7 @@ async fn a_rewritten_album_nfo_does_not_reread_its_tracks() {
         .await
         .unwrap()
         .id;
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
 
     let first = scanner.scan(lib, &paths).await.unwrap();
     assert_eq!(first.items_added, 2, "{first:?}");

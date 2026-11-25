@@ -392,7 +392,7 @@ async fn local_library(app: &common::TestApp) -> (Tree, Uuid, Uuid) {
     .fetch_one(&app.pool)
     .await
     .unwrap();
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root])
         .await
         .expect("scan");
@@ -444,11 +444,11 @@ async fn a_linked_jellyfin_library_merges_into_the_local_one() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
 
-    let report = app.links.sync(&app.pool, link).await.expect("sync");
+    let report = app.links.sync(&app.data, link).await.expect("sync");
     assert_eq!(
         (report.added, report.updated, report.removed),
         (2, 0, 0),
@@ -605,10 +605,10 @@ async fn a_later_sync_updates_and_removes_and_fetches_only_changes() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("first sync");
+    app.links.sync(&app.data, link).await.expect("first sync");
 
     {
         let mut r = remote.lock().unwrap();
@@ -616,7 +616,7 @@ async fn a_later_sync_updates_and_removes_and_fetches_only_changes() {
         r.films[1] = film("r300", "Third (Remastered)", "300", "e2", 1920, 1080);
         r.seen.clear();
     }
-    let report = app.links.sync(&app.pool, link).await.expect("second sync");
+    let report = app.links.sync(&app.data, link).await.expect("second sync");
     assert_eq!(
         (report.added, report.updated, report.removed),
         (0, 1, 1),
@@ -661,10 +661,10 @@ async fn a_film_gained_locally_takes_in_the_friends_copy() {
     let url = fake_jellyfin(remote).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("first sync");
+    app.links.sync(&app.data, link).await.expect("first sync");
 
     let file = tree.0.join("Gained (2001)/Gained (2001).mkv");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -674,7 +674,7 @@ async fn a_film_gained_locally_takes_in_the_friends_copy() {
         "[ids]\ntmdb = 400\n",
     )
     .unwrap();
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[tree.0.to_string_lossy().to_string()])
         .await
         .expect("rescan");
@@ -695,7 +695,7 @@ async fn a_film_gained_locally_takes_in_the_friends_copy() {
         vec!["Gained", "Shared Film"],
         "after the scan: {list}"
     );
-    let report = app.links.sync(&app.pool, link).await.expect("second sync");
+    let report = app.links.sync(&app.data, link).await.expect("second sync");
     assert_eq!(report.merged, 0, "{report:?}");
 
     let (_, list) = app
@@ -725,10 +725,10 @@ async fn a_wrong_password_is_reported_and_nothing_changes() {
     let url = fake_jellyfin(remote).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "wrong"))
+        .register(&app.data, settings(&url, "wrong"))
         .await
         .unwrap();
-    let err = app.links.sync(&app.pool, link).await.unwrap_err();
+    let err = app.links.sync(&app.data, link).await.unwrap_err();
     assert!(err.to_string().contains("sign in"), "{err}");
     let linked: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM media_items WHERE link_id IS NOT NULL")
@@ -766,10 +766,10 @@ async fn a_bad_mapping_skips_itself_and_removes_nothing() {
         remote: "Films".into(),
         local: Some("Nope".into()),
     });
-    let link = app.links.register(&app.pool, s).await.unwrap();
+    let link = app.links.register(&app.data, s).await.unwrap();
     let report = app
         .links
-        .sync(&app.pool, link)
+        .sync(&app.data, link)
         .await
         .expect("the rest syncs");
     assert_eq!(report.added, 1, "{report:?}");
@@ -795,7 +795,7 @@ async fn a_bad_mapping_skips_itself_and_removes_nothing() {
     assert_eq!(no_nope, 0, "a misspelt local library is not made");
 
     remote.lock().unwrap().films.clear();
-    let report = app.links.sync(&app.pool, link).await.expect("sync again");
+    let report = app.links.sync(&app.data, link).await.expect("sync again");
     assert_eq!(report.removed, 0, "{report:?}");
     let (_, list) = app
         .get(
@@ -826,10 +826,10 @@ async fn every_version_of_a_friends_film_is_a_copy() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    app.links.sync(&app.data, link).await.expect("sync");
 
     let (_, list) = app
         .get(
@@ -883,7 +883,7 @@ async fn every_version_of_a_friends_film_is_a_copy() {
         r.films[0]["MediaSources"].as_array_mut().unwrap().pop();
         r.films[0]["Etag"] = json!("e2");
     }
-    app.links.sync(&app.pool, link).await.expect("sync again");
+    app.links.sync(&app.data, link).await.expect("sync again");
     let (_, item) = app.get(&format!("/Users/{uid}/Items/{id}"), &token).await;
     assert!(
         item["MediaSources"]
@@ -918,8 +918,8 @@ async fn a_friends_library_without_a_local_one_gets_its_own() {
         remote: "Home Videos".into(),
         local: None,
     }];
-    let link = app.links.register(&app.pool, s.clone()).await.unwrap();
-    let report = app.links.sync(&app.pool, link).await.expect("sync");
+    let link = app.links.register(&app.data, s.clone()).await.unwrap();
+    let report = app.links.sync(&app.data, link).await.expect("sync");
     assert_eq!(report.added, 2, "{report:?}");
 
     let (_, views) = app.get(&format!("/Users/{uid}/Views"), &token).await;
@@ -1016,7 +1016,7 @@ async fn a_friends_library_without_a_local_one_gets_its_own() {
 
     // It has no folders: a scan of it leaves the friend's videos alone.
     let id = Uuid::parse_str(&shorts).unwrap();
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(id, &[])
         .await
         .expect("scan");
@@ -1029,8 +1029,8 @@ async fn a_friends_library_without_a_local_one_gets_its_own() {
     assert_eq!(names(&list), vec!["Beach", "Birthday 2019"], "{list}");
 
     // The same library is used again, not a second one.
-    app.links.register(&app.pool, s).await.unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync again");
+    app.links.register(&app.data, s).await.unwrap();
+    app.links.sync(&app.data, link).await.expect("sync again");
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM libraries WHERE name = 'Home Videos · Alex'")
             .fetch_one(&app.pool)
@@ -1085,7 +1085,7 @@ async fn local_shows(app: &common::TestApp) -> (Tree, Uuid, Uuid, Uuid, Uuid) {
     .fetch_one(&app.pool)
     .await
     .unwrap();
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root])
         .await
         .expect("scan");
@@ -1141,10 +1141,10 @@ async fn a_friends_shows_merge_into_the_local_ones() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, shows_settings(&url))
+        .register(&app.data, shows_settings(&url))
         .await
         .unwrap();
-    let report = app.links.sync(&app.pool, link).await.expect("sync");
+    let report = app.links.sync(&app.data, link).await.expect("sync");
     assert_eq!(report.added, 9, "{report:?}");
 
     let (_, list) = app
@@ -1223,7 +1223,7 @@ async fn a_friends_shows_merge_into_the_local_ones() {
 
     // The friend drops S01E02: the season keeps the local episode only.
     remote.lock().unwrap().shows.retain(|i| i["Id"] != "e12");
-    let report = app.links.sync(&app.pool, link).await.expect("sync again");
+    let report = app.links.sync(&app.data, link).await.expect("sync again");
     assert_eq!(report.removed, 1, "{report:?}");
     let (_, eps) = app
         .get(
@@ -1249,10 +1249,10 @@ async fn a_friends_copy_is_transcoded_by_the_friend_through_this_server() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    app.links.sync(&app.data, link).await.expect("sync");
     let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
         .fetch_one(&app.pool)
         .await
@@ -1380,7 +1380,7 @@ async fn the_admin_sees_each_link_and_can_sync_it_now() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
 
@@ -1462,8 +1462,8 @@ async fn a_link_taken_out_of_the_config_is_removed_at_start() {
         remote: "Home Videos".into(),
         local: None,
     });
-    let link = app.links.register(&app.pool, s).await.unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    let link = app.links.register(&app.data, s).await.unwrap();
+    app.links.sync(&app.data, link).await.expect("sync");
     let (_, mine) = app
         .get(&format!("/Users/{uid}/Items/{local}"), &token)
         .await;
@@ -1557,8 +1557,8 @@ async fn a_friends_titles_leave_the_views_while_their_server_is_down() {
         remote: "Home Videos".into(),
         local: None,
     });
-    let link = app.links.register(&app.pool, s).await.unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    let link = app.links.register(&app.data, s).await.unwrap();
+    app.links.sync(&app.data, link).await.expect("sync");
     let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
         .fetch_one(&app.pool)
         .await
@@ -1611,7 +1611,7 @@ async fn a_friends_titles_leave_the_views_while_their_server_is_down() {
 
     // Down.
     remote.lock().unwrap().down = true;
-    assert!(app.links.sync(&app.pool, link).await.is_err());
+    assert!(app.links.sync(&app.data, link).await.is_err());
     let (header, text) = notice(&mut rx).await;
     assert!(!header.is_empty());
     assert!(text.contains("Alex") && text.contains("hidden"), "{text}");
@@ -1645,12 +1645,12 @@ async fn a_friends_titles_leave_the_views_while_their_server_is_down() {
     let (_, links) = app.get("/api/v1/links", &admin_token).await;
     assert!(links[0]["offline_since"].is_string(), "{links}");
     // Still down: no second message.
-    assert!(app.links.recheck_offline(&app.pool).await == 0);
+    assert!(app.links.recheck_offline(&app.data).await == 0);
     assert!(rx.try_recv().is_err(), "one message per change");
 
     // Back.
     remote.lock().unwrap().down = false;
-    assert_eq!(app.links.recheck_offline(&app.pool).await, 1);
+    assert_eq!(app.links.recheck_offline(&app.data).await, 1);
     let (_, text) = notice(&mut rx).await;
     assert!(text.contains("Alex") && text.contains("back"), "{text}");
     let (_, list) = app.get(&movies, &token).await;
@@ -1681,8 +1681,8 @@ async fn a_title_another_friend_holds_stays_while_one_is_down() {
         let url = fake_jellyfin(remote.clone()).await;
         let mut s = settings(&url, "secret");
         s.name = name.into();
-        let link = app.links.register(&app.pool, s).await.unwrap();
-        app.links.sync(&app.pool, link).await.expect("sync");
+        let link = app.links.register(&app.data, s).await.unwrap();
+        app.links.sync(&app.data, link).await.expect("sync");
         ids.push(link);
         remotes.push(remote);
     }
@@ -1695,7 +1695,7 @@ async fn a_title_another_friend_holds_stays_while_one_is_down() {
     .unwrap();
     let down = ids.iter().position(|i| *i == standing).unwrap();
     remotes[down].lock().unwrap().down = true;
-    assert!(app.links.sync(&app.pool, standing).await.is_err());
+    assert!(app.links.sync(&app.data, standing).await.is_err());
 
     let movies = format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie");
     let (_, list) = app.get(&movies, &token).await;
@@ -1718,7 +1718,7 @@ async fn a_title_another_friend_holds_stays_while_one_is_down() {
     );
 
     remotes[down].lock().unwrap().down = false;
-    app.links.recheck_offline(&app.pool).await;
+    app.links.recheck_offline(&app.data).await;
     let (_, list) = app.get(&movies, &token).await;
     assert_eq!(names(&list), vec!["Only Theirs", "Shared Film"], "{list}");
     let (_, film) = app.get(&format!("/Users/{uid}/Items/{item}"), &token).await;
@@ -1770,10 +1770,10 @@ async fn watched_state_outlives_a_removed_link_and_comes_back_with_the_title() {
     let url = fake_jellyfin(alex).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    app.links.sync(&app.data, link).await.expect("sync");
     let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
         .fetch_one(&app.pool)
         .await
@@ -1801,8 +1801,8 @@ async fn watched_state_outlives_a_removed_link_and_comes_back_with_the_title() {
     let url = fake_jellyfin(sam).await;
     let mut s = settings(&url, "secret");
     s.name = "Sam".into();
-    let link = app.links.register(&app.pool, s).await.unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    let link = app.links.register(&app.data, s).await.unwrap();
+    app.links.sync(&app.data, link).await.expect("sync");
     let (_, list) = app.get(&movies, &token).await;
     let back = list["Items"]
         .as_array()
@@ -1855,10 +1855,10 @@ async fn a_copy_that_plays_as_is_can_be_preferred_over_a_better_one() {
         let url = fake_jellyfin(remote).await;
         let link = app
             .links
-            .register(&app.pool, settings(&url, "secret"))
+            .register(&app.data, settings(&url, "secret"))
             .await
             .unwrap();
-        app.links.sync(&app.pool, link).await.expect("sync");
+        app.links.sync(&app.data, link).await.expect("sync");
         // An H.264 client: this server's 1080p H.264 copy plays as is; the
         // friend's 2160p HEVC copy has to be converted (by the friend).
         let profile = json!({
@@ -1938,8 +1938,8 @@ async fn a_linking_server_never_sees_what_this_server_links() {
         remote: "Home Videos".into(),
         local: None,
     });
-    let link = app.links.register(&app.pool, s).await.unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    let link = app.links.register(&app.data, s).await.unwrap();
+    app.links.sync(&app.data, link).await.expect("sync");
     let theirs: Uuid = sqlx::query_scalar("SELECT id FROM media_items WHERE remote_id = 'r200'")
         .fetch_one(&app.pool)
         .await
@@ -2046,7 +2046,7 @@ async fn each_link_has_its_own_metrics() {
     let link = app
         .links
         .register(
-            &app.pool,
+            &app.data,
             LinkSettings {
                 name: "Metered".into(),
                 ..settings(&url, "secret")
@@ -2054,9 +2054,9 @@ async fn each_link_has_its_own_metrics() {
         )
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    app.links.sync(&app.data, link).await.expect("sync");
     remote.lock().unwrap().down = true;
-    app.links.sync(&app.pool, link).await.unwrap_err();
+    app.links.sync(&app.data, link).await.unwrap_err();
 
     let response = app
         .metrics_router
@@ -2134,7 +2134,7 @@ async fn the_links_list_says_how_each_link_is_doing() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
 
@@ -2143,9 +2143,9 @@ async fn the_links_list_says_how_each_link_is_doing() {
     assert!(list[0]["response_ms"].is_null(), "{list}");
     assert_eq!(list[0]["failed_syncs"], 0, "{list}");
 
-    app.links.sync(&app.pool, link).await.expect("sync");
+    app.links.sync(&app.data, link).await.expect("sync");
     remote.lock().unwrap().down = true;
-    app.links.sync(&app.pool, link).await.unwrap_err();
+    app.links.sync(&app.data, link).await.unwrap_err();
 
     let (_, list) = app.get("/api/v1/links", &admin).await;
     let entry = &list[0];
@@ -2220,9 +2220,9 @@ async fn a_friends_films_join_the_collections_here() {
     let root = tree.0.to_string_lossy().to_string();
     let rescan = || {
         let root = root.clone();
-        let pool = app.pool.clone();
+        let data = app.data.clone();
         async move {
-            LibraryScanner::new(pool, None)
+            LibraryScanner::new(data, None)
                 .scan(lib, &[root])
                 .await
                 .expect("scan")
@@ -2259,10 +2259,10 @@ async fn a_friends_films_join_the_collections_here() {
     let url = fake_jellyfin(remote.clone()).await;
     let link = app
         .links
-        .register(&app.pool, settings(&url, "secret"))
+        .register(&app.data, settings(&url, "secret"))
         .await
         .unwrap();
-    app.links.sync(&app.pool, link).await.expect("sync");
+    app.links.sync(&app.data, link).await.expect("sync");
 
     let s = |v: &str| v.to_string();
     assert_eq!(
@@ -2303,7 +2303,7 @@ async fn a_friends_films_join_the_collections_here() {
         r.films.retain(|f| f["Id"] != "r200");
         r.box_sets.retain(|b| b["Id"] != "bsfav");
     }
-    app.links.sync(&app.pool, link).await.expect("sync again");
+    app.links.sync(&app.data, link).await.expect("sync again");
     assert_eq!(
         collections_of(&app, &token, lib).await,
         vec![(
@@ -2370,7 +2370,7 @@ async fn scanning_a_library_syncs_the_links_that_fill_it() {
         remote: "Home Videos".into(),
         local: None,
     });
-    let link = app.links.register(&app.pool, s).await.unwrap();
+    let link = app.links.register(&app.data, s).await.unwrap();
 
     // Before any sync, Movies already names what fills it.
     assert_eq!(

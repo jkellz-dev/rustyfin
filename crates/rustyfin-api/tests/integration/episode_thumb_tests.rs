@@ -76,7 +76,7 @@ async fn scan(app: &common::TestApp, tree: &Tree) {
         .await
         .unwrap()
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root])
         .await
         .expect("scan");

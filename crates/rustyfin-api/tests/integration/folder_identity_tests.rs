@@ -45,7 +45,7 @@ impl Drop for Tree {
 }
 
 async fn scan(app: &common::TestApp, lib: Uuid, root: &Path) {
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root.to_string_lossy().to_string()])
         .await
         .expect("scan");

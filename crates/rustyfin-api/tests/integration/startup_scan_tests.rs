@@ -34,7 +34,7 @@ async fn the_startup_scan_is_recorded_as_a_run_of_scan_all_libraries() {
     };
     let scheduler = TaskScheduler::new(
         config,
-        app.pool.clone(),
+        app.data.clone(),
         Arc::new(RwLock::new(HashSet::new())),
         None,
     );

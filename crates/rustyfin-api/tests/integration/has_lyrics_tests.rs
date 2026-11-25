@@ -56,7 +56,7 @@ async fn tracks_say_whether_they_have_lyrics() {
     .fetch_one(&app.pool)
     .await
     .unwrap();
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     scanner
         .scan(lib, std::slice::from_ref(&root))
         .await
@@ -100,7 +100,7 @@ async fn a_lyrics_file_is_a_lyric_stream() {
     .fetch_one(&app.pool)
     .await
     .unwrap();
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, std::slice::from_ref(&root))
         .await
         .unwrap();

@@ -59,7 +59,7 @@ async fn metrics_cover_requests_libraries_scans_and_health() {
         .await
         .unwrap()
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[path])
         .await
         .unwrap();

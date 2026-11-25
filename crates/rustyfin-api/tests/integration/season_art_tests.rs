@@ -54,7 +54,7 @@ async fn scan_tv(app: &common::TestApp, tree: &Tree) {
         .await
         .expect("library")
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root])
         .await
         .expect("scan");

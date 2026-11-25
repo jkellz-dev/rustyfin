@@ -92,7 +92,7 @@ async fn broken_movie_files_do_not_stop_the_scan() {
         .await
         .unwrap()
         .id;
-    let scanned = LibraryScanner::new(app.pool.clone(), None)
+    let scanned = LibraryScanner::new(app.data.clone(), None)
         .scan(lib, std::slice::from_ref(&root))
         .await
         .expect("the scan finishes");
@@ -122,7 +122,7 @@ async fn broken_movie_files_do_not_stop_the_scan() {
     }
 
     // A second scan of the same tree is as calm.
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, std::slice::from_ref(&root))
         .await
         .expect("the rescan finishes");
@@ -156,7 +156,7 @@ async fn broken_episode_files_do_not_stop_the_scan() {
         .await
         .unwrap()
         .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, std::slice::from_ref(&root))
         .await
         .expect("the scan finishes");

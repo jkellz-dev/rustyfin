@@ -26,6 +26,8 @@ pub struct TestApp {
     /// The metrics listener's router (`/metrics`).
     pub metrics_router: Router,
     pub pool: PgPool,
+    /// The data layer over `pool`.
+    pub data: rustyfin_data::PgData,
     pub schema: String,
     pub session_manager: Arc<SessionManager>,
     /// What `POST /System/Shutdown` and `/System/Restart` fire.
@@ -142,14 +144,15 @@ impl TestApp {
         migrator.run(&pool).await.expect("failed to run migrations");
 
         // Build AppState with minimal config.
-        let session_manager = Arc::new(SessionManager::new(pool.clone()));
+        let data = rustyfin_data::PgData::from_pool(&pool);
+        let session_manager = Arc::new(SessionManager::new(data.clone()));
         let search_service = Arc::new(if meilisearch {
             let url = std::env::var("MEILI_URL")
                 .expect("MEILI_URL: these tests need a Meilisearch (CI and the builder start one)");
             let key = std::env::var("MEILI_KEY").ok();
-            SearchService::with_index(pool.clone(), Some(&url), key.as_deref(), &schema)
+            SearchService::with_index(data.clone(), Some(&url), key.as_deref(), &schema)
         } else {
-            SearchService::new(pool.clone(), None, None)
+            SearchService::new(data.clone(), None, None)
         });
         let search = search_service.clone();
         let transcode_manager = Arc::new(TranscodeManager::new(
@@ -168,7 +171,7 @@ impl TestApp {
         let scan_board = rustyfin_core::library::progress::ScanBoard::global().clone();
         let links = Arc::new(rustyfin_core::link::Links::default());
         let state = AppState {
-            data: rustyfin_data::PgData::from_pool(&pool),
+            data: data.clone(),
             pool: pool.clone(),
             local_only: false,
             server_id: "test-server-id".to_string(),
@@ -207,6 +210,7 @@ impl TestApp {
             router,
             metrics_router,
             pool,
+            data,
             schema,
             session_manager,
             shutdown,

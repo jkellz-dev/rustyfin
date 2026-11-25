@@ -213,7 +213,7 @@ async fn tracks_keep_the_genre_their_tags_name() {
         .await
         .unwrap()
         .id;
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     scanner
         .scan(lib, std::slice::from_ref(&root_s))
         .await

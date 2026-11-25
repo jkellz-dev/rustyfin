@@ -38,7 +38,7 @@ async fn stats_list_each_library_with_its_count_and_last_scan() {
     .await
     .unwrap()
     .id;
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(movies, &[movies_path])
         .await
         .unwrap();

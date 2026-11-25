@@ -17,7 +17,7 @@ async fn a_live_token_resolves_to_its_session_and_user() {
     let app = common::TestApp::new().await;
     let (user_id, token) = app.create_user("viewer", false).await;
 
-    let resolved = resolve_token(&app.pool, &token)
+    let resolved = resolve_token(&app.data, &token)
         .await
         .expect("a live token resolves");
     assert_eq!(resolved.user.id, user_id);
@@ -28,7 +28,7 @@ async fn a_live_token_resolves_to_its_session_and_user() {
 #[tokio::test]
 async fn an_unknown_token_is_unknown() {
     let app = common::TestApp::new().await;
-    let err = resolve_token(&app.pool, "no-such-token").await.unwrap_err();
+    let err = resolve_token(&app.data, "no-such-token").await.unwrap_err();
     assert!(matches!(err, TokenError::Unknown), "{err:?}");
     app.cleanup().await;
 }
@@ -41,7 +41,7 @@ async fn a_deactivated_session_is_unknown() {
         .await
         .expect("deactivate");
 
-    let err = resolve_token(&app.pool, &token).await.unwrap_err();
+    let err = resolve_token(&app.data, &token).await.unwrap_err();
     assert!(matches!(err, TokenError::Unknown), "{err:?}");
     app.cleanup().await;
 }
@@ -58,7 +58,7 @@ async fn an_expired_session_is_expired() {
     .await
     .expect("expire the session");
 
-    let err = resolve_token(&app.pool, &token).await.unwrap_err();
+    let err = resolve_token(&app.data, &token).await.unwrap_err();
     assert!(matches!(err, TokenError::Expired), "{err:?}");
     app.cleanup().await;
 }
@@ -71,13 +71,13 @@ async fn a_disabled_user_cannot_use_an_existing_token_and_can_again_once_enabled
     users::update_disabled(&app.pool, user_id, true)
         .await
         .expect("disable");
-    let err = resolve_token(&app.pool, &token).await.unwrap_err();
+    let err = resolve_token(&app.data, &token).await.unwrap_err();
     assert!(matches!(err, TokenError::UserDisabled), "{err:?}");
 
     users::update_disabled(&app.pool, user_id, false)
         .await
         .expect("enable");
-    assert!(resolve_token(&app.pool, &token).await.is_ok());
+    assert!(resolve_token(&app.data, &token).await.is_ok());
     app.cleanup().await;
 }
 

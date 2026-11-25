@@ -173,7 +173,7 @@ async fn image_tags_survive_rescans_and_change_when_the_file_does() {
         .unwrap()
         .id;
     let scan = || async {
-        LibraryScanner::new(app.pool.clone(), None)
+        LibraryScanner::new(app.data.clone(), None)
             .scan(lib, std::slice::from_ref(&root))
             .await
             .expect("scan");

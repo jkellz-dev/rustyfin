@@ -82,7 +82,7 @@ async fn a_rescan_of_unchanged_music_changes_no_item() {
         .await
         .unwrap()
         .id;
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     scanner
         .scan(lib, std::slice::from_ref(&root_s))
         .await
@@ -157,7 +157,7 @@ async fn a_rescan_of_unchanged_films_and_shows_changes_no_item() {
             .id;
         libs.push((id, path));
     }
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     for _ in 0..2 {
         for (id, path) in &libs {
             scanner
@@ -238,7 +238,7 @@ async fn art_written_after_the_first_scan_appears_on_the_next() {
             .id;
         libs.push((id, path));
     }
-    let scanner = LibraryScanner::new(app.pool.clone(), None);
+    let scanner = LibraryScanner::new(app.data.clone(), None);
     let scan_all = || async {
         for (id, path) in &libs {
             scanner

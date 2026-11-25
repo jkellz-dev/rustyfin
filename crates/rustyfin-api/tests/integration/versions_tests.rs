@@ -70,7 +70,7 @@ async fn library(app: &common::TestApp, root: &str) -> Uuid {
 }
 
 async fn scan(app: &common::TestApp, lib: Uuid, root: &str) {
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root.to_string()])
         .await
         .expect("scan");

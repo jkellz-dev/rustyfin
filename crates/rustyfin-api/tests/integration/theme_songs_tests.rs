@@ -45,7 +45,7 @@ async fn library(app: &common::TestApp, kind: &str, root: &str) -> Uuid {
     .fetch_one(&app.pool)
     .await
     .unwrap();
-    LibraryScanner::new(app.pool.clone(), None)
+    LibraryScanner::new(app.data.clone(), None)
         .scan(lib, &[root.to_string()])
         .await
         .expect("scan");
