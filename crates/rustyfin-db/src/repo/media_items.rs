@@ -2161,9 +2161,7 @@ impl ItemQuery {
         qb.push_bind(user_id);
         qb.push(" WHERE ud.last_played_date IS NOT NULL");
         self.apply_filters(&mut qb);
-        qb.push(sqlx::AssertSqlSafe(format!(
-            " ORDER BY ud.last_played_date DESC, {rest} LIMIT "
-        )));
+        qb.push(format!(" ORDER BY ud.last_played_date DESC, {rest} LIMIT "));
         qb.push_bind(upto);
         qb.push(
             ") UNION ALL (SELECT mi.*, NULL::timestamptz AS rf_played FROM visible_media_items mi \
@@ -2173,11 +2171,11 @@ impl ItemQuery {
         qb.push_bind(user_id);
         qb.push(")");
         self.apply_filters(&mut qb);
-        qb.push(sqlx::AssertSqlSafe(format!(" ORDER BY {rest} LIMIT ")));
+        qb.push(format!(" ORDER BY {rest} LIMIT "));
         qb.push_bind(upto);
-        qb.push(sqlx::AssertSqlSafe(format!(
+        qb.push(format!(
             ")) mi ORDER BY mi.rf_played DESC NULLS LAST, {rest} LIMIT "
-        )));
+        ));
         qb.push_bind(self.limit);
         qb.push(" OFFSET ");
         qb.push_bind(self.start_index);
