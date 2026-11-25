@@ -431,6 +431,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Build router with all API routes
     rustyfin_api::link_notices::spawn(state.clone());
+    // Genre lists, built before anyone opens one and kept fresh.
+    rustyfin_api::routes::music_genres::spawn_genre_list_builder(state.clone());
     let app = build_router(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);

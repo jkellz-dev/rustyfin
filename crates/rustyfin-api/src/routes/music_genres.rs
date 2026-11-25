@@ -39,11 +39,7 @@ pub async fn get_music_genres(
     auth: AuthenticatedUser,
     Query(query): Query<MusicGenresQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    let schema: String = sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or_default();
-    let key = format!("{schema}|{:?}", query.parent_id);
+    let key = genre_list_key(&state, query.parent_id).await;
     let cached = GENRE_PAGES.lock().ok().and_then(|c| {
         c.as_ref()
             .and_then(|c| c.get(&key))
@@ -52,15 +48,7 @@ pub async fn get_music_genres(
     });
     let all = match cached {
         Some(hit) => hit,
-        None => {
-            let built = build_music_genres(&state, query.parent_id).await?;
-            if let Ok(mut c) = GENRE_PAGES.lock() {
-                let c = c.get_or_insert_with(Default::default);
-                c.retain(|_, (at, _)| at.elapsed() < GENRE_PAGES_FRESH);
-                c.insert(key, (std::time::Instant::now(), built.clone()));
-            }
-            built
-        }
+        None => rebuild_genre_list(&state, key, query.parent_id).await?,
     };
     let matching: Vec<BaseItemDto> = match query.search_term.as_deref() {
         Some(term) => {
@@ -79,6 +67,64 @@ pub async fn get_music_genres(
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
+}
+
+/// The cache key of a library's genre list: database and schema (tests share
+/// one database, a schema each), and the library.
+async fn genre_list_key(state: &AppState, parent_id: Option<Uuid>) -> String {
+    let schema: String = sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or_default();
+    format!("{schema}|{parent_id:?}")
+}
+
+/// Build a library's genre list and keep it.
+async fn rebuild_genre_list(
+    state: &AppState,
+    key: String,
+    parent_id: Option<Uuid>,
+) -> Result<Vec<BaseItemDto>, ApiError> {
+    let built = build_music_genres(state, parent_id).await?;
+    if let Ok(mut c) = GENRE_PAGES.lock() {
+        let c = c.get_or_insert_with(Default::default);
+        c.retain(|_, (at, _)| at.elapsed() < GENRE_PAGES_FRESH);
+        c.insert(key, (std::time::Instant::now(), built.clone()));
+    }
+    Ok(built)
+}
+
+/// How often the background builder rebuilds the genre lists: before they
+/// go stale, so no request waits on a build.
+const GENRE_LISTS_REBUILD: std::time::Duration = std::time::Duration::from_secs(240);
+
+/// Build every music library's genre list (and the all-libraries one) at
+/// start, in the background, and again every four minutes, before the five
+/// the cache keeps them (owner, 2026-11-24: the first open after the cache
+/// expired took 1.1 s). A failed build is logged and tried next time.
+pub fn spawn_genre_list_builder(state: AppState) {
+    tokio::spawn(async move {
+        loop {
+            let started = std::time::Instant::now();
+            let libraries = rustyfin_db::repo::libraries::list_all(&state.pool)
+                .await
+                .or_log_default("libraries::list_all");
+            let targets = std::iter::once(None).chain(
+                libraries
+                    .iter()
+                    .filter(|l| l.library_type == "music")
+                    .map(|l| Some(l.id)),
+            );
+            for parent_id in targets {
+                let key = genre_list_key(&state, parent_id).await;
+                if let Err(e) = rebuild_genre_list(&state, key, parent_id).await {
+                    tracing::warn!("Building the genre list of {parent_id:?} failed: {e}");
+                }
+            }
+            tracing::debug!("Genre lists built in {:?}", started.elapsed());
+            tokio::time::sleep(GENRE_LISTS_REBUILD).await;
+        }
+    });
 }
 
 /// Every music genre of `parent_id` (or everywhere), in name order, without
