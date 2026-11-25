@@ -2090,10 +2090,102 @@ impl Default for ItemQuery {
 
 impl ItemQuery {
     /// Check if any sort or filter requires a user_data JOIN.
+    /// The filters read the caller's user data (`ud`).
+    fn filters_need_user_data(&self) -> bool {
+        self.is_favorite.is_some() || self.is_played.is_some() || self.is_resumable
+    }
+
+    /// "Recently played" (`SortBy=DatePlayed…` descending, no user-data
+    /// filter or other user-data sort): the played items, few, are read by
+    /// date, and the rest in the order after it, each only up to the page,
+    /// instead of sorting the whole library by a joined date (owner,
+    /// 2026-11-24: 1.7 s for Finamp's recently played tracks).
+    fn played_first(&self) -> bool {
+        let user_sorts = [
+            "DatePlayed",
+            "PlayCount",
+            "IsFavoriteOrLiked",
+            "IsUnplayed",
+            "IsPlayed",
+        ];
+        self.user_id.is_some()
+            && self.ranked_ids.is_none()
+            && !self.filters_need_user_data()
+            && self.sort_by.first().is_some_and(|s| s == "DatePlayed")
+            && self
+                .sort_order
+                .first()
+                .is_some_and(|o| o.eq_ignore_ascii_case("Descending"))
+            && !self.sort_by[1..]
+                .iter()
+                .any(|s| user_sorts.contains(&s.as_str()))
+    }
+
+    /// The ORDER BY terms after the first sort key (as `apply_sorting` writes
+    /// them), with the tiebreaker.
+    fn order_after_first(&self) -> String {
+        let mut terms = Vec::new();
+        for (i, sort_name) in self.sort_by.iter().enumerate().skip(1) {
+            let Some(col) = Self::sort_column(sort_name) else {
+                continue;
+            };
+            let desc = self
+                .sort_order
+                .get(i)
+                .or(self.sort_order.first())
+                .is_some_and(|o| o.eq_ignore_ascii_case("Descending"));
+            terms.push(format!(
+                "{col} {}",
+                if desc {
+                    "DESC NULLS LAST"
+                } else {
+                    "ASC NULLS LAST"
+                }
+            ));
+        }
+        terms.push("mi.sort_name, mi.name".to_string());
+        terms.join(", ")
+    }
+
+    /// `fetch` for `played_first`: the played items by date, then the rest.
+    async fn fetch_played_first(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+        let Some(user_id) = self.user_id else {
+            return Ok(Vec::new());
+        };
+        let rest = self.order_after_first();
+        let upto = self.start_index.saturating_add(self.limit);
+        let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+            "SELECT mi.* FROM ((SELECT mi.*, ud.last_played_date AS rf_played \
+             FROM visible_media_items mi JOIN user_data ud ON ud.item_id = mi.id AND ud.user_id = ",
+        );
+        qb.push_bind(user_id);
+        qb.push(" WHERE ud.last_played_date IS NOT NULL");
+        self.apply_filters(&mut qb);
+        qb.push(sqlx::AssertSqlSafe(format!(
+            " ORDER BY ud.last_played_date DESC, {rest} LIMIT "
+        )));
+        qb.push_bind(upto);
+        qb.push(
+            ") UNION ALL (SELECT mi.*, NULL::timestamptz AS rf_played FROM visible_media_items mi \
+             WHERE NOT EXISTS (SELECT 1 FROM user_data ud WHERE ud.item_id = mi.id \
+             AND ud.last_played_date IS NOT NULL AND ud.user_id = ",
+        );
+        qb.push_bind(user_id);
+        qb.push(")");
+        self.apply_filters(&mut qb);
+        qb.push(sqlx::AssertSqlSafe(format!(" ORDER BY {rest} LIMIT ")));
+        qb.push_bind(upto);
+        qb.push(sqlx::AssertSqlSafe(format!(
+            ")) mi ORDER BY mi.rf_played DESC NULLS LAST, {rest} LIMIT "
+        )));
+        qb.push_bind(self.limit);
+        qb.push(" OFFSET ");
+        qb.push_bind(self.start_index);
+        qb.build_query_as::<MediaItemRow>().fetch_all(pool).await
+    }
+
     fn needs_user_data_join(&self) -> bool {
-        self.is_favorite.is_some()
-            || self.is_played.is_some()
-            || self.is_resumable
+        self.filters_need_user_data()
             || self.sort_by.iter().any(|s| {
                 matches!(
                     s.as_str(),
@@ -2149,6 +2241,9 @@ impl ItemQuery {
 
     /// Execute the query and return matching items.
     pub async fn fetch(&self, pool: &PgPool) -> Result<Vec<MediaItemRow>, sqlx::Error> {
+        if self.played_first() {
+            return self.fetch_played_first(pool).await;
+        }
         let mut qb: QueryBuilder<sqlx::Postgres> =
             QueryBuilder::new("SELECT mi.* FROM visible_media_items mi");
 
@@ -2178,7 +2273,7 @@ impl ItemQuery {
         let mut qb: QueryBuilder<sqlx::Postgres> =
             QueryBuilder::new("SELECT COUNT(*) FROM visible_media_items mi");
 
-        if self.needs_user_data_join()
+        if self.filters_need_user_data()
             && let Some(user_id) = self.user_id
         {
             qb.push(" LEFT JOIN user_data ud ON ud.item_id = mi.id AND ud.user_id = ");
