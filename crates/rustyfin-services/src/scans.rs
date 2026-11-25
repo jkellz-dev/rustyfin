@@ -134,7 +134,12 @@ impl Scans<'_> {
                 lib.scanning_enabled()
             })
             .collect();
-        let libs = self.claim(libs, |lib| lib.id, |lib| &lib.name).await;
+        let wanted: Vec<(Uuid, &str)> = libs.iter().map(|l| (l.id, l.name.as_str())).collect();
+        let claimed = self.claim(&wanted).await;
+        let libs: Vec<Library> = libs
+            .into_iter()
+            .filter(|l| claimed.contains(&l.id))
+            .collect();
         if libs.is_empty() {
             return;
         }
@@ -210,11 +215,7 @@ impl Scans<'_> {
         dirs.sort();
         dirs.dedup();
         let label = library.to_string();
-        if self
-            .claim(vec![library], |id| *id, |_| label.as_str())
-            .await
-            .is_empty()
-        {
+        if self.claim(&[(library, label.as_str())]).await.is_empty() {
             return;
         }
 
@@ -264,23 +265,17 @@ impl Scans<'_> {
 
     /// Mark what is not being scanned yet as being scanned, under one lock so
     /// two requests cannot both start a scan of the same library; returns
-    /// what this caller now scans.
-    async fn claim<T>(
-        &self,
-        wanted: Vec<T>,
-        id: impl Fn(&T) -> Uuid,
-        name: impl Fn(&T) -> &str,
-    ) -> Vec<T> {
+    /// the ids this caller now scans.
+    async fn claim(&self, wanted: &[(Uuid, &str)]) -> HashSet<Uuid> {
         let mut in_flight = self.runtime.in_flight.write().await;
-        wanted
-            .into_iter()
-            .filter(|item| {
-                let fresh = in_flight.insert(id(item));
-                if !fresh {
-                    tracing::info!("Skipping scan of '{}': already in flight", name(item));
-                }
-                fresh
-            })
-            .collect()
+        let mut claimed = HashSet::new();
+        for (id, name) in wanted {
+            if in_flight.insert(*id) {
+                claimed.insert(*id);
+            } else {
+                tracing::info!("Skipping scan of '{name}': already in flight");
+            }
+        }
+        claimed
     }
 }
