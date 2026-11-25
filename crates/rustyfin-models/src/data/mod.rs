@@ -49,7 +49,7 @@ pub use media_item::{
     ArtistFilter, ItemMetadata, MediaItem, MediaItemStore, NameKind, NewMediaItem,
 };
 pub use media_streams::{MediaStream, MediaStreamStore, NewMediaStream};
-pub use people::{MediaItemPerson, PeopleStore, Person};
+pub use people::{Credit, ItemCredit, MediaItemPerson, PeopleStore, Person};
 pub use play_history::{Play, PlayFilter, PlayHistoryStore, PlayReport};
 pub use playlists::{Playlist, PlaylistItem, PlaylistShare, PlaylistStore};
 pub use search_feed::{PeopleFeedPage, SearchFeedPage, SearchFeedStore};

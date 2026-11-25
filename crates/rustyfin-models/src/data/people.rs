@@ -3,6 +3,13 @@ use uuid::Uuid;
 
 use super::DataResult;
 
+/// A person credited on an item: the person, their role (a character, say)
+/// and their place in the billing order.
+pub type Credit = (Person, Option<String>, Option<i32>);
+
+/// A credit with the id of the item it is on.
+pub type ItemCredit = (Uuid, Person, Option<String>, Option<i32>);
+
 /// A person (actor, director, writer, ...).
 #[derive(Debug, Clone)]
 pub struct Person {
@@ -127,11 +134,11 @@ pub trait PeopleStore {
     fn list_by_items(
         &self,
         item_ids: &[uuid::Uuid],
-    ) -> impl Future<Output = DataResult<Vec<(uuid::Uuid, Person, Option<String>, Option<i32>)>>> + Send;
+    ) -> impl Future<Output = DataResult<Vec<ItemCredit>>> + Send;
 
     /// Get people associated with a media item.
     fn list_by_item(
         &self,
         item_id: uuid::Uuid,
-    ) -> impl Future<Output = DataResult<Vec<(Person, Option<String>, Option<i32>)>>> + Send;
+    ) -> impl Future<Output = DataResult<Vec<Credit>>> + Send;
 }

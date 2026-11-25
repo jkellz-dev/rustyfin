@@ -144,17 +144,11 @@ impl PeopleStore for PgPeople {
             .data()
     }
 
-    async fn list_by_items(
-        &self,
-        item_ids: &[uuid::Uuid],
-    ) -> DataResult<Vec<(uuid::Uuid, Person, Option<String>, Option<i32>)>> {
+    async fn list_by_items(&self, item_ids: &[uuid::Uuid]) -> DataResult<Vec<ItemCredit>> {
         repo::list_by_items(&self.pool, item_ids).await.data()
     }
 
-    async fn list_by_item(
-        &self,
-        item_id: uuid::Uuid,
-    ) -> DataResult<Vec<(Person, Option<String>, Option<i32>)>> {
+    async fn list_by_item(&self, item_id: uuid::Uuid) -> DataResult<Vec<Credit>> {
         repo::list_by_item(&self.pool, item_id).await.data()
     }
 }
