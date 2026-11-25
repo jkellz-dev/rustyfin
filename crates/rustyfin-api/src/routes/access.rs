@@ -5,7 +5,6 @@
 //! apply the same rule. Jellyfin answers 404 for an item the user may not see, so
 //! that is what a hidden item gets here too: a 403 would confirm it exists.
 
-use rustyfin_models::data::{Data, LibraryAccessStore, MediaItemStore};
 use uuid::Uuid;
 
 use rustyfin_data::repo::media_items::MediaItemRow;
@@ -13,33 +12,15 @@ use rustyfin_data::repo::media_items::MediaItemRow;
 use crate::error::ApiError;
 use crate::router::AppState;
 
-/// Succeeds when the item exists and `user_id` may see its library.
-///
-/// Items that belong to no library are visible to everyone, as in `GET /Items/{id}`.
+/// Succeeds when the item exists and `user_id` may see its library
+/// (`rustyfin_services::access`).
 pub async fn require_item_access(
     state: &AppState,
     user_id: Uuid,
     item_id: Uuid,
 ) -> Result<(), ApiError> {
-    let item = state
-        .data
-        .media_items()
-        .find_by_id(item_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-
-    let Some(library_id) = item.library_id else {
-        return Ok(());
-    };
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(user_id)
-        .await?;
-    match accessible {
-        Some(allowed) if !allowed.contains(&library_id) => Err(ApiError::NotFound),
-        _ => Ok(()),
-    }
+    state.services.access().item(user_id, item_id).await?;
+    Ok(())
 }
 
 /// Drops the items `user_id` may not see, for list routes that pick items from
@@ -49,16 +30,5 @@ pub async fn retain_accessible(
     user_id: Uuid,
     items: Vec<MediaItemRow>,
 ) -> Result<Vec<MediaItemRow>, ApiError> {
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(user_id)
-        .await?;
-    let Some(allowed) = accessible else {
-        return Ok(items);
-    };
-    Ok(items
-        .into_iter()
-        .filter(|item| item.library_id.is_none_or(|lib| allowed.contains(&lib)))
-        .collect())
+    Ok(state.services.access().retain(user_id, items).await?)
 }

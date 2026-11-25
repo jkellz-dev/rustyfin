@@ -2,12 +2,11 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use rustyfin_models::data::{Data, UserDataChange, UserDataStore};
+use rustyfin_services::user_data::UserDataUpdate;
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::user_data;
 use rustyfin_models::dto::UserItemDataDto;
 
 use crate::error::ApiError;
@@ -46,8 +45,11 @@ pub async fn get_user_item_data(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ud = state.data.user_data().get(auth.user_id, item_id).await?;
+    let ud = state
+        .services
+        .user_data()
+        .get(auth.user_id, item_id)
+        .await?;
     let mut dto = ud.as_ref().map(to_dto).unwrap_or_default();
     dto.item_id = Some(item_id.simple().to_string());
     dto.key = Some(item_id.simple().to_string());
@@ -62,26 +64,19 @@ pub async fn update_user_item_data(
     Path(item_id): Path<Uuid>,
     Json(body): Json<UpdateUserItemData>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    // `Likes` without a rating maps onto the rating, as the Rating route does.
-    let rating = body
-        .rating
-        .or(body.likes.map(|l| if l { 10.0 } else { 1.0 }));
+    let update = UserDataUpdate {
+        played: body.played,
+        play_count: body.play_count,
+        position_ticks: body.playback_position_ticks,
+        is_favorite: body.is_favorite,
+        rating: body.rating,
+        likes: body.likes,
+        last_played_date: body.last_played_date,
+    };
     let ud = state
-        .data
+        .services
         .user_data()
-        .update_partial(
-            auth.user_id,
-            item_id,
-            &UserDataChange {
-                played: body.played,
-                play_count: body.play_count,
-                position_ticks: body.playback_position_ticks,
-                is_favorite: body.is_favorite,
-                rating,
-                last_played_date: body.last_played_date,
-            },
-        )
+        .update(auth.user_id, item_id, update)
         .await?;
     let mut dto = to_dto(&ud);
     dto.item_id = Some(item_id.simple().to_string());
@@ -113,9 +108,8 @@ pub async fn mark_favorite(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = state
-        .data
+        .services
         .user_data()
         .set_favorite(auth.user_id, item_id, true)
         .await?;
@@ -128,9 +122,8 @@ pub async fn unmark_favorite(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = state
-        .data
+        .services
         .user_data()
         .set_favorite(auth.user_id, item_id, false)
         .await?;
@@ -143,9 +136,8 @@ pub async fn mark_played(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = state
-        .data
+        .services
         .user_data()
         .set_played(auth.user_id, item_id, true)
         .await?;
@@ -158,9 +150,8 @@ pub async fn mark_unplayed(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = state
-        .data
+        .services
         .user_data()
         .set_played(auth.user_id, item_id, false)
         .await?;
@@ -211,11 +202,10 @@ pub async fn update_rating(
     Path(item_id): Path<Uuid>,
     Query(params): Query<RatingParams>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = state
-        .data
+        .services
         .user_data()
-        .set_rating(auth.user_id, item_id, params.likes)
+        .set_like(auth.user_id, item_id, params.likes)
         .await?;
     Ok(Json(to_dto(&ud)))
 }
@@ -225,11 +215,10 @@ pub async fn delete_rating(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
     let ud = state
-        .data
+        .services
         .user_data()
-        .set_rating(auth.user_id, item_id, None)
+        .set_like(auth.user_id, item_id, None)
         .await?;
     Ok(Json(to_dto(&ud)))
 }
@@ -251,15 +240,14 @@ pub async fn delete_rating_legacy(
     delete_rating(state, auth, Path(item_id)).await
 }
 
-fn to_dto(ud: &user_data::UserDataRow) -> UserItemDataDto {
-    const MIN_LIKE_VALUE: f64 = 6.5;
+fn to_dto(ud: &rustyfin_models::data::UserData) -> UserItemDataDto {
     UserItemDataDto {
         playback_position_ticks: ud.playback_position_ticks,
         play_count: ud.play_count,
         is_favorite: ud.is_favorite,
         played: ud.played,
         rating: ud.rating,
-        likes: ud.rating.map(|r| r >= MIN_LIKE_VALUE),
+        likes: rustyfin_services::user_data::likes(ud.rating),
         last_played_date: ud.last_played_date,
         ..Default::default()
     }

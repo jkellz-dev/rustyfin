@@ -305,15 +305,13 @@ pub async fn set_played(
     .map(Into::into)
 }
 
-/// Set or clear user rating for an item.
+/// Set or clear a user's rating of an item.
 pub async fn set_rating(
     pool: &PgPool,
     user_id: Uuid,
     item_id: Uuid,
-    likes: Option<bool>,
+    rating: Option<f64>,
 ) -> Result<UserDataRow, sqlx::Error> {
-    let rating: Option<f64> = likes.map(|l| if l { 10.0 } else { 1.0 });
-
     sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id, rating)

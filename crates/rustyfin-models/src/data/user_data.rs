@@ -107,12 +107,12 @@ pub trait UserDataStore {
         played: bool,
     ) -> impl Future<Output = DataResult<UserData>> + Send;
 
-    /// Set or clear user rating for an item.
+    /// Set or clear a user's rating of an item.
     fn set_rating(
         &self,
         user_id: uuid::Uuid,
         item_id: uuid::Uuid,
-        likes: Option<bool>,
+        rating: Option<f64>,
     ) -> impl Future<Output = DataResult<UserData>> + Send;
 
     /// Get resume items (items with playback position) for a user.

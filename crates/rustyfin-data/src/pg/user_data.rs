@@ -117,9 +117,9 @@ impl UserDataStore for PgUserData {
         &self,
         user_id: uuid::Uuid,
         item_id: uuid::Uuid,
-        likes: Option<bool>,
+        rating: Option<f64>,
     ) -> DataResult<UserData> {
-        repo::set_rating(&self.pool, user_id, item_id, likes)
+        repo::set_rating(&self.pool, user_id, item_id, rating)
             .await
             .data()
     }

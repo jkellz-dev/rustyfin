@@ -845,22 +845,21 @@ async fn user_data_set_rating() {
         .create_media_item("Rated Movie", "Movie", lib_id, None)
         .await;
 
-    // likes=true -> rating 10.0
-    let ud1 = user_data::set_rating(&app.pool, user_id, item_id, Some(true))
+    // A rating is stored as given, and replaced by the next one.
+    let ud1 = user_data::set_rating(&app.pool, user_id, item_id, Some(10.0))
         .await
-        .expect("set_rating likes=true");
+        .expect("set_rating 10");
     assert!((ud1.rating.unwrap() - 10.0).abs() < 0.01);
 
-    // likes=false -> rating 1.0
-    let ud2 = user_data::set_rating(&app.pool, user_id, item_id, Some(false))
+    let ud2 = user_data::set_rating(&app.pool, user_id, item_id, Some(1.0))
         .await
-        .expect("set_rating likes=false");
+        .expect("set_rating 1");
     assert!((ud2.rating.unwrap() - 1.0).abs() < 0.01);
 
-    // likes=None -> rating None
+    // None clears it.
     let ud3 = user_data::set_rating(&app.pool, user_id, item_id, None)
         .await
-        .expect("set_rating likes=None");
+        .expect("set_rating None");
     assert!(ud3.rating.is_none());
 
     app.cleanup().await;

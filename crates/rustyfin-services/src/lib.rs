@@ -12,12 +12,14 @@
 //! the data layer through the `Data` trait and answers with a
 //! [`ServiceError`] the API crates turn into their own error shapes.
 
+pub mod access;
 pub mod error;
 pub mod image;
 pub mod library;
 pub mod link;
 pub mod playlists;
 pub mod session;
+pub mod user_data;
 
 pub use error::{ServiceError, ServiceResult};
 
@@ -32,6 +34,16 @@ pub struct Services<D> {
 impl<D: Data> Services<D> {
     pub fn new(data: D) -> Self {
         Self { data }
+    }
+
+    /// Which items a user may see.
+    pub fn access(&self) -> access::Access<'_, D> {
+        access::Access { data: &self.data }
+    }
+
+    /// A user's own state on items: played, position, favourite, rating.
+    pub fn user_data(&self) -> user_data::UserItemData<'_, D> {
+        user_data::UserItemData { data: &self.data }
     }
 
     /// Playlists: who may see and change them.
