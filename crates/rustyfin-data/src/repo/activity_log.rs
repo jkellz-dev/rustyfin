@@ -1,10 +1,12 @@
+use super::all;
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::ActivityLogEntry;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// One `activity_log` entry (sign-ins, scans, errors) shown in the admin.
+/// The `ActivityLogRow` row as Postgres returns it; callers get it as [`ActivityLogEntry`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct ActivityLogRow {
+pub(crate) struct ActivityLogEntryRecord {
     pub id: i64,
     pub name: String,
     pub overview: Option<String>,
@@ -13,6 +15,34 @@ pub struct ActivityLogRow {
     pub user_id: Option<Uuid>,
     pub item_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::ActivityLogEntry as ActivityLogRow;
+
+impl From<ActivityLogEntryRecord> for ActivityLogEntry {
+    fn from(r: ActivityLogEntryRecord) -> Self {
+        let ActivityLogEntryRecord {
+            id,
+            name,
+            overview,
+            log_type,
+            severity,
+            user_id,
+            item_id,
+            created_at,
+        } = r;
+        ActivityLogEntry {
+            id,
+            name,
+            overview,
+            log_type,
+            severity,
+            user_id,
+            item_id,
+            created_at,
+        }
+    }
 }
 
 /// Insert a new activity log entry.
@@ -25,7 +55,7 @@ pub async fn insert(
     user_id: Option<Uuid>,
     item_id: Option<Uuid>,
 ) -> Result<ActivityLogRow, sqlx::Error> {
-    sqlx::query_as::<_, ActivityLogRow>(
+    sqlx::query_as::<_, ActivityLogEntryRecord>(
         r#"
         INSERT INTO activity_log (name, overview, log_type, severity, user_id, item_id)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -40,16 +70,18 @@ pub async fn insert(
     .bind(item_id)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// List recent activity log entries.
 pub async fn list_recent(pool: &PgPool, limit: i64) -> Result<Vec<ActivityLogRow>, sqlx::Error> {
-    sqlx::query_as::<_, ActivityLogRow>(
+    sqlx::query_as::<_, ActivityLogEntryRecord>(
         "SELECT * FROM activity_log ORDER BY created_at DESC LIMIT $1",
     )
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// List activity log entries with pagination and filtering.
@@ -81,7 +113,7 @@ pub async fn list_paginated(
         param_index + 1
     ));
 
-    let mut q = sqlx::query_as::<_, ActivityLogRow>(sqlx::AssertSqlSafe(query));
+    let mut q = sqlx::query_as::<_, ActivityLogEntryRecord>(sqlx::AssertSqlSafe(query));
 
     if let Some(date) = min_date {
         q = q.bind(date);

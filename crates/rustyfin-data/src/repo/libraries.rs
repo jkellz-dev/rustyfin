@@ -1,10 +1,12 @@
+use super::{all, opt};
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::{Library, LibraryStat};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// A library: its name, type, folders, options, scan schedule and last scan.
+/// The `LibraryRow` row as Postgres returns it; callers get it as [`Library`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct LibraryRow {
+pub(crate) struct LibraryRecord {
     pub id: Uuid,
     pub name: String,
     pub library_type: String,
@@ -25,9 +27,43 @@ pub struct LibraryRow {
     pub link_id: Option<Uuid>,
 }
 
-/// One library on the dashboard: its media count and last finished scan.
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Library as LibraryRow;
+
+impl From<LibraryRecord> for Library {
+    fn from(r: LibraryRecord) -> Self {
+        let LibraryRecord {
+            id,
+            name,
+            library_type,
+            paths,
+            scan_schedule,
+            library_options,
+            created_at,
+            updated_at,
+            last_scanned_at,
+            last_scan_duration_ms,
+            link_id,
+        } = r;
+        Library {
+            id,
+            name,
+            library_type,
+            paths,
+            scan_schedule,
+            library_options,
+            created_at,
+            updated_at,
+            last_scanned_at,
+            last_scan_duration_ms,
+            link_id,
+        }
+    }
+}
+
+/// The `LibraryStatRow` row as Postgres returns it; callers get it as [`LibraryStat`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct LibraryStatRow {
+pub(crate) struct LibraryStatRecord {
     pub id: Uuid,
     pub name: String,
     pub library_type: String,
@@ -40,9 +76,35 @@ pub struct LibraryStatRow {
     pub linked: bool,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::LibraryStat as LibraryStatRow;
+
+impl From<LibraryStatRecord> for LibraryStat {
+    fn from(r: LibraryStatRecord) -> Self {
+        let LibraryStatRecord {
+            id,
+            name,
+            library_type,
+            item_count,
+            last_scanned_at,
+            last_scan_duration_ms,
+            linked,
+        } = r;
+        LibraryStat {
+            id,
+            name,
+            library_type,
+            item_count,
+            last_scanned_at,
+            last_scan_duration_ms,
+            linked,
+        }
+    }
+}
+
 /// Every library with its media count and last finished scan, by name.
 pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryStatRow>(
+    sqlx::query_as::<_, LibraryStatRecord>(
         "SELECT l.id, l.name, l.library_type, l.last_scanned_at, l.last_scan_duration_ms, \
                 l.link_id IS NOT NULL AS linked, \
                 (SELECT COUNT(*) FROM visible_media_items m WHERE m.library_id = l.id \
@@ -53,6 +115,7 @@ pub async fn stats(pool: &PgPool) -> Result<Vec<LibraryStatRow>, sqlx::Error> {
     )
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Record that a scan of `id` finished now, after `took`.
@@ -73,50 +136,44 @@ pub async fn mark_scanned(
 
 /// List all libraries.
 pub async fn list_all(pool: &PgPool) -> Result<Vec<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>("SELECT * FROM libraries ORDER BY name")
+    sqlx::query_as::<_, LibraryRecord>("SELECT * FROM libraries ORDER BY name")
         .fetch_all(pool)
         .await
+        .map(all)
 }
 
 /// Libraries that scans may touch: every library except those a client switched
 /// off with `LibraryOptions.Enabled = false`. A library with no stored options, or
 /// with options that do not mention `Enabled`, is enabled.
 pub async fn list_scannable(pool: &PgPool) -> Result<Vec<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         "SELECT * FROM libraries \
          WHERE library_options->>'Enabled' IS DISTINCT FROM 'false' \
          ORDER BY name",
     )
     .fetch_all(pool)
     .await
-}
-
-impl LibraryRow {
-    /// False when a client switched the library off with `LibraryOptions.Enabled`.
-    pub fn scanning_enabled(&self) -> bool {
-        self.library_options
-            .get("Enabled")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(true)
-    }
+    .map(all)
 }
 
 /// Find a library by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>("SELECT * FROM libraries WHERE id = $1")
+    sqlx::query_as::<_, LibraryRecord>("SELECT * FROM libraries WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Find a library by name, ignoring case (Jellyfin treats library names that way).
 pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         "SELECT * FROM libraries WHERE lower(name) = lower($1) ORDER BY created_at LIMIT 1",
     )
     .bind(name)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Create a library with client-supplied options.
@@ -127,7 +184,7 @@ pub async fn create_with_options(
     paths: &[String],
     options: &serde_json::Value,
 ) -> Result<LibraryRow, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         r#"
         INSERT INTO libraries (name, library_type, paths, library_options)
         VALUES ($1, $2, $3, $4)
@@ -140,6 +197,7 @@ pub async fn create_with_options(
     .bind(options)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Rename a library; the id (and so everything attached to it) is unchanged.
@@ -148,13 +206,14 @@ pub async fn rename(
     id: Uuid,
     new_name: &str,
 ) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         "UPDATE libraries SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
     )
     .bind(new_name)
     .bind(id)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Replace a library's media paths.
@@ -163,13 +222,14 @@ pub async fn set_paths(
     id: Uuid,
     paths: &[String],
 ) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         "UPDATE libraries SET paths = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
     )
     .bind(paths)
     .bind(id)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Store a library's options.
@@ -178,13 +238,14 @@ pub async fn set_options(
     id: Uuid,
     options: &serde_json::Value,
 ) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         "UPDATE libraries SET library_options = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
     )
     .bind(options)
     .bind(id)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Create a library.
@@ -194,7 +255,7 @@ pub async fn create(
     library_type: &str,
     paths: &[String],
 ) -> Result<LibraryRow, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         r#"
         INSERT INTO libraries (name, library_type, paths)
         VALUES ($1, $2, $3)
@@ -206,6 +267,7 @@ pub async fn create(
     .bind(paths)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Update the library's updated_at timestamp.
@@ -224,7 +286,7 @@ pub async fn update(
     name: &str,
     paths: &[String],
 ) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         r#"
         UPDATE libraries SET name = $1, paths = $2, updated_at = NOW()
         WHERE id = $3
@@ -236,6 +298,7 @@ pub async fn update(
     .bind(id)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Delete a library by ID.
@@ -253,7 +316,7 @@ pub async fn update_scan_schedule(
     id: Uuid,
     schedule: Option<&str>,
 ) -> Result<Option<LibraryRow>, sqlx::Error> {
-    sqlx::query_as::<_, LibraryRow>(
+    sqlx::query_as::<_, LibraryRecord>(
         r#"
         UPDATE libraries SET scan_schedule = $1, updated_at = NOW()
         WHERE id = $2
@@ -264,4 +327,5 @@ pub async fn update_scan_schedule(
     .bind(id)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }

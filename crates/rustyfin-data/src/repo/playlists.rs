@@ -1,10 +1,12 @@
+use super::{all, opt};
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::{Playlist, PlaylistItem, PlaylistShare};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// A playlist and who owns it.
+/// The `PlaylistRow` row as Postgres returns it; callers get it as [`Playlist`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct PlaylistRow {
+pub(crate) struct PlaylistRecord {
     pub id: Uuid,
     pub name: String,
     pub owner_user_id: Uuid,
@@ -14,21 +16,85 @@ pub struct PlaylistRow {
     pub updated_at: DateTime<Utc>,
 }
 
-/// One entry of a playlist (an item can be in it more than once).
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Playlist as PlaylistRow;
+
+impl From<PlaylistRecord> for Playlist {
+    fn from(r: PlaylistRecord) -> Self {
+        let PlaylistRecord {
+            id,
+            name,
+            owner_user_id,
+            media_type,
+            open_access,
+            created_at,
+            updated_at,
+        } = r;
+        Playlist {
+            id,
+            name,
+            owner_user_id,
+            media_type,
+            open_access,
+            created_at,
+            updated_at,
+        }
+    }
+}
+
+/// The `PlaylistItemRow` row as Postgres returns it; callers get it as [`PlaylistItem`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct PlaylistItemRow {
+pub(crate) struct PlaylistItemRecord {
     pub id: Uuid,
     pub playlist_id: Uuid,
     pub item_id: Uuid,
     pub sort_order: i32,
 }
 
-/// Another user a playlist is shared with.
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::PlaylistItem as PlaylistItemRow;
+
+impl From<PlaylistItemRecord> for PlaylistItem {
+    fn from(r: PlaylistItemRecord) -> Self {
+        let PlaylistItemRecord {
+            id,
+            playlist_id,
+            item_id,
+            sort_order,
+        } = r;
+        PlaylistItem {
+            id,
+            playlist_id,
+            item_id,
+            sort_order,
+        }
+    }
+}
+
+/// The `PlaylistShareRow` row as Postgres returns it; callers get it as [`PlaylistShare`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct PlaylistShareRow {
+pub(crate) struct PlaylistShareRecord {
     pub playlist_id: Uuid,
     pub user_id: Uuid,
     pub can_edit: bool,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::PlaylistShare as PlaylistShareRow;
+
+impl From<PlaylistShareRecord> for PlaylistShare {
+    fn from(r: PlaylistShareRecord) -> Self {
+        let PlaylistShareRecord {
+            playlist_id,
+            user_id,
+            can_edit,
+        } = r;
+        PlaylistShare {
+            playlist_id,
+            user_id,
+            can_edit,
+        }
+    }
 }
 
 /// Create an empty playlist.
@@ -38,7 +104,7 @@ pub async fn create(
     owner_user_id: Uuid,
     media_type: &str,
 ) -> Result<PlaylistRow, sqlx::Error> {
-    sqlx::query_as::<_, PlaylistRow>(
+    sqlx::query_as::<_, PlaylistRecord>(
         "INSERT INTO playlists (name, owner_user_id, media_type) VALUES ($1, $2, $3) RETURNING *",
     )
     .bind(name)
@@ -46,14 +112,16 @@ pub async fn create(
     .bind(media_type)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// The playlist with this id, if any.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PlaylistRow>, sqlx::Error> {
-    sqlx::query_as::<_, PlaylistRow>("SELECT * FROM playlists WHERE id = $1")
+    sqlx::query_as::<_, PlaylistRecord>("SELECT * FROM playlists WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Rename a playlist.
@@ -82,7 +150,7 @@ pub async fn list_items(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<PlaylistItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, PlaylistItemRow>(
+    sqlx::query_as::<_, PlaylistItemRecord>(
         "SELECT * FROM playlist_items WHERE playlist_id = $1 ORDER BY sort_order LIMIT $2 OFFSET $3",
     )
     .bind(playlist_id)
@@ -90,6 +158,7 @@ pub async fn list_items(
     .bind(offset)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Append items to the end of a playlist.
@@ -157,10 +226,11 @@ pub async fn get_shares(
     pool: &PgPool,
     playlist_id: Uuid,
 ) -> Result<Vec<PlaylistShareRow>, sqlx::Error> {
-    sqlx::query_as::<_, PlaylistShareRow>("SELECT * FROM playlist_shares WHERE playlist_id = $1")
+    sqlx::query_as::<_, PlaylistShareRecord>("SELECT * FROM playlist_shares WHERE playlist_id = $1")
         .bind(playlist_id)
         .fetch_all(pool)
         .await
+        .map(all)
 }
 
 /// Share a playlist with a user, or change whether they may edit it.

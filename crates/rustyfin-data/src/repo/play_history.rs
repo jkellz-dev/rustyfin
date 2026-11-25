@@ -2,7 +2,9 @@
 //! 2026-11-17). Time is credited between reports while not paused, at most
 //! `MAX_GAP_MS` per gap; a stopped play shorter than `MIN_PLAY_MS` is dropped.
 
+use super::all;
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::Play;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -134,9 +136,9 @@ pub async fn stats(pool: &PgPool, user_id: Uuid) -> Result<Vec<(String, i64, i64
     .await
 }
 
-/// One play in a user's history, with the item's name and kind as they were.
+/// The `PlayRow` row as Postgres returns it; callers get it as [`Play`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct PlayRow {
+pub(crate) struct PlayRecord {
     pub id: Uuid,
     pub item_id: Option<Uuid>,
     pub item_type: String,
@@ -149,6 +151,42 @@ pub struct PlayRow {
     pub last_seen_at: DateTime<Utc>,
     pub played_ms: i64,
     pub ended: bool,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Play as PlayRow;
+
+impl From<PlayRecord> for Play {
+    fn from(r: PlayRecord) -> Self {
+        let PlayRecord {
+            id,
+            item_id,
+            item_type,
+            item_name,
+            parent_name,
+            client,
+            device_name,
+            play_method,
+            started_at,
+            last_seen_at,
+            played_ms,
+            ended,
+        } = r;
+        Play {
+            id,
+            item_id,
+            item_type,
+            item_name,
+            parent_name,
+            client,
+            device_name,
+            play_method,
+            started_at,
+            last_seen_at,
+            played_ms,
+            ended,
+        }
+    }
 }
 
 /// What the list may be narrowed to.
@@ -190,7 +228,7 @@ pub async fn list(
 ) -> Result<(Vec<PlayRow>, i64), sqlx::Error> {
     let kinds = KINDS.map(String::from).to_vec();
     let pattern = like(filter.search.as_deref());
-    let rows = sqlx::query_as::<_, PlayRow>(sqlx::AssertSqlSafe(format!(
+    let rows = sqlx::query_as::<_, PlayRecord>(sqlx::AssertSqlSafe(format!(
         "SELECT id, item_id, item_type, item_name, parent_name, client, device_name, \
          play_method, started_at, last_seen_at, played_ms, ended FROM play_history \
          WHERE {WHERE} ORDER BY started_at DESC, id LIMIT $7 OFFSET $8"
@@ -216,5 +254,5 @@ pub async fn list(
     .bind(filter.max_date)
     .fetch_one(pool)
     .await?;
-    Ok((rows, total))
+    Ok((all(rows), total))
 }

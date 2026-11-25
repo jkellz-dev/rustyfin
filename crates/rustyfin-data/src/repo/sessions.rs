@@ -1,10 +1,12 @@
+use super::{all, opt};
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::{Device, Session};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// A signed-in device: its access token, user, app and device.
+/// The `SessionRow` row as Postgres returns it; callers get it as [`Session`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct SessionRow {
+pub(crate) struct SessionRecord {
     pub id: Uuid,
     pub access_token: String,
     pub user_id: Uuid,
@@ -18,22 +20,58 @@ pub struct SessionRow {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Session as SessionRow;
+
+impl From<SessionRecord> for Session {
+    fn from(r: SessionRecord) -> Self {
+        let SessionRecord {
+            id,
+            access_token,
+            user_id,
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+            is_active,
+            created_at,
+            last_activity,
+            expires_at,
+        } = r;
+        Session {
+            id,
+            access_token,
+            user_id,
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+            is_active,
+            created_at,
+            last_activity,
+            expires_at,
+        }
+    }
+}
+
 /// Find a session by access token.
 pub async fn find_by_token(pool: &PgPool, token: &str) -> Result<Option<SessionRow>, sqlx::Error> {
-    sqlx::query_as::<_, SessionRow>(
+    sqlx::query_as::<_, SessionRecord>(
         "SELECT * FROM sessions WHERE access_token = $1 AND is_active = true",
     )
     .bind(token)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// An active session by id.
 pub async fn find_active_by_id(pool: &PgPool, id: Uuid) -> Result<Option<SessionRow>, sqlx::Error> {
-    sqlx::query_as::<_, SessionRow>("SELECT * FROM sessions WHERE id = $1 AND is_active = true")
+    sqlx::query_as::<_, SessionRecord>("SELECT * FROM sessions WHERE id = $1 AND is_active = true")
         .bind(id)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// The user's active session on `device_id`, most recent first.
@@ -42,7 +80,7 @@ pub async fn find_active_for_device(
     user_id: Uuid,
     device_id: &str,
 ) -> Result<Option<SessionRow>, sqlx::Error> {
-    sqlx::query_as::<_, SessionRow>(
+    sqlx::query_as::<_, SessionRecord>(
         "SELECT * FROM sessions WHERE user_id = $1 AND device_id = $2 AND is_active = true \
          AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY last_activity DESC LIMIT 1",
     )
@@ -50,16 +88,18 @@ pub async fn find_active_for_device(
     .bind(device_id)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Find active sessions for a user.
 pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<SessionRow>, sqlx::Error> {
-    sqlx::query_as::<_, SessionRow>(
+    sqlx::query_as::<_, SessionRecord>(
         "SELECT * FROM sessions WHERE user_id = $1 AND is_active = true ORDER BY last_activity DESC",
     )
     .bind(user_id)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Create a new session.
@@ -72,7 +112,7 @@ pub async fn create(
     app_name: &str,
     app_version: Option<&str>,
 ) -> Result<SessionRow, sqlx::Error> {
-    sqlx::query_as::<_, SessionRow>(
+    sqlx::query_as::<_, SessionRecord>(
         r#"
         INSERT INTO sessions (access_token, user_id, device_id, device_name, app_name, app_version)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -87,6 +127,7 @@ pub async fn create(
     .bind(app_version)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Update last activity for a session.
@@ -115,11 +156,12 @@ pub async fn deactivate(pool: &PgPool, session_id: Uuid) -> Result<(), sqlx::Err
 
 /// List all active sessions.
 pub async fn list_active(pool: &PgPool) -> Result<Vec<SessionRow>, sqlx::Error> {
-    sqlx::query_as::<_, SessionRow>(
+    sqlx::query_as::<_, SessionRecord>(
         "SELECT * FROM sessions WHERE is_active = true ORDER BY last_activity DESC",
     )
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Deactivate sessions that have been inactive for longer than the given number of days.
@@ -146,9 +188,9 @@ pub async fn deactivate_by_token(pool: &PgPool, token: &str) -> Result<(), sqlx:
     Ok(())
 }
 
-/// A device signed in: its latest active session and the user's name.
+/// The `DeviceRow` row as Postgres returns it; callers get it as [`Device`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct DeviceRow {
+pub(crate) struct DeviceRecord {
     pub device_id: String,
     pub device_name: String,
     pub app_name: String,
@@ -158,10 +200,36 @@ pub struct DeviceRow {
     pub last_activity: DateTime<Utc>,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Device as DeviceRow;
+
+impl From<DeviceRecord> for Device {
+    fn from(r: DeviceRecord) -> Self {
+        let DeviceRecord {
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+            user_id,
+            user_name,
+            last_activity,
+        } = r;
+        Device {
+            device_id,
+            device_name,
+            app_name,
+            app_version,
+            user_id,
+            user_name,
+            last_activity,
+        }
+    }
+}
+
 /// Devices with an active session (of `user_id`, when given), most recently
 /// active first; one entry per device and user.
 pub async fn devices(pool: &PgPool, user_id: Option<Uuid>) -> Result<Vec<DeviceRow>, sqlx::Error> {
-    sqlx::query_as::<_, DeviceRow>(
+    sqlx::query_as::<_, DeviceRecord>(
         "SELECT * FROM ( \
            SELECT DISTINCT ON (s.device_id, s.user_id) s.device_id, s.device_name, s.app_name, \
                   s.app_version, s.user_id, u.username AS user_name, s.last_activity \
@@ -173,6 +241,7 @@ pub async fn devices(pool: &PgPool, user_id: Option<Uuid>) -> Result<Vec<DeviceR
     .bind(user_id)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Sign a device out: end its active sessions. Returns their ids.

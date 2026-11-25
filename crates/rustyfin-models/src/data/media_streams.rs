@@ -1,0 +1,37 @@
+use uuid::Uuid;
+
+/// One stream of a file (video, audio, subtitle), or a subtitle file beside it (`is_external`).
+#[derive(Debug, Clone)]
+pub struct MediaStream {
+    pub id: Uuid,
+    pub item_id: Uuid,
+    pub stream_index: i32,
+    pub stream_type: String,
+    pub codec: Option<String>,
+    pub language: Option<String>,
+    pub title: Option<String>,
+    pub is_default: bool,
+    pub is_forced: bool,
+    pub is_external: bool,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub bit_rate: Option<i32>,
+    pub bit_depth: Option<i32>,
+    pub pixel_format: Option<String>,
+    pub aspect_ratio: Option<String>,
+    pub real_frame_rate: Option<f32>,
+    pub color_space: Option<String>,
+    pub color_primaries: Option<String>,
+    pub color_transfer: Option<String>,
+    pub channels: Option<i32>,
+    pub channel_layout: Option<String>,
+    pub sample_rate: Option<i32>,
+    pub path: Option<String>,
+    pub profile: Option<String>,
+    pub level: Option<i32>,
+    pub codec_tag: Option<String>,
+    pub time_base: Option<String>,
+    pub ref_frames: Option<i32>,
+    pub nal_length_size: Option<String>,
+    pub is_interlaced: bool,
+}

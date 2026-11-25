@@ -1,10 +1,12 @@
+use super::opt;
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::DeviceAuth;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// A pending device sign-in: the code shown on the device and the one the user enters.
+/// The `DeviceAuthRow` row as Postgres returns it; callers get it as [`DeviceAuth`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct DeviceAuthRow {
+pub(crate) struct DeviceAuthRecord {
     pub id: Uuid,
     pub device_code: String,
     pub user_code: String,
@@ -17,6 +19,38 @@ pub struct DeviceAuthRow {
     pub poll_interval: i32,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::DeviceAuth as DeviceAuthRow;
+
+impl From<DeviceAuthRecord> for DeviceAuth {
+    fn from(r: DeviceAuthRecord) -> Self {
+        let DeviceAuthRecord {
+            id,
+            device_code,
+            user_code,
+            client_info,
+            scope,
+            status,
+            user_id,
+            created_at,
+            expires_at,
+            poll_interval,
+        } = r;
+        DeviceAuth {
+            id,
+            device_code,
+            user_code,
+            client_info,
+            scope,
+            status,
+            user_id,
+            created_at,
+            expires_at,
+            poll_interval,
+        }
+    }
+}
+
 /// Create a new device authorization request.
 pub async fn create(
     pool: &PgPool,
@@ -25,7 +59,7 @@ pub async fn create(
     client_info: &serde_json::Value,
     expires_at: DateTime<Utc>,
 ) -> Result<DeviceAuthRow, sqlx::Error> {
-    sqlx::query_as::<_, DeviceAuthRow>(
+    sqlx::query_as::<_, DeviceAuthRecord>(
         r#"
         INSERT INTO device_auth_requests (device_code, user_code, client_info, expires_at)
         VALUES ($1, $2, $3, $4)
@@ -38,6 +72,7 @@ pub async fn create(
     .bind(expires_at)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Find a device auth request by device code (for polling).
@@ -45,10 +80,13 @@ pub async fn find_by_device_code(
     pool: &PgPool,
     device_code: &str,
 ) -> Result<Option<DeviceAuthRow>, sqlx::Error> {
-    sqlx::query_as::<_, DeviceAuthRow>("SELECT * FROM device_auth_requests WHERE device_code = $1")
-        .bind(device_code)
-        .fetch_optional(pool)
-        .await
+    sqlx::query_as::<_, DeviceAuthRecord>(
+        "SELECT * FROM device_auth_requests WHERE device_code = $1",
+    )
+    .bind(device_code)
+    .fetch_optional(pool)
+    .await
+    .map(opt)
 }
 
 /// Find a device auth request by user code (for user authorization page).
@@ -56,12 +94,13 @@ pub async fn find_by_user_code(
     pool: &PgPool,
     user_code: &str,
 ) -> Result<Option<DeviceAuthRow>, sqlx::Error> {
-    sqlx::query_as::<_, DeviceAuthRow>(
+    sqlx::query_as::<_, DeviceAuthRecord>(
         "SELECT * FROM device_auth_requests WHERE user_code = $1 AND status = 'pending'",
     )
     .bind(user_code)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Authorize a device auth request (user completed browser auth).

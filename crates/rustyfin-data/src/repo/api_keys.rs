@@ -1,10 +1,12 @@
+use super::{all, opt};
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::ApiKey;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// An API key; only the key's hash is stored.
+/// The `ApiKeyRow` row as Postgres returns it; callers get it as [`ApiKey`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct ApiKeyRow {
+pub(crate) struct ApiKeyRecord {
     pub id: Uuid,
     pub name: String,
     pub key_hash: String,
@@ -12,30 +14,55 @@ pub struct ApiKeyRow {
     pub last_used_at: Option<DateTime<Utc>>,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::ApiKey as ApiKeyRow;
+
+impl From<ApiKeyRecord> for ApiKey {
+    fn from(r: ApiKeyRecord) -> Self {
+        let ApiKeyRecord {
+            id,
+            name,
+            key_hash,
+            created_at,
+            last_used_at,
+        } = r;
+        ApiKey {
+            id,
+            name,
+            key_hash,
+            created_at,
+            last_used_at,
+        }
+    }
+}
+
 /// Store a new API key by its hash.
 pub async fn create(pool: &PgPool, name: &str, key_hash: &str) -> Result<ApiKeyRow, sqlx::Error> {
-    sqlx::query_as::<_, ApiKeyRow>(
+    sqlx::query_as::<_, ApiKeyRecord>(
         "INSERT INTO api_keys (name, key_hash) VALUES ($1, $2) RETURNING *",
     )
     .bind(name)
     .bind(key_hash)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Every API key, newest first.
 pub async fn list_all(pool: &PgPool) -> Result<Vec<ApiKeyRow>, sqlx::Error> {
-    sqlx::query_as::<_, ApiKeyRow>("SELECT * FROM api_keys ORDER BY created_at DESC")
+    sqlx::query_as::<_, ApiKeyRecord>("SELECT * FROM api_keys ORDER BY created_at DESC")
         .fetch_all(pool)
         .await
+        .map(all)
 }
 
 /// The API key with this hash, if any.
 pub async fn find_by_hash(pool: &PgPool, key_hash: &str) -> Result<Option<ApiKeyRow>, sqlx::Error> {
-    sqlx::query_as::<_, ApiKeyRow>("SELECT * FROM api_keys WHERE key_hash = $1")
+    sqlx::query_as::<_, ApiKeyRecord>("SELECT * FROM api_keys WHERE key_hash = $1")
         .bind(key_hash)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Delete an API key; `false` when there was none.

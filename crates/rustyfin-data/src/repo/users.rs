@@ -1,10 +1,12 @@
+use super::{all, opt};
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::User;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Database row for a user.
+/// The `UserRow` row as Postgres returns it; callers get it as [`User`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct UserRow {
+pub(crate) struct UserRecord {
     pub id: Uuid,
     pub username: String,
     pub display_name: Option<String>,
@@ -28,6 +30,58 @@ pub struct UserRow {
     /// The admin lets this user link a server to this one (roadmap 16b.2r).
     #[sqlx(default)]
     pub may_link: bool,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::User as UserRow;
+
+impl From<UserRecord> for User {
+    fn from(r: UserRecord) -> Self {
+        let UserRecord {
+            id,
+            username,
+            display_name,
+            email,
+            is_administrator,
+            enable_all_libraries,
+            remote_user_id,
+            max_parental_rating,
+            audio_language_preference,
+            subtitle_language_preference,
+            subtitle_mode,
+            is_disabled,
+            play_default_audio_track,
+            enable_next_episode_auto_play,
+            last_login_date,
+            last_activity_date,
+            created_at,
+            updated_at,
+            configuration,
+            may_link,
+        } = r;
+        User {
+            id,
+            username,
+            display_name,
+            email,
+            is_administrator,
+            enable_all_libraries,
+            remote_user_id,
+            max_parental_rating,
+            audio_language_preference,
+            subtitle_language_preference,
+            subtitle_mode,
+            is_disabled,
+            play_default_audio_track,
+            enable_next_episode_auto_play,
+            last_login_date,
+            last_activity_date,
+            created_at,
+            updated_at,
+            configuration,
+            may_link,
+        }
+    }
 }
 
 /// The settings `POST /Users/{userId}/Configuration` saves.
@@ -68,10 +122,11 @@ pub async fn update_settings(
 
 /// Find a user by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<UserRow>, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>("SELECT * FROM users WHERE id = $1")
+    sqlx::query_as::<_, UserRecord>("SELECT * FROM users WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Find a user by username.
@@ -79,10 +134,11 @@ pub async fn find_by_username(
     pool: &PgPool,
     username: &str,
 ) -> Result<Option<UserRow>, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>("SELECT * FROM users WHERE username = $1")
+    sqlx::query_as::<_, UserRecord>("SELECT * FROM users WHERE username = $1")
         .bind(username)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Find a user by remote user ID (from forward auth header).
@@ -90,17 +146,19 @@ pub async fn find_by_remote_user_id(
     pool: &PgPool,
     remote_user_id: &str,
 ) -> Result<Option<UserRow>, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>("SELECT * FROM users WHERE remote_user_id = $1")
+    sqlx::query_as::<_, UserRecord>("SELECT * FROM users WHERE remote_user_id = $1")
         .bind(remote_user_id)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// List all users.
 pub async fn list_all(pool: &PgPool) -> Result<Vec<UserRow>, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>("SELECT * FROM users ORDER BY username")
+    sqlx::query_as::<_, UserRecord>("SELECT * FROM users ORDER BY username")
         .fetch_all(pool)
         .await
+        .map(all)
 }
 
 /// Create or update a user from forward auth headers.
@@ -112,7 +170,7 @@ pub async fn upsert_from_forward_auth(
     display_name: Option<&str>,
     email: Option<&str>,
 ) -> Result<UserRow, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>(
+    sqlx::query_as::<_, UserRecord>(
         r#"
         INSERT INTO users (remote_user_id, username, display_name, email)
         VALUES ($1, $2, $3, $4)
@@ -131,6 +189,7 @@ pub async fn upsert_from_forward_auth(
     .bind(email)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Update last activity timestamp.
@@ -186,7 +245,7 @@ pub async fn upsert_from_ldap(
     display_name: Option<&str>,
     email: Option<&str>,
 ) -> Result<UserRow, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>(
+    sqlx::query_as::<_, UserRecord>(
         r#"
         INSERT INTO users (username, display_name, email, last_login_date)
         VALUES ($1, $2, $3, NOW())
@@ -203,6 +262,7 @@ pub async fn upsert_from_ldap(
     .bind(email)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Update the disabled status of a user.

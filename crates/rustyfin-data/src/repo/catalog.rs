@@ -6,17 +6,39 @@
 //! the changes since it are those it did not see. Unlike a sequence number,
 //! that never misses a long transaction that commits after a later one.
 
+use super::all;
+use rustyfin_models::data::CatalogChange;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// One changed item.
+/// The `Change` row as Postgres returns it; callers get it as [`CatalogChange`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct Change {
+pub(crate) struct CatalogChangeRecord {
     pub id: Uuid,
     pub item_type: String,
     pub library_id: Uuid,
     /// Its change, for paging (`xid,id`).
     pub change_xid: String,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::CatalogChange as Change;
+
+impl From<CatalogChangeRecord> for CatalogChange {
+    fn from(r: CatalogChangeRecord) -> Self {
+        let CatalogChangeRecord {
+            id,
+            item_type,
+            library_id,
+            change_xid,
+        } = r;
+        CatalogChange {
+            id,
+            item_type,
+            library_id,
+            change_xid,
+        }
+    }
 }
 
 /// A page of the feed.
@@ -67,7 +89,7 @@ pub async fn changes(
     let snapshot: String = sqlx::query_scalar("SELECT pg_current_snapshot()::text")
         .fetch_one(&mut *tx)
         .await?;
-    let mut changes: Vec<Change> = sqlx::query_as(
+    let mut changes: Vec<CatalogChangeRecord> = sqlx::query_as(
         "SELECT id, item_type, library_id, change_xid::text AS change_xid FROM media_items \
          WHERE link_id IS NULL AND library_id IS NOT NULL \
            AND ($1::uuid[] IS NULL OR library_id = ANY($1)) \
@@ -108,7 +130,7 @@ pub async fn changes(
     };
     tx.commit().await?;
     Ok(Page {
-        changes,
+        changes: all(changes),
         removed,
         snapshot,
         next,

@@ -1,9 +1,11 @@
+use super::all;
+use rustyfin_models::data::MediaStream;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// One stream of a file (video, audio, subtitle), or a subtitle file beside it (`is_external`).
+/// The `MediaStreamRow` row as Postgres returns it; callers get it as [`MediaStream`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct MediaStreamRow {
+pub(crate) struct MediaStreamRecord {
     pub id: Uuid,
     pub item_id: Uuid,
     pub stream_index: i32,
@@ -35,6 +37,80 @@ pub struct MediaStreamRow {
     pub ref_frames: Option<i32>,
     pub nal_length_size: Option<String>,
     pub is_interlaced: bool,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::MediaStream as MediaStreamRow;
+
+impl From<MediaStreamRecord> for MediaStream {
+    fn from(r: MediaStreamRecord) -> Self {
+        let MediaStreamRecord {
+            id,
+            item_id,
+            stream_index,
+            stream_type,
+            codec,
+            language,
+            title,
+            is_default,
+            is_forced,
+            is_external,
+            width,
+            height,
+            bit_rate,
+            bit_depth,
+            pixel_format,
+            aspect_ratio,
+            real_frame_rate,
+            color_space,
+            color_primaries,
+            color_transfer,
+            channels,
+            channel_layout,
+            sample_rate,
+            path,
+            profile,
+            level,
+            codec_tag,
+            time_base,
+            ref_frames,
+            nal_length_size,
+            is_interlaced,
+        } = r;
+        MediaStream {
+            id,
+            item_id,
+            stream_index,
+            stream_type,
+            codec,
+            language,
+            title,
+            is_default,
+            is_forced,
+            is_external,
+            width,
+            height,
+            bit_rate,
+            bit_depth,
+            pixel_format,
+            aspect_ratio,
+            real_frame_rate,
+            color_space,
+            color_primaries,
+            color_transfer,
+            channels,
+            channel_layout,
+            sample_rate,
+            path,
+            profile,
+            level,
+            codec_tag,
+            time_base,
+            ref_frames,
+            nal_length_size,
+            is_interlaced,
+        }
+    }
 }
 
 /// A stream for the scanner to insert.
@@ -75,7 +151,7 @@ pub struct NewMediaStream {
 
 /// Insert a media stream.
 pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStreamRow, sqlx::Error> {
-    sqlx::query_as::<_, MediaStreamRow>(
+    sqlx::query_as::<_, MediaStreamRecord>(
         r#"
         INSERT INTO media_streams (
             item_id, stream_index, stream_type, codec, language, title,
@@ -129,6 +205,7 @@ pub async fn insert(pool: &PgPool, stream: &NewMediaStream) -> Result<MediaStrea
     .bind(&stream.path)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Whether any stream of the item was stored before the details existed. ffprobe
@@ -162,12 +239,13 @@ pub async fn list_by_items(
     if item_ids.is_empty() {
         return Ok(Vec::new());
     }
-    sqlx::query_as::<_, MediaStreamRow>(
+    sqlx::query_as::<_, MediaStreamRecord>(
         "SELECT * FROM media_streams WHERE item_id = ANY($1) ORDER BY item_id, stream_index",
     )
     .bind(item_ids)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// An item's streams in stream order.
@@ -175,10 +253,11 @@ pub async fn list_by_item(
     pool: &PgPool,
     item_id: Uuid,
 ) -> Result<Vec<MediaStreamRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaStreamRow>(
+    sqlx::query_as::<_, MediaStreamRecord>(
         "SELECT * FROM media_streams WHERE item_id = $1 ORDER BY stream_index",
     )
     .bind(item_id)
     .fetch_all(pool)
     .await
+    .map(all)
 }

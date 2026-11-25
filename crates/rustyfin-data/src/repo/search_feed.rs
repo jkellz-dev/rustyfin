@@ -5,11 +5,12 @@
 //! Unlike that feed this one carries every shared item, linked copies too;
 //! what a user may see is decided when a search is answered.
 
+use super::all;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::media_items::{MediaItemRecord, MediaItemRow, models};
-use super::people::PersonRow;
+use super::people::{PersonRecord, PersonRow};
 
 /// A page of changes.
 #[derive(Debug, Clone)]
@@ -150,7 +151,7 @@ pub async fn people_changes(
     #[derive(sqlx::FromRow)]
     struct Row {
         #[sqlx(flatten)]
-        person: PersonRow,
+        person: PersonRecord,
         change_key: String,
     }
     let mut rows: Vec<Row> = sqlx::query_as(
@@ -186,7 +187,7 @@ pub async fn people_changes(
         Vec::new()
     };
     Ok(PeoplePage {
-        people: rows.into_iter().map(|r| r.person).collect(),
+        people: rows.into_iter().map(|r| r.person.into()).collect(),
         removed,
         next,
     })
@@ -198,11 +199,12 @@ pub async fn people_page(
     after: Option<Uuid>,
     limit: i64,
 ) -> Result<Vec<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>(
+    sqlx::query_as::<_, PersonRecord>(
         "SELECT * FROM people WHERE ($1::uuid IS NULL OR id > $1) ORDER BY id LIMIT $2",
     )
     .bind(after)
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(all)
 }

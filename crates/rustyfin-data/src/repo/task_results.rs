@@ -1,8 +1,10 @@
+use super::opt;
+use rustyfin_models::data::TaskResult;
 use sqlx::PgPool;
 
-/// One run of a scheduled task and how it ended.
+/// The `TaskResultRow` row as Postgres returns it; callers get it as [`TaskResult`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct TaskResultRow {
+pub(crate) struct TaskResultRecord {
     pub id: i64,
     pub task_key: String,
     pub task_name: String,
@@ -10,6 +12,32 @@ pub struct TaskResultRow {
     pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
     pub status: String,
     pub error_message: Option<String>,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::TaskResult as TaskResultRow;
+
+impl From<TaskResultRecord> for TaskResult {
+    fn from(r: TaskResultRecord) -> Self {
+        let TaskResultRecord {
+            id,
+            task_key,
+            task_name,
+            started_at,
+            ended_at,
+            status,
+            error_message,
+        } = r;
+        TaskResult {
+            id,
+            task_key,
+            task_name,
+            started_at,
+            ended_at,
+            status,
+            error_message,
+        }
+    }
 }
 
 /// Record that a task started; returns the run's id.
@@ -63,12 +91,13 @@ pub async fn latest_by_task_key(
     pool: &PgPool,
     task_key: &str,
 ) -> Result<Option<TaskResultRow>, sqlx::Error> {
-    sqlx::query_as::<_, TaskResultRow>(
+    sqlx::query_as::<_, TaskResultRecord>(
         "SELECT * FROM task_results WHERE task_key = $1 ORDER BY started_at DESC LIMIT 1",
     )
     .bind(task_key)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Mark runs left `Running` by a server that stopped as `Aborted` (Jellyfin's

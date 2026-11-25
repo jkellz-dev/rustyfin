@@ -1,9 +1,11 @@
+use super::{all, opt};
+use rustyfin_models::data::{MediaItemPerson, Person};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// A person (actor, director, writer, ...).
+/// The `PersonRow` row as Postgres returns it; callers get it as [`Person`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct PersonRow {
+pub(crate) struct PersonRecord {
     pub id: Uuid,
     pub name: String,
     pub sort_name: Option<String>,
@@ -14,30 +16,80 @@ pub struct PersonRow {
     pub provider_person_id: Option<String>,
 }
 
-/// A person in an item's cast or crew: their role and billing order.
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Person as PersonRow;
+
+impl From<PersonRecord> for Person {
+    fn from(r: PersonRecord) -> Self {
+        let PersonRecord {
+            id,
+            name,
+            sort_name,
+            person_type,
+            overview,
+            external_ids,
+            image_url,
+            provider_person_id,
+        } = r;
+        Person {
+            id,
+            name,
+            sort_name,
+            person_type,
+            overview,
+            external_ids,
+            image_url,
+            provider_person_id,
+        }
+    }
+}
+
+/// The `MediaItemPersonRow` row as Postgres returns it; callers get it as [`MediaItemPerson`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct MediaItemPersonRow {
+pub(crate) struct MediaItemPersonRecord {
     pub item_id: Uuid,
     pub person_id: Uuid,
     pub role: Option<String>,
     pub sort_order: Option<i32>,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::MediaItemPerson as MediaItemPersonRow;
+
+impl From<MediaItemPersonRecord> for MediaItemPerson {
+    fn from(r: MediaItemPersonRecord) -> Self {
+        let MediaItemPersonRecord {
+            item_id,
+            person_id,
+            role,
+            sort_order,
+        } = r;
+        MediaItemPerson {
+            item_id,
+            person_id,
+            role,
+            sort_order,
+        }
+    }
+}
+
 /// Find a person by name (case-insensitive exact match).
 /// A person by id.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>("SELECT * FROM people WHERE id = $1")
+    sqlx::query_as::<_, PersonRecord>("SELECT * FROM people WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// The person with this name, ignoring case.
 pub async fn find_by_name(pool: &PgPool, name: &str) -> Result<Option<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>("SELECT * FROM people WHERE LOWER(name) = LOWER($1) LIMIT 1")
+    sqlx::query_as::<_, PersonRecord>("SELECT * FROM people WHERE LOWER(name) = LOWER($1) LIMIT 1")
         .bind(name)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Find a person by name and type.
@@ -46,11 +98,12 @@ pub async fn find_by_name_and_type(
     name: &str,
     person_type: &str,
 ) -> Result<Option<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>("SELECT * FROM people WHERE name = $1 AND person_type = $2")
+    sqlx::query_as::<_, PersonRecord>("SELECT * FROM people WHERE name = $1 AND person_type = $2")
         .bind(name)
         .bind(person_type)
         .fetch_optional(pool)
         .await
+        .map(opt)
 }
 
 /// Insert a new person.
@@ -63,7 +116,7 @@ pub async fn insert(
     image_url: Option<&str>,
     provider_person_id: Option<&str>,
 ) -> Result<PersonRow, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>(
+    sqlx::query_as::<_, PersonRecord>(
         r#"
         INSERT INTO people (name, person_type, sort_name, external_ids, image_url, provider_person_id)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -78,6 +131,7 @@ pub async fn insert(
     .bind(provider_person_id)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Find a person by name and type, or create if not found.
@@ -179,7 +233,7 @@ pub async fn list_people(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>(
+    sqlx::query_as::<_, PersonRecord>(
         r#"
         SELECT * FROM people
         WHERE ($1::text[] = '{}' OR person_type = ANY($1))
@@ -196,6 +250,7 @@ pub async fn list_people(
     .bind(offset)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// People among `ids` (Meilisearch's best matches, best first) with the type
@@ -208,7 +263,7 @@ pub async fn list_people_by_ids(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>(
+    sqlx::query_as::<_, PersonRecord>(
         r#"
         SELECT * FROM people
         WHERE id = ANY($1)
@@ -225,6 +280,7 @@ pub async fn list_people_by_ids(
     .bind(offset)
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// How many of `ids` pass the type filters.
@@ -274,7 +330,7 @@ pub async fn count_people(
 
 /// List people that have a provider_person_id but no Primary image row.
 pub async fn list_missing_headshots(pool: &PgPool) -> Result<Vec<PersonRow>, sqlx::Error> {
-    sqlx::query_as::<_, PersonRow>(
+    sqlx::query_as::<_, PersonRecord>(
         r#"
         SELECT p.* FROM people p
         WHERE (p.provider_person_id IS NOT NULL OR p.image_url IS NOT NULL)
@@ -286,6 +342,7 @@ pub async fn list_missing_headshots(pool: &PgPool) -> Result<Vec<PersonRow>, sql
     )
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Count items by type that a person appears in.

@@ -1,10 +1,12 @@
+use super::opt;
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::UserData;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// What a user did with an item: position, played, favourite, play count, rating.
+/// The `UserDataRow` row as Postgres returns it; callers get it as [`UserData`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct UserDataRow {
+pub(crate) struct UserDataRecord {
     pub user_id: Uuid,
     pub item_id: Uuid,
     pub playback_position_ticks: i64,
@@ -17,17 +19,52 @@ pub struct UserDataRow {
     pub subtitle_stream_index: Option<i32>,
 }
 
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::UserData as UserDataRow;
+
+impl From<UserDataRecord> for UserData {
+    fn from(r: UserDataRecord) -> Self {
+        let UserDataRecord {
+            user_id,
+            item_id,
+            playback_position_ticks,
+            play_count,
+            is_favorite,
+            played,
+            rating,
+            last_played_date,
+            audio_stream_index,
+            subtitle_stream_index,
+        } = r;
+        UserData {
+            user_id,
+            item_id,
+            playback_position_ticks,
+            play_count,
+            is_favorite,
+            played,
+            rating,
+            last_played_date,
+            audio_stream_index,
+            subtitle_stream_index,
+        }
+    }
+}
+
 /// Get user data for an item.
 pub async fn get(
     pool: &PgPool,
     user_id: Uuid,
     item_id: Uuid,
 ) -> Result<Option<UserDataRow>, sqlx::Error> {
-    sqlx::query_as::<_, UserDataRow>("SELECT * FROM user_data WHERE user_id = $1 AND item_id = $2")
-        .bind(user_id)
-        .bind(item_id)
-        .fetch_optional(pool)
-        .await
+    sqlx::query_as::<_, UserDataRecord>(
+        "SELECT * FROM user_data WHERE user_id = $1 AND item_id = $2",
+    )
+    .bind(user_id)
+    .bind(item_id)
+    .fetch_optional(pool)
+    .await
+    .map(opt)
 }
 
 /// Upsert user data (playback position, played status, etc).
@@ -41,14 +78,17 @@ pub async fn get_many(
     if item_ids.is_empty() {
         return Ok(std::collections::HashMap::new());
     }
-    let rows = sqlx::query_as::<_, UserDataRow>(
+    let rows = sqlx::query_as::<_, UserDataRecord>(
         "SELECT * FROM user_data WHERE user_id = $1 AND item_id = ANY($2)",
     )
     .bind(user_id)
     .bind(item_ids)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(|r| (r.item_id, r)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.item_id, UserDataRow::from(r)))
+        .collect())
 }
 
 /// For each of `folder_ids`: how many playable items are below it and how many of
@@ -104,7 +144,7 @@ pub async fn upsert(
     is_favorite: bool,
     play_count: i32,
 ) -> Result<UserDataRow, sqlx::Error> {
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id, playback_position_ticks, played, is_favorite, play_count, last_played_date)
         VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -125,6 +165,7 @@ pub async fn upsert(
     .bind(play_count)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Save a play state from playback: played, resume point and play count,
@@ -139,7 +180,7 @@ pub async fn save_play_state(
     play_count: i32,
     stamp: bool,
 ) -> Result<UserDataRow, sqlx::Error> {
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id, playback_position_ticks, played, play_count, last_played_date)
         VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN NOW() END)
@@ -159,6 +200,7 @@ pub async fn save_play_state(
     .bind(stamp)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Apply a partial update: each `Some` field is set, the rest kept. Setting
@@ -176,7 +218,7 @@ pub async fn update_partial(
     rating: Option<f64>,
     last_played_date: Option<DateTime<Utc>>,
 ) -> Result<UserDataRow, sqlx::Error> {
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id) VALUES ($1, $2)
         ON CONFLICT (user_id, item_id) DO NOTHING
@@ -186,7 +228,7 @@ pub async fn update_partial(
     .bind(item_id)
     .fetch_optional(pool)
     .await?;
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         UPDATE user_data SET
             play_count = COALESCE($4,
@@ -211,6 +253,7 @@ pub async fn update_partial(
     .bind(last_played_date)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Set favorite status for an item.
@@ -220,7 +263,7 @@ pub async fn set_favorite(
     item_id: Uuid,
     is_favorite: bool,
 ) -> Result<UserDataRow, sqlx::Error> {
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id, is_favorite)
         VALUES ($1, $2, $3)
@@ -233,6 +276,7 @@ pub async fn set_favorite(
     .bind(is_favorite)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Mark item as played.
@@ -242,7 +286,7 @@ pub async fn set_played(
     item_id: Uuid,
     played: bool,
 ) -> Result<UserDataRow, sqlx::Error> {
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id, played, play_count, last_played_date)
         VALUES ($1, $2, $3, CASE WHEN $3 THEN 1 ELSE 0 END, CASE WHEN $3 THEN NOW() ELSE NULL END)
@@ -258,6 +302,7 @@ pub async fn set_played(
     .bind(played)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Set or clear user rating for an item.
@@ -269,7 +314,7 @@ pub async fn set_rating(
 ) -> Result<UserDataRow, sqlx::Error> {
     let rating: Option<f64> = likes.map(|l| if l { 10.0 } else { 1.0 });
 
-    sqlx::query_as::<_, UserDataRow>(
+    sqlx::query_as::<_, UserDataRecord>(
         r#"
         INSERT INTO user_data (user_id, item_id, rating)
         VALUES ($1, $2, $3)
@@ -282,6 +327,7 @@ pub async fn set_rating(
     .bind(rating)
     .fetch_one(pool)
     .await
+    .map(Into::into)
 }
 
 /// Get resume items (items with playback position) for a user.
@@ -291,7 +337,7 @@ pub async fn get_resume_items(
     limit: i64,
 ) -> Result<Vec<(UserDataRow, Uuid)>, sqlx::Error> {
     // Returns user_data rows for items with active playback positions
-    let rows = sqlx::query_as::<_, UserDataRow>(
+    let rows = sqlx::query_as::<_, UserDataRecord>(
         r#"
         SELECT * FROM user_data
         WHERE user_id = $1 AND playback_position_ticks > 0 AND played = false
@@ -308,7 +354,7 @@ pub async fn get_resume_items(
         .into_iter()
         .map(|r| {
             let item_id = r.item_id;
-            (r, item_id)
+            (UserDataRow::from(r), item_id)
         })
         .collect())
 }

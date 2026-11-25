@@ -5,6 +5,8 @@
 //! so every list shows the film once and the copies are ranked like local
 //! versions.
 
+use super::all;
+use rustyfin_models::data::Link;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -13,8 +15,9 @@ use uuid::Uuid;
 
 use super::media_streams::{self, NewMediaStream};
 
+/// The `LinkRow` row as Postgres returns it; callers get it as [`Link`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct LinkRow {
+pub(crate) struct LinkRecord {
     pub id: Uuid,
     pub name: String,
     pub kind: String,
@@ -23,6 +26,32 @@ pub struct LinkRow {
     pub last_error: Option<String>,
     /// Since when its server is down; `None` while it is up.
     pub offline_since: Option<DateTime<Utc>>,
+}
+
+/// Transitional name until callers move onto the data-layer traits.
+pub use rustyfin_models::data::Link as LinkRow;
+
+impl From<LinkRecord> for Link {
+    fn from(r: LinkRecord) -> Self {
+        let LinkRecord {
+            id,
+            name,
+            kind,
+            url,
+            last_sync_at,
+            last_error,
+            offline_since,
+        } = r;
+        Link {
+            id,
+            name,
+            kind,
+            url,
+            last_sync_at,
+            last_error,
+            offline_since,
+        }
+    }
 }
 
 /// The link of this name, made or brought up to date.
@@ -40,11 +69,12 @@ pub async fn upsert(pool: &PgPool, name: &str, kind: &str, url: &str) -> Result<
 }
 
 pub async fn list(pool: &PgPool) -> Result<Vec<LinkRow>, sqlx::Error> {
-    sqlx::query_as::<_, LinkRow>(
+    sqlx::query_as::<_, LinkRecord>(
         "SELECT id, name, kind, url, last_sync_at, last_error, offline_since FROM links ORDER BY name",
     )
     .fetch_all(pool)
     .await
+    .map(all)
 }
 
 /// Per link: titles it brought that stand on their own (films and shows only

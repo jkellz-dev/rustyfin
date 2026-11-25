@@ -1,3 +1,4 @@
+use super::opt;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -2727,7 +2728,7 @@ pub async fn genre_image(
     genre: &str,
     library: Option<Uuid>,
 ) -> Result<Option<crate::repo::images::ImageRow>, sqlx::Error> {
-    sqlx::query_as::<_, crate::repo::images::ImageRow>(
+    sqlx::query_as::<_, crate::repo::images::ImageRecord>(
         "SELECT i.* FROM images i JOIN visible_media_items m ON m.id = i.entity_id \
          WHERE $1 = ANY(m.genres) AND ($2::uuid IS NULL OR m.library_id = $2) \
            AND m.item_type IN ('Movie', 'Series', 'MusicAlbum', 'MusicArtist') \
@@ -2739,6 +2740,7 @@ pub async fn genre_image(
     .bind(library)
     .fetch_optional(pool)
     .await
+    .map(opt)
 }
 
 /// Ids of the titles and tracks a library gained since `since` (a scan's

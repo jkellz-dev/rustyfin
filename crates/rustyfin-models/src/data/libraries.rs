@@ -1,0 +1,47 @@
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+/// A library: its name, type, folders, options, scan schedule and last scan.
+#[derive(Debug, Clone)]
+pub struct Library {
+    pub id: Uuid,
+    pub name: String,
+    pub library_type: String,
+    pub paths: Vec<String>,
+    pub scan_schedule: Option<String>,
+    /// Client-supplied `LibraryOptions` JSON (`{}` until a client sets it).
+    pub library_options: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    /// When its last scan finished (absent from queries that name columns).
+    pub last_scanned_at: Option<DateTime<Utc>>,
+    /// How long its last scan took, in milliseconds.
+    pub last_scan_duration_ms: Option<i64>,
+    /// The link whose library this is, for one made for a friend's library.
+    pub link_id: Option<Uuid>,
+}
+
+impl Library {
+    /// False when a client switched the library off with `LibraryOptions.Enabled`.
+    pub fn scanning_enabled(&self) -> bool {
+        self.library_options
+            .get("Enabled")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true)
+    }
+}
+
+/// One library on the dashboard: its media count and last finished scan.
+#[derive(Debug, Clone)]
+pub struct LibraryStat {
+    pub id: Uuid,
+    pub name: String,
+    pub library_type: String,
+    /// Films, episodes, tracks and other videos (not shows, seasons or folders),
+    /// each once: not its other versions (a friend's copies) or extras.
+    pub item_count: i64,
+    pub last_scanned_at: Option<DateTime<Utc>>,
+    pub last_scan_duration_ms: Option<i64>,
+    /// A library a link made and fills (no folders of its own).
+    pub linked: bool,
+}

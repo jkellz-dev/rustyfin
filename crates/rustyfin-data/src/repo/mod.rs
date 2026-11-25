@@ -19,3 +19,13 @@ pub mod task_results;
 pub mod user_data;
 pub mod user_library_access;
 pub mod users;
+
+/// Rows as models: what a query read, in the shape callers get.
+pub(crate) fn all<R, M: From<R>>(rows: Vec<R>) -> Vec<M> {
+    rows.into_iter().map(M::from).collect()
+}
+
+/// A row, if any, as a model.
+pub(crate) fn opt<R, M: From<R>>(row: Option<R>) -> Option<M> {
+    row.map(M::from)
+}
