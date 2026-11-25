@@ -3,7 +3,6 @@ use rand::RngExt;
 use rustyfin_data::PgData;
 use rustyfin_models::data::{Data, DataError, DeviceAuthStore};
 
-use rustyfin_data::repo::device_auth;
 use rustyfin_models::dto::{DeviceCodeResponse, DeviceTokenPending, DeviceTokenResponse};
 
 /// Generate a random device code (long, for machine use).

@@ -2,7 +2,7 @@
 //! details of the new and changed ones, remove the ones gone, then merge. A
 //! Rustyfin friend says what changed itself (its change feed).
 
-use rustyfin_models::data::{Data, LibraryStore};
+use rustyfin_models::data::{Data, LibraryStore, LinkStore};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, bail};
@@ -25,7 +25,7 @@ pub(super) async fn sync_link(data: &PgData, link: &Link) -> anyhow::Result<Sync
     let client = &link.client;
     // Signing in and listing the friend's libraries must work, or nothing can.
     let remote_libraries = client.libraries().await?;
-    let stored = links::stored_copies(data, link.id).await?;
+    let stored = data.links().stored_copies(link.id).await?;
     // The friend's item -> its stored copies' tags (one per version).
     let mut stored_tags: HashMap<&str, Vec<&Option<String>>> = HashMap::new();
     for (remote_id, (_, tag)) in &stored {
@@ -57,9 +57,9 @@ pub(super) async fn sync_link(data: &PgData, link: &Link) -> anyhow::Result<Sync
             .filter(|id| !kept.contains(*id))
             .cloned()
             .collect();
-        report.removed = links::delete_copies(data, link.id, &gone).await?;
+        report.removed = data.links().delete_copies(link.id, &gone).await?;
     }
-    report.merged = links::merge(data).await?;
+    report.merged = data.links().merge().await?;
     sync_collections(data, link, &mut report).await?;
     Ok(report)
 }
@@ -78,10 +78,10 @@ async fn sync_collections(
             return Ok(());
         }
     };
-    let changed = links::set_collections(data, link.id, &sets).await?;
+    let changed = data.links().set_collections(link.id, &sets).await?;
     let films_changed = report.added + report.updated + report.removed + report.merged > 0;
     if changed || films_changed {
-        for library in links::movie_libraries(data, link.id).await? {
+        for library in data.links().movie_libraries(link.id).await? {
             crate::library::scanner::rebuild_movie_collections(data, library).await?;
         }
     }
@@ -147,7 +147,7 @@ async fn sync_library(
         for item in client.items_by_id(batch).await? {
             for film in items_from_jellyfin(&item, link.id, &link.settings.name, local_library) {
                 progress.kept.insert(film.remote_id.clone());
-                let (_, new) = links::upsert_item(data, &film).await?;
+                let (_, new) = data.links().upsert_item(&film).await?;
                 if new {
                     progress.report.added += 1;
                 } else {
@@ -199,13 +199,13 @@ async fn target(
                 .id
         }
         None => {
-            links::ensure_library(
-                data,
-                link.id,
-                &format!("{remote_name} · {}", link.settings.name),
-                if shows { "tvshows" } else { "movies" },
-            )
-            .await?
+            data.links()
+                .ensure_library(
+                    link.id,
+                    &format!("{remote_name} · {}", link.settings.name),
+                    if shows { "tvshows" } else { "movies" },
+                )
+                .await?
         }
     };
     Ok((remote_id.clone(), local_library, shows))
@@ -241,7 +241,7 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
             Err(e) => report.errors.push(format!("{}: {e:#}", map.remote)),
         }
     }
-    let mut since = links::catalog_cursor(data, link.id).await?;
+    let mut since = data.links().catalog_cursor(link.id).await?;
     let feed = match client.catalog(since.as_deref()).await? {
         Some(feed) => feed,
         None => {
@@ -253,7 +253,7 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
         }
     };
     let full = since.is_none();
-    let stored = links::stored_copies(data, link.id).await?;
+    let stored = data.links().stored_copies(link.id).await?;
     // What to fetch, per local library.
     let mut wanted: HashMap<Uuid, Vec<String>> = HashMap::new();
     for changed in &feed.changed {
@@ -279,7 +279,7 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
                 let copies = items_from_jellyfin(&item, link.id, &link.settings.name, *local);
                 let written: HashSet<String> = copies.iter().map(|c| c.remote_id.clone()).collect();
                 for copy in copies {
-                    let (_, new) = links::upsert_item(data, &copy).await?;
+                    let (_, new) = data.links().upsert_item(&copy).await?;
                     if new {
                         report.added += 1;
                     } else {
@@ -292,7 +292,7 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
                     .filter(|r| plain(links::remote_item(r)) == item_id && !written.contains(*r))
                     .cloned()
                     .collect();
-                report.removed += links::delete_copies(data, link.id, &stale).await?;
+                report.removed += data.links().delete_copies(link.id, &stale).await?;
                 kept.extend(written);
             }
         }
@@ -316,17 +316,19 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
             .cloned()
             .collect()
     };
-    report.removed += links::delete_copies(data, link.id, &gone).await?;
+    report.removed += data.links().delete_copies(link.id, &gone).await?;
     // With a mapping failing, its changes come again next time.
     if report.errors.is_empty() {
-        links::set_catalog_cursor(data, link.id, &feed.cursor).await?;
+        data.links()
+            .set_catalog_cursor(link.id, &feed.cursor)
+            .await?;
         for library in own {
             data.libraries()
                 .mark_scanned(library, started.elapsed())
                 .await?;
         }
     }
-    report.merged = links::merge(data).await?;
+    report.merged = data.links().merge().await?;
     Ok(report)
 }
 

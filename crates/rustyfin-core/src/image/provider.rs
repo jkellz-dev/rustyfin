@@ -2,8 +2,6 @@ use rustyfin_data::PgData;
 use rustyfin_models::data::{Data, ImageStore};
 use uuid::Uuid;
 
-use rustyfin_data::repo::images;
-
 /// Serves and processes images for media items and users.
 pub struct ImageProvider {
     data: PgData,

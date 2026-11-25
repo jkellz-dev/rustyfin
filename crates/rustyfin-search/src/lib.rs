@@ -17,13 +17,13 @@
 pub mod indexer;
 pub mod query;
 
-use rustyfin_models::data::{Data, DataError, MediaItemStore, SearchFeedStore};
+use rustyfin_models::data::{Data, DataError, MediaItemStore, PeopleStore, SearchFeedStore};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use rustyfin_data::PgData;
-use rustyfin_data::repo::people::{self, PersonRow};
-use rustyfin_data::repo::{media_items, search_feed};
+use rustyfin_data::repo::media_items;
+use rustyfin_data::repo::people::PersonRow;
 use uuid::Uuid;
 
 /// Documents per Meilisearch batch when indexing.
@@ -311,7 +311,11 @@ impl SearchService {
     ) -> Result<Vec<(PersonRow, f64)>, SearchError> {
         if let Some(hits) = self.ranked(true, term, None, limit.max(0) as usize).await {
             let ids: Vec<Uuid> = hits.iter().map(|(id, _)| *id).collect();
-            let rows = people::list_people_by_ids(&self.data, &ids, &[], &[], limit, 0).await?;
+            let rows = self
+                .data
+                .people()
+                .list_people_by_ids(&ids, &[], &[], limit, 0)
+                .await?;
             let mut by_id: std::collections::HashMap<Uuid, PersonRow> =
                 rows.into_iter().map(|r| (r.id, r)).collect();
             return Ok(hits
@@ -319,7 +323,11 @@ impl SearchService {
                 .filter_map(|(id, score)| by_id.remove(&id).map(|p| (p, score)))
                 .collect());
         }
-        let rows = people::list_people(&self.data, &[], &[], Some(term), limit, 0).await?;
+        let rows = self
+            .data
+            .people()
+            .list_people(&[], &[], Some(term), limit, 0)
+            .await?;
         Ok(rows.into_iter().map(|p| (p, 0.0)).collect())
     }
 

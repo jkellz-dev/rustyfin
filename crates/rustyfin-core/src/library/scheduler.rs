@@ -12,7 +12,7 @@ use rustyfin_data::PgData;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use rustyfin_data::repo::{activity_log, libraries, task_results};
+use rustyfin_data::repo::libraries;
 
 use crate::library::scanner::LibraryScanner;
 

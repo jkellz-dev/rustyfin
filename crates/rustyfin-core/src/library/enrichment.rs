@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use rustyfin_data::PgData;
 use uuid::Uuid;
 
-use rustyfin_data::repo::{media_items, people};
+use rustyfin_data::repo::media_items;
 
 use rustyfin_common::nfo::{
     NfoMetadata, find_album_nfo, find_artist_nfo, find_episode_nfo, find_movie_nfo,

@@ -8,10 +8,7 @@ use std::time::Instant;
 use rustyfin_data::PgData;
 use uuid::Uuid;
 
-use rustyfin_data::repo::{
-    activity_log, chapters, collections, images as images_repo, libraries, media_items,
-    media_streams,
-};
+use rustyfin_data::repo::{collections, images as images_repo, media_items, media_streams};
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;

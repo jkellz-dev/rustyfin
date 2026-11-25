@@ -6,8 +6,6 @@ use rustyfin_data::PgData;
 use rustyfin_models::data::{ApiKeyStore, Data};
 use sha2::{Digest, Sha256};
 
-use rustyfin_data::repo::api_keys;
-
 /// Authenticated via API key (X-Api-Key header or api_key query param).
 #[derive(Debug, Clone)]
 pub struct ApiKeyUser {
@@ -61,7 +59,7 @@ where
         let pool_clone = data.clone();
         let key_id = row.id;
         tokio::spawn(async move {
-            let _ = api_keys::touch_last_used(&pool_clone, key_id).await;
+            let _ = pool_clone.api_keys().touch_last_used(key_id).await;
         });
 
         Ok(ApiKeyUser {

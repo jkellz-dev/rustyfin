@@ -6,7 +6,6 @@ use rustyfin_data::PgData;
 use rustyfin_models::data::{Data, DataError, SessionStore};
 use uuid::Uuid;
 
-use rustyfin_data::repo::sessions;
 use rustyfin_models::dto::MediaBrowserAuth;
 
 use crate::session::{ResolvedToken, TokenError, resolve_token};
