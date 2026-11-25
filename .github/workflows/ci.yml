@@ -73,8 +73,10 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
+      # Every crate and target (tests included): CI is the gate before an
+      # image, with no separate full run before main (owner, 2026-11-24).
       - name: Clippy
-        run: mbx clippy -- -D warnings
+        run: mbx clippy --workspace --all-targets -- -D warnings
 
   # Unit and integration tests in one job with one cache. As two jobs they
   # saved a ~9 GB target/ each, over GitHub's 10 GB per repository, so caches
@@ -146,6 +148,11 @@ jobs:
 
       - name: Run integration tests
         run: mbx test -p rustyfin-api --test integration -- --test-threads=1
+
+      # The other crates' own test files (rustyfin-common, -media, -core...);
+      # --tests reruns their unit tests too, which are quick.
+      - name: Run other crates' integration tests
+        run: mbx test --workspace --exclude rustyfin-api --exclude rustyfin-server --tests
 
   build-frontend:
     name: Build Frontend
