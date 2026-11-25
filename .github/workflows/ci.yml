@@ -488,9 +488,11 @@ jobs:
           VERSION=$(jq -r '.releases[0].version' <<<"$PR")
           git fetch origin "$BRANCH"
           git switch "$BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "number=$(jq -r '.number' <<<"$PR")" >> "$GITHUB_OUTPUT"
+          {
+            echo "branch=$BRANCH"
+            echo "tag=v$VERSION"
+            echo "number=$(jq -r '.number' <<<"$PR")"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Write the changelog
         if: steps.release-plz.outputs.prs_created == 'true'
