@@ -123,4 +123,10 @@ pub trait UserStore {
 
     /// Delete a user by ID.
     fn delete(&self, id: uuid::Uuid) -> impl Future<Output = DataResult<bool>> + Send;
+
+    /// The enabled users who can see any of `libraries`.
+    fn seeing_libraries(
+        &self,
+        libraries: &[uuid::Uuid],
+    ) -> impl Future<Output = DataResult<Vec<uuid::Uuid>>> + Send;
 }

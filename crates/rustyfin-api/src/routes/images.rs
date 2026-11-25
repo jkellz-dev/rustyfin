@@ -92,7 +92,7 @@ async fn check_image_access(
         // A genre's picture is anyone's (its albums are checked when opened).
         Some(allowed)
             if !allowed.contains(&item_id)
-                && super::music_genres::genre_name_by_id(&state.pool, item_id)
+                && super::music_genres::genre_name_by_id(&state.data, item_id)
                     .await
                     .is_none() =>
         {
@@ -227,7 +227,7 @@ async fn serve_placeholder(
         // draw initials).
         let path = headshot_path(state, &person).ok_or(ApiError::NotFound)?;
         return serve_image(&path.to_string_lossy(), opts, state, req).await;
-    } else if let Some(genre) = super::music_genres::genre_name_by_id(&state.pool, item_id).await {
+    } else if let Some(genre) = super::music_genres::genre_name_by_id(&state.data, item_id).await {
         // A genre: one of its albums' covers, else a title's art (films).
         let album = state
             .data

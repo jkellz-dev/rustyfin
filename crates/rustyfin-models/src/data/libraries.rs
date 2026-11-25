@@ -136,4 +136,13 @@ pub trait LibraryStore {
         id: uuid::Uuid,
         schedule: Option<&str>,
     ) -> impl Future<Output = DataResult<Option<Library>>> + Send;
+
+    /// Titles per library and item type: library name, item type, count
+    /// (no versions, extras or a friend's copies).
+    fn item_counts(&self) -> impl Future<Output = DataResult<Vec<(String, String, i64)>>> + Send;
+
+    /// Each library's name and when its last scan finished.
+    fn scan_times(
+        &self,
+    ) -> impl Future<Output = DataResult<Vec<(String, Option<DateTime<Utc>>)>>> + Send;
 }

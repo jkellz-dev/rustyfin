@@ -4,7 +4,7 @@
 //! scans, logins); gauges (libraries, sessions, health) are read at scrape
 //! time.
 
-use rustyfin_models::data::{Data, LibraryStore, LinkStore, UserStore};
+use rustyfin_models::data::{Data, LibraryStore, LinkStore, StatusStore, UserStore};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -152,32 +152,27 @@ async fn collect(state: &AppState) {
     metrics::gauge!("rustyfin_up").set(1.0);
     metrics::gauge!("rustyfin_build_info", "version" => env!("CARGO_PKG_VERSION")).set(1.0);
 
-    let database: String =
-        sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
-            .fetch_one(&state.pool)
-            .await
-            .unwrap_or_default();
+    let database: String = state.data.status().scope().await.unwrap_or_default();
     let count_now = counts_due(&database);
     if count_now {
-        let counts: Vec<(String, String, i64)> = sqlx::query_as(
-            "SELECT l.name, m.item_type, COUNT(*) FROM media_items m \
-             JOIN libraries l ON l.id = m.library_id \
-             WHERE m.owner_id IS NULL GROUP BY l.name, m.item_type",
-        )
-        .fetch_all(&state.pool)
-        .await
-        .unwrap_or_default();
+        let counts = state
+            .data
+            .libraries()
+            .item_counts()
+            .await
+            .unwrap_or_default();
         for (library, item_type, n) in counts {
             metrics::gauge!("rustyfin_library_items", "library" => library, "type" => item_type)
                 .set(n as f64);
         }
     }
     // Only the scan times: the dashboard's per-library counts are not needed.
-    let scanned: Vec<(String, Option<chrono::DateTime<chrono::Utc>>)> =
-        sqlx::query_as("SELECT name, last_scanned_at FROM libraries")
-            .fetch_all(&state.pool)
-            .await
-            .unwrap_or_default();
+    let scanned = state
+        .data
+        .libraries()
+        .scan_times()
+        .await
+        .unwrap_or_default();
     for (name, at) in scanned {
         if let Some(at) = at {
             metrics::gauge!("rustyfin_library_last_scan_timestamp_seconds", "library" => name)

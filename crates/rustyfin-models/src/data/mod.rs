@@ -29,6 +29,7 @@ mod play_history;
 mod playlists;
 mod search_feed;
 mod sessions;
+mod status;
 mod task_results;
 mod user_data;
 mod user_library_access;
@@ -54,6 +55,7 @@ pub use play_history::{Play, PlayFilter, PlayHistoryStore, PlayReport};
 pub use playlists::{Playlist, PlaylistItem, PlaylistShare, PlaylistStore};
 pub use search_feed::{PeopleFeedPage, SearchFeedPage, SearchFeedStore};
 pub use sessions::{Device, Session, SessionStore};
+pub use status::{Connections, StatusStore};
 pub use task_results::{TaskResult, TaskResultStore};
 pub use user_data::{UserData, UserDataChange, UserDataStore};
 pub use user_library_access::LibraryAccessStore;
@@ -130,6 +132,10 @@ pub trait Data: Clone + Send + Sync + 'static {
     /// Sessions.
     type Sessions: SessionStore + Send + Sync;
     fn sessions(&self) -> &Self::Sessions;
+
+    /// The store itself.
+    type Status: StatusStore + Send + Sync;
+    fn status(&self) -> &Self::Status;
 
     /// Task results.
     type TaskResults: TaskResultStore + Send + Sync;

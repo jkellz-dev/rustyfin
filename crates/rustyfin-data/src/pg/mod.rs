@@ -20,6 +20,7 @@ mod play_history;
 mod playlists;
 mod search_feed;
 mod sessions;
+mod status;
 mod task_results;
 mod user_data;
 mod user_library_access;
@@ -49,6 +50,7 @@ pub struct PgData {
     playlists: PgPlaylists,
     search_feed: PgSearchFeed,
     sessions: PgSessions,
+    status: PgStatus,
     task_results: PgTaskResults,
     user_data: PgUserData,
     user_library_access: PgUserLibraryAccess,
@@ -80,6 +82,7 @@ impl PgData {
             playlists: PgPlaylists { pool: pool.clone() },
             search_feed: PgSearchFeed { pool: pool.clone() },
             sessions: PgSessions { pool: pool.clone() },
+            status: PgStatus { pool: pool.clone() },
             task_results: PgTaskResults { pool: pool.clone() },
             user_data: PgUserData { pool: pool.clone() },
             user_library_access: PgUserLibraryAccess { pool: pool.clone() },
@@ -152,6 +155,10 @@ impl Data for PgData {
     type SearchFeed = PgSearchFeed;
     fn search_feed(&self) -> &PgSearchFeed {
         &self.search_feed
+    }
+    type Status = PgStatus;
+    fn status(&self) -> &PgStatus {
+        &self.status
     }
     type Sessions = PgSessions;
     fn sessions(&self) -> &PgSessions {
@@ -274,6 +281,12 @@ pub struct PgSearchFeed {
 /// Sessions in Postgres.
 #[derive(Clone)]
 pub struct PgSessions {
+    pool: PgPool,
+}
+
+/// The database itself.
+#[derive(Clone)]
+pub struct PgStatus {
     pool: PgPool,
 }
 

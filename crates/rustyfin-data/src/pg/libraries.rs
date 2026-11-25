@@ -93,4 +93,12 @@ impl LibraryStore for PgLibraries {
             .await
             .data()
     }
+
+    async fn item_counts(&self) -> DataResult<Vec<(String, String, i64)>> {
+        repo::item_counts(&self.pool).await.data()
+    }
+
+    async fn scan_times(&self) -> DataResult<Vec<(String, Option<chrono::DateTime<chrono::Utc>>)>> {
+        repo::scan_times(&self.pool).await.data()
+    }
 }

@@ -13,7 +13,7 @@ use super::items::attach_user_data;
 /// The fields every name item in a list carries; `user_data` for the lists
 /// Jellyfin sends it on (people, studios, years).
 pub(crate) async fn finish_list(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     user_id: Uuid,
     dtos: &mut [BaseItemDto],
     user_data: bool,
@@ -22,13 +22,13 @@ pub(crate) async fn finish_list(
         list_defaults(dto);
     }
     if user_data {
-        attach_user_data(pool, user_id, dtos).await;
+        attach_user_data(data, user_id, dtos).await;
     }
 }
 
 /// A single name item, as `/Persons/{name}` and the like answer it.
 pub(crate) async fn finish_detail(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     user_id: Uuid,
     mut dto: BaseItemDto,
     date_created: Option<DateTime<Utc>>,
@@ -74,7 +74,7 @@ pub(crate) async fn finish_detail(
     ] {
         count.get_or_insert(0);
     }
-    attach_user_data(pool, user_id, std::slice::from_mut(&mut dto)).await;
+    attach_user_data(data, user_id, std::slice::from_mut(&mut dto)).await;
     dto
 }
 

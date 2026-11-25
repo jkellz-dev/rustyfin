@@ -121,7 +121,7 @@ pub async fn get_genres(
         dtos.push(dto);
     }
 
-    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, false).await;
+    super::name_items::finish_list(&state.data, auth.user_id, &mut dtos, false).await;
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
@@ -173,7 +173,7 @@ pub async fn get_genre(
         .await
         .or_log_default("media_items::first_added_with");
     Ok(Json(
-        super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
+        super::name_items::finish_detail(&state.data, auth.user_id, dto, added).await,
     ))
 }
 

@@ -15,6 +15,7 @@ pub mod play_history;
 pub mod playlists;
 pub mod search_feed;
 pub mod sessions;
+pub mod status;
 pub mod task_results;
 pub mod user_data;
 pub mod user_library_access;

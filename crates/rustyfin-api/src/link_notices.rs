@@ -3,7 +3,7 @@
 //! notified"). Every session of a user who can see that link's titles gets
 //! Jellyfin's `DisplayMessage` command, which apps show as a message.
 
-use rustyfin_models::data::{Data, LinkStore};
+use rustyfin_models::data::{Data, DataResult, LinkStore, UserStore};
 use std::collections::HashMap;
 
 use rustyfin_core::link::LinkEvent;
@@ -77,15 +77,9 @@ async fn tell(state: &AppState, event: &LinkEvent) {
 }
 
 /// Users who can see a library holding the link's titles.
-async fn who_sees(state: &AppState, link_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+async fn who_sees(state: &AppState, link_id: Uuid) -> DataResult<Vec<Uuid>> {
     let libraries = state.data.links().libraries_of(link_id).await?;
-    sqlx::query_scalar(
-        "SELECT id FROM users u WHERE NOT u.is_disabled AND (u.enable_all_libraries OR EXISTS \
-         (SELECT 1 FROM user_library_access a WHERE a.user_id = u.id AND a.library_id = ANY($1)))",
-    )
-    .bind(&libraries)
-    .fetch_all(&state.pool)
-    .await
+    state.data.users().seeing_libraries(&libraries).await
 }
 
 #[cfg(test)]

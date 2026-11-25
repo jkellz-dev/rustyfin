@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::media_streams::{self, NewMediaStream};
+use super::media_streams;
 
 /// The `LinkRow` row as Postgres returns it; callers get it as [`Link`].
 #[derive(Debug, Clone, sqlx::FromRow)]

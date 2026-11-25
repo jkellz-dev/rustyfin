@@ -34,15 +34,11 @@ pub async fn create_collection(
 
     // Create a media_item with Type='BoxSet'
     let id = Uuid::new_v4();
-    sqlx::query(
-        r#"INSERT INTO media_items (id, name, item_type, is_folder, library_id)
-           VALUES ($1, $2, 'BoxSet', true, $3)"#,
-    )
-    .bind(id)
-    .bind(&name)
-    .bind(query.parent_id)
-    .execute(&state.pool)
-    .await?;
+    state
+        .data
+        .collections()
+        .create(id, &name, query.parent_id)
+        .await?;
 
     // Add initial items
     if let Some(ref ids_str) = query.ids {

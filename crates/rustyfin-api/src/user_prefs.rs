@@ -14,7 +14,6 @@
 use rustyfin_data::repo::users;
 use rustyfin_models::data::{Data, UserStore};
 use rustyfin_models::dto::{BaseItemDto, MediaStream, PlaybackInfoResponse, UserConfiguration};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 /// The user's settings, or Jellyfin's defaults for a user who never saved any

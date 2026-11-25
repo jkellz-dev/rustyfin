@@ -5,10 +5,10 @@
 //! apply the same rule. Jellyfin answers 404 for an item the user may not see, so
 //! that is what a hidden item gets here too: a 403 would confirm it exists.
 
-use rustyfin_models::data::{Data, LibraryAccessStore};
+use rustyfin_models::data::{Data, LibraryAccessStore, MediaItemStore};
 use uuid::Uuid;
 
-use rustyfin_data::repo::media_items::{self, MediaItemRow};
+use rustyfin_data::repo::media_items::MediaItemRow;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -21,7 +21,10 @@ pub async fn require_item_access(
     user_id: Uuid,
     item_id: Uuid,
 ) -> Result<(), ApiError> {
-    let item = media_items::find_by_id(&state.pool, item_id)
+    let item = state
+        .data
+        .media_items()
+        .find_by_id(item_id)
         .await?
         .ok_or(ApiError::NotFound)?;
 

@@ -329,3 +329,25 @@ pub async fn update_scan_schedule(
     .await
     .map(opt)
 }
+
+/// Titles per library and item type: what each library holds, as the
+/// `rustyfin_library_items` metric counts it (no versions, extras or a
+/// friend's copies).
+pub async fn item_counts(pool: &PgPool) -> Result<Vec<(String, String, i64)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT l.name, m.item_type, COUNT(*) FROM media_items m \
+         JOIN libraries l ON l.id = m.library_id \
+         WHERE m.owner_id IS NULL GROUP BY l.name, m.item_type",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// Each library's name and when its last scan finished.
+pub async fn scan_times(
+    pool: &PgPool,
+) -> Result<Vec<(String, Option<DateTime<Utc>>)>, sqlx::Error> {
+    sqlx::query_as("SELECT name, last_scanned_at FROM libraries")
+        .fetch_all(pool)
+        .await
+}

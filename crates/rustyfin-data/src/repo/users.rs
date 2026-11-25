@@ -276,3 +276,14 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
         .await?;
     Ok(result.rows_affected() > 0)
 }
+
+/// The enabled users who can see any of `libraries`.
+pub async fn seeing_libraries(pool: &PgPool, libraries: &[Uuid]) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM users u WHERE NOT u.is_disabled AND (u.enable_all_libraries OR EXISTS \
+         (SELECT 1 FROM user_library_access a WHERE a.user_id = u.id AND a.library_id = ANY($1)))",
+    )
+    .bind(libraries)
+    .fetch_all(pool)
+    .await
+}

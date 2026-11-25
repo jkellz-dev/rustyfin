@@ -12,7 +12,7 @@ use rustyfin_models::data::{
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
-use rustyfin_data::repo::{activity_log, libraries};
+use rustyfin_data::repo::libraries;
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,

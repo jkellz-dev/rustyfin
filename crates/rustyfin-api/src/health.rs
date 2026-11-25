@@ -3,6 +3,7 @@
 //! space is not reported: the libraries share two disks, so it repeated the
 //! same numbers on every row (owner, 2026-11-15).
 
+use rustyfin_models::data::{Data, StatusStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -71,12 +72,13 @@ pub async fn system_health(state: &AppState, libs: &[LibraryRow]) -> SystemHealt
 
 async fn database_health(state: &AppState) -> DatabaseHealth {
     let started = Instant::now();
-    let result = sqlx::query("SELECT 1").execute(&state.pool).await;
+    let result = state.data.status().ping().await;
+    let connections = state.data.status().connections();
     DatabaseHealth {
         ok: result.is_ok(),
         latency_ms: started.elapsed().as_secs_f64() * 1000.0,
-        pool_size: state.pool.size(),
-        pool_idle: u32::try_from(state.pool.num_idle()).unwrap_or(u32::MAX),
+        pool_size: connections.open,
+        pool_idle: connections.idle,
         error: result.err().map(|e| e.to_string()),
     }
 }

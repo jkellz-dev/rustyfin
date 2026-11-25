@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use rustyfin_models::data::{Data, LibraryStore, MediaItemStore};
+use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, StatusStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -64,7 +64,7 @@ pub async fn get_music_genres(
     let start = query.start_index.unwrap_or(0).max(0) as usize;
     let limit = query.limit.unwrap_or(100).max(0) as usize;
     let mut dtos: Vec<BaseItemDto> = matching.into_iter().skip(start).take(limit).collect();
-    super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, false).await;
+    super::name_items::finish_list(&state.data, auth.user_id, &mut dtos, false).await;
     let mut result = QueryResult::new(dtos, total);
     result.start_index = start as i32;
     Ok(Json(result))
@@ -73,10 +73,7 @@ pub async fn get_music_genres(
 /// The cache key of a library's genre list: database and schema (tests share
 /// one database, a schema each), and the library.
 async fn genre_list_key(state: &AppState, parent_id: Option<Uuid>) -> String {
-    let schema: String = sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or_default();
+    let schema: String = state.data.status().scope().await.unwrap_or_default();
     format!("{schema}|{parent_id:?}")
 }
 
@@ -234,7 +231,7 @@ pub async fn get_music_genre(
         .await
         .or_log_default("media_items::first_added_with");
     Ok(Json(
-        super::name_items::finish_detail(&state.pool, auth.user_id, dto, added).await,
+        super::name_items::finish_detail(&state.data, auth.user_id, dto, added).await,
     ))
 }
 
@@ -262,7 +259,7 @@ const GENRE_IDS_REREAD: std::time::Duration = std::time::Duration::from_secs(10)
 /// `GenreIds` (comma-separated) as genre names; `None` when not given. Ids
 /// that name no genre are left out, so an unknown id matches nothing.
 pub(crate) async fn genre_names_by_ids(
-    pool: &sqlx::PgPool,
+    data: &rustyfin_data::PgData,
     ids: Option<&str>,
 ) -> Option<Vec<String>> {
     let ids: Vec<Uuid> = ids?
@@ -271,20 +268,16 @@ pub(crate) async fn genre_names_by_ids(
         .collect();
     let mut names = Vec::with_capacity(ids.len());
     for id in ids {
-        if let Some(name) = genre_name_by_id(pool, id).await {
+        if let Some(name) = genre_name_by_id(data, id).await {
             names.push(name);
         }
     }
     Some(names)
 }
 
-pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<String> {
+pub(crate) async fn genre_name_by_id(data: &rustyfin_data::PgData, id: Uuid) -> Option<String> {
     // The database and schema: tests share one database, a schema each.
-    let database: String =
-        sqlx::query_scalar("SELECT current_database() || '.' || current_schema()")
-            .fetch_one(pool)
-            .await
-            .unwrap_or_default();
+    let database: String = data.status().scope().await.unwrap_or_default();
     if let Ok(cached) = GENRE_IDS.lock()
         && let Some((at, names)) = cached.as_ref().and_then(|c| c.get(&database))
     {
@@ -297,7 +290,9 @@ pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<St
             return None;
         }
     }
-    let genres = media_items::distinct_genres(pool, None)
+    let genres = data
+        .media_items()
+        .distinct_genres(None)
         .await
         .or_log_default("media_items::distinct_genres");
     let names: std::collections::HashMap<Uuid, String> = genres

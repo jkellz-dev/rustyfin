@@ -1094,7 +1094,7 @@ pub async fn get_items(
         None => (None, Vec::new()),
     };
     let genres_any =
-        super::music_genres::genre_names_by_ids(&state.pool, query.genre_ids.as_deref()).await;
+        super::music_genres::genre_names_by_ids(&state.data, query.genre_ids.as_deref()).await;
     let item_query = media_items::ItemQuery {
         genres_any,
         library_id: if is_library { query.parent_id } else { None },
@@ -1270,7 +1270,7 @@ pub async fn get_item_by_id(
     let Some(item) = state.data.media_items().find_by_id(item_id).await? else {
         // A genre is no stored item; clients open it by id (Finamp's genre
         // page). Music first: a name both kinds use is a music genre there.
-        let Some(genre) = super::music_genres::genre_name_by_id(&state.pool, item_id).await else {
+        let Some(genre) = super::music_genres::genre_name_by_id(&state.data, item_id).await else {
             return Err(ApiError::NotFound);
         };
         return match super::music_genres::get_music_genre(

@@ -75,4 +75,12 @@ pub trait CollectionStore {
         &self,
         collection_ids: &[uuid::Uuid],
     ) -> impl Future<Output = DataResult<std::collections::HashMap<uuid::Uuid, i64>>> + Send;
+
+    /// Create an empty collection named `name`, in `library` when given.
+    fn create(
+        &self,
+        id: uuid::Uuid,
+        name: &str,
+        library: Option<uuid::Uuid>,
+    ) -> impl Future<Output = DataResult<()>> + Send;
 }

@@ -85,4 +85,8 @@ impl UserStore for PgUsers {
     async fn delete(&self, id: uuid::Uuid) -> DataResult<bool> {
         repo::delete(&self.pool, id).await.data()
     }
+
+    async fn seeing_libraries(&self, libraries: &[uuid::Uuid]) -> DataResult<Vec<uuid::Uuid>> {
+        repo::seeing_libraries(&self.pool, libraries).await.data()
+    }
 }

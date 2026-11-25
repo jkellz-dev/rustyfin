@@ -65,4 +65,13 @@ impl CollectionStore for PgCollections {
             .await
             .data()
     }
+
+    async fn create(
+        &self,
+        id: uuid::Uuid,
+        name: &str,
+        library: Option<uuid::Uuid>,
+    ) -> DataResult<()> {
+        repo::create(&self.pool, id, name, library).await.data()
+    }
 }

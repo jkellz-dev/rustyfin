@@ -270,3 +270,23 @@ pub async fn count_items_batch(
     .await?;
     Ok(rows.into_iter().collect())
 }
+
+/// Create an empty collection (a `BoxSet` folder) named `name`, in
+/// `library` when given.
+pub async fn create(
+    pool: &PgPool,
+    id: Uuid,
+    name: &str,
+    library: Option<Uuid>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"INSERT INTO media_items (id, name, item_type, is_folder, library_id)
+           VALUES ($1, $2, 'BoxSet', true, $3)"#,
+    )
+    .bind(id)
+    .bind(name)
+    .bind(library)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

@@ -93,7 +93,7 @@ async fn get_artists_inner(
         _ => None,
     };
     let genres_any =
-        super::music_genres::genre_names_by_ids(&state.pool, params.genre_ids.as_deref()).await;
+        super::music_genres::genre_names_by_ids(&state.data, params.genre_ids.as_deref()).await;
     let filter = media_items::ArtistFilter {
         genres_any: genres_any.as_deref(),
         search: params.search_term.as_deref(),
