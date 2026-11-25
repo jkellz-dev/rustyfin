@@ -149,10 +149,18 @@ pub(crate) fn genre_image_tag(album: Uuid) -> String {
 }
 
 /// Genre ids are made from their names (UUID v5); the names of every genre,
-/// by id, kept for five minutes. Artwork requests come in bursts of a page;
-/// an id not in the list reads the names again (a genre added since).
-type GenreIds = Option<(std::time::Instant, std::collections::HashMap<Uuid, String>)>;
-static GENRE_IDS: std::sync::Mutex<GenreIds> = std::sync::Mutex::new(None);
+/// by id, per database (tests run many in one process), kept for five
+/// minutes. An id not in the list reads the names again (a genre added
+/// since), but at most every ten seconds: every image or access check for an
+/// id that is no item asks here, and reading the names takes 0.1 s on a large
+/// library (owner, 2026-11-24: 18 reads in three minutes made /Genres 0.5 s).
+type GenreIds = std::collections::HashMap<
+    String,
+    (std::time::Instant, std::collections::HashMap<Uuid, String>),
+>;
+static GENRE_IDS: std::sync::Mutex<Option<GenreIds>> = std::sync::Mutex::new(None);
+const GENRE_IDS_FRESH: std::time::Duration = std::time::Duration::from_secs(300);
+const GENRE_IDS_REREAD: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// The genre named by `id` (a Genre or MusicGenre item's id), if any.
 /// `GenreIds` (comma-separated) as genre names; `None` when not given. Ids
@@ -175,12 +183,22 @@ pub(crate) async fn genre_names_by_ids(
 }
 
 pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<String> {
+    let database = pool
+        .connect_options()
+        .get_database()
+        .unwrap_or_default()
+        .to_string();
     if let Ok(cached) = GENRE_IDS.lock()
-        && let Some((at, names)) = cached.as_ref()
-        && at.elapsed() < std::time::Duration::from_secs(300)
-        && let Some(name) = names.get(&id)
+        && let Some((at, names)) = cached.as_ref().and_then(|c| c.get(&database))
     {
-        return Some(name.clone());
+        if at.elapsed() < GENRE_IDS_FRESH
+            && let Some(name) = names.get(&id)
+        {
+            return Some(name.clone());
+        }
+        if at.elapsed() < GENRE_IDS_REREAD {
+            return None;
+        }
     }
     let genres = media_items::distinct_genres(pool, None)
         .await
@@ -191,7 +209,9 @@ pub(crate) async fn genre_name_by_id(pool: &sqlx::PgPool, id: Uuid) -> Option<St
         .collect();
     let found = names.get(&id).cloned();
     if let Ok(mut cached) = GENRE_IDS.lock() {
-        *cached = Some((std::time::Instant::now(), names));
+        cached
+            .get_or_insert_with(Default::default)
+            .insert(database, (std::time::Instant::now(), names));
     }
     found
 }
