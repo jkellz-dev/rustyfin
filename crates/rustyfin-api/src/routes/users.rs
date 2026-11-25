@@ -225,12 +225,7 @@ pub async fn get_user_image(
         return Err(ApiError::NotFound);
     };
 
-    let user = state
-        .data
-        .users()
-        .find_by_id(user_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    let user = state.services.users().get(user_id).await?;
 
     let url = template
         .replace("{username}", &user.username)
