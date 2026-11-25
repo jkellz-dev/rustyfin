@@ -24,11 +24,12 @@ pub struct MusicGenresQuery {
     pub limit: Option<i64>,
 }
 
-/// A genre list page as last built (before the caller's own data), by
-/// database and schema, library, search and page. Genres, their counts and
-/// pictures change only with scans; building a page reads most of the
-/// library (owner, 2026-11-24: 0.5 s, 0.34 s of it the pictures).
-type GenrePages = std::collections::HashMap<String, (std::time::Instant, Vec<BaseItemDto>, i32)>;
+/// Every music genre of a library as last built (before the caller's own
+/// data), by database and schema and library; pages and searches are cut
+/// from it. Genres, their counts and pictures change only with scans, and
+/// building even one page read most of the library (owner, 2026-11-24: 0.5 s
+/// a page, 0.37 s of it the pictures, and Finamp loads the list page by page).
+type GenrePages = std::collections::HashMap<String, (std::time::Instant, Vec<BaseItemDto>)>;
 static GENRE_PAGES: std::sync::Mutex<Option<GenrePages>> = std::sync::Mutex::new(None);
 const GENRE_PAGES_FRESH: std::time::Duration = std::time::Duration::from_secs(300);
 
@@ -42,70 +43,63 @@ pub async fn get_music_genres(
         .fetch_one(&state.pool)
         .await
         .unwrap_or_default();
-    let key = format!(
-        "{schema}|{:?}|{:?}|{:?}|{:?}",
-        query.parent_id, query.search_term, query.start_index, query.limit
-    );
+    let key = format!("{schema}|{:?}", query.parent_id);
     let cached = GENRE_PAGES.lock().ok().and_then(|c| {
         c.as_ref()
             .and_then(|c| c.get(&key))
-            .filter(|(at, _, _)| at.elapsed() < GENRE_PAGES_FRESH)
-            .map(|(_, dtos, total)| (dtos.clone(), *total))
+            .filter(|(at, _)| at.elapsed() < GENRE_PAGES_FRESH)
+            .map(|(_, dtos)| dtos.clone())
     });
-    let (mut dtos, total) = match cached {
+    let all = match cached {
         Some(hit) => hit,
         None => {
-            let built = build_music_genres(&state, &query).await?;
+            let built = build_music_genres(&state, query.parent_id).await?;
             if let Ok(mut c) = GENRE_PAGES.lock() {
                 let c = c.get_or_insert_with(Default::default);
-                c.retain(|_, (at, _, _)| at.elapsed() < GENRE_PAGES_FRESH);
-                c.insert(key, (std::time::Instant::now(), built.0.clone(), built.1));
+                c.retain(|_, (at, _)| at.elapsed() < GENRE_PAGES_FRESH);
+                c.insert(key, (std::time::Instant::now(), built.clone()));
             }
             built
         }
     };
+    let matching: Vec<BaseItemDto> = match query.search_term.as_deref() {
+        Some(term) => {
+            let lower = term.to_lowercase();
+            all.into_iter()
+                .filter(|g| g.name.to_lowercase().contains(&lower))
+                .collect()
+        }
+        None => all,
+    };
+    let total = matching.len() as i32;
+    let start = query.start_index.unwrap_or(0).max(0) as usize;
+    let limit = query.limit.unwrap_or(100).max(0) as usize;
+    let mut dtos: Vec<BaseItemDto> = matching.into_iter().skip(start).take(limit).collect();
     super::name_items::finish_list(&state.pool, auth.user_id, &mut dtos, false).await;
     let mut result = QueryResult::new(dtos, total);
-    result.start_index = query.start_index.unwrap_or(0) as i32;
+    result.start_index = start as i32;
     Ok(Json(result))
 }
 
-/// A page of the genre list (without the caller's own data), and the total.
+/// Every music genre of `parent_id` (or everywhere), in name order, without
+/// the caller's own data.
 async fn build_music_genres(
     state: &AppState,
-    query: &MusicGenresQuery,
-) -> Result<(Vec<BaseItemDto>, i32), ApiError> {
-    let genres =
-        media_items::distinct_genres_by_item_types(&state.pool, query.parent_id, MUSIC_TYPES)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let filtered: Vec<&String> = if let Some(ref term) = query.search_term {
-        let lower = term.to_lowercase();
-        genres
-            .iter()
-            .filter(|g| g.to_lowercase().contains(&lower))
-            .collect()
-    } else {
-        genres.iter().collect()
-    };
-
-    let total = filtered.len() as i32;
-    let start = query.start_index.unwrap_or(0) as usize;
-    let limit = query.limit.unwrap_or(100) as usize;
-    let page = &filtered[start.min(filtered.len())..filtered.len().min(start + limit)];
-
-    let names: Vec<String> = page.iter().map(|g| g.to_string()).collect();
+    parent_id: Option<Uuid>,
+) -> Result<Vec<BaseItemDto>, ApiError> {
+    let names = media_items::distinct_genres_by_item_types(&state.pool, parent_id, MUSIC_TYPES)
+        .await
+        .map_err(ApiError::Database)?;
     let mut all_counts =
-        media_items::count_genres_by_types(&state.pool, &names, query.parent_id, MUSIC_TYPES)
+        media_items::count_genres_by_types(&state.pool, &names, parent_id, MUSIC_TYPES)
             .await
             .or_log_default("media_items::count_genres_by_types");
     // Each genre's picture: one of its albums' covers (owner, 2026-11-23).
-    let covers = media_items::genre_albums(&state.pool, &names, query.parent_id)
+    let covers = media_items::genre_albums(&state.pool, &names, parent_id)
         .await
         .or_log_default("media_items::genre_albums");
-    let mut dtos = Vec::with_capacity(page.len());
-    for genre_name in page {
+    let mut dtos = Vec::with_capacity(names.len());
+    for genre_name in &names {
         let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes());
         let counts = all_counts.remove(genre_name.as_str()).unwrap_or_default();
         let cover = covers.get(genre_name.as_str()).copied();
@@ -137,7 +131,7 @@ async fn build_music_genres(
         dto.child_count = Some(total_children);
         dtos.push(dto);
     }
-    Ok((dtos, total))
+    Ok(dtos)
 }
 
 /// `GET /MusicGenres/{genreName}` — Get a specific music genre by name.
