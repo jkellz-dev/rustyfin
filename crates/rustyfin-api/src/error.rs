@@ -93,7 +93,7 @@ impl IntoResponse for ApiError {
             // that does not exist (e.g. user data for an unknown item), which
             // Jellyfin reports as 404 rather than a server error.
             ApiError::Database(e) if is_foreign_key_violation(e) => StatusCode::NOT_FOUND,
-            ApiError::Database(e) if rustyfin_db::pool::is_unavailable(e) => {
+            ApiError::Database(e) if rustyfin_data::pool::is_unavailable(e) => {
                 StatusCode::SERVICE_UNAVAILABLE
             }
             ApiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,

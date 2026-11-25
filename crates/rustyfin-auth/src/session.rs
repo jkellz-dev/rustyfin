@@ -2,7 +2,7 @@ use rand::RngExt;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{sessions, users};
+use rustyfin_data::repo::{sessions, users};
 
 /// Generate a random access token (64-char hex string).
 pub fn generate_token() -> String {

@@ -12,7 +12,7 @@ use axum::{
     extract::ConnectInfo,
     http::{Request, StatusCode},
 };
-use rustyfin_db::repo::{sessions, users};
+use rustyfin_data::repo::{sessions, users};
 use serde_json::Value;
 use std::net::SocketAddr;
 use tower::ServiceExt;
@@ -166,7 +166,7 @@ async fn without_the_proxys_word_a_token_signs_nobody_in() {
 async fn the_library_webhook_comes_from_inside_with_a_server_key() {
     let app = common::TestApp::with_forward_auth().await;
     let key = "library-key-for-tests";
-    rustyfin_db::repo::api_keys::create(
+    rustyfin_data::repo::api_keys::create(
         &app.pool,
         "Library tool",
         &rustyfin_auth::api_key::hash_api_key(key),

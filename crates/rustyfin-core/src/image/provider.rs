@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::images;
+use rustyfin_data::repo::images;
 
 /// Serves and processes images for media items and users.
 pub struct ImageProvider {

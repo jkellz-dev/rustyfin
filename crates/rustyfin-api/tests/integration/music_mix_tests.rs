@@ -10,7 +10,7 @@ use crate::common;
 
 use axum::http::StatusCode;
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::libraries;
+use rustyfin_data::repo::libraries;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -120,10 +120,10 @@ async fn a_mix_leaves_out_libraries_the_user_may_not_see() {
     let hidden = app.create_media_item("Hidden", "Audio", closed, None).await;
     set_genres(&app, seed, &["Jazz"]).await;
     set_genres(&app, hidden, &["Jazz"]).await;
-    rustyfin_db::repo::users::update_policy(&app.pool, user, false, false)
+    rustyfin_data::repo::users::update_policy(&app.pool, user, false, false)
         .await
         .unwrap();
-    rustyfin_db::repo::user_library_access::set_enabled_libraries(&app.pool, user, &[open])
+    rustyfin_data::repo::user_library_access::set_enabled_libraries(&app.pool, user, &[open])
         .await
         .unwrap();
     let (status, body) = app.get(&format!("/Items/{seed}/InstantMix"), &token).await;

@@ -6,8 +6,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::media_items;
-use rustyfin_db::repo::media_items::NameKind;
+use rustyfin_data::repo::media_items;
+use rustyfin_data::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -32,7 +32,7 @@ pub async fn get_genres(
     // A music (or music videos) library's genres are music genres, as
     // Jellyfin answers them (GenresController); Finamp opens only those.
     if let Some(parent) = query.parent_id
-        && let Some(lib) = rustyfin_db::repo::libraries::find_by_id(&state.pool, parent)
+        && let Some(lib) = rustyfin_data::repo::libraries::find_by_id(&state.pool, parent)
             .await
             .map_err(ApiError::Database)?
         && matches!(lib.library_type.as_str(), "music" | "musicvideos")

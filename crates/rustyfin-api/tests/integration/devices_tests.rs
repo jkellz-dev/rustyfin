@@ -17,7 +17,7 @@ async fn sign_in(
     client: &str,
 ) -> String {
     let token = format!("tok-{device_id}-{}", Uuid::new_v4().simple());
-    rustyfin_db::repo::sessions::create(
+    rustyfin_data::repo::sessions::create(
         &app.pool,
         &token,
         user,

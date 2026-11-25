@@ -6,7 +6,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::{media_streams, people};
+use rustyfin_data::repo::{media_streams, people};
 use uuid::Uuid;
 
 async fn set(app: &common::TestApp, sql: &'static str, id: Uuid, other: Option<Uuid>) {

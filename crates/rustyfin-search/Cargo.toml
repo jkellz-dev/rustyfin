@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-rustyfin-db.workspace = true
+rustyfin-data.workspace = true
 
 tokio.workspace = true
 serde.workspace = true

@@ -75,10 +75,10 @@ async fn a_file_the_user_may_not_see_is_not_found() {
     let open = app.create_library("Open", "music").await;
     let closed = app.create_library("Closed", "music").await;
     let track = app.create_media_item("Hidden", "Audio", closed, None).await;
-    rustyfin_db::repo::users::update_policy(&app.pool, user, false, false)
+    rustyfin_data::repo::users::update_policy(&app.pool, user, false, false)
         .await
         .unwrap();
-    rustyfin_db::repo::user_library_access::set_enabled_libraries(&app.pool, user, &[open])
+    rustyfin_data::repo::user_library_access::set_enabled_libraries(&app.pool, user, &[open])
         .await
         .unwrap();
     for path in [

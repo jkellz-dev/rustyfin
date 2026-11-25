@@ -16,7 +16,7 @@ use axum::extract::Request;
 use axum::http::HeaderValue;
 use axum::response::IntoResponse;
 use rustyfin_core::link::{LibraryMap, LinkKind, LinkSettings};
-use rustyfin_db::repo::{media_items, users};
+use rustyfin_data::repo::{media_items, users};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -122,7 +122,7 @@ async fn a_rustyfin_links_through_forward_auth_and_syncs_only_what_changed() {
         .execute(&friend.pool)
         .await
         .unwrap();
-    rustyfin_db::repo::user_library_access::set_enabled_libraries(
+    rustyfin_data::repo::user_library_access::set_enabled_libraries(
         &friend.pool,
         jonathan.id,
         &[films],

@@ -4,7 +4,7 @@ use std::time::Instant;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{
+use rustyfin_data::repo::{
     activity_log, chapters, collections, images as images_repo, libraries, media_items,
     media_streams,
 };
@@ -300,7 +300,7 @@ impl LibraryScanner {
         // A title this scan found may be one a linked server shares: merge
         // now, not at the link's next sync, so it is never listed twice.
         if library_type != "music"
-            && let Err(e) = rustyfin_db::repo::links::merge(&self.pool).await
+            && let Err(e) = rustyfin_data::repo::links::merge(&self.pool).await
         {
             tracing::warn!("Could not merge linked copies after the scan: {e}");
         }
@@ -2282,7 +2282,7 @@ pub async fn rebuild_movie_collections(
             names.entry(tmdb.clone()).or_insert_with(|| name.clone());
         }
     }
-    let linked = rustyfin_db::repo::links::collection_members(pool, library_id).await?;
+    let linked = rustyfin_data::repo::links::collection_members(pool, library_id).await?;
     for (_, name, tmdb) in &linked {
         if let Some(tmdb) = tmdb
             && !name.is_empty()

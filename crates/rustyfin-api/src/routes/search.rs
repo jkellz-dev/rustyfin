@@ -6,7 +6,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, user_library_access};
+use rustyfin_data::repo::{images, user_library_access};
 use rustyfin_models::dto::{SearchHint, SearchHintResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -73,13 +73,13 @@ pub async fn search_hints(
         .filter(|h| h.item_type == "BoxSet")
         .map(|h| h.id)
         .collect();
-    let hidden = rustyfin_db::repo::collections::hidden_among(&state.pool, &boxsets)
+    let hidden = rustyfin_data::repo::collections::hidden_among(&state.pool, &boxsets)
         .await
         .map_err(ApiError::Database)?;
     // Titles of a linked server that is down are not shown.
     let hit_ids: Vec<Uuid> = hits.iter().map(|h| h.id).collect();
     let shown: std::collections::HashSet<Uuid> =
-        rustyfin_db::repo::media_items::visible_ids(&state.pool, &hit_ids)
+        rustyfin_data::repo::media_items::visible_ids(&state.pool, &hit_ids)
             .await
             .map_err(ApiError::Database)?
             .into_iter()

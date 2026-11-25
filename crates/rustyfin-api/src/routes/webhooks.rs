@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use rustyfin_auth::api_key::ApiKeyUser;
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::{activity_log, libraries, media_items};
+use rustyfin_data::repo::{activity_log, libraries, media_items};
 
 use crate::error::ApiError;
 use crate::router::AppState;

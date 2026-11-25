@@ -7,7 +7,7 @@
 //! every stream, so a row without one predates the details.
 use crate::common;
 
-use rustyfin_db::repo::media_streams;
+use rustyfin_data::repo::media_streams;
 use uuid::Uuid;
 
 async fn insert_stream(app: &common::TestApp, item: Uuid, index: i32, time_base: Option<&str>) {

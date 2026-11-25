@@ -5,7 +5,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::user_data;
+use rustyfin_data::repo::user_data;
 use serde_json::Value;
 
 fn names(body: &Value) -> Vec<String> {
@@ -427,7 +427,7 @@ async fn the_alphabet_bar_filters_artists_by_sort_name() {
 /// stage.
 #[tokio::test]
 async fn the_artist_list_stays_fast_in_a_large_library() {
-    use rustyfin_db::repo::{images, media_items};
+    use rustyfin_data::repo::{images, media_items};
     let app = common::TestApp::new().await;
     let (uid, token) = app.create_user("viewer", true).await;
     let lib = app.create_library("Music", "music").await;

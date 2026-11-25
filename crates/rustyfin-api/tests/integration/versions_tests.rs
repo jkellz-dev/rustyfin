@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use axum::http::StatusCode;
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::media_streams::{self, NewMediaStream};
+use rustyfin_data::repo::media_streams::{self, NewMediaStream};
 use serde_json::{Value, json};
 use uuid::Uuid;
 

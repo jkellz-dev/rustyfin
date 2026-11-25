@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 pub use jellyfin::{Changed, Feed, JellyfinClient};
 pub use oidc::OidcSettings;
-pub use rustyfin_db::repo::links::{LINK_SCHEME, parse_image_path};
+pub use rustyfin_data::repo::links::{LINK_SCHEME, parse_image_path};
 pub use sync::items_from_jellyfin;
 
 /// What the friend runs. A Rustyfin is signed in to through its forward-auth
@@ -143,7 +143,7 @@ impl Links {
     pub async fn register(&self, pool: &PgPool, settings: LinkSettings) -> anyhow::Result<Uuid> {
         let url = settings.url.trim_end_matches('/').to_string();
         let id =
-            rustyfin_db::repo::links::upsert(pool, &settings.name, settings.kind.as_str(), &url)
+            rustyfin_data::repo::links::upsert(pool, &settings.name, settings.kind.as_str(), &url)
                 .await?;
         let client = JellyfinClient::new(&url, &settings.user, &settings.password, id)?
             .with_oidc(settings.oidc.clone())
@@ -168,7 +168,7 @@ impl Links {
     /// placed again (coming back), the activity log says so, and
     /// subscribers hear of it.
     async fn mark(&self, pool: &PgPool, link: &Link, online: bool) {
-        let changed = match rustyfin_db::repo::links::set_offline(pool, link.id, !online).await {
+        let changed = match rustyfin_data::repo::links::set_offline(pool, link.id, !online).await {
             Ok(changed) => changed,
             Err(e) => {
                 tracing::warn!(
@@ -183,9 +183,9 @@ impl Links {
         }
         let name = &link.settings.name;
         let moved = if online {
-            rustyfin_db::repo::links::merge(pool).await
+            rustyfin_data::repo::links::merge(pool).await
         } else {
-            rustyfin_db::repo::links::rehome(pool, link.id).await
+            rustyfin_data::repo::links::rehome(pool, link.id).await
         };
         if let Err(e) = moved {
             tracing::warn!("Link {name}: could not rearrange its copies: {e}");
@@ -203,7 +203,7 @@ impl Links {
         } else {
             tracing::warn!("{text}");
         }
-        let _ = rustyfin_db::repo::activity_log::insert(
+        let _ = rustyfin_data::repo::activity_log::insert(
             pool,
             &text,
             None,
@@ -237,7 +237,7 @@ impl Links {
     /// Sync each link whose server is down, which brings back those that
     /// answer again. Returns how many came back.
     pub async fn recheck_offline(&self, pool: &PgPool) -> usize {
-        let Ok(offline) = rustyfin_db::repo::links::offline_ids(pool).await else {
+        let Ok(offline) = rustyfin_data::repo::links::offline_ids(pool).await else {
             return 0;
         };
         let mut back = 0;
@@ -354,7 +354,7 @@ impl Links {
         metrics::histogram!("rustyfin_link_sync_duration_seconds", "link" => name)
             .record(started.elapsed().as_secs_f64());
         link.client.record_sync(started.elapsed(), error.is_none());
-        if let Err(e) = rustyfin_db::repo::links::record_sync(pool, id, error.as_deref()).await {
+        if let Err(e) = rustyfin_data::repo::links::record_sync(pool, id, error.as_deref()).await {
             tracing::warn!(
                 "Could not record the sync of link {}: {e}",
                 link.settings.name

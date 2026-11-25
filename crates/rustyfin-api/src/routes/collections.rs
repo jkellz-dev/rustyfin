@@ -6,7 +6,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_db::repo::collections;
+use rustyfin_data::repo::collections;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -116,7 +116,7 @@ pub async fn get_item_collections(
     let ids = collections::list_containing(&state.pool, item_id)
         .await
         .map_err(ApiError::Database)?;
-    let mut rows = rustyfin_db::repo::media_items::find_by_ids(&state.pool, &ids)
+    let mut rows = rustyfin_data::repo::media_items::find_by_ids(&state.pool, &ids)
         .await
         .map_err(ApiError::Database)?;
     rows.sort_by(|a, b| a.sort_name.cmp(&b.sort_name).then(a.name.cmp(&b.name)));
@@ -124,7 +124,7 @@ pub async fn get_item_collections(
         .iter()
         .map(|row| super::items::media_item_to_dto(row, &state.server_id))
         .collect();
-    let images = rustyfin_db::repo::images::list_by_items(&state.pool, &ids)
+    let images = rustyfin_data::repo::images::list_by_items(&state.pool, &ids)
         .await
         .map_err(ApiError::Database)?;
     let by_item = super::items::group_images_by_item(images);

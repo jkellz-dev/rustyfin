@@ -71,7 +71,7 @@ impl ScheduledTask for ActivityLogPruneTask {
 
     async fn run(&self) -> anyhow::Result<()> {
         let deleted =
-            rustyfin_db::repo::activity_log::delete_older_than(&self.pool, self.retention_days)
+            rustyfin_data::repo::activity_log::delete_older_than(&self.pool, self.retention_days)
                 .await?;
         if deleted > 0 {
             tracing::info!(
@@ -122,7 +122,7 @@ impl ScheduledTask for SessionCleanupTask {
 
     async fn run(&self) -> anyhow::Result<()> {
         let deactivated =
-            rustyfin_db::repo::sessions::deactivate_stale(&self.pool, self.inactive_days).await?;
+            rustyfin_data::repo::sessions::deactivate_stale(&self.pool, self.inactive_days).await?;
         if !deactivated.is_empty() {
             tracing::info!(
                 count = deactivated.len(),

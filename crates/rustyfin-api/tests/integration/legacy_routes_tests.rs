@@ -8,7 +8,7 @@ use crate::common;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::libraries;
+use rustyfin_data::repo::libraries;
 use serde_json::json;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -20,7 +20,7 @@ use uuid::Uuid;
 async fn the_arrs_older_notifications_rescan_the_title_they_name() {
     let app = common::TestApp::new().await;
     let key = "library-key-for-tests";
-    rustyfin_db::repo::api_keys::create(
+    rustyfin_data::repo::api_keys::create(
         &app.pool,
         "Library tool",
         &rustyfin_auth::api_key::hash_api_key(key),

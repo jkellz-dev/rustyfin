@@ -7,7 +7,7 @@ use crate::common;
 use std::collections::BTreeMap;
 
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::{libraries, media_streams};
+use rustyfin_data::repo::{libraries, media_streams};
 use uuid::Uuid;
 
 /// A tiny MP3: an ID3v2.3 tag with a title and an artist (or none), then a few

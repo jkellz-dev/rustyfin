@@ -8,7 +8,7 @@ use axum::{
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::{activity_log, libraries, user_library_access};
+use rustyfin_data::repo::{activity_log, libraries, user_library_access};
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
@@ -84,7 +84,7 @@ async fn all_views(
         .collect();
     for dto in &mut dtos {
         let count =
-            rustyfin_db::repo::media_items::count_top_level_by_library(&state.pool, dto.id, &[])
+            rustyfin_data::repo::media_items::count_top_level_by_library(&state.pool, dto.id, &[])
                 .await
                 .or_log_default("media_items::count_top_level_by_library");
         dto.child_count = Some(count as i32);
@@ -209,7 +209,7 @@ pub(crate) async fn visible_collection_count(
     let accessible = user_library_access::get_accessible_library_ids(&state.pool, user_id)
         .await
         .map_err(ApiError::Database)?;
-    rustyfin_db::repo::collections::count_visible(&state.pool, accessible.as_deref())
+    rustyfin_data::repo::collections::count_visible(&state.pool, accessible.as_deref())
         .await
         .map_err(ApiError::Database)
 }
@@ -251,7 +251,7 @@ pub(crate) async fn visible_library_folder(
     };
     let mut dto = collection_folder_dto(&lib, &state.server_id);
     let count =
-        rustyfin_db::repo::media_items::count_top_level_by_library(&state.pool, lib.id, &[])
+        rustyfin_data::repo::media_items::count_top_level_by_library(&state.pool, lib.id, &[])
             .await
             .or_log_default("media_items::count_top_level_by_library");
     dto.child_count = Some(count as i32);
@@ -269,7 +269,7 @@ async fn visible_libraries(
         .await
         .map_err(ApiError::Database)?;
     // A library made for a friend's, while their server is down: hidden.
-    let offline = rustyfin_db::repo::links::offline_ids(&state.pool)
+    let offline = rustyfin_data::repo::links::offline_ids(&state.pool)
         .await
         .map_err(ApiError::Database)?;
     Ok(libs
@@ -296,7 +296,7 @@ pub async fn get_root_folder_legacy(
     auth: AuthenticatedUser,
     axum::extract::Path(user_id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
-    rustyfin_db::repo::users::find_by_id(&state.pool, user_id)
+    rustyfin_data::repo::users::find_by_id(&state.pool, user_id)
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;

@@ -173,7 +173,7 @@ async fn people_and_artists_are_found_with_typos() {
         ("Ridley Scott", "Director"),
         ("Tom Skerritt", "Actor"),
     ] {
-        rustyfin_db::repo::people::insert(&app.pool, name, kind, None, None, None, None)
+        rustyfin_data::repo::people::insert(&app.pool, name, kind, None, None, None, None)
             .await
             .unwrap();
     }
@@ -221,7 +221,7 @@ async fn people_and_artists_are_found_with_typos() {
 async fn the_people_index_follows_renames_and_removals() {
     let app = common::TestApp::with_meilisearch().await;
     let (_, token) = app.create_user("viewer", false).await;
-    let weaver = rustyfin_db::repo::people::insert(
+    let weaver = rustyfin_data::repo::people::insert(
         &app.pool,
         "Sigourney Weaver",
         "Actor",
@@ -232,7 +232,7 @@ async fn the_people_index_follows_renames_and_removals() {
     )
     .await
     .unwrap();
-    let scott = rustyfin_db::repo::people::insert(
+    let scott = rustyfin_data::repo::people::insert(
         &app.pool,
         "Ridley Scott",
         "Director",

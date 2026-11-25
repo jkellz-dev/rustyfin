@@ -7,7 +7,7 @@ use axum::{
 };
 
 use rustyfin_auth::{forward_auth, ldap, middleware::parse_mediabrowser_header, session};
-use rustyfin_db::repo::{activity_log, users};
+use rustyfin_data::repo::{activity_log, users};
 use rustyfin_models::dto::{
     AuthenticateByNameRequest, AuthenticationResult, SessionInfoDto, UserConfiguration, UserDto,
     UserPolicy,
@@ -109,7 +109,7 @@ pub async fn authenticate_by_name(
     // keeps it and its token, so addresses an app built with the token (a
     // queue of tracks) keep working.
     let existing =
-        rustyfin_db::repo::sessions::find_active_for_device(&state.pool, user.id, device_id)
+        rustyfin_data::repo::sessions::find_active_for_device(&state.pool, user.id, device_id)
             .await
             .map_err(ApiError::Database)?;
     let (token, session_id) = match existing {

@@ -7,7 +7,7 @@ use axum::extract::{Path, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
 use axum::response::Response;
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::media_items::MediaItemRow;
+use rustyfin_data::repo::media_items::MediaItemRow;
 use rustyfin_media::image_processing::{self, ImageOptions};
 
 use crate::error::ApiError;
@@ -37,7 +37,7 @@ pub(crate) async fn stream(
     let data = item.extra_data.as_ref();
     let remote_id = data
         .and_then(|d| d["RemoteItemId"].as_str())
-        .unwrap_or_else(|| rustyfin_db::repo::links::remote_item(remote_id));
+        .unwrap_or_else(|| rustyfin_data::repo::links::remote_item(remote_id));
     let source = data
         .and_then(|d| d["RemoteSourceId"].as_str())
         .unwrap_or(remote_id)
@@ -185,7 +185,7 @@ pub(crate) async fn offer_transcodes(
         let Ok(id) = uuid::Uuid::parse_str(&source.id) else {
             continue;
         };
-        let Ok(Some(row)) = rustyfin_db::repo::media_items::find_by_id(&state.pool, id).await
+        let Ok(Some(row)) = rustyfin_data::repo::media_items::find_by_id(&state.pool, id).await
         else {
             continue;
         };
@@ -198,7 +198,7 @@ pub(crate) async fn offer_transcodes(
         let data = row.extra_data.as_ref();
         let item = data
             .and_then(|d| d["RemoteItemId"].as_str())
-            .unwrap_or_else(|| rustyfin_db::repo::links::remote_item(remote_id))
+            .unwrap_or_else(|| rustyfin_data::repo::links::remote_item(remote_id))
             .to_string();
         let remote_source = data
             .and_then(|d| d["RemoteSourceId"].as_str())
@@ -277,7 +277,7 @@ pub async fn relay_media(
     if !matches!(kind.as_str(), "videos" | "audio") || remote.is_empty() || parts.next().is_none() {
         return Err(ApiError::NotFound);
     }
-    let copy = rustyfin_db::repo::links::find_copy(&state.pool, link_id, remote)
+    let copy = rustyfin_data::repo::links::find_copy(&state.pool, link_id, remote)
         .await
         .map_err(ApiError::Database)?
         .ok_or(ApiError::NotFound)?;

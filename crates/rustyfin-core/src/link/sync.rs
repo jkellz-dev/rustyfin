@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
-use rustyfin_db::repo::links::{self, LinkedItem};
-use rustyfin_db::repo::media_streams::NewMediaStream;
+use rustyfin_data::repo::links::{self, LinkedItem};
+use rustyfin_data::repo::media_streams::NewMediaStream;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -157,7 +157,8 @@ async fn sync_library(
     }
     // A library of its own has no folders to scan: this sync is what fills it.
     if map.local.is_none() {
-        rustyfin_db::repo::libraries::mark_scanned(pool, local_library, started.elapsed()).await?;
+        rustyfin_data::repo::libraries::mark_scanned(pool, local_library, started.elapsed())
+            .await?;
     }
     Ok(())
 }
@@ -189,7 +190,7 @@ async fn target(
     let shows = collection == "tvshows";
     let local_library = match &map.local {
         Some(local) => {
-            rustyfin_db::repo::libraries::find_by_name(pool, local.trim())
+            rustyfin_data::repo::libraries::find_by_name(pool, local.trim())
                 .await?
                 .with_context(|| format!("there is no local library named \"{local}\""))?
                 .id
@@ -317,7 +318,7 @@ async fn sync_rustyfin(pool: &PgPool, link: &Link) -> anyhow::Result<SyncReport>
     if report.errors.is_empty() {
         links::set_catalog_cursor(pool, link.id, &feed.cursor).await?;
         for library in own {
-            rustyfin_db::repo::libraries::mark_scanned(pool, library, started.elapsed()).await?;
+            rustyfin_data::repo::libraries::mark_scanned(pool, library, started.elapsed()).await?;
         }
     }
     report.merged = links::merge(pool).await?;

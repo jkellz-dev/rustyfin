@@ -6,7 +6,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::sessions;
+use rustyfin_data::repo::sessions;
 use serde_json::json;
 
 #[tokio::test]

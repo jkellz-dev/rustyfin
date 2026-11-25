@@ -68,7 +68,7 @@ async fn a_collection_recorded_from_tmdb_joins_films_with_stale_nfos() {
     t.film("28 Days Later (2002) [tmdbid-170]", old);
     t.film("28 Weeks Later (2007) [tmdbid-1562]", old);
     t.film("28 Years Later (2025) [tmdbid-1100988]", new);
-    let lib = rustyfin_db::repo::libraries::create(&app.pool, "Movies", "movies", &[t.root()])
+    let lib = rustyfin_data::repo::libraries::create(&app.pool, "Movies", "movies", &[t.root()])
         .await
         .unwrap()
         .id;

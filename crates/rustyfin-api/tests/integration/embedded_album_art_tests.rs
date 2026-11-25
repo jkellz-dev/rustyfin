@@ -50,7 +50,7 @@ async fn an_album_without_a_cover_file_shows_its_first_tracks_cover() {
     let t = Tree::new();
     t.copy("Wavves/Cherry Soda/01 Sine.mp3", "sine.mp3");
     t.copy("Wavves/Plain/01 Sine.flac", "sine.flac");
-    let lib = rustyfin_db::repo::libraries::create(&app.pool, "Music", "music", &[t.root()])
+    let lib = rustyfin_data::repo::libraries::create(&app.pool, "Music", "music", &[t.root()])
         .await
         .unwrap()
         .id;

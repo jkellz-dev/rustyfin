@@ -14,7 +14,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{Executor, PgPool, Row};
 use uuid::Uuid;
 
-use rustyfin_db::repo::libraries;
+use rustyfin_data::repo::libraries;
 
 const NEW_MIGRATION: &str = "20261112000000_library_options.sql";
 

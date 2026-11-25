@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_core::EnrichmentService;
-use rustyfin_db::repo::images::ImageRow;
-use rustyfin_db::repo::{
+use rustyfin_data::repo::images::ImageRow;
+use rustyfin_data::repo::{
     chapters, images, libraries, media_items, media_streams, people, user_data, user_library_access,
 };
 use rustyfin_media::image_processing::Placeholder;
@@ -1018,7 +1018,7 @@ pub async fn get_items(
         && parent.item_type == "BoxSet"
     {
         super::access::require_item_access(&state, auth.user_id, pid).await?;
-        let members = rustyfin_db::repo::collections::list_item_ids(&state.pool, pid)
+        let members = rustyfin_data::repo::collections::list_item_ids(&state.pool, pid)
             .await
             .map_err(ApiError::Database)?;
         // An empty id list means "no filter" to the query: match nothing instead.
@@ -1160,7 +1160,7 @@ pub async fn get_items(
             .collect();
         if !boxsets.is_empty() {
             counts.extend(
-                rustyfin_db::repo::collections::count_items_batch(&state.pool, &boxsets)
+                rustyfin_data::repo::collections::count_items_batch(&state.pool, &boxsets)
                     .await
                     .or_log_default("collections::count_items_batch"),
             );
@@ -1290,7 +1290,7 @@ pub async fn get_item_by_id(
 
     // Child count for folders (a collection counts its films)
     if item.item_type == "BoxSet" {
-        let count = rustyfin_db::repo::collections::list_item_ids(&state.pool, item_id)
+        let count = rustyfin_data::repo::collections::list_item_ids(&state.pool, item_id)
             .await
             .map(|ids| ids.len())
             .unwrap_or(0);

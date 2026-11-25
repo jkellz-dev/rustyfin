@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use rustyfin_api::router::{AppState, build_router};
 use rustyfin_core::session::SessionManager;
-use rustyfin_db::repo::{libraries, media_items, sessions, users};
+use rustyfin_data::repo::{libraries, media_items, sessions, users};
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_search::SearchService;
 

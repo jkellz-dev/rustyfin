@@ -7,8 +7,8 @@
 
 use uuid::Uuid;
 
-use rustyfin_db::repo::media_items::{self, MediaItemRow};
-use rustyfin_db::repo::user_library_access;
+use rustyfin_data::repo::media_items::{self, MediaItemRow};
+use rustyfin_data::repo::user_library_access;
 
 use crate::error::ApiError;
 use crate::router::AppState;

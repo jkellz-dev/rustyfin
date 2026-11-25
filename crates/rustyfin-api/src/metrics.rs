@@ -14,7 +14,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use rustyfin_db::repo::{libraries, links, users};
+use rustyfin_data::repo::{libraries, links, users};
 
 use crate::router::AppState;
 

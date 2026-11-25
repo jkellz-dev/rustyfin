@@ -183,7 +183,7 @@ last changed a person, as on `media_items`.
 
 ### `search_sync`
 
-Where each Meilisearch index was brought up to (`rustyfin_db::repo::search_feed`): the changes since are those this
+Where each Meilisearch index was brought up to (`rustyfin_data::repo::search_feed`): the changes since are those this
 snapshot did not see. No row: the next sync builds the index whole.
 
 | Column | Type | Nullable | Default | Description |

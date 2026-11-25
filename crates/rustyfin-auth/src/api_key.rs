@@ -5,7 +5,7 @@ use axum::{
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
-use rustyfin_db::repo::api_keys;
+use rustyfin_data::repo::api_keys;
 
 /// Authenticated via API key (X-Api-Key header or api_key query param).
 #[derive(Debug, Clone)]

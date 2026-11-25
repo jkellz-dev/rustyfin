@@ -6,7 +6,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::people;
+use rustyfin_data::repo::people;
 use serde_json::Value;
 
 fn assert_item_fields(what: &str, item: &Value) {

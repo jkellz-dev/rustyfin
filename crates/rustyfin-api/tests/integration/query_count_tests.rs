@@ -11,7 +11,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::{images, media_items, people, user_data};
+use rustyfin_data::repo::{images, media_items, people, user_data};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};

@@ -13,7 +13,7 @@ use crate::common;
 
 use axum::http::StatusCode;
 use rustyfin_core::headshot_file_name;
-use rustyfin_db::repo::people;
+use rustyfin_data::repo::people;
 use std::path::PathBuf;
 use uuid::Uuid;
 

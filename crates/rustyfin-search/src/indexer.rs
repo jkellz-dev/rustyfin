@@ -6,8 +6,8 @@ use std::time::Duration;
 use meilisearch_sdk::client::{Client, SwapIndexes};
 use meilisearch_sdk::settings::Settings;
 use meilisearch_sdk::task_info::TaskInfo;
-use rustyfin_db::repo::media_items::MediaItemRow;
-use rustyfin_db::repo::people::PersonRow;
+use rustyfin_data::repo::media_items::MediaItemRow;
+use rustyfin_data::repo::people::PersonRow;
 use serde::Serialize;
 use uuid::Uuid;
 

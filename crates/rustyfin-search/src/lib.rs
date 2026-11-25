@@ -20,8 +20,8 @@ pub mod query;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use rustyfin_db::repo::people::{self, PersonRow};
-use rustyfin_db::repo::{media_items, search_feed};
+use rustyfin_data::repo::people::{self, PersonRow};
+use rustyfin_data::repo::{media_items, search_feed};
 use sqlx::PgPool;
 use uuid::Uuid;
 

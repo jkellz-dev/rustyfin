@@ -5,7 +5,7 @@
 use axum::Json;
 use axum::extract::{Query, State};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{catalog, user_library_access, users};
+use rustyfin_data::repo::{catalog, user_library_access, users};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

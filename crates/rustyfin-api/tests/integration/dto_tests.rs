@@ -1,7 +1,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::media_items;
+use rustyfin_data::repo::media_items;
 
 /// An empty library should return `Items: []` (not null) with `TotalRecordCount: 0`.
 #[tokio::test]

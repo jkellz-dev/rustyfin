@@ -1,5 +1,5 @@
-use rustyfin_db::repo::media_items::MediaItemRow;
-use rustyfin_db::repo::media_streams::MediaStreamRow;
+use rustyfin_data::repo::media_items::MediaItemRow;
+use rustyfin_data::repo::media_streams::MediaStreamRow;
 use rustyfin_models::dto::{
     DeviceProfile, MediaSourceInfo, MediaStream, PlaybackInfoRequest, PlaybackInfoResponse,
     SubtitleProfile,

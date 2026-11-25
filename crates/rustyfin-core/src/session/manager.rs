@@ -104,16 +104,16 @@ impl SessionManager {
         if self.sessions.read().await.contains_key(&session_id) {
             return;
         }
-        let row = match rustyfin_db::repo::sessions::find_active_by_id(&self.pool, session_id).await
-        {
-            Ok(Some(row)) => row,
-            Ok(None) => return,
-            Err(e) => {
-                tracing::warn!("Could not load session {session_id} to track it: {e}");
-                return;
-            }
-        };
-        let user_name = rustyfin_db::repo::users::find_by_id(&self.pool, row.user_id)
+        let row =
+            match rustyfin_data::repo::sessions::find_active_by_id(&self.pool, session_id).await {
+                Ok(Some(row)) => row,
+                Ok(None) => return,
+                Err(e) => {
+                    tracing::warn!("Could not load session {session_id} to track it: {e}");
+                    return;
+                }
+            };
+        let user_name = rustyfin_data::repo::users::find_by_id(&self.pool, row.user_id)
             .await
             .ok()
             .flatten()

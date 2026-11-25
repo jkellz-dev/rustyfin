@@ -5,7 +5,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::libraries;
+use rustyfin_data::repo::libraries;
 use serde_json::Value;
 
 fn folder<'a>(list: &'a Value, name: &str) -> &'a Value {

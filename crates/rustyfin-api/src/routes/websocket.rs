@@ -105,7 +105,7 @@ async fn handle_socket(
                     Some(token) => token_still_valid(&state, token).await,
                     // Vouched for: open while its session is.
                     None => !matches!(
-                        rustyfin_db::repo::sessions::find_active_by_id(&state.pool, session_id).await,
+                        rustyfin_data::repo::sessions::find_active_by_id(&state.pool, session_id).await,
                         Ok(None)
                     ),
                 };

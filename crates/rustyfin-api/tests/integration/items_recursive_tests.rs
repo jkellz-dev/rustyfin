@@ -111,7 +111,7 @@ async fn without_recursive_only_the_direct_children_are_listed() {
 /// episodes they may see rather than short because hidden ones were fetched first.
 #[tokio::test]
 async fn recursive_stays_inside_the_libraries_the_user_may_see() {
-    use rustyfin_db::repo::{user_library_access, users};
+    use rustyfin_data::repo::{user_library_access, users};
 
     let app = common::TestApp::new().await;
     let (user_id, token) = app.create_user("restricted", false).await;

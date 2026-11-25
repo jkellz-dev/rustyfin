@@ -6,7 +6,7 @@ use axum::{
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::display_preferences as prefs_repo;
+use rustyfin_data::repo::display_preferences as prefs_repo;
 use rustyfin_models::dto::DisplayPreferencesDto;
 
 use crate::error::ApiError;

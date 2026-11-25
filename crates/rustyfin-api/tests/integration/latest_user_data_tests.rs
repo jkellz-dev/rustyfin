@@ -130,13 +130,13 @@ async fn continue_watching_keeps_to_video_and_shows_in_progress() {
     .execute(&app.pool)
     .await
     .unwrap();
-    rustyfin_db::repo::user_data::upsert(&app.pool, user, s1e1, 0, true, false, 1)
+    rustyfin_data::repo::user_data::upsert(&app.pool, user, s1e1, 0, true, false, 1)
         .await
         .unwrap();
     let song = app
         .create_media_item("Half a Song", "Audio", lib, None)
         .await;
-    rustyfin_db::repo::user_data::upsert(&app.pool, user, song, 10_000_000, false, false, 0)
+    rustyfin_data::repo::user_data::upsert(&app.pool, user, song, 10_000_000, false, false, 0)
         .await
         .unwrap();
 

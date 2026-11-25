@@ -6,7 +6,7 @@ use axum::{
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{media_items, media_streams};
+use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::playback_info;
 use rustyfin_models::dto::{PlaybackInfoRequest, PlaybackInfoResponse};
 

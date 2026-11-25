@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{media_items, play_history};
+use rustyfin_data::repo::{media_items, play_history};
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -187,7 +187,7 @@ async fn pictures(
         .map(|row| items::media_item_to_dto(row, &state.server_id))
         .collect();
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-    let images = rustyfin_db::repo::images::list_by_items(&state.pool, &ids)
+    let images = rustyfin_data::repo::images::list_by_items(&state.pool, &ids)
         .await
         .unwrap_or_default();
     let by_item = items::group_images_by_item(images);

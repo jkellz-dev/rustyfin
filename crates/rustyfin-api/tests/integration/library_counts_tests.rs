@@ -7,7 +7,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::{user_library_access, users};
+use rustyfin_data::repo::{user_library_access, users};
 use uuid::Uuid;
 
 /// A movies library with one movie; a shows library with one series, one season and

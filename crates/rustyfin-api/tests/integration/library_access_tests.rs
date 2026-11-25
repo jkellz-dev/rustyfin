@@ -11,7 +11,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::{media_items, user_library_access, users};
+use rustyfin_data::repo::{media_items, user_library_access, users};
 use uuid::Uuid;
 
 struct World {

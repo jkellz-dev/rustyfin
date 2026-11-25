@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{media_items, people};
+use rustyfin_data::repo::{media_items, people};
 
 use rustyfin_common::nfo::{
     NfoMetadata, find_album_nfo, find_artist_nfo, find_episode_nfo, find_movie_nfo,
@@ -210,7 +210,7 @@ impl EnrichmentService {
                         {
                             let headshot_path = cache_dir.join(file);
                             if headshot_path.is_file() {
-                                let existing = rustyfin_db::repo::images::find_by_item_and_type(
+                                let existing = rustyfin_data::repo::images::find_by_item_and_type(
                                     &self.pool,
                                     person_row.id,
                                     "Primary",
@@ -218,14 +218,14 @@ impl EnrichmentService {
                                 )
                                 .await;
                                 if matches!(existing, Ok(None)) {
-                                    let new_image = rustyfin_db::repo::images::NewImage {
+                                    let new_image = rustyfin_data::repo::images::NewImage {
                                         entity_id: person_row.id,
                                         image_type: "Primary".to_string(),
                                         path: headshot_path.to_string_lossy().into_owned(),
                                         image_index: 0,
                                     };
                                     if let Err(e) =
-                                        rustyfin_db::repo::images::insert(&self.pool, &new_image)
+                                        rustyfin_data::repo::images::insert(&self.pool, &new_image)
                                             .await
                                     {
                                         tracing::error!(
@@ -274,13 +274,13 @@ impl EnrichmentService {
             if !headshot_path.is_file() {
                 continue;
             }
-            let new_image = rustyfin_db::repo::images::NewImage {
+            let new_image = rustyfin_data::repo::images::NewImage {
                 entity_id: person.id,
                 image_type: "Primary".to_string(),
                 path: headshot_path.to_string_lossy().into_owned(),
                 image_index: 0,
             };
-            if let Err(e) = rustyfin_db::repo::images::insert(&self.pool, &new_image).await {
+            if let Err(e) = rustyfin_data::repo::images::insert(&self.pool, &new_image).await {
                 tracing::error!("Failed to insert headshot for {}: {e}", person.name);
             } else {
                 inserted += 1;

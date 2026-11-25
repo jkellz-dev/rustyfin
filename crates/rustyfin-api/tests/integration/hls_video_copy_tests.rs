@@ -4,7 +4,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::media_streams::{self, NewMediaStream};
+use rustyfin_data::repo::media_streams::{self, NewMediaStream};
 use uuid::Uuid;
 
 fn video(item_id: Uuid, profile: &str, level: i32, bit_depth: i32, pix: &str) -> NewMediaStream {

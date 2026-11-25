@@ -9,7 +9,7 @@
 use crate::common;
 
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::libraries;
+use rustyfin_data::repo::libraries;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 

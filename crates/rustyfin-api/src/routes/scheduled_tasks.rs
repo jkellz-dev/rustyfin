@@ -5,7 +5,7 @@ use axum::{
 };
 
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_db::repo::task_results;
+use rustyfin_data::repo::task_results;
 use rustyfin_models::dto::{TaskInfoDto, TaskResultDto, TaskTriggerDto};
 
 use crate::error::ApiError;

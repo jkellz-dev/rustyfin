@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use rustyfin_auth::api_key::hash_api_key;
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_db::repo::api_keys;
+use rustyfin_data::repo::api_keys;
 
 use crate::error::ApiError;
 use crate::router::AppState;

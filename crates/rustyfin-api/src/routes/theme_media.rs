@@ -11,7 +11,7 @@ use axum::{
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, media_items};
+use rustyfin_data::repo::{images, media_items};
 use rustyfin_models::dto::{AllThemeMediaResult, BaseItemDto, ThemeMediaResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
@@ -118,7 +118,7 @@ pub async fn get_ancestors(
         dto.child_count = Some(counts.get(&dto.id).copied().unwrap_or(0) as i32);
     }
     if let Some(lib) = match library_id {
-        Some(id) => rustyfin_db::repo::libraries::find_by_id(&state.pool, id)
+        Some(id) => rustyfin_data::repo::libraries::find_by_id(&state.pool, id)
             .await
             .map_err(ApiError::Database)?,
         None => None,

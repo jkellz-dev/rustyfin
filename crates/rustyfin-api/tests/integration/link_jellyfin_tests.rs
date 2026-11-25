@@ -20,7 +20,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use rustyfin_core::LibraryScanner;
 use rustyfin_core::link::{LibraryMap, LinkKind, LinkSettings};
-use rustyfin_db::repo::media_items;
+use rustyfin_data::repo::media_items;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -1470,12 +1470,12 @@ async fn a_link_taken_out_of_the_config_is_removed_at_start() {
     assert!(mine["ImageTags"]["Primary"].is_string(), "borrowed: {mine}");
 
     // Still named in the config: nothing goes.
-    let removed = rustyfin_db::repo::links::remove_unconfigured(&app.pool, &["Alex".to_string()])
+    let removed = rustyfin_data::repo::links::remove_unconfigured(&app.pool, &["Alex".to_string()])
         .await
         .unwrap();
     assert!(removed.is_empty(), "{removed:?}");
 
-    let removed = rustyfin_db::repo::links::remove_unconfigured(&app.pool, &[])
+    let removed = rustyfin_data::repo::links::remove_unconfigured(&app.pool, &[])
         .await
         .unwrap();
     assert_eq!(removed.len(), 1, "{removed:?}");
@@ -1788,7 +1788,7 @@ async fn watched_state_outlives_a_removed_link_and_comes_back_with_the_title() {
     .await
     .unwrap();
 
-    rustyfin_db::repo::links::remove_unconfigured(&app.pool, &[])
+    rustyfin_data::repo::links::remove_unconfigured(&app.pool, &[])
         .await
         .unwrap();
     let movies = format!("/Users/{uid}/Items?ParentId={lib}&Recursive=true&IncludeItemTypes=Movie");

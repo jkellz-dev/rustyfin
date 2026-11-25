@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_db::repo::sessions;
+use rustyfin_data::repo::sessions;
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

@@ -48,7 +48,7 @@ pub fn local_only_pool(pool: &PgPool) -> PgPool {
         .options([("rustyfin.local_only", "on")]);
     PgPoolOptions::new()
         .max_connections(5)
-        .acquire_timeout(rustyfin_db::pool::ACQUIRE_TIMEOUT)
+        .acquire_timeout(rustyfin_data::pool::ACQUIRE_TIMEOUT)
         .connect_lazy_with(options)
 }
 

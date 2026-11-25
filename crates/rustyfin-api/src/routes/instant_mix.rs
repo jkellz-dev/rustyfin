@@ -10,7 +10,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, media_items, user_library_access};
+use rustyfin_data::repo::{images, media_items, user_library_access};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use super::items::{

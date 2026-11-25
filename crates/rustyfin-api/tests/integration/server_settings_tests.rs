@@ -89,7 +89,7 @@ async fn the_server_configuration_has_jellyfins_fields() {
 async fn devices_and_keys_answer_in_jellyfins_shapes() {
     let app = common::TestApp::new().await;
     let (user, admin) = app.create_user("admin", true).await;
-    rustyfin_db::repo::sessions::create(
+    rustyfin_data::repo::sessions::create(
         &app.pool,
         "tok-settings-tv",
         user,

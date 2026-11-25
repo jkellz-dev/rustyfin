@@ -2,7 +2,7 @@ use chrono::Utc;
 use rand::RngExt;
 use sqlx::PgPool;
 
-use rustyfin_db::repo::device_auth;
+use rustyfin_data::repo::device_auth;
 use rustyfin_models::dto::{DeviceCodeResponse, DeviceTokenPending, DeviceTokenResponse};
 
 /// Generate a random device code (long, for machine use).

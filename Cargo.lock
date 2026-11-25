@@ -3360,7 +3360,7 @@ dependencies = [
  "rustyfin-auth",
  "rustyfin-common",
  "rustyfin-core",
- "rustyfin-db",
+ "rustyfin-data",
  "rustyfin-media",
  "rustyfin-models",
  "rustyfin-search",
@@ -3387,7 +3387,7 @@ dependencies = [
  "ipnet",
  "ldap3",
  "rand 0.10.4",
- "rustyfin-db",
+ "rustyfin-data",
  "rustyfin-models",
  "serde",
  "serde_json",
@@ -3450,7 +3450,7 @@ dependencies = [
  "regex",
  "reqwest 0.13.5",
  "rustyfin-common",
- "rustyfin-db",
+ "rustyfin-data",
  "rustyfin-media",
  "rustyfin-models",
  "rustyfin-search",
@@ -3465,7 +3465,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustyfin-db"
+name = "rustyfin-data"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -3502,7 +3502,7 @@ dependencies = [
  "image",
  "libc",
  "lofty",
- "rustyfin-db",
+ "rustyfin-data",
  "rustyfin-models",
  "serde",
  "serde_json",
@@ -3548,7 +3548,7 @@ name = "rustyfin-search"
 version = "0.1.0"
 dependencies = [
  "meilisearch-sdk",
- "rustyfin-db",
+ "rustyfin-data",
  "serde",
  "serde_json",
  "sqlx",
@@ -3569,7 +3569,7 @@ dependencies = [
  "rustyfin-api",
  "rustyfin-auth",
  "rustyfin-core",
- "rustyfin-db",
+ "rustyfin-data",
  "rustyfin-frontend",
  "rustyfin-media",
  "rustyfin-models",

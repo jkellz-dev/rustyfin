@@ -9,7 +9,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AuthenticatedUser, OptionalUser};
-use rustyfin_db::repo::{images, libraries, media_items, people, user_library_access};
+use rustyfin_data::repo::{images, libraries, media_items, people, user_library_access};
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 
@@ -186,7 +186,7 @@ async fn serve_placeholder(
         }
         // A collection without a cover shows its earliest film's poster.
         if item.item_type == "BoxSet" {
-            let members = rustyfin_db::repo::collections::list_item_ids(&state.pool, item.id)
+            let members = rustyfin_data::repo::collections::list_item_ids(&state.pool, item.id)
                 .await
                 .map_err(ApiError::Database)?;
             let mut films = media_items::find_by_ids(&state.pool, &members)

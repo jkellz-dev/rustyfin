@@ -8,7 +8,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_db::repo::{user_library_access, users};
+use rustyfin_data::repo::{user_library_access, users};
 
 #[tokio::test]
 async fn the_root_folder_holds_the_libraries_a_user_may_see() {

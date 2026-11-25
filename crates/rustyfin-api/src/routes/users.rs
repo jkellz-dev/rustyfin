@@ -7,7 +7,7 @@ use axum::{
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_db::repo::{activity_log, user_library_access, users};
+use rustyfin_data::repo::{activity_log, user_library_access, users};
 use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, UserPolicy};
 
 use crate::error::ApiError;

@@ -260,7 +260,7 @@ async fn show_and_season_extras_are_not_episodes() {
 
 #[tokio::test]
 async fn extras_of_a_hidden_library_are_404() {
-    use rustyfin_db::repo::{user_library_access, users};
+    use rustyfin_data::repo::{user_library_access, users};
     let app = common::TestApp::new().await;
     let (user_id, token) = app.create_user("restricted", false).await;
     let hidden = app.create_library("Hidden", "movies").await;

@@ -494,7 +494,7 @@ impl JellyfinClient {
     /// plus one per such collection.
     pub async fn collections(
         &self,
-    ) -> anyhow::Result<Vec<rustyfin_db::repo::links::LinkCollection>> {
+    ) -> anyhow::Result<Vec<rustyfin_data::repo::links::LinkCollection>> {
         let light = |q: &mut Vec<(&str, String)>| {
             q.push(("EnableImages", "false".into()));
             q.push(("EnableUserData", "false".into()));
@@ -526,7 +526,7 @@ impl JellyfinClient {
                     .filter_map(|f| f["Id"].as_str().map(str::to_string))
                     .collect()
             };
-            out.push(rustyfin_db::repo::links::LinkCollection {
+            out.push(rustyfin_data::repo::links::LinkCollection {
                 remote_id: id.to_string(),
                 name: name.to_string(),
                 tmdb_id,

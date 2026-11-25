@@ -11,7 +11,7 @@ use rustyfin_core::TaskScheduler;
 use rustyfin_core::library::scheduler::{
     LibraryScanScheduleConfig, SchedulerConfig, SearchReindexScheduleConfig,
 };
-use rustyfin_db::repo::task_results;
+use rustyfin_data::repo::task_results;
 use tokio::sync::RwLock;
 
 #[tokio::test]

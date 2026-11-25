@@ -6,8 +6,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::media_items;
-use rustyfin_db::repo::media_items::NameKind;
+use rustyfin_data::repo::media_items;
+use rustyfin_data::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -106,7 +106,7 @@ pub fn spawn_genre_list_builder(state: AppState) {
     tokio::spawn(async move {
         loop {
             let started = std::time::Instant::now();
-            let libraries = rustyfin_db::repo::libraries::list_all(&state.pool)
+            let libraries = rustyfin_data::repo::libraries::list_all(&state.pool)
                 .await
                 .or_log_default("libraries::list_all");
             let targets = std::iter::once(None).chain(

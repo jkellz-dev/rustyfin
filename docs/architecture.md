@@ -14,7 +14,7 @@ rustyfin/
 │   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
 │   ├── rustyfin-auth/          # Who is asking: forward auth, LDAPS, tokens, sessions
 │   ├── rustyfin-core/          # Scanner, enrichment, scheduler, sessions, scan progress
-│   ├── rustyfin-db/            # Postgres pool, migrations, repositories
+│   ├── rustyfin-data/            # Postgres pool, migrations, repositories
 │   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
 │   ├── rustyfin-search/        # Meilisearch, with Postgres as the fallback
 │   ├── rustyfin-media/         # Probing, play-method decisions, streaming, HLS transcoding
@@ -34,17 +34,17 @@ Each crate starts with a `//!` overview of what it holds.
 
 ```text
 rustyfin-server
-├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-db, rustyfin-models
-│                  ├── rustyfin-core ──── rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-db, rustyfin-models
-│                  ├── rustyfin-media ─── rustyfin-db, rustyfin-models
-│                  ├── rustyfin-search ── rustyfin-db
+├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-data, rustyfin-models
+│                  ├── rustyfin-core ──── rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-data, rustyfin-models
+│                  ├── rustyfin-media ─── rustyfin-data, rustyfin-models
+│                  ├── rustyfin-search ── rustyfin-data
 │                  └── rustyfin-common
 └── rustyfin-frontend (no internal dependencies)
 
 rustyfin-meta ──── rustyfin-common     (the tool shares no server code beyond common)
 ```
 
-`rustyfin-db`, `rustyfin-models` and `rustyfin-common` depend on no other Rustyfin crate.
+`rustyfin-data`, `rustyfin-models` and `rustyfin-common` depend on no other Rustyfin crate.
 
 ## What each crate does
 
@@ -77,7 +77,7 @@ the WebSocket), and image resizing. See [Library Scanning](library-scanning.md).
 `Links` registry, a Jellyfin API client that signs in as the friend's link user, and the sync that mirrors the shared
 catalogue into `media_items` and merges it ([Linked Servers](linked-servers.md)).
 
-### `rustyfin-db`
+### `rustyfin-data`
 
 The sqlx pool, the migrations in `migrations/`, and one repository module per table or concern (media items, streams,
 user data, play history, sessions, libraries, people, images, ...). Queries are plain SQL strings, so building needs no

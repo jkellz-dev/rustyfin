@@ -13,7 +13,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{media_items, media_streams};
+use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_media::transcode::{
     hls::{

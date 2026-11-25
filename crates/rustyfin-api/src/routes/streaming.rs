@@ -8,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::media_items;
+use rustyfin_data::repo::media_items;
 use rustyfin_media::streaming;
 
 use crate::error::ApiError;

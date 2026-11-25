@@ -1,6 +1,6 @@
 use crate::common;
 
-use rustyfin_db::repo::{images, libraries, media_items, people, user_data};
+use rustyfin_data::repo::{images, libraries, media_items, people, user_data};
 use uuid::Uuid;
 
 // ---------------------------------------------------------------------------

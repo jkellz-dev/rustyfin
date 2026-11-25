@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
 };
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::media_items;
+use rustyfin_data::repo::media_items;
 use rustyfin_models::dto::lyrics::{LyricDto, LyricLineDto, LyricMetadata};
 use rustyfin_models::dto::query_result::QueryResult;
 use uuid::Uuid;

@@ -11,7 +11,7 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use rustyfin_db::repo::{activity_log, libraries, task_results};
+use rustyfin_data::repo::{activity_log, libraries, task_results};
 
 use crate::library::scanner::LibraryScanner;
 

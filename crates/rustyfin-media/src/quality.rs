@@ -7,7 +7,7 @@
 //! own preference (the film's own file, a local copy over a linked one) wins
 //! it.
 
-use rustyfin_db::repo::media_streams::MediaStreamRow;
+use rustyfin_data::repo::media_streams::MediaStreamRow;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Kind {

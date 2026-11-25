@@ -52,7 +52,7 @@ async fn a_rewritten_album_nfo_does_not_reread_its_tracks() {
     std::fs::copy(fixtures.join("sine.flac"), album.join("02 Summer.flac")).unwrap();
     write_nfo(&album, &nfo("Purple Hat"), 0);
     let paths = [tree.0.to_string_lossy().to_string()];
-    let lib = rustyfin_db::repo::libraries::create(&app.pool, "Music", "music", &paths)
+    let lib = rustyfin_data::repo::libraries::create(&app.pool, "Music", "music", &paths)
         .await
         .unwrap()
         .id;

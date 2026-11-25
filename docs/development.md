@@ -81,7 +81,7 @@ rustyfin/
     ├── rustyfin-api/           # Route handlers
     ├── rustyfin-auth/          # Auth extractors
     ├── rustyfin-core/          # Domain logic
-    ├── rustyfin-db/            # Database layer
+    ├── rustyfin-data/            # Database layer
     ├── rustyfin-models/        # Shared DTOs
     ├── rustyfin-search/        # Search service
     ├── rustyfin-media/         # Probing & streaming
@@ -258,7 +258,7 @@ database connection needed).
 ## Adding a New API Endpoint
 
 1. **Define DTOs** (if needed) in `crates/rustyfin-models/src/dto/`
-2. **Add DB functions** (if needed) in `crates/rustyfin-db/src/repo/`
+2. **Add DB functions** (if needed) in `crates/rustyfin-data/src/repo/`
 3. **Write the handler** in `crates/rustyfin-api/src/routes/<resource>.rs`
 4. **Register the route** in `crates/rustyfin-api/src/router.rs`
 

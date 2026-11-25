@@ -6,7 +6,7 @@ use axum::{
 };
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_db::repo::{libraries, media_items, users};
+use rustyfin_data::repo::{libraries, media_items, users};
 use rustyfin_models::dto::{
     CastReceiverApplication, DashboardStats, EndPointInfo, LogFileInfo, PublicSystemInfo,
     StartupConfiguration, SystemInfo,

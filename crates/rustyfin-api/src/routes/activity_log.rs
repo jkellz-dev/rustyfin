@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_db::repo::activity_log;
+use rustyfin_data::repo::activity_log;
 use rustyfin_models::dto::{ActivityLogEntryDto, QueryResult};
 
 use crate::error::ApiError;

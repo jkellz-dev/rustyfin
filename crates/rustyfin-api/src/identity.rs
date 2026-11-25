@@ -30,7 +30,7 @@ use rustyfin_auth::{
     middleware::{AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token},
     session,
 };
-use rustyfin_db::repo::{sessions, users};
+use rustyfin_data::repo::{sessions, users};
 
 use crate::router::{AppState, ForwardAuthState};
 
@@ -62,7 +62,7 @@ pub async fn vouch(State(state): State<AppState>, mut req: Request, next: Next) 
             Ok(None) => {
                 req.extensions_mut().insert(Unvouched);
             }
-            Err(e) if rustyfin_db::pool::is_unavailable(&e) => {
+            Err(e) if rustyfin_data::pool::is_unavailable(&e) => {
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
             Err(e) => {

@@ -6,7 +6,7 @@ use crate::common;
 
 use axum::http::StatusCode;
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::{libraries, user_library_access, users};
+use rustyfin_data::repo::{libraries, user_library_access, users};
 use std::path::PathBuf;
 use uuid::Uuid;
 

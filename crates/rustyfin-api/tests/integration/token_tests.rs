@@ -10,7 +10,7 @@ use crate::common;
 
 use axum::http::StatusCode;
 use rustyfin_auth::session::{TokenError, resolve_token};
-use rustyfin_db::repo::{sessions, users};
+use rustyfin_data::repo::{sessions, users};
 
 #[tokio::test]
 async fn a_live_token_resolves_to_its_session_and_user() {

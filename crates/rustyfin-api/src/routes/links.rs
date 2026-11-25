@@ -6,7 +6,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_db::repo::links;
+use rustyfin_data::repo::links;
 use serde::Serialize;
 use uuid::Uuid;
 

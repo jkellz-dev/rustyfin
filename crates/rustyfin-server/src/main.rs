@@ -23,7 +23,7 @@ use rustyfin_core::library::scheduler::{
 };
 use rustyfin_core::library::tasks::SearchReindexTask;
 use rustyfin_core::session::SessionManager;
-use rustyfin_db::pool;
+use rustyfin_data::pool;
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_search::SearchService;
 
@@ -122,7 +122,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Runs the last server left running were stopped by it: Aborted, and a
     // stopped library scan starts again once the server is up (below).
-    let interrupted = match rustyfin_db::repo::task_results::cleanup_stale_running(&db_pool).await {
+    let interrupted = match rustyfin_data::repo::task_results::cleanup_stale_running(&db_pool).await
+    {
         Ok(keys) => keys,
         Err(e) => {
             tracing::error!("Failed to clean up stale task results: {e}");
@@ -349,7 +350,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     let configured: Vec<String> = config.links.iter().map(|l| l.name.clone()).collect();
-    match rustyfin_db::repo::links::remove_unconfigured(&db_pool, &configured).await {
+    match rustyfin_data::repo::links::remove_unconfigured(&db_pool, &configured).await {
         Ok(removed) => {
             for (name, copies) in removed {
                 tracing::warn!(

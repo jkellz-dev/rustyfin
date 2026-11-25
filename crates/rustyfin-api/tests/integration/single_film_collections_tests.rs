@@ -61,7 +61,7 @@ async fn collections_of_one_film_are_not_listed() {
     t.film("A (2001)", pair);
     t.film("B (2002)", pair);
     t.film("C (2003)", lone);
-    let lib = rustyfin_db::repo::libraries::create(&app.pool, "Movies", "movies", &[t.root()])
+    let lib = rustyfin_data::repo::libraries::create(&app.pool, "Movies", "movies", &[t.root()])
         .await
         .unwrap()
         .id;

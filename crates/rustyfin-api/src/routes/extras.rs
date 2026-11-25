@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
 };
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{images, media_items};
+use rustyfin_data::repo::{images, media_items};
 use rustyfin_models::dto::{BaseItemDto, ThemeMediaResult};
 use uuid::Uuid;
 

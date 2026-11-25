@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use rustyfin_db::repo::libraries::LibraryRow;
+use rustyfin_data::repo::libraries::LibraryRow;
 use rustyfin_models::dto::{
     CacheHealth, DatabaseHealth, FolderHealth, LibraryHealth, SearchHealth, SystemHealth,
 };

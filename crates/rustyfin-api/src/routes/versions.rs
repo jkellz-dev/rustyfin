@@ -4,7 +4,7 @@
 //! `MediaSourceId`. The best copy comes first and plays when none is named
 //! (owner, 2026-11-18; `rustyfin_media::quality`).
 
-use rustyfin_db::repo::{media_items, media_streams};
+use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::quality::Quality;
 use rustyfin_models::dto::{BaseItemDto, DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use uuid::Uuid;

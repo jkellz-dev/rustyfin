@@ -5,7 +5,7 @@ use axum::{
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rustyfin_db::repo::sessions;
+use rustyfin_data::repo::sessions;
 use rustyfin_models::dto::MediaBrowserAuth;
 
 use crate::session::{ResolvedToken, TokenError, resolve_token};
@@ -133,7 +133,7 @@ where
             resolve_token(&pool, &token).await.map_err(|e| match e {
                 // Busy or unreachable database: 503, never a 401 that would
                 // sign the client out.
-                TokenError::Database(e) if rustyfin_db::pool::is_unavailable(&e) => {
+                TokenError::Database(e) if rustyfin_data::pool::is_unavailable(&e) => {
                     StatusCode::SERVICE_UNAVAILABLE
                 }
                 TokenError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,

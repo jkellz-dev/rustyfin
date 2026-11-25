@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode};
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::{media_items, user_data};
+use rustyfin_data::repo::{media_items, user_data};
 use rustyfin_models::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
 
 use crate::error::ApiError;

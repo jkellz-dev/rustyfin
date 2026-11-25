@@ -6,7 +6,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_db::repo::user_data;
+use rustyfin_data::repo::user_data;
 use rustyfin_models::dto::UserItemDataDto;
 
 use crate::error::ApiError;

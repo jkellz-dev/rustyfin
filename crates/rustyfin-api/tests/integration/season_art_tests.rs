@@ -12,7 +12,7 @@ use crate::common;
 
 use axum::http::StatusCode;
 use rustyfin_core::LibraryScanner;
-use rustyfin_db::repo::libraries;
+use rustyfin_data::repo::libraries;
 use rustyfin_media::image_processing::Placeholder;
 use std::path::PathBuf;
 use uuid::Uuid;

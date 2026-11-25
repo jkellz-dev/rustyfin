@@ -4,7 +4,7 @@
 //! tasks it stopped so a library scan can start again.
 use crate::common;
 
-use rustyfin_db::repo::task_results;
+use rustyfin_data::repo::task_results;
 
 #[tokio::test]
 async fn a_run_the_server_stopped_is_aborted_not_failed() {
