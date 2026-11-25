@@ -1,10 +1,18 @@
 # Rustyfin
 
+> [!CAUTION]
+> **ALPHA SOFTWARE: EXPECT DRASTIC CHANGES.**
+>
+> Rustyfin is alpha software and is likely to change drastically, without notice or a migration path. Its code layout,
+> its configuration, its own API and its database schema are all still moving. Keep backups, read the changelog
+> before upgrading, and expect upgrades that need manual steps.
+
 A media server in Rust that speaks Jellyfin's API, so Jellyfin's apps (Infuse, Swiftfin, Findroid, Finamp, Jellyfin
 Media Player, ...) work with it unchanged. The aim is a fast, light Jellyfin replacement for people who run their own
 servers: one binary, Postgres for state, media folders mounted read-only.
 
-**Status**: pre-release. Testing each Jellyfin app on real devices is still under way. What is done and what is next:
+**Status**: alpha (see the warning above). Testing each Jellyfin app on real devices is still under way. What is done
+and what is next:
 [`roadmap.md`](roadmap.md).
 
 ## Quick start
