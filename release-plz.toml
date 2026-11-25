@@ -39,3 +39,12 @@ git_tag_enable = true
 name = "rustyfin-bench"
 release = false
 git_tag_name = "rustyfin-bench-v{{ version }}"
+
+# Crates of the layered split (CLAUDE.md) that are newer than the newest vX.Y.Z
+# tag, so release-plz cannot find them there. They share the workspace version
+# and ship inside rustyfin-server, so they need no release or tag of their own;
+# the same entry goes here for each new crate until a product tag contains it.
+[[package]]
+name = "rustyfin-data"
+release = false
+git_tag_name = "rustyfin-data-v{{ version }}"
