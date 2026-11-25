@@ -32,3 +32,11 @@ pub async fn retain_accessible(
 ) -> Result<Vec<MediaItemRow>, ApiError> {
     Ok(state.services.access().retain(user_id, items).await?)
 }
+
+/// The caller, for the services' rules that depend on who asks.
+pub fn viewer(auth: &rustyfin_auth::middleware::AuthenticatedUser) -> rustyfin_services::Viewer {
+    rustyfin_services::Viewer {
+        user: auth.user_id,
+        is_administrator: auth.is_administrator,
+    }
+}

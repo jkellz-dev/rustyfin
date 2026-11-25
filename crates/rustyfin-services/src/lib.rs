@@ -24,8 +24,11 @@ pub mod playlists;
 pub mod scans;
 pub mod session;
 pub mod user_data;
+pub mod users;
+pub mod viewer;
 
 pub use error::{ServiceError, ServiceResult};
+pub use viewer::Viewer;
 
 use rustyfin_models::data::Data;
 
@@ -68,6 +71,11 @@ impl<D: Data> Services<D> {
     /// What playback reports change, and play history.
     pub fn playback(&self) -> playback::Playback<'_, D> {
         playback::Playback { data: &self.data }
+    }
+
+    /// Users, their settings, policy and permissions.
+    pub fn users(&self) -> users::Users<'_, D> {
+        users::Users { data: &self.data }
     }
 
     /// Playlists: who may see and change them.

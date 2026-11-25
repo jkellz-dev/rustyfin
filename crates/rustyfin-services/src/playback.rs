@@ -7,8 +7,9 @@ use rustyfin_models::data::{
 };
 use uuid::Uuid;
 
-use crate::error::{ServiceError, ServiceResult};
+use crate::error::ServiceResult;
 use crate::play_state::{self, Kind};
+use crate::viewer::Viewer;
 
 /// The most plays one page of history holds.
 pub const MAX_HISTORY_PAGE: i64 = 500;
@@ -39,24 +40,6 @@ pub struct Heard<'a> {
     /// The app and device of the session, when known.
     pub client: Option<&'a str>,
     pub device_name: Option<&'a str>,
-}
-
-/// Who is asking, for reads other users' data could answer.
-#[derive(Debug, Clone, Copy)]
-pub struct Viewer {
-    pub user: Uuid,
-    pub is_administrator: bool,
-}
-
-impl Viewer {
-    /// Administrators see anyone's; a user sees their own.
-    fn may_see(self, user: Uuid) -> ServiceResult<()> {
-        if self.is_administrator || self.user == user {
-            Ok(())
-        } else {
-            Err(ServiceError::Forbidden)
-        }
-    }
 }
 
 /// Minutes and plays of one kind of media.
@@ -184,7 +167,7 @@ impl<D: Data> Playback<'_, D> {
 
     /// A user's time and plays per kind of media.
     pub async fn stats(&self, viewer: Viewer, user: Uuid) -> ServiceResult<Vec<KindStats>> {
-        viewer.may_see(user)?;
+        viewer.may_act_for(user)?;
         Ok(self
             .data
             .play_history()
@@ -209,7 +192,7 @@ impl<D: Data> Playback<'_, D> {
         start: i64,
         limit: i64,
     ) -> ServiceResult<(Vec<Play>, i64)> {
-        viewer.may_see(user)?;
+        viewer.may_act_for(user)?;
         Ok(self
             .data
             .play_history()
@@ -228,22 +211,5 @@ mod tests {
         assert_eq!(play_key(s, Some(" abc "), i), "abc");
         assert_eq!(play_key(s, Some("  "), i), format!("{s}:{i}"));
         assert_eq!(play_key(s, None, i), format!("{s}:{i}"));
-    }
-
-    #[test]
-    fn only_administrators_see_other_users_history() {
-        let me = Uuid::nil();
-        let other = Uuid::max();
-        let user = Viewer {
-            user: me,
-            is_administrator: false,
-        };
-        assert!(user.may_see(me).is_ok());
-        assert!(matches!(user.may_see(other), Err(ServiceError::Forbidden)));
-        let admin = Viewer {
-            is_administrator: true,
-            ..user
-        };
-        assert!(admin.may_see(other).is_ok());
     }
 }

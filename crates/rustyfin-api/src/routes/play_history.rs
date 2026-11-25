@@ -10,19 +10,11 @@ use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlayFilter};
 use rustyfin_models::dto::QueryResult;
-use rustyfin_services::playback::Viewer;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::router::AppState;
-
-fn viewer(auth: &AuthenticatedUser) -> Viewer {
-    Viewer {
-        user: auth.user_id,
-        is_administrator: auth.is_administrator,
-    }
-}
 
 fn minutes(ms: i64) -> f64 {
     (ms as f64 / 60_000.0 * 10.0).round() / 10.0
@@ -54,7 +46,7 @@ pub async fn get_play_stats(
     let rows = state
         .services
         .playback()
-        .stats(viewer(&auth), user_id)
+        .stats(super::access::viewer(&auth), user_id)
         .await?;
     let total_ms: i64 = rows.iter().map(|r| r.millis).sum();
     Ok(Json(PlayStats {
@@ -186,7 +178,7 @@ pub async fn get_play_history(
         .services
         .playback()
         .history(
-            viewer(&auth),
+            super::access::viewer(&auth),
             user_id,
             &filter,
             start,

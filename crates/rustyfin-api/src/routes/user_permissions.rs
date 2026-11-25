@@ -6,7 +6,6 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_models::data::{Data, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -32,7 +31,7 @@ pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<Vec<UserPermissions>>, ApiError> {
-    let users = state.data.users().list_all().await?;
+    let users = state.services.users().list().await?;
     Ok(Json(
         users
             .into_iter()
@@ -52,16 +51,12 @@ pub struct PermissionsPatch {
     pub may_link: Option<bool>,
 }
 
-async fn current(state: &AppState, id: Uuid) -> Result<Permissions, ApiError> {
-    let user = state
-        .data
-        .users()
-        .find_by_id(id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    Ok(Permissions {
-        may_link: user.may_link,
-    })
+impl From<rustyfin_services::users::Permissions> for Permissions {
+    fn from(p: rustyfin_services::users::Permissions) -> Self {
+        Self {
+            may_link: p.may_link,
+        }
+    }
 }
 
 /// A user's own, or anyone's for an administrator.
@@ -70,10 +65,12 @@ pub async fn get(
     auth: AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Permissions>, ApiError> {
-    if auth.user_id != id && !auth.is_administrator {
-        return Err(ApiError::Forbidden);
-    }
-    Ok(Json(current(&state, id).await?))
+    let permissions = state
+        .services
+        .users()
+        .permissions(super::access::viewer(&auth), id)
+        .await?;
+    Ok(Json(permissions.into()))
 }
 
 /// Administrators only; answers with the permissions as they now are.
@@ -83,14 +80,14 @@ pub async fn patch(
     Path(id): Path<Uuid>,
     Json(change): Json<PermissionsPatch>,
 ) -> Result<Json<Permissions>, ApiError> {
-    if let Some(may_link) = change.may_link
-        && !state.data.users().set_may_link(id, may_link).await?
-    {
-        return Err(ApiError::NotFound);
-    }
+    let permissions = state
+        .services
+        .users()
+        .set_permissions(id, change.may_link)
+        .await?;
     if change.may_link.is_some() {
         // Requests from that user's sessions are scoped anew.
         crate::link_scope::forget();
     }
-    Ok(Json(current(&state, id).await?))
+    Ok(Json(permissions.into()))
 }

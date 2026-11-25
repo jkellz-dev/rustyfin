@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
-use rustyfin_models::data::{ActivityLogStore, Data, LibraryAccessStore, UserStore};
+use rustyfin_services::users::{PolicyChange, SettingsChange};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
@@ -97,50 +97,35 @@ pub async fn update_user_configuration(
     Path(user_id): Path<Uuid>,
     Json(config): Json<UserConfiguration>,
 ) -> Result<StatusCode, ApiError> {
-    if auth.user_id != user_id && !auth.is_administrator {
-        return Err(ApiError::Forbidden);
-    }
     let blob = serde_json::to_value(&config)
         .map_err(|e| ApiError::Internal(format!("user configuration: {e}")))?;
     let mode = SUBTITLE_MODES
         .iter()
         .position(|m| m.eq_ignore_ascii_case(&config.subtitle_mode))
         .unwrap_or(0) as i32;
-    let settings = users::UserSettings {
-        audio_language_preference: config
-            .audio_language_preference
-            .as_deref()
-            .filter(|s| !s.is_empty()),
-        subtitle_language_preference: config
-            .subtitle_language_preference
-            .as_deref()
-            .filter(|s| !s.is_empty()),
+    let change = SettingsChange {
+        audio_language: config.audio_language_preference.clone(),
+        subtitle_language: config.subtitle_language_preference.clone(),
         subtitle_mode: mode,
         play_default_audio_track: config.play_default_audio_track,
-        enable_next_episode_auto_play: config.enable_next_episode_auto_play,
-        configuration: &blob,
+        next_episode_auto_play: config.enable_next_episode_auto_play,
+        configuration: blob,
     };
-    if !state
-        .data
+    state
+        .services
         .users()
-        .update_settings(user_id, &settings)
-        .await?
-    {
-        return Err(ApiError::NotFound);
-    }
+        .save_settings(super::access::viewer(&auth), user_id, &change)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Populate the `enabled_folders` field on a user DTO if the user is restricted.
-async fn populate_enabled_folders(data: &rustyfin_data::PgData, dto: &mut UserDto) {
-    if !dto.policy.enable_all_folders
-        && let Ok(ids) = data
-            .user_library_access()
-            .get_enabled_libraries(dto.id)
-            .await
-    {
+/// A user as Jellyfin shows them, with the libraries they are limited to.
+async fn user_dto(state: &AppState, user: &users::UserRow, ldap_enabled: bool) -> UserDto {
+    let mut dto = user_row_to_dto(user, &state.server_id, ldap_enabled);
+    if let Some(ids) = state.services.users().enabled_libraries(user).await {
         dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();
     }
+    dto
 }
 
 /// `GET /Users` — List all users.
@@ -149,16 +134,10 @@ pub async fn list_users(
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<UserDto>>, ApiError> {
     let ldap_enabled = state.ldap_config.is_some();
-    let rows = state.data.users().list_all().await?;
-    let mut dtos: Vec<UserDto> = rows
-        .iter()
-        .map(|r| user_row_to_dto(r, &state.server_id, ldap_enabled))
-        .collect();
-
-    for dto in &mut dtos {
-        populate_enabled_folders(&state.data, dto).await;
+    let mut dtos = Vec::new();
+    for user in state.services.users().list().await? {
+        dtos.push(user_dto(&state, &user, ldap_enabled).await);
     }
-
     Ok(Json(dtos))
 }
 
@@ -168,15 +147,8 @@ pub async fn get_current_user(
     auth: AuthenticatedUser,
 ) -> Result<Json<UserDto>, ApiError> {
     let ldap_enabled = state.ldap_config.is_some();
-    let user = state
-        .data
-        .users()
-        .find_by_id(auth.user_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    let mut dto = user_row_to_dto(&user, &state.server_id, ldap_enabled);
-    populate_enabled_folders(&state.data, &mut dto).await;
-    Ok(Json(dto))
+    let user = state.services.users().get(auth.user_id).await?;
+    Ok(Json(user_dto(&state, &user, ldap_enabled).await))
 }
 
 /// `GET /Users/{id}` — Get user by ID.
@@ -186,15 +158,8 @@ pub async fn get_user_by_id(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserDto>, ApiError> {
     let ldap_enabled = state.ldap_config.is_some();
-    let user = state
-        .data
-        .users()
-        .find_by_id(user_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    let mut dto = user_row_to_dto(&user, &state.server_id, ldap_enabled);
-    populate_enabled_folders(&state.data, &mut dto).await;
-    Ok(Json(dto))
+    let user = state.services.users().get(user_id).await?;
+    Ok(Json(user_dto(&state, &user, ldap_enabled).await))
 }
 
 /// `GET /Users/Public` — Public user list for login screen.
@@ -208,7 +173,7 @@ pub async fn get_public_users(
         return Ok(Json(Vec::new()));
     }
 
-    let rows = state.data.users().list_all().await?;
+    let rows = state.services.users().list().await?;
     let dtos: Vec<UserDto> = rows
         .iter()
         .map(|r| user_row_to_dto(r, &state.server_id, true))
@@ -222,27 +187,11 @@ pub async fn delete_user(
     admin: AdminUser,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    if admin.0.user_id == user_id {
-        return Err(ApiError::BadRequest("Cannot delete yourself".to_string()));
-    }
-    let deleted = state.data.users().delete(user_id).await?;
-    if !deleted {
-        return Err(ApiError::NotFound);
-    }
-
-    let _ = state
-        .data
-        .activity_log()
-        .insert(
-            "User deleted",
-            None,
-            "UserDeleted",
-            "Informational",
-            Some(admin.0.user_id),
-            None,
-        )
-        .await;
-
+    state
+        .services
+        .users()
+        .delete(admin.0.user_id, user_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -254,27 +203,16 @@ pub async fn update_user_policy(
     Path(user_id): Path<Uuid>,
     Json(req): Json<UpdateUserPolicyRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let updated = state
-        .data
-        .users()
-        .update_policy(user_id, req.is_administrator, req.enable_all_folders)
-        .await?;
-    if !updated {
-        return Err(ApiError::NotFound);
-    }
-
-    // Always sync the library access whitelist
-    let lib_ids: Vec<Uuid> = req
-        .enabled_folders
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    state
-        .data
-        .user_library_access()
-        .set_enabled_libraries(user_id, &lib_ids)
-        .await?;
-
+    let change = PolicyChange {
+        is_administrator: req.is_administrator,
+        all_libraries: req.enable_all_folders,
+        libraries: req
+            .enabled_folders
+            .iter()
+            .filter_map(|s| s.parse().ok())
+            .collect(),
+    };
+    state.services.users().set_policy(user_id, &change).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
