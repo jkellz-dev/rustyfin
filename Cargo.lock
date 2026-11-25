@@ -3550,6 +3550,7 @@ version = "0.1.0"
 dependencies = [
  "meilisearch-sdk",
  "rustyfin-data",
+ "rustyfin-models",
  "serde",
  "serde_json",
  "sqlx",
