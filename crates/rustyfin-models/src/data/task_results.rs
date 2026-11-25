@@ -1,5 +1,3 @@
-use chrono::{DateTime, Utc};
-
 /// One run of a scheduled task and how it ended.
 #[derive(Debug, Clone)]
 pub struct TaskResult {

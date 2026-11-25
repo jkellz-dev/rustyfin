@@ -120,7 +120,7 @@ pub async fn list_paginated(
     }
     q = q.bind(limit).bind(start_index);
 
-    q.fetch_all(pool).await
+    q.fetch_all(pool).await.map(all)
 }
 
 /// Delete activity log entries older than the given number of days.
