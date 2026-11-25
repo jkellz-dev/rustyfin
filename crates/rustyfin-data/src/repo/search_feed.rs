@@ -8,7 +8,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::media_items::MediaItemRow;
+use super::media_items::{MediaItemRecord, MediaItemRow, models};
 use super::people::PersonRow;
 
 /// A page of changes.
@@ -39,7 +39,7 @@ pub async fn changes(
     #[derive(sqlx::FromRow)]
     struct Row {
         #[sqlx(flatten)]
-        item: MediaItemRow,
+        item: MediaItemRecord,
         change_key: String,
     }
     let mut rows: Vec<Row> = sqlx::query_as(
@@ -76,7 +76,7 @@ pub async fn changes(
         Vec::new()
     };
     Ok(Page {
-        items: rows.into_iter().map(|r| r.item).collect(),
+        items: rows.into_iter().map(|r| r.item.into()).collect(),
         removed,
         next,
     })
@@ -88,7 +88,7 @@ pub async fn all_page(
     after: Option<Uuid>,
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM media_items WHERE owner_id IS NULL AND ($1::uuid IS NULL OR id > $1) \
          ORDER BY id LIMIT $2",
     )
@@ -96,6 +96,7 @@ pub async fn all_page(
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Where the index `index` was brought up to, if it ever was.

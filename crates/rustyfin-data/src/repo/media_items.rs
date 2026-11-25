@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use rustyfin_models::data::MediaItem;
 use sqlx::{PgPool, QueryBuilder};
 use uuid::Uuid;
 
-/// A `media_items` row: a film, show, season, episode, artist, album, track, folder or extra.
+/// A `media_items` row as Postgres returns it; callers get it as
+/// [`MediaItem`].
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct MediaItemRow {
+pub(crate) struct MediaItemRecord {
     pub id: Uuid,
     pub item_type: String,
     pub library_id: Option<Uuid>,
@@ -67,6 +69,119 @@ pub struct MediaItemRow {
     pub remote_etag: Option<String>,
 }
 
+/// Transitional name: callers still say `MediaItemRow` until they move onto
+/// the data-layer traits.
+pub use rustyfin_models::data::MediaItem as MediaItemRow;
+
+impl From<MediaItemRecord> for MediaItem {
+    fn from(r: MediaItemRecord) -> Self {
+        let MediaItemRecord {
+            id,
+            item_type,
+            library_id,
+            parent_id,
+            name,
+            sort_name,
+            original_title,
+            overview,
+            path,
+            community_rating,
+            critic_rating,
+            official_rating,
+            genres,
+            studios,
+            tags,
+            production_year,
+            premiere_date,
+            end_date,
+            runtime_ticks,
+            index_number,
+            parent_index_number,
+            is_folder,
+            date_created,
+            date_modified,
+            date_last_media_added,
+            series_id,
+            season_id,
+            series_name,
+            season_name,
+            container,
+            total_bitrate,
+            width,
+            height,
+            size,
+            etag,
+            presentation_unique_key,
+            external_ids,
+            extra_data,
+            artists,
+            extra_type,
+            owner_id,
+            has_lyrics,
+            link_id,
+            remote_id,
+            remote_etag,
+        } = r;
+        MediaItem {
+            id,
+            item_type,
+            library_id,
+            parent_id,
+            name,
+            sort_name,
+            original_title,
+            overview,
+            path,
+            community_rating,
+            critic_rating,
+            official_rating,
+            genres,
+            studios,
+            tags,
+            production_year,
+            premiere_date,
+            end_date,
+            runtime_ticks,
+            index_number,
+            parent_index_number,
+            is_folder,
+            date_created,
+            date_modified,
+            date_last_media_added,
+            series_id,
+            season_id,
+            series_name,
+            season_name,
+            container,
+            total_bitrate,
+            width,
+            height,
+            size,
+            etag,
+            presentation_unique_key,
+            external_ids,
+            extra_data,
+            artists,
+            extra_type,
+            owner_id,
+            has_lyrics,
+            link_id,
+            remote_id,
+            remote_etag,
+        }
+    }
+}
+
+/// Rows as items.
+pub(crate) fn models(rows: Vec<MediaItemRecord>) -> Vec<MediaItem> {
+    rows.into_iter().map(MediaItem::from).collect()
+}
+
+/// A row, if any, as an item.
+fn maybe_model(row: Option<MediaItemRecord>) -> Option<MediaItem> {
+    row.map(MediaItem::from)
+}
+
 /// Record whether a track has lyrics.
 pub async fn set_has_lyrics(pool: &PgPool, id: Uuid, has: bool) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE media_items SET has_lyrics = $2 WHERE id = $1")
@@ -100,7 +215,7 @@ pub async fn list_extras(
     extra_types: &[&str],
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     let types: Vec<String> = extra_types.iter().map(|t| t.to_string()).collect();
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE owner_id = $1 AND extra_type = ANY($2) \
          ORDER BY sort_name, name",
     )
@@ -108,6 +223,7 @@ pub async fn list_extras(
     .bind(types)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// The other versions of each of `owners` (Jellyfin's multi-version films),
@@ -116,13 +232,14 @@ pub async fn list_versions(
     pool: &PgPool,
     owners: &[Uuid],
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE owner_id = ANY($1) AND extra_type = 'Version' \
          ORDER BY path",
     )
     .bind(owners)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Per owner: (trailers, special features), for `LocalTrailerCount` and
@@ -144,10 +261,11 @@ pub async fn count_extras(
 }
 /// Find a media item by ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM visible_media_items WHERE id = $1")
+    sqlx::query_as::<_, MediaItemRecord>("SELECT * FROM visible_media_items WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await
+        .map(maybe_model)
 }
 
 /// The most parents `list_ancestors` will follow. Real libraries are a handful
@@ -159,7 +277,7 @@ pub const MAX_ANCESTOR_DEPTH: i32 = 64;
 /// The item itself is not included. A looping `parent_id` chain stops after
 /// [`MAX_ANCESTOR_DEPTH`] rows instead of recursing forever.
 pub async fn list_ancestors(pool: &PgPool, id: Uuid) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         WITH RECURSIVE chain AS (
             SELECT m.*, 1 AS depth
@@ -178,6 +296,7 @@ pub async fn list_ancestors(pool: &PgPool, id: Uuid) -> Result<Vec<MediaItemRow>
     .bind(MAX_ANCESTOR_DEPTH)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Which of `paths` some item already has.
@@ -201,7 +320,7 @@ pub async fn list_by_parents(
     if parent_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = sqlx::query_as::<_, MediaItemRow>(
+    let rows = sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE parent_id = ANY($1) \
          AND (cardinality($2::text[]) = 0 OR item_type = ANY($2)) \
          ORDER BY parent_index_number NULLS LAST, index_number NULLS LAST, sort_name, name",
@@ -209,7 +328,8 @@ pub async fn list_by_parents(
     .bind(parent_ids)
     .bind(item_types)
     .fetch_all(pool)
-    .await?;
+    .await
+    .map(models)?;
     let mut by_parent: HashMap<Uuid, Vec<MediaItemRow>> = HashMap::new();
     for row in rows {
         if let Some(parent) = row.parent_id {
@@ -260,7 +380,7 @@ pub async fn list_by_parent(
         param_index + 1
     ));
 
-    let mut q = sqlx::query_as::<_, MediaItemRow>(sqlx::AssertSqlSafe(query));
+    let mut q = sqlx::query_as::<_, MediaItemRecord>(sqlx::AssertSqlSafe(query));
 
     if let Some(pid) = parent_id {
         q = q.bind(pid);
@@ -270,7 +390,7 @@ pub async fn list_by_parent(
     }
     q = q.bind(limit).bind(start_index);
 
-    q.fetch_all(pool).await
+    q.fetch_all(pool).await.map(models)
 }
 
 /// The running time of everything under a folder (an album's tracks, also in
@@ -334,7 +454,7 @@ pub async fn list_by_library(
     start_index: i64,
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE library_id = $1 ORDER BY sort_name, name LIMIT $2 OFFSET $3",
     )
     .bind(library_id)
@@ -342,6 +462,7 @@ pub async fn list_by_library(
     .bind(start_index)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// List top-level items in a library, optionally filtered by item type.
@@ -353,7 +474,7 @@ pub async fn list_top_level_by_library(
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     if item_types.is_empty() {
-        sqlx::query_as::<_, MediaItemRow>(
+        sqlx::query_as::<_, MediaItemRecord>(
             "SELECT * FROM visible_media_items WHERE library_id = $1 AND parent_id IS NULL \
              ORDER BY sort_name, name LIMIT $2 OFFSET $3",
         )
@@ -362,8 +483,9 @@ pub async fn list_top_level_by_library(
         .bind(start_index)
         .fetch_all(pool)
         .await
+        .map(models)
     } else {
-        sqlx::query_as::<_, MediaItemRow>(
+        sqlx::query_as::<_, MediaItemRecord>(
             "SELECT * FROM visible_media_items WHERE library_id = $1 AND parent_id IS NULL \
              AND item_type = ANY($2) ORDER BY sort_name, name LIMIT $3 OFFSET $4",
         )
@@ -373,6 +495,7 @@ pub async fn list_top_level_by_library(
         .bind(start_index)
         .fetch_all(pool)
         .await
+        .map(models)
     }
 }
 
@@ -411,7 +534,7 @@ pub async fn latest_by_library(
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     // What was added: media, not the containers a scan makes or the
     // collections built from NFOs (Jellyfin's Latest leaves those out too).
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE ($1::uuid IS NULL OR library_id = $1) \
          AND item_type NOT IN ('BoxSet', 'Folder', 'CollectionFolder', 'Playlist', 'Season', \
                                'UserRootFolder') \
@@ -424,6 +547,7 @@ pub async fn latest_by_library(
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Set an item's change tag.
@@ -438,10 +562,11 @@ pub async fn set_etag(pool: &PgPool, id: Uuid, etag: Option<&str>) -> Result<(),
 
 /// Find a media item by its filesystem path.
 pub async fn find_by_path(pool: &PgPool, path: &str) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM media_items WHERE path = $1")
+    sqlx::query_as::<_, MediaItemRecord>("SELECT * FROM media_items WHERE path = $1")
         .bind(path)
         .fetch_optional(pool)
         .await
+        .map(maybe_model)
 }
 
 /// The folder row of `item_type` stored for directory `path` under `parent_id`.
@@ -451,7 +576,7 @@ pub async fn find_folder_by_path(
     item_type: &str,
     parent_id: Option<Uuid>,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM media_items WHERE path = $1 AND item_type = $2 \
          AND parent_id IS NOT DISTINCT FROM $3 LIMIT 1",
     )
@@ -460,6 +585,7 @@ pub async fn find_folder_by_path(
     .bind(parent_id)
     .fetch_optional(pool)
     .await
+    .map(maybe_model)
 }
 
 /// A folder row found by name, inside one library. Rows from scans that stored
@@ -471,7 +597,7 @@ pub async fn find_folder_by_name(
     item_type: &str,
     parent_id: Option<Uuid>,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM media_items WHERE library_id = $1 AND name = $2 AND item_type = $3 \
          AND parent_id IS NOT DISTINCT FROM $4 ORDER BY date_created LIMIT 1",
     )
@@ -481,6 +607,7 @@ pub async fn find_folder_by_name(
     .bind(parent_id)
     .fetch_optional(pool)
     .await
+    .map(maybe_model)
 }
 
 /// Bring a folder row up to date with its directory: the clean name (and a new
@@ -527,13 +654,14 @@ pub async fn find_by_name_and_type(
     name: &str,
     item_type: &str,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE LOWER(name) = LOWER($1) AND item_type = $2 LIMIT 1",
     )
     .bind(name)
     .bind(item_type)
     .fetch_optional(pool)
     .await
+    .map(maybe_model)
 }
 
 /// Find a media item by name, type, and parent.
@@ -544,7 +672,7 @@ pub async fn find_by_name_and_parent(
     parent_id: Option<Uuid>,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
     if let Some(pid) = parent_id {
-        sqlx::query_as::<_, MediaItemRow>(
+        sqlx::query_as::<_, MediaItemRecord>(
             "SELECT * FROM media_items WHERE name = $1 AND item_type = $2 AND parent_id = $3",
         )
         .bind(name)
@@ -552,14 +680,16 @@ pub async fn find_by_name_and_parent(
         .bind(pid)
         .fetch_optional(pool)
         .await
+        .map(maybe_model)
     } else {
-        sqlx::query_as::<_, MediaItemRow>(
+        sqlx::query_as::<_, MediaItemRecord>(
             "SELECT * FROM media_items WHERE name = $1 AND item_type = $2 AND parent_id IS NULL",
         )
         .bind(name)
         .bind(item_type)
         .fetch_optional(pool)
         .await
+        .map(maybe_model)
     }
 }
 
@@ -590,7 +720,7 @@ pub struct NewMediaItem {
 
 /// Insert a new media item.
 pub async fn insert(pool: &PgPool, item: &NewMediaItem) -> Result<MediaItemRow, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         INSERT INTO media_items (
             item_type, library_id, parent_id, name, sort_name, path,
@@ -629,6 +759,7 @@ pub async fn insert(pool: &PgPool, item: &NewMediaItem) -> Result<MediaItemRow, 
     .bind(&item.etag)
     .fetch_one(pool)
     .await
+    .map(MediaItem::from)
 }
 
 /// Update an existing media item.
@@ -637,7 +768,7 @@ pub async fn update(
     id: Uuid,
     item: &NewMediaItem,
 ) -> Result<MediaItemRow, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         UPDATE media_items SET
             item_type = $2, library_id = $3, parent_id = $4, name = $5,
@@ -674,6 +805,7 @@ pub async fn update(
     .bind(&item.etag)
     .fetch_one(pool)
     .await
+    .map(MediaItem::from)
 }
 
 /// Delete a media item by its filesystem path.
@@ -1103,10 +1235,11 @@ pub async fn find_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<MediaItemRow
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    sqlx::query_as::<_, MediaItemRow>("SELECT * FROM visible_media_items WHERE id = ANY($1)")
+    sqlx::query_as::<_, MediaItemRecord>("SELECT * FROM visible_media_items WHERE id = ANY($1)")
         .bind(ids)
         .fetch_all(pool)
         .await
+        .map(models)
 }
 
 /// Store a track's artists as read from its tags (empty: read, none found).
@@ -1203,7 +1336,7 @@ pub async fn get_last_watched_episode(
     user_id: Uuid,
     series_id: Uuid,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         SELECT m.*
         FROM visible_media_items m
@@ -1220,6 +1353,7 @@ pub async fn get_last_watched_episode(
     .bind(series_id)
     .fetch_optional(pool)
     .await
+    .map(maybe_model)
 }
 
 /// Get the next unwatched episode after a given season/episode position.
@@ -1230,7 +1364,7 @@ pub async fn get_next_episode(
     min_season: Option<i32>,
     min_episode: Option<i32>,
 ) -> Result<Option<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         SELECT m.*
         FROM visible_media_items m
@@ -1254,6 +1388,7 @@ pub async fn get_next_episode(
     .bind(min_episode)
     .fetch_optional(pool)
     .await
+    .map(maybe_model)
 }
 
 /// The next episode to watch in each of `series_ids`, in that order (series
@@ -1268,7 +1403,7 @@ pub async fn get_next_episodes(
     if series_ids.is_empty() {
         return Ok(Vec::new());
     }
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         WITH wanted AS (
             SELECT series_id, ord FROM unnest($2::uuid[]) WITH ORDINALITY AS w(series_id, ord)
@@ -1311,6 +1446,7 @@ pub async fn get_next_episodes(
     .bind(series_ids)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Get random unplayed items for suggestions.
@@ -1322,7 +1458,7 @@ pub async fn get_random_items(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         SELECT m.*
         FROM visible_media_items m
@@ -1342,6 +1478,7 @@ pub async fn get_random_items(
     .bind(offset)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Search items by name (basic ILIKE search).
@@ -1351,13 +1488,14 @@ pub async fn search_by_name(
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
     let pattern = format!("%{query}%");
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items WHERE name ILIKE $1 AND owner_id IS NULL ORDER BY name LIMIT $2",
     )
     .bind(&pattern)
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// One page of the shared items (no owner) for the search index, in id order
@@ -1368,7 +1506,7 @@ pub async fn search_index_page(
     after: Option<Uuid>,
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM media_items WHERE owner_id IS NULL AND ($1::uuid IS NULL OR id > $1) \
          ORDER BY id LIMIT $2",
     )
@@ -1376,6 +1514,7 @@ pub async fn search_index_page(
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// The genres an instant mix seeded by `id` draws from: the item's own and
@@ -1404,7 +1543,7 @@ pub async fn instant_mix(
     libraries: Option<&[Uuid]>,
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         "SELECT * FROM visible_media_items \
          WHERE item_type = 'Audio' AND genres && $1 \
            AND ($2::uuid[] IS NULL OR library_id = ANY($2)) \
@@ -1415,6 +1554,7 @@ pub async fn instant_mix(
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Replace a track's genres, writing only when they differ (a write moves the
@@ -1500,7 +1640,7 @@ pub async fn find_similar(
     item_type: &str,
     limit: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         WITH source AS (
             SELECT genres, studios, tags FROM visible_media_items WHERE id = $1
@@ -1538,6 +1678,7 @@ pub async fn find_similar(
     .bind(limit)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Count items per type that have a specific genre, optionally scoped to a library.
@@ -1861,9 +2002,10 @@ pub async fn list_artists(
     list.push(" OFFSET ");
     list.push_bind(start_index);
     let rows = list
-        .build_query_as::<MediaItemRow>()
+        .build_query_as::<MediaItemRecord>()
         .fetch_all(pool)
-        .await?;
+        .await
+        .map(models)?;
     Ok((rows, total.0))
 }
 
@@ -1924,7 +2066,7 @@ pub async fn upcoming_episodes(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<MediaItemRow>, sqlx::Error> {
-    sqlx::query_as::<_, MediaItemRow>(
+    sqlx::query_as::<_, MediaItemRecord>(
         r#"
         SELECT * FROM visible_media_items
         WHERE item_type = 'Episode'
@@ -1940,6 +2082,7 @@ pub async fn upcoming_episodes(
     .bind(offset)
     .fetch_all(pool)
     .await
+    .map(models)
 }
 
 /// Count upcoming episodes (premiere_date >= today).
@@ -2168,7 +2311,11 @@ impl ItemQuery {
         self.apply_filters(&mut qb);
         qb.push(format!(" ORDER BY ud.last_played_date DESC, {rest} LIMIT "));
         qb.push_bind(upto);
-        let played = qb.build_query_as::<MediaItemRow>().fetch_all(pool).await?;
+        let played = models(
+            qb.build_query_as::<MediaItemRecord>()
+                .fetch_all(pool)
+                .await?,
+        );
         let have = played.len() as i64;
         let mut page: Vec<MediaItemRow> = played.into_iter().skip(start as usize).collect();
         if have >= upto {
@@ -2188,7 +2335,11 @@ impl ItemQuery {
         qb.push_bind(take);
         qb.push(" OFFSET ");
         qb.push_bind(skip);
-        page.extend(qb.build_query_as::<MediaItemRow>().fetch_all(pool).await?);
+        page.extend(models(
+            qb.build_query_as::<MediaItemRecord>()
+                .fetch_all(pool)
+                .await?,
+        ));
         Ok(page)
     }
 
@@ -2273,7 +2424,10 @@ impl ItemQuery {
         qb.push(" OFFSET ");
         qb.push_bind(self.start_index);
 
-        qb.build_query_as::<MediaItemRow>().fetch_all(pool).await
+        qb.build_query_as::<MediaItemRecord>()
+            .fetch_all(pool)
+            .await
+            .map(models)
     }
 
     /// Count matching items (for TotalRecordCount).

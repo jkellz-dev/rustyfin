@@ -13,9 +13,11 @@
 
 mod display_preferences;
 mod error;
+mod media_item;
 
 pub use display_preferences::DisplayPreferencesStore;
 pub use error::{DataError, DataResult};
+pub use media_item::MediaItem;
 
 /// Everything the data layer provides. Services are generic over this
 /// trait; `rustyfin-server` picks the implementation.
