@@ -4,17 +4,17 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
+use rustyfin_models::data::User;
 use rustyfin_services::users::{PolicyChange, SettingsChange};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::users;
 use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, UserPolicy};
 
 use crate::error::ApiError;
 use crate::router::AppState;
 
-fn user_row_to_dto(row: &users::UserRow, server_id: &str) -> UserDto {
+fn user_row_to_dto(row: &User, server_id: &str) -> UserDto {
     UserDto {
         name: row.username.clone(),
         server_id: server_id.to_string(),
@@ -46,7 +46,7 @@ const SUBTITLE_MODES: [&str; 5] = ["Default", "Always", "OnlyForced", "None", "S
 
 /// The user's `UserConfiguration`: what the app last saved, with the settings
 /// that have their own columns read from them.
-pub(crate) fn user_configuration(row: &users::UserRow) -> UserConfiguration {
+pub(crate) fn user_configuration(row: &User) -> UserConfiguration {
     let mut config = row
         .configuration
         .clone()
@@ -120,7 +120,7 @@ pub async fn update_user_configuration(
 }
 
 /// A user as Jellyfin shows them, with the libraries they are limited to.
-async fn user_dto(state: &AppState, user: &users::UserRow) -> UserDto {
+async fn user_dto(state: &AppState, user: &User) -> UserDto {
     let mut dto = user_row_to_dto(user, &state.server_id);
     if let Some(ids) = state.services.users().enabled_libraries(user).await {
         dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();

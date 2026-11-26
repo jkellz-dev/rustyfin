@@ -307,12 +307,7 @@ pub async fn stored_copies(
     Ok(rows.into_iter().map(|(r, id, e)| (r, (id, e))).collect())
 }
 
-/// The friend's item id of a stored copy (`<film>` or `<film>/<source>`).
-pub fn remote_item(remote_id: &str) -> &str {
-    remote_id
-        .split_once('/')
-        .map_or(remote_id, |(item, _)| item)
-}
+pub use rustyfin_models::data::remote_item;
 
 /// The copy a link holds of the friend's item `remote` (its main copy when
 /// the item has several versions), for the transcode relay's access check.

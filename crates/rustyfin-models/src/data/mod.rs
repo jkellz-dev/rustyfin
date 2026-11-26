@@ -36,14 +36,16 @@ mod users;
 
 pub use activity_log::{ActivityLogEntry, ActivityLogStore};
 pub use api_keys::{ApiKey, ApiKeyStore};
-pub use catalog::{CatalogChange, CatalogPage, CatalogStore};
+pub use catalog::{
+    CatalogChange, CatalogPage, CatalogStore, is_catalog_snapshot, parse_catalog_after,
+};
 pub use chapters::{Chapter, ChapterStore};
 pub use collections::{AutoSet, CollectionStore};
 pub use display_preferences::DisplayPreferencesStore;
 pub use error::{DataError, DataResult};
 pub use images::{Image, ImageStore, NewImage};
 pub use libraries::{Library, LibraryStat, LibraryStore};
-pub use links::{Link, LinkCollection, LinkStore, LinkedItem};
+pub use links::{Link, LinkCollection, LinkStore, LinkedItem, remote_item};
 pub use media_item::{
     ArtistFilter, ItemMetadata, ItemQuery, MediaItem, MediaItemStore, NameKind, NewMediaItem,
 };

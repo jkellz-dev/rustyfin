@@ -182,7 +182,6 @@ impl TestApp {
         let state = AppState {
             services,
             data: data.clone(),
-            pool: pool.clone(),
             local_only: false,
             server_id: "test-server-id".to_string(),
             server_name: "Rustyfin Test".to_string(),

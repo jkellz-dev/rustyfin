@@ -34,6 +34,10 @@ pub mod viewer;
 pub use error::{ServiceError, ServiceResult};
 pub use viewer::Viewer;
 
+/// The data layer the server runs on. The API crates name it through here,
+/// never the data crate itself (`CLAUDE.md`, "Layers").
+pub type Store = rustyfin_data::PgData;
+
 use rustyfin_models::data::Data;
 
 /// The services over one data layer. Cheap to clone when the data layer is.

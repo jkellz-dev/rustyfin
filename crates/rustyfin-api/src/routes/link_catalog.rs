@@ -5,7 +5,6 @@
 use axum::Json;
 use axum::extract::{Query, State};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::catalog;
 use rustyfin_models::data::{CatalogStore, Data, LibraryAccessStore, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -68,14 +67,17 @@ pub async fn catalog(
         return Err(ApiError::Forbidden);
     }
     let since = q.since.filter(|s| !s.is_empty());
-    if since.as_deref().is_some_and(|s| !catalog::is_snapshot(s)) {
+    if since
+        .as_deref()
+        .is_some_and(|s| !rustyfin_models::data::is_catalog_snapshot(s))
+    {
         return Err(ApiError::BadRequest(
             "since: not a cursor from this feed".into(),
         ));
     }
     let after = match q.after.filter(|s| !s.is_empty()) {
         Some(a) => Some(
-            catalog::parse_after(&a)
+            rustyfin_models::data::parse_catalog_after(&a)
                 .ok_or_else(|| ApiError::BadRequest("after: not a Next from this feed".into()))?,
         ),
         None => None,

@@ -13,7 +13,7 @@ use super::items::attach_user_data;
 /// The fields every name item in a list carries; `user_data` for the lists
 /// Jellyfin sends it on (people, studios, years).
 pub(crate) async fn finish_list(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     user_id: Uuid,
     dtos: &mut [BaseItemDto],
     user_data: bool,
@@ -28,7 +28,7 @@ pub(crate) async fn finish_list(
 
 /// A single name item, as `/Persons/{name}` and the like answer it.
 pub(crate) async fn finish_detail(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     user_id: Uuid,
     mut dto: BaseItemDto,
     date_created: Option<DateTime<Utc>>,

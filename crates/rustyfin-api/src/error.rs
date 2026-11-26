@@ -22,11 +22,7 @@ pub enum ApiError {
     #[error("Conflict: {0}")]
     Conflict(String),
 
-    #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
-
-    /// A data-layer failure (`rustyfin_models::data`). Replaces `Database`
-    /// as handlers move off the pool and onto the data-layer traits.
+    /// A data-layer failure (`rustyfin_models::data`).
     #[error("{0}")]
     Data(#[from] DataError),
 
@@ -57,15 +53,6 @@ pub trait DegradeExt<T> {
     fn or_log_default(self, what: &str) -> T;
 }
 
-impl<T: Default> DegradeExt<T> for Result<T, sqlx::Error> {
-    fn or_log_default(self, what: &str) -> T {
-        self.unwrap_or_else(|e| {
-            tracing::warn!("{what} failed, continuing without it: {e}");
-            T::default()
-        })
-    }
-}
-
 impl<T: Default> DegradeExt<T> for Result<T, DataError> {
     fn or_log_default(self, what: &str) -> T {
         self.unwrap_or_else(|e| {
@@ -73,15 +60,6 @@ impl<T: Default> DegradeExt<T> for Result<T, DataError> {
             T::default()
         })
     }
-}
-
-/// Postgres SQLSTATE for `foreign_key_violation`.
-const PG_FOREIGN_KEY_VIOLATION: &str = "23503";
-
-fn is_foreign_key_violation(e: &sqlx::Error) -> bool {
-    e.as_database_error()
-        .and_then(|d| d.code())
-        .is_some_and(|c| c == PG_FOREIGN_KEY_VIOLATION)
 }
 
 /// Jellyfin's 404 body: ASP.NET problem details (`type`, `title`, `status`,
@@ -113,15 +91,9 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::Conflict(_) => StatusCode::CONFLICT,
-            // A foreign-key violation means the request referenced a row
-            // that does not exist (e.g. user data for an unknown item), which
-            // Jellyfin reports as 404 rather than a server error.
-            ApiError::Database(e) if is_foreign_key_violation(e) => StatusCode::NOT_FOUND,
-            ApiError::Database(e) if rustyfin_data::pool::is_unavailable(e) => {
-                StatusCode::SERVICE_UNAVAILABLE
-            }
-            ApiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            // Same answers as the database cases above.
+            // A missing reference means the request named a row that does
+            // not exist (e.g. user data for an unknown item), which Jellyfin
+            // reports as 404 rather than a server error.
             ApiError::Data(DataError::MissingReference(_)) => StatusCode::NOT_FOUND,
             ApiError::Data(DataError::Unavailable(_)) => StatusCode::SERVICE_UNAVAILABLE,
             ApiError::Data(DataError::Other(_)) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -154,12 +126,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn non_database_sqlx_error_is_not_fk_violation() {
-        assert!(!is_foreign_key_violation(&sqlx::Error::RowNotFound));
-    }
-
-    #[test]
-    fn data_errors_answer_like_database_errors() {
+    fn data_errors_answer_as_jellyfin_does() {
         let status = |e| ApiError::Data(e).into_response().status();
         assert_eq!(
             status(DataError::MissingReference("fk".into())),
@@ -173,11 +140,5 @@ mod tests {
             status(DataError::Other("bad".into())),
             StatusCode::INTERNAL_SERVER_ERROR
         );
-    }
-
-    #[test]
-    fn plain_database_error_maps_to_500() {
-        let resp = ApiError::Database(sqlx::Error::RowNotFound).into_response();
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }

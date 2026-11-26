@@ -4,10 +4,9 @@
 //! The list routes filter by that set; every route that names a single item has to
 //! apply the same rule. Jellyfin answers 404 for an item the user may not see, so
 //! that is what a hidden item gets here too: a 403 would confirm it exists.
+use rustyfin_models::data::MediaItem;
 
 use uuid::Uuid;
-
-use rustyfin_data::repo::media_items::MediaItemRow;
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -28,8 +27,8 @@ pub async fn require_item_access(
 pub async fn retain_accessible(
     state: &AppState,
     user_id: Uuid,
-    items: Vec<MediaItemRow>,
-) -> Result<Vec<MediaItemRow>, ApiError> {
+    items: Vec<MediaItem>,
+) -> Result<Vec<MediaItem>, ApiError> {
     Ok(state.services.access().retain(user_id, items).await?)
 }
 

@@ -20,8 +20,6 @@ use axum::Router;
 use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
 use tower::ServiceExt;
 
 /// The device name Rustyfin's link client signs in with.
@@ -41,27 +39,16 @@ pub fn forget() {
     SEEN.lock().unwrap().clear();
 }
 
-/// A pool like `pool` whose connections leave out what links hold.
-pub fn local_only_pool(pool: &PgPool) -> PgPool {
-    let options = (*pool.connect_options())
-        .clone()
-        .options([("rustyfin.local_only", "on")]);
-    PgPoolOptions::new()
-        .max_connections(5)
-        .acquire_timeout(rustyfin_data::pool::ACQUIRE_TIMEOUT)
-        .connect_lazy_with(options)
-}
-
 /// What [`dispatch`] needs: the full data layer to look tokens up, and the routes
 /// for linking servers.
 #[derive(Clone)]
 pub struct LinkScope {
-    pub data: rustyfin_data::PgData,
+    pub data: rustyfin_services::Store,
     pub local_routes: Router,
 }
 
 impl LinkScope {
-    pub fn new(data: rustyfin_data::PgData, local_routes: Router) -> Self {
+    pub fn new(data: rustyfin_services::Store, local_routes: Router) -> Self {
         Self { data, local_routes }
     }
 

@@ -1,4 +1,4 @@
-use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
+use rustyfin_models::data::{Data, MediaItemStore, MediaStream, MediaStreamStore};
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,7 +14,6 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_streams;
 use rustyfin_media::playback_info::stream_row_to_dto;
 use rustyfin_media::transcode::{
     hls::{
@@ -660,7 +659,7 @@ async fn start_session(
 }
 
 /// The file's first video stream, for the copy-or-encode decision.
-fn source_video(streams: &[media_streams::MediaStreamRow]) -> Option<SourceVideo> {
+fn source_video(streams: &[MediaStream]) -> Option<SourceVideo> {
     streams
         .iter()
         .find(|s| s.stream_type == "Video")

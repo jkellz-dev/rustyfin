@@ -2,12 +2,11 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, StatusStore};
+use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, NameKind, StatusStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -258,7 +257,7 @@ const GENRE_IDS_REREAD: std::time::Duration = std::time::Duration::from_secs(10)
 /// `GenreIds` (comma-separated) as genre names; `None` when not given. Ids
 /// that name no genre are left out, so an unknown id matches nothing.
 pub(crate) async fn genre_names_by_ids(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     ids: Option<&str>,
 ) -> Option<Vec<String>> {
     let ids: Vec<Uuid> = ids?
@@ -274,7 +273,7 @@ pub(crate) async fn genre_names_by_ids(
     Some(names)
 }
 
-pub(crate) async fn genre_name_by_id(data: &rustyfin_data::PgData, id: Uuid) -> Option<String> {
+pub(crate) async fn genre_name_by_id(data: &rustyfin_services::Store, id: Uuid) -> Option<String> {
     // The database and schema: tests share one database, a schema each.
     let database: String = data.status().scope().await.unwrap_or_default();
     if let Ok(cached) = GENRE_IDS.lock()

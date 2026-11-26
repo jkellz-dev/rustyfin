@@ -8,8 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use rustyfin_auth::middleware::AdminUser;
-use rustyfin_data::repo::sessions;
-use rustyfin_models::data::{Data, SessionStore};
+use rustyfin_models::data::{Data, Device, SessionStore};
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -47,7 +46,7 @@ pub struct DeviceCapabilities {
     pub supports_persistent_identifier: bool,
 }
 
-async fn device_infos(state: &AppState, rows: Vec<sessions::DeviceRow>) -> Vec<DeviceInfo> {
+async fn device_infos(state: &AppState, rows: Vec<Device>) -> Vec<DeviceInfo> {
     let live = state.session_manager.get_sessions(None).await;
     rows.into_iter()
         .map(|d| {

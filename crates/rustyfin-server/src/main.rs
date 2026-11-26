@@ -375,7 +375,6 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         services,
         data: data.clone(),
-        pool: db_pool,
         local_only: false,
         server_id,
         server_name: config.server.server_name,

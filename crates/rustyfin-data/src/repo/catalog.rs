@@ -43,23 +43,9 @@ impl From<CatalogChangeRecord> for CatalogChange {
 
 pub use rustyfin_models::data::CatalogPage as Page;
 
-/// True for a `pg_snapshot` in its text form (`xmin:xmax:xip,...`).
-pub fn is_snapshot(s: &str) -> bool {
-    let digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
-    let parts: Vec<&str> = s.split(':').collect();
-    parts.len() == 3
-        && digits(parts[0])
-        && digits(parts[1])
-        && (parts[2].is_empty() || parts[2].split(',').all(digits))
-}
-
-/// A page position (`xid,id`), if well formed.
-pub fn parse_after(s: &str) -> Option<(String, Uuid)> {
-    let (xid, id) = s.split_once(',')?;
-    (!xid.is_empty() && xid.bytes().all(|b| b.is_ascii_digit()))
-        .then(|| id.parse().ok().map(|id| (xid.to_string(), id)))
-        .flatten()
-}
+pub use rustyfin_models::data::{
+    is_catalog_snapshot as is_snapshot, parse_catalog_after as parse_after,
+};
 
 /// Items changed since `since` (every item when `None`) in `libraries` (every
 /// library when `None`), this server's own only, `limit` per page from

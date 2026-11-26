@@ -1,6 +1,7 @@
 use rustyfin_models::data::{
-    ChapterStore, CollectionStore, Data, ImageStore, LibraryAccessStore, LibraryStore,
-    MediaItemStore, MediaStreamStore, PeopleStore, UserDataStore,
+    ChapterStore, CollectionStore, Data, Image, ImageStore, ItemQuery, LibraryAccessStore,
+    LibraryStore, MediaItem, MediaItemStore, MediaStream, MediaStreamStore, PeopleStore, Person,
+    UserData, UserDataStore,
 };
 use std::collections::HashMap;
 
@@ -13,8 +14,6 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::images::ImageRow;
-use rustyfin_data::repo::{media_items, media_streams, people, user_data};
 use rustyfin_media::image_processing::Placeholder;
 use rustyfin_media::playback_info::{
     default_audio_stream_index, source_video_type, stream_row_to_dto,
@@ -96,10 +95,7 @@ fn parse_filters(filters: &Option<String>) -> (Option<bool>, Option<bool>, bool)
 /// The caller's `UserData` for an item: their row when they have one, otherwise
 /// the zeros Jellyfin sends for an item they never touched. Clients read these
 /// fields without checking for their presence.
-pub(crate) fn user_data_dto(
-    item_id: Uuid,
-    row: Option<&user_data::UserDataRow>,
-) -> UserItemDataDto {
+pub(crate) fn user_data_dto(item_id: Uuid, row: Option<&UserData>) -> UserItemDataDto {
     let mut dto = match row {
         Some(ud) => UserItemDataDto {
             playback_position_ticks: ud.playback_position_ticks,
@@ -123,7 +119,7 @@ pub(crate) fn user_data_dto(
 /// A track's lyrics file as Jellyfin lists it: an external `Lyric` stream
 /// after the probed ones. Only tracks the scan found lyrics for are looked at.
 fn lyric_stream(
-    item: &media_items::MediaItemRow,
+    item: &MediaItem,
     streams: &[MediaStream],
     reveal_path: bool,
 ) -> Option<MediaStream> {
@@ -147,8 +143,8 @@ fn lyric_stream(
 
 pub(crate) fn attach_media_source(
     dto: &mut BaseItemDto,
-    item: &media_items::MediaItemRow,
-    streams: &[media_streams::MediaStreamRow],
+    item: &MediaItem,
+    streams: &[MediaStream],
     reveal_path: bool,
 ) {
     if streams.is_empty() {
@@ -161,8 +157,8 @@ pub(crate) fn attach_media_source(
 
 /// The item's file as a media source: its streams, size, container.
 pub(crate) fn media_source(
-    item: &media_items::MediaItemRow,
-    streams: &[media_streams::MediaStreamRow],
+    item: &MediaItem,
+    streams: &[MediaStream],
     reveal_path: bool,
 ) -> MediaSourceInfo {
     let mut media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
@@ -203,7 +199,7 @@ pub(crate) fn media_source(
 /// `0001`, an episode `001 - 0001 - <name>`, a track `0001 - 0001 - <name>`
 /// (disc, then track; a missing number is left out). The same key the list
 /// queries sort by (`JELLYFIN_SORT_KEY`).
-fn numbered_sort_name(item: &media_items::MediaItemRow) -> Option<String> {
+fn numbered_sort_name(item: &MediaItem) -> Option<String> {
     let part =
         |n: Option<i32>, width: usize| n.map(|n| format!("{n:0width$} - ")).unwrap_or_default();
     match item.item_type.as_str() {
@@ -231,9 +227,9 @@ fn numbered_sort_name(item: &media_items::MediaItemRow) -> Option<String> {
 /// `Fields=MediaSources` or `Fields=MediaStreams` on a list: clients decide direct
 /// play from the list without a request per item. One query for all the items.
 pub(crate) async fn attach_media_sources_if_asked(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     fields: &Option<String>,
-    items: &[media_items::MediaItemRow],
+    items: &[MediaItem],
     dtos: &mut [BaseItemDto],
     reveal_path: bool,
 ) {
@@ -254,7 +250,7 @@ pub(crate) async fn attach_media_sources_if_asked(
         .list_by_items(&ids)
         .await
         .or_log_default("media_streams::list_by_items");
-    let mut by_item: HashMap<Uuid, Vec<media_streams::MediaStreamRow>> = HashMap::new();
+    let mut by_item: HashMap<Uuid, Vec<MediaStream>> = HashMap::new();
     for row in rows {
         by_item.entry(row.item_id).or_default().push(row);
     }
@@ -312,7 +308,7 @@ fn folder_user_data(ud: &mut UserItemDataDto, total: i64, unplayed: i64) {
 
 /// Seasons carry only their parent link; name the series for them in one query.
 pub(crate) async fn name_series_for_seasons(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     dtos: &mut [BaseItemDto],
 ) {
     let wanted: Vec<Uuid> = dtos
@@ -347,7 +343,7 @@ pub(crate) async fn name_series_for_seasons(
 /// the unplayed counts for folders). A failing lookup leaves the zeros in place
 /// and logs: the list is the answer, the user data is an extra.
 pub(crate) async fn attach_user_data(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     user_id: Uuid,
     dtos: &mut [BaseItemDto],
 ) {
@@ -475,7 +471,7 @@ pub(crate) fn external_urls(
         .collect()
 }
 
-pub(crate) fn media_item_to_dto(item: &media_items::MediaItemRow, server_id: &str) -> BaseItemDto {
+pub(crate) fn media_item_to_dto(item: &MediaItem, server_id: &str) -> BaseItemDto {
     // Convert external_ids JSONB to provider_ids HashMap
     let provider_ids = item.external_ids.as_ref().and_then(|v| {
         let obj = v.as_object()?;
@@ -586,8 +582,8 @@ pub(crate) struct ImageFields {
     primary_image_aspect_ratio: Option<f64>,
 }
 
-/// Build image-related fields from a slice of `ImageRow`s for a single item.
-pub(crate) fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
+/// Build image-related fields from a slice of `Image`s for a single item.
+pub(crate) fn build_image_fields(item_images: &[Image]) -> ImageFields {
     if item_images.is_empty() {
         return ImageFields {
             image_tags: Some(HashMap::new()),
@@ -644,7 +640,7 @@ pub(crate) fn build_image_fields(item_images: &[ImageRow]) -> ImageFields {
 }
 
 /// Apply image fields to a DTO from a pre-grouped image map.
-pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow]) {
+pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[Image]) {
     let fields = build_image_fields(item_images);
     dto.image_tags = fields.image_tags;
     dto.backdrop_image_tags = fields.backdrop_image_tags;
@@ -655,7 +651,7 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[ImageRow
 
 /// Seasons and episodes name their show's poster (`SeriesPrimaryImageTag`), and a
 /// season without a cover of its own shows the show's (owner, 2026-11-14).
-pub(crate) async fn attach_series_art(data: &rustyfin_data::PgData, dtos: &mut [BaseItemDto]) {
+pub(crate) async fn attach_series_art(data: &rustyfin_services::Store, dtos: &mut [BaseItemDto]) {
     let series_of = |d: &BaseItemDto| match d.item_type.as_str() {
         "Season" => d.series_id.or(d.parent_id),
         "Episode" => d.series_id,
@@ -667,7 +663,7 @@ pub(crate) async fn attach_series_art(data: &rustyfin_data::PgData, dtos: &mut [
     }
     series_ids.sort();
     series_ids.dedup();
-    let posters: HashMap<Uuid, ImageRow> = data
+    let posters: HashMap<Uuid, Image> = data
         .images()
         .list_by_items(&series_ids)
         .await
@@ -714,15 +710,15 @@ pub(crate) async fn attach_series_art(data: &rustyfin_data::PgData, dtos: &mut [
 /// queries for the whole page. Artist names link to artist folders of the same
 /// library only, so a hidden library's artists never show up.
 pub(crate) async fn attach_music_fields(
-    data: &rustyfin_data::PgData,
-    items: &[media_items::MediaItemRow],
+    data: &rustyfin_services::Store,
+    items: &[MediaItem],
     dtos: &mut [BaseItemDto],
 ) {
     let musical = |t: &str| matches!(t, "Audio" | "MusicAlbum" | "MusicArtist");
     if !dtos.iter().any(|d| musical(&d.item_type)) {
         return;
     }
-    let rows: HashMap<Uuid, &media_items::MediaItemRow> = items.iter().map(|i| (i.id, i)).collect();
+    let rows: HashMap<Uuid, &MediaItem> = items.iter().map(|i| (i.id, i)).collect();
 
     let mut related_ids: Vec<Uuid> = Vec::new();
     for row in items {
@@ -737,7 +733,7 @@ pub(crate) async fn attach_music_fields(
     }
     related_ids.sort();
     related_ids.dedup();
-    let related: HashMap<Uuid, media_items::MediaItemRow> = data
+    let related: HashMap<Uuid, MediaItem> = data
         .media_items()
         .find_by_ids(&related_ids)
         .await
@@ -762,13 +758,13 @@ pub(crate) async fn attach_music_fields(
         .collect();
 
     // A track's artists: its tags, else its album artist.
-    let album_artist_of = |row: &media_items::MediaItemRow| -> Option<String> {
+    let album_artist_of = |row: &MediaItem| -> Option<String> {
         row.series_id
             .and_then(|id| related.get(&id))
             .map(|a| a.name.clone())
             .or_else(|| row.series_name.clone())
     };
-    let track_artists = |row: &media_items::MediaItemRow| -> Vec<String> {
+    let track_artists = |row: &MediaItem| -> Vec<String> {
         row.artists
             .clone()
             .filter(|a| !a.is_empty())
@@ -939,8 +935,8 @@ pub(crate) fn frame_tag(id: Uuid, etag: Option<&str>) -> String {
 }
 
 /// Group images by entity_id for batch application.
-pub(crate) fn group_images_by_item(all_images: Vec<ImageRow>) -> HashMap<Uuid, Vec<ImageRow>> {
-    let mut map: HashMap<Uuid, Vec<ImageRow>> = HashMap::new();
+pub(crate) fn group_images_by_item(all_images: Vec<Image>) -> HashMap<Uuid, Vec<Image>> {
+    let mut map: HashMap<Uuid, Vec<Image>> = HashMap::new();
     for img in all_images {
         if let Some(item_id) = img.entity_id {
             map.entry(item_id).or_default().push(img);
@@ -1094,7 +1090,7 @@ pub async fn get_items(
     };
     let genres_any =
         super::music_genres::genre_names_by_ids(&state.data, query.genre_ids.as_deref()).await;
-    let item_query = media_items::ItemQuery {
+    let item_query = ItemQuery {
         genres_any,
         library_id: if is_library { query.parent_id } else { None },
         parent_id: if !is_library && collection_members.is_none() {
@@ -1456,7 +1452,7 @@ pub async fn get_item_by_id(
 }
 
 /// A person on a title: who, their role, their billing order.
-type Billing = (people::PersonRow, Option<String>, Option<i32>);
+type Billing = (Person, Option<String>, Option<i32>);
 
 /// Cast and crew as Jellyfin lists them, with a photo tag for whoever has one
 /// (a stored image, else the shared headshot folder).
@@ -1673,20 +1669,20 @@ fn latest_fetch_types(wanted: &[String]) -> Vec<String> {
 
 /// One slot of the grouped Latest list.
 enum LatestSlot {
-    Item(media_items::MediaItemRow),
+    Item(MediaItem),
     Album(Uuid),
-    Series(Uuid, media_items::MediaItemRow, usize),
+    Series(Uuid, MediaItem, usize),
 }
 
 /// Jellyfin's grouping of Latest: tracks become their album (also from disc
 /// folders), a show with several new episodes becomes the show, one new
 /// episode stays an episode. Newest first, `limit` entries.
 async fn group_latest(
-    data: &rustyfin_data::PgData,
-    added: Vec<media_items::MediaItemRow>,
+    data: &rustyfin_services::Store,
+    added: Vec<MediaItem>,
     wanted: &[String],
     limit: i64,
-) -> Result<Vec<media_items::MediaItemRow>, ApiError> {
+) -> Result<Vec<MediaItem>, ApiError> {
     // Each track's album: its parent, or its parent's parent for disc folders.
     let parent_ids: Vec<Uuid> = added
         .iter()
@@ -1695,14 +1691,14 @@ async fn group_latest(
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    let parents: HashMap<Uuid, media_items::MediaItemRow> = data
+    let parents: HashMap<Uuid, MediaItem> = data
         .media_items()
         .find_by_ids(&parent_ids)
         .await?
         .into_iter()
         .map(|r| (r.id, r))
         .collect();
-    let album_of = |track: &media_items::MediaItemRow| -> Option<Uuid> {
+    let album_of = |track: &MediaItem| -> Option<Uuid> {
         let parent = parents.get(&track.parent_id?)?;
         if parent.item_type == "MusicAlbum" {
             Some(parent.id)
@@ -1747,7 +1743,7 @@ async fn group_latest(
             _ => None,
         })
         .collect();
-    let mut folders: HashMap<Uuid, media_items::MediaItemRow> = data
+    let mut folders: HashMap<Uuid, MediaItem> = data
         .media_items()
         .find_by_ids(&folder_ids)
         .await?
@@ -1817,7 +1813,7 @@ pub async fn get_resume_items(
 
     // The items in one query, then in resume order.
     let resume_ids: Vec<Uuid> = resume_data.iter().map(|(_, id)| *id).collect();
-    let resume_items: HashMap<Uuid, media_items::MediaItemRow> = state
+    let resume_items: HashMap<Uuid, MediaItem> = state
         .data
         .media_items()
         .find_by_ids(&resume_ids)

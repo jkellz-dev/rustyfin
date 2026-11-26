@@ -8,7 +8,6 @@ license.workspace = true
 rustyfin-auth.workspace = true
 rustyfin-common.workspace = true
 rustyfin-services.workspace = true
-rustyfin-data.workspace = true
 rustyfin-models.workspace = true
 rustyfin-media.workspace = true
 rustyfin-search.workspace = true
@@ -22,7 +21,6 @@ tower.workspace = true
 tower-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
@@ -37,6 +35,10 @@ futures-util.workspace = true
 rand.workspace = true
 
 [dev-dependencies]
+# The tests set up rows straight in the database; the crate itself never
+# touches it (CLAUDE.md, "Layers").
+rustyfin-data.workspace = true
+sqlx.workspace = true
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 tower = { workspace = true, features = ["util"] }
 tokio = { workspace = true, features = ["full", "test-util"] }

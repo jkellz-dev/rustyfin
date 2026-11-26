@@ -253,3 +253,10 @@ pub trait LinkStore {
     /// with the copy ([`delete_copies`]).
     fn borrow(&self) -> impl Future<Output = DataResult<()>> + Send;
 }
+
+/// The friend's item id of a stored copy (`<film>` or `<film>/<source>`).
+pub fn remote_item(remote_id: &str) -> &str {
+    remote_id
+        .split_once('/')
+        .map_or(remote_id, |(item, _)| item)
+}

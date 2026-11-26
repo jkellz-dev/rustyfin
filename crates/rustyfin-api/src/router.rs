@@ -7,7 +7,6 @@ use axum::{
     extract::FromRef,
     routing::{delete, get, post},
 };
-use sqlx::PgPool;
 use tokio::sync::RwLock;
 
 use crate::routes::*;
@@ -23,13 +22,11 @@ pub struct ForwardAuthState {
 /// Shared application state.
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: PgPool,
-    /// The data layer over `pool` (`CLAUDE.md`, "Layers"). Transitional:
-    /// both exist while handlers move off the pool.
-    pub data: rustyfin_data::PgData,
+    /// The data layer (`CLAUDE.md`, "Layers").
+    pub data: rustyfin_services::Store,
     /// The rules over `data` (`rustyfin-services`).
-    pub services: rustyfin_services::Services<rustyfin_data::PgData>,
-    /// Serving a server that links this one: `pool` leaves out what links
+    pub services: rustyfin_services::Services<rustyfin_services::Store>,
+    /// Serving a server that links this one: `data` leaves out what links
     /// hold, and so does everything else (`link_scope`). Set by
     /// [`build_router`] for its second copy of the routes.
     pub local_only: bool,
@@ -58,7 +55,7 @@ pub struct AppState {
     pub prefer_direct_play: bool,
 }
 
-impl FromRef<AppState> for rustyfin_data::PgData {
+impl FromRef<AppState> for rustyfin_services::Store {
     fn from_ref(state: &AppState) -> Self {
         state.data.clone()
     }
@@ -72,12 +69,10 @@ impl FromRef<AppState> for rustyfin_data::PgData {
 /// A server linking this one is served by a second copy of the routes that
 /// sees only this server's own media (`link_scope`).
 pub fn build_router(state: AppState) -> Router {
-    let local_pool = crate::link_scope::local_only_pool(&state.pool);
-    let local_data = rustyfin_data::PgData::from_pool(&local_pool);
+    let local_data = state.data.local_only();
     let local_state = AppState {
         services: state.services.with_data(local_data.clone()),
         data: local_data,
-        pool: local_pool,
         local_only: true,
         ..state.clone()
     };

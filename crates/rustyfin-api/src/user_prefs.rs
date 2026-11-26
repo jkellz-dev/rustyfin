@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 /// The user's settings, or Jellyfin's defaults for a user who never saved any
 /// (or cannot be read).
-pub async fn load(data: &rustyfin_data::PgData, user_id: Uuid) -> UserConfiguration {
+pub async fn load(data: &rustyfin_services::Store, user_id: Uuid) -> UserConfiguration {
     match data.users().find_by_id(user_id).await {
         Ok(Some(row)) => crate::routes::users::user_configuration(&row),
         Ok(None) => UserConfiguration::default(),

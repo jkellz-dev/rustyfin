@@ -38,3 +38,21 @@ pub trait CatalogStore {
         limit: i64,
     ) -> impl Future<Output = DataResult<CatalogPage>> + Send;
 }
+
+/// True for a `pg_snapshot` in its text form (`xmin:xmax:xip,...`).
+pub fn is_catalog_snapshot(s: &str) -> bool {
+    let digits = |p: &str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+    let parts: Vec<&str> = s.split(':').collect();
+    parts.len() == 3
+        && digits(parts[0])
+        && digits(parts[1])
+        && (parts[2].is_empty() || parts[2].split(',').all(digits))
+}
+
+/// A page position (`xid,id`), if well formed.
+pub fn parse_catalog_after(s: &str) -> Option<(String, Uuid)> {
+    let (xid, id) = s.split_once(',')?;
+    (!xid.is_empty() && xid.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| id.parse().ok().map(|id| (xid.to_string(), id)))
+        .flatten()
+}

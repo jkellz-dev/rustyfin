@@ -41,10 +41,12 @@ async fn a_busy_pool_answers_503_quickly_then_recovers() {
 fn an_unavailable_database_is_503_with_retry_after() {
     use axum::response::IntoResponse;
     let response =
-        rustyfin_api::error::ApiError::Database(sqlx::Error::PoolTimedOut).into_response();
+        rustyfin_api::error::ApiError::Data(rustyfin_data::data_error(sqlx::Error::PoolTimedOut))
+            .into_response();
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert!(response.headers().contains_key("Retry-After"));
     let response =
-        rustyfin_api::error::ApiError::Database(sqlx::Error::RowNotFound).into_response();
+        rustyfin_api::error::ApiError::Data(rustyfin_data::data_error(sqlx::Error::RowNotFound))
+            .into_response();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }

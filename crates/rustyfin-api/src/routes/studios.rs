@@ -4,12 +4,11 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
-use rustyfin_models::data::{Data, MediaItemStore};
+use rustyfin_models::data::{Data, MediaItemStore, NameKind};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items::NameKind;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};

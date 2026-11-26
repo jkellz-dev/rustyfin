@@ -4,12 +4,11 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
-use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
+use rustyfin_models::data::{ArtistFilter, Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
@@ -94,7 +93,7 @@ async fn get_artists_inner(
     };
     let genres_any =
         super::music_genres::genre_names_by_ids(&state.data, params.genre_ids.as_deref()).await;
-    let filter = media_items::ArtistFilter {
+    let filter = ArtistFilter {
         genres_any: genres_any.as_deref(),
         search: params.search_term.as_deref(),
         library_id: params.parent_id,

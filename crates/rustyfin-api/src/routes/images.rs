@@ -7,13 +7,12 @@ use axum::{
 };
 use rustyfin_models::data::{
     CollectionStore, Data, ImageStore, LibraryAccessStore, LibraryStore, MediaItemStore,
-    PeopleStore,
+    PeopleStore, Person,
 };
 use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::{AuthenticatedUser, OptionalUser};
-use rustyfin_data::repo::people;
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 
@@ -104,10 +103,7 @@ async fn check_image_access(
 
 /// A person's headshot in the shared people folder, if the metadata CLI has
 /// fetched one: by TMDB id, else by the photo's address (never by name).
-pub(crate) fn headshot_path(
-    state: &AppState,
-    person: &people::PersonRow,
-) -> Option<std::path::PathBuf> {
+pub(crate) fn headshot_path(state: &AppState, person: &Person) -> Option<std::path::PathBuf> {
     let dir = state.people_cache_dir.as_ref()?;
     let path = dir.join(rustyfin_services::headshot_file_name(
         person.provider_person_id.as_deref(),

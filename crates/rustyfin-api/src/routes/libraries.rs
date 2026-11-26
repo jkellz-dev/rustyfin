@@ -6,11 +6,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use rustyfin_models::data::{
-    CollectionStore, Data, LibraryAccessStore, LibraryStore, LinkStore, MediaItemStore, UserStore,
+    CollectionStore, Data, Library, LibraryAccessStore, LibraryStore, LinkStore, MediaItemStore,
+    UserStore,
 };
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_data::repo::libraries;
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,
@@ -273,7 +273,7 @@ pub(crate) async fn visible_library_folder(
 async fn visible_libraries(
     state: &AppState,
     user_id: uuid::Uuid,
-) -> Result<Vec<libraries::LibraryRow>, ApiError> {
+) -> Result<Vec<Library>, ApiError> {
     let libs = state.data.libraries().list_all().await?;
     let accessible = state
         .data
@@ -316,7 +316,7 @@ pub async fn get_root_folder_legacy(
 }
 
 /// A library as Jellyfin's `CollectionFolder` item.
-pub(crate) fn collection_folder_dto(lib: &libraries::LibraryRow, server_id: &str) -> BaseItemDto {
+pub(crate) fn collection_folder_dto(lib: &Library, server_id: &str) -> BaseItemDto {
     let mut dto = BaseItemDto {
         name: lib.name.clone(),
         server_id: server_id.to_string(),
@@ -480,7 +480,7 @@ pub async fn delete_virtual_folder(
 // ── Jellyfin LibraryStructureController parity ───────────────────────
 
 /// A library's stored options (defaults when none were ever set).
-fn options_of(lib: &libraries::LibraryRow) -> LibraryOptions {
+fn options_of(lib: &Library) -> LibraryOptions {
     serde_json::from_value(lib.library_options.clone()).unwrap_or_default()
 }
 
@@ -521,7 +521,7 @@ fn jellyfin_option_defaults() -> serde_json::Value {
 
 /// A library's options as Jellyfin lists them: stored values, its folders as
 /// `PathInfos`, and Jellyfin's defaults for everything else.
-fn listed_options(lib: &libraries::LibraryRow) -> LibraryOptions {
+fn listed_options(lib: &Library) -> LibraryOptions {
     let mut options = options_of(lib);
     if options.path_infos.is_empty() {
         options.path_infos = lib
@@ -541,7 +541,7 @@ fn listed_options(lib: &libraries::LibraryRow) -> LibraryOptions {
     options
 }
 
-fn folder_info(lib: libraries::LibraryRow) -> VirtualFolderInfo {
+fn folder_info(lib: Library) -> VirtualFolderInfo {
     VirtualFolderInfo {
         library_options: listed_options(&lib),
         name: lib.name,

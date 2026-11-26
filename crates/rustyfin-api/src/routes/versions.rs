@@ -4,9 +4,8 @@
 //! `MediaSourceId`. The best copy comes first and plays when none is named
 //! (owner, 2026-11-18; `rustyfin_media::quality`).
 
-use rustyfin_data::repo::{media_items, media_streams};
 use rustyfin_media::quality::Quality;
-use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
+use rustyfin_models::data::{Data, MediaItem, MediaItemStore, MediaStream, MediaStreamStore};
 use rustyfin_models::dto::{BaseItemDto, DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use uuid::Uuid;
 
@@ -58,15 +57,15 @@ async fn best_copy(state: &AppState, item_id: Uuid) -> Result<Uuid, ApiError> {
     Ok(best.1)
 }
 
-fn quality(row: &media_items::MediaItemRow, streams: &[media_streams::MediaStreamRow]) -> Quality {
+fn quality(row: &MediaItem, streams: &[MediaStream]) -> Quality {
     Quality::of_rows(streams, row.total_bitrate.map(i64::from))
 }
 
 async fn streams_by_item(
-    data: &rustyfin_data::PgData,
+    data: &rustyfin_services::Store,
     ids: &[Uuid],
-) -> std::collections::HashMap<Uuid, Vec<media_streams::MediaStreamRow>> {
-    let mut streams: std::collections::HashMap<Uuid, Vec<media_streams::MediaStreamRow>> =
+) -> std::collections::HashMap<Uuid, Vec<MediaStream>> {
+    let mut streams: std::collections::HashMap<Uuid, Vec<MediaStream>> =
         std::collections::HashMap::new();
     for row in data
         .media_streams()
@@ -79,13 +78,13 @@ async fn streams_by_item(
     streams
 }
 
-pub(crate) fn is_version_of(row: &media_items::MediaItemRow, film: Uuid) -> bool {
+pub(crate) fn is_version_of(row: &MediaItem, film: Uuid) -> bool {
     row.owner_id == Some(film) && row.extra_type.as_deref() == Some("Version")
 }
 
 /// A version's name as a media source: its label (`[Bluray-1080p]`), else the
 /// file's name.
-pub(crate) fn source_name(item: &media_items::MediaItemRow) -> Option<String> {
+pub(crate) fn source_name(item: &MediaItem) -> Option<String> {
     if item.link_id.is_some() {
         return linked_name(item);
     }
@@ -100,7 +99,7 @@ pub(crate) fn source_name(item: &media_items::MediaItemRow) -> Option<String> {
 }
 
 /// A linked copy is named for the friend's server: "2160p · Alex".
-fn linked_name(item: &media_items::MediaItemRow) -> Option<String> {
+fn linked_name(item: &MediaItem) -> Option<String> {
     let data = item.extra_data.as_ref()?;
     let link = data["LinkName"].as_str()?;
     match data["LinkSource"].as_str().filter(|s| !s.is_empty()) {
@@ -122,8 +121,8 @@ fn mark_linked(source: &mut rustyfin_models::dto::MediaSourceInfo) {
 /// on a tie the film's own) and `MediaSourceCount`, as Jellyfin does. One
 /// query for the page.
 pub(crate) async fn attach_versions(
-    data: &rustyfin_data::PgData,
-    items: &[media_items::MediaItemRow],
+    data: &rustyfin_services::Store,
+    items: &[MediaItem],
     dtos: &mut [BaseItemDto],
     reveal_path: bool,
 ) {
@@ -158,7 +157,7 @@ pub(crate) async fn attach_versions(
     ids.extend(films.iter().copied());
     let streams = streams_by_item(data, &ids).await;
     for (item, dto) in items.iter().zip(dtos.iter_mut()) {
-        let mine: Vec<&media_items::MediaItemRow> = versions
+        let mine: Vec<&MediaItem> = versions
             .iter()
             .filter(|v| v.owner_id == Some(item.id))
             .collect();
@@ -166,8 +165,7 @@ pub(crate) async fn attach_versions(
             continue;
         }
         let none = Vec::new();
-        let mut rows: Vec<&media_items::MediaItemRow> =
-            std::iter::once(item).chain(mine.iter().copied()).collect();
+        let mut rows: Vec<&MediaItem> = std::iter::once(item).chain(mine.iter().copied()).collect();
         // Stable: on a tie the film's own file stays first.
         rows.sort_by_cached_key(|row| {
             std::cmp::Reverse(quality(row, streams.get(&row.id).unwrap_or(&none)))
@@ -216,7 +214,7 @@ pub(crate) fn order_sources(
 /// quality, to order the sources again once more of them can play.
 pub(crate) async fn add_playback_versions(
     state: &AppState,
-    item: &media_items::MediaItemRow,
+    item: &MediaItem,
     info: &mut PlaybackInfoResponse,
     request: Option<&PlaybackInfoRequest>,
     profile: Option<&DeviceProfile>,
