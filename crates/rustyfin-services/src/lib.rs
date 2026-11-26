@@ -13,6 +13,8 @@
 //! [`ServiceError`] the API crates turn into their own error shapes.
 
 pub mod access;
+pub mod api_keys;
+pub mod collections;
 pub mod error;
 pub mod image;
 pub mod libraries;
@@ -51,6 +53,16 @@ impl<D: Data> Services<D> {
             data,
             scans: self.scans.clone(),
         }
+    }
+
+    /// API keys for programs.
+    pub fn api_keys(&self) -> api_keys::ApiKeys<'_, D> {
+        api_keys::ApiKeys { data: &self.data }
+    }
+
+    /// Collections made by hand.
+    pub fn collections(&self) -> collections::Collections<'_, D> {
+        collections::Collections { data: &self.data }
     }
 
     /// Which items a user may see.

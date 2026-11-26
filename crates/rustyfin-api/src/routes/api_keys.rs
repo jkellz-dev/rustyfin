@@ -1,10 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode};
-use rand::RngExt;
-use rustyfin_models::data::{ApiKeyStore, Data};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use rustyfin_auth::api_key::hash_api_key;
 use rustyfin_auth::middleware::AdminUser;
 
 use crate::error::ApiError;
@@ -36,27 +33,12 @@ pub struct ApiKeyDto {
     pub is_active: bool,
 }
 
-fn generate_api_key() -> String {
-    const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let mut rng = rand::rng();
-    let random_part: String = (0..32)
-        .map(|_| {
-            let idx = rng.random_range(0..CHARSET.len());
-            CHARSET[idx] as char
-        })
-        .collect();
-    format!("rfy_{random_part}")
-}
-
 pub async fn create_api_key(
     State(state): State<AppState>,
     _admin: AdminUser,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> Result<Json<CreateApiKeyResponse>, ApiError> {
-    let plaintext_key = generate_api_key();
-    let key_hash = hash_api_key(&plaintext_key);
-
-    let row = state.data.api_keys().create(&req.name, &key_hash).await?;
+    let (row, plaintext_key) = state.services.api_keys().create(&req.name).await?;
 
     Ok(Json(CreateApiKeyResponse {
         id: row.id,
@@ -71,7 +53,7 @@ pub async fn list_api_keys(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Result<Json<rustyfin_models::dto::QueryResult<ApiKeyDto>>, ApiError> {
-    let rows = state.data.api_keys().list_all().await?;
+    let rows = state.services.api_keys().list().await?;
 
     let dtos: Vec<ApiKeyDto> = rows
         .into_iter()
@@ -94,11 +76,6 @@ pub async fn delete_api_key(
     _admin: AdminUser,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = state.data.api_keys().delete(id).await?;
-
-    if !deleted {
-        return Err(ApiError::NotFound);
-    }
-
+    state.services.api_keys().delete(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

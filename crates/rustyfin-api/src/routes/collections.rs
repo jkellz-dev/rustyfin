@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use rustyfin_models::data::{CollectionStore, Data, ImageStore, MediaItemStore};
+use rustyfin_models::data::{Data, ImageStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -30,27 +30,15 @@ pub async fn create_collection(
     _admin: AdminUser,
     Query(query): Query<CreateCollectionRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let name = query.name.unwrap_or_else(|| "New Collection".to_string());
-
-    // Create a media_item with Type='BoxSet'
-    let id = Uuid::new_v4();
-    state
-        .data
+    let id = state
+        .services
         .collections()
-        .create(id, &name, query.parent_id)
+        .create(
+            query.name.as_deref(),
+            query.parent_id,
+            &split_ids(query.ids.as_deref()),
+        )
         .await?;
-
-    // Add initial items
-    if let Some(ref ids_str) = query.ids {
-        let item_ids: Vec<Uuid> = ids_str
-            .split(',')
-            .filter_map(|s| s.trim().parse().ok())
-            .collect();
-        if !item_ids.is_empty() {
-            let _ = state.data.collections().add_items(id, &item_ids).await;
-        }
-    }
-
     Ok(Json(serde_json::json!({ "Id": id })))
 }
 
@@ -60,21 +48,11 @@ pub async fn add_collection_items(
     Path(collection_id): Path<Uuid>,
     Query(query): Query<CollectionItemsQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let ids: Vec<Uuid> = query
-        .ids
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter_map(|s| s.trim().parse().ok())
-        .collect();
-
-    if !ids.is_empty() {
-        state
-            .data
-            .collections()
-            .add_items(collection_id, &ids)
-            .await?;
-    }
+    state
+        .services
+        .collections()
+        .add(collection_id, &split_ids(query.ids.as_deref()))
+        .await?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -85,21 +63,11 @@ pub async fn remove_collection_items(
     Path(collection_id): Path<Uuid>,
     Query(query): Query<CollectionItemsQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let ids: Vec<Uuid> = query
-        .ids
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter_map(|s| s.trim().parse().ok())
-        .collect();
-
-    if !ids.is_empty() {
-        state
-            .data
-            .collections()
-            .remove_items(collection_id, &ids)
-            .await?;
-    }
+    state
+        .services
+        .collections()
+        .remove(collection_id, &split_ids(query.ids.as_deref()))
+        .await?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -111,10 +79,12 @@ pub async fn get_item_collections(
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<rustyfin_models::dto::QueryResult<rustyfin_models::dto::BaseItemDto>>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, item_id).await?;
-    let ids = state.data.collections().list_containing(item_id).await?;
-    let mut rows = state.data.media_items().find_by_ids(&ids).await?;
-    rows.sort_by(|a, b| a.sort_name.cmp(&b.sort_name).then(a.name.cmp(&b.name)));
+    let rows = state
+        .services
+        .collections()
+        .containing(auth.user_id, item_id)
+        .await?;
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let mut dtos: Vec<_> = rows
         .iter()
         .map(|row| super::items::media_item_to_dto(row, &state.server_id))
@@ -129,4 +99,12 @@ pub async fn get_item_collections(
     super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     let total = dtos.len() as i32;
     Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
+}
+
+/// Ids from a comma-separated list; what does not parse is left out.
+fn split_ids(text: Option<&str>) -> Vec<Uuid> {
+    text.unwrap_or("")
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect()
 }
