@@ -51,6 +51,10 @@ impl<D: Data> Access<'_, D> {
     }
 
     /// The libraries `user` is limited to; `None` when they see them all.
+    pub async fn limited_to(&self, user: Uuid) -> ServiceResult<Option<Vec<Uuid>>> {
+        self.libraries(user).await
+    }
+
     async fn libraries(&self, user: Uuid) -> ServiceResult<Option<Vec<Uuid>>> {
         Ok(self
             .data

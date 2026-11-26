@@ -23,6 +23,7 @@ use rustyfin_models::dto::{
     QueryResult, UserItemDataDto,
 };
 use rustyfin_services::EnrichmentService;
+use rustyfin_services::browse::{Latest, Listing, Resume};
 
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
@@ -989,13 +990,6 @@ pub async fn get_items(
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let start_index = query.start_index.unwrap_or(0);
     let limit = query.limit.unwrap_or(50).min(500);
-    let recursive = query.recursive.unwrap_or(false);
-
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
 
     // The Collections view lists every collection the user may see.
     if query.parent_id == Some(super::libraries::collections_view_id(&state.server_id)) {
@@ -1014,93 +1008,17 @@ pub async fn get_items(
         .await;
     }
 
-    // Determine if parent_id is a library
-    let is_library = if let Some(pid) = query.parent_id {
-        state.data.libraries().find_by_id(pid).await?.is_some()
-    } else {
-        false
-    };
-
-    // Block access to a library the user isn't allowed to see
-    if is_library
-        && let Some(ref allowed) = accessible
-        && !allowed.contains(&query.parent_id.unwrap())
-    {
-        return Err(ApiError::NotFound);
-    }
-
-    // A collection (BoxSet) lists its films, which are not its children by
-    // parent: they live in their library and may be in several collections.
-    let mut collection_members: Option<Vec<Uuid>> = None;
-    if !is_library
-        && let Some(pid) = query.parent_id
-        && let Some(parent) = state.data.media_items().find_by_id(pid).await?
-        && parent.item_type == "BoxSet"
-    {
-        super::access::require_item_access(&state, auth.user_id, pid).await?;
-        let members = state.data.collections().list_item_ids(pid).await?;
-        // An empty id list means "no filter" to the query: match nothing instead.
-        collection_members = Some(if members.is_empty() {
-            vec![Uuid::nil()]
-        } else {
-            members
-        });
-    }
-
-    // A collection's films go by release (its DisplayOrder), as in Jellyfin,
-    // when the client asks for no order or for name order; any other explicit
-    // order is honoured.
-    let wanted_sort = parse_comma_delimited(&query.sort_by);
-    let collection_sort = (collection_members.is_some()
-        && (wanted_sort.is_empty()
-            || wanted_sort
-                .iter()
-                .all(|s| matches!(s.as_str(), "SortName" | "Name" | "Default"))))
-    .then(|| {
-        ["PremiereDate", "ProductionYear", "SortName"]
-            .map(str::to_string)
-            .to_vec()
-    });
-
     // Artists are MusicArtist items, not people: their own filter.
     let person_ids = parse_comma_uuids(&query.person_ids);
     let mut artist_ids = parse_comma_uuids(&query.artist_ids);
     artist_ids.extend(parse_comma_uuids(&query.album_artist_ids));
     let (filter_played, filter_favorite, filter_resumable) = parse_filters(&query.filters);
-
-    // Build the query
-    // Meilisearch ranks the matches (owner, 2026-11-19); everything else is
-    // filtered here. Without it (or while it is not ready) the name is matched.
-    let ranked = match query.search_term.as_deref().map(str::trim) {
-        Some(term) if !term.is_empty() => {
-            state
-                .search_service
-                .ranked_tiers(
-                    term,
-                    &parse_comma_delimited(&query.include_item_types),
-                    rustyfin_search::CANDIDATES,
-                )
-                .await
-        }
-        _ => None,
-    };
-    let (ranked_ids, ranked_tiers) = match ranked {
-        Some((ids, tiers)) => (Some(ids), tiers),
-        None => (None, Vec::new()),
-    };
     let genres_any =
         super::music_genres::genre_names_by_ids(&state.data, query.genre_ids.as_deref()).await;
     let item_query = ItemQuery {
         genres_any,
-        library_id: if is_library { query.parent_id } else { None },
-        parent_id: if !is_library && collection_members.is_none() {
-            query.parent_id
-        } else {
-            None
-        },
-        recursive: recursive && collection_members.is_none(),
-        ids: collection_members.unwrap_or_else(|| parse_comma_uuids(&query.ids)),
-        accessible_libraries: if is_library { None } else { accessible.clone() },
+        recursive: query.recursive.unwrap_or(false),
+        ids: parse_comma_uuids(&query.ids),
         include_item_types: parse_comma_delimited(&query.include_item_types),
         exclude_item_types: parse_comma_delimited(&query.exclude_item_types),
         genres: parse_pipe_delimited(&query.genres),
@@ -1116,29 +1034,32 @@ pub async fn get_items(
         name_starts_with: query.name_starts_with.clone(),
         name_less_than: query.name_less_than.clone(),
         name_starts_with_or_greater: query.name_starts_with_or_greater.clone(),
-        user_id: Some(auth.user_id),
         is_favorite: query.is_favorite.or(filter_favorite),
         is_played: query.is_played.or(filter_played),
         is_resumable: filter_resumable,
         search_term: query.search_term.clone(),
-        ranked_ids,
-        ranked_tiers,
-        sort_by: collection_sort.unwrap_or_else(|| parse_comma_delimited(&query.sort_by)),
+        sort_by: parse_comma_delimited(&query.sort_by),
         sort_order: parse_comma_delimited(&query.sort_order),
         start_index,
         limit,
+        ..Default::default()
     };
+    let page = state
+        .services
+        .browse()
+        .items(
+            auth.user_id,
+            Listing {
+                query: item_query,
+                parent: query.parent_id,
+                count: query.enable_total_record_count.unwrap_or(true),
+            },
+        )
+        .await?;
+    let (items, total) = (page.items, page.total);
 
-    let items = state.data.media_items().query(&item_query).await?;
-
-    let total = if query.enable_total_record_count.unwrap_or(true) {
-        state.data.media_items().count_query(&item_query).await?
-    } else {
-        0
-    };
-
-    // Library access is applied in the query (`accessible_libraries`), so `items` and
-    // `total` already cover only what this user may see.
+    // Library access is applied in the query, so `items` and `total` cover
+    // only what this user may see.
 
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
@@ -1220,19 +1141,32 @@ pub async fn get_item_counts(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<rustyfin_models::dto::ItemCounts>, ApiError> {
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
-    let rows = state
-        .data
-        .media_items()
-        .count_by_type(accessible.as_deref())
-        .await?;
+    let rows = state.services.browse().counts(auth.user_id).await?;
     Ok(Json(rustyfin_models::dto::ItemCounts::from_type_counts(
         rows.iter().map(|(t, n)| (t.as_str(), *n)),
     )))
+}
+
+/// A genre is no stored item; clients open it by id (Finamp's genre page).
+/// Music first: a name both kinds use is a music genre there.
+async fn genre_by_id(
+    state: AppState,
+    auth: AuthenticatedUser,
+    id: Uuid,
+) -> Result<Json<BaseItemDto>, ApiError> {
+    let Some(genre) = super::music_genres::genre_name_by_id(&state.data, id).await else {
+        return Err(ApiError::NotFound);
+    };
+    match super::music_genres::get_music_genre(
+        State(state.clone()),
+        auth.clone(),
+        Path(genre.clone()),
+    )
+    .await
+    {
+        Err(ApiError::NotFound) => super::genres::get_genre(State(state), auth, Path(genre)).await,
+        answer => answer,
+    }
 }
 
 /// `GET /Items/{itemId}` — Single item detail.
@@ -1262,39 +1196,13 @@ pub async fn get_item_by_id(
         attach_user_data(&state.data, auth.user_id, &mut folders).await;
         return Ok(Json(folders.remove(0)));
     }
-    let Some(item) = state.data.media_items().find_by_id(item_id).await? else {
-        // A genre is no stored item; clients open it by id (Finamp's genre
-        // page). Music first: a name both kinds use is a music genre there.
-        let Some(genre) = super::music_genres::genre_name_by_id(&state.data, item_id).await else {
-            return Err(ApiError::NotFound);
-        };
-        return match super::music_genres::get_music_genre(
-            State(state.clone()),
-            auth.clone(),
-            Path(genre.clone()),
-        )
-        .await
-        {
-            Err(ApiError::NotFound) => {
-                super::genres::get_genre(State(state), auth, Path(genre)).await
-            }
-            answer => answer,
-        };
-    };
-
-    // Check library access
-    if let Some(lib_id) = item.library_id {
-        let accessible = state
-            .data
-            .user_library_access()
-            .get_accessible_library_ids(auth.user_id)
-            .await?;
-        if let Some(ref allowed) = accessible
-            && !allowed.contains(&lib_id)
-        {
-            return Err(ApiError::NotFound);
+    let item = match state.services.access().item(auth.user_id, item_id).await {
+        Ok(item) => item,
+        Err(rustyfin_services::ServiceError::NotFound) => {
+            return genre_by_id(state, auth, item_id).await;
         }
-    }
+        Err(e) => return Err(e.into()),
+    };
 
     let mut dto = media_item_to_dto(&item, &state.server_id);
 
@@ -1534,70 +1442,31 @@ pub async fn get_latest_items(
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
 
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
-
     // One library's latest, or across all of them: the media added, then (as
     // Jellyfin) tracks grouped into their album and a show's new episodes into
-    // the show, unless GroupItems=false.
-    let wanted = parse_comma_delimited(&query.include_item_types);
-    let group = query.group_items.unwrap_or(true);
-    let fetch_types = latest_fetch_types(&wanted);
-    if !wanted.is_empty() && fetch_types.is_empty() {
-        return Ok(Json(Vec::new()));
-    }
-    // The user's settings: across libraries, not those they keep out of
-    // Latest; and (Jellyfin's default) not what they have played.
+    // the show, unless GroupItems=false. The user's settings: across
+    // libraries, not those they keep out of Latest; and (Jellyfin's default)
+    // not what they have played.
     let config = crate::user_prefs::load(&state.data, auth.user_id).await;
-    let left_out = if query.parent_id.is_none() {
-        crate::user_prefs::ids(&config.latest_items_excludes)
-    } else {
-        Vec::new()
-    };
-    let hide_played = query.is_played != Some(true) && config.hide_played_in_latest;
-    let filtered = !left_out.is_empty() || hide_played;
-    let fetch_limit = if group || filtered {
-        (limit * 20).min(1000)
-    } else {
-        limit
-    };
-    let mut added = state
-        .data
-        .media_items()
-        .latest_by_library(query.parent_id, &fetch_types, fetch_limit)
+    let items = state
+        .services
+        .browse()
+        .latest(
+            auth.user_id,
+            &Latest {
+                library: query.parent_id,
+                types: parse_comma_delimited(&query.include_item_types),
+                group: query.group_items.unwrap_or(true),
+                limit,
+                left_out: if query.parent_id.is_none() {
+                    crate::user_prefs::ids(&config.latest_items_excludes)
+                } else {
+                    Vec::new()
+                },
+                hide_played: query.is_played != Some(true) && config.hide_played_in_latest,
+            },
+        )
         .await?;
-    added.retain(|i| i.library_id.is_none_or(|l| !left_out.contains(&l)));
-    if hide_played {
-        let ids: Vec<Uuid> = added.iter().map(|i| i.id).collect();
-        let data = state
-            .data
-            .user_data()
-            .get_many(auth.user_id, &ids)
-            .await
-            .or_log_default("user_data::get_many");
-        added.retain(|i| !data.get(&i.id).is_some_and(|d| d.played));
-    }
-    if !group {
-        added.truncate(limit as usize);
-    }
-    let items = if group {
-        group_latest(&state.data, added, &wanted, limit).await?
-    } else {
-        added
-    };
-
-    // Filter by library access
-    let items: Vec<_> = items
-        .into_iter()
-        .filter(|i| {
-            accessible
-                .as_ref()
-                .is_none_or(|ids| i.library_id.is_none_or(|lid| ids.contains(&lid)))
-        })
-        .collect();
 
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
@@ -1646,147 +1515,6 @@ pub async fn get_latest_items(
     Ok(Json(dtos))
 }
 
-/// What Latest reads: media, never containers. Asking for shows or albums
-/// reads their episodes or tracks, which are then grouped.
-fn latest_fetch_types(wanted: &[String]) -> Vec<String> {
-    const MEDIA: [&str; 5] = ["Movie", "Episode", "Audio", "Video", "MusicVideo"];
-    if wanted.is_empty() {
-        return MEDIA.map(str::to_string).to_vec();
-    }
-    let mut types: Vec<String> = Vec::new();
-    for t in wanted {
-        let read = match t.as_str() {
-            "Series" | "Season" => "Episode",
-            "MusicAlbum" | "MusicArtist" => "Audio",
-            other => other,
-        };
-        if MEDIA.contains(&read) && !types.iter().any(|x| x == read) {
-            types.push(read.to_string());
-        }
-    }
-    types
-}
-
-/// One slot of the grouped Latest list.
-enum LatestSlot {
-    Item(MediaItem),
-    Album(Uuid),
-    Series(Uuid, MediaItem, usize),
-}
-
-/// Jellyfin's grouping of Latest: tracks become their album (also from disc
-/// folders), a show with several new episodes becomes the show, one new
-/// episode stays an episode. Newest first, `limit` entries.
-async fn group_latest(
-    data: &rustyfin_services::Store,
-    added: Vec<MediaItem>,
-    wanted: &[String],
-    limit: i64,
-) -> Result<Vec<MediaItem>, ApiError> {
-    // Each track's album: its parent, or its parent's parent for disc folders.
-    let parent_ids: Vec<Uuid> = added
-        .iter()
-        .filter(|r| r.item_type == "Audio")
-        .filter_map(|r| r.parent_id)
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect();
-    let parents: HashMap<Uuid, MediaItem> = data
-        .media_items()
-        .find_by_ids(&parent_ids)
-        .await?
-        .into_iter()
-        .map(|r| (r.id, r))
-        .collect();
-    let album_of = |track: &MediaItem| -> Option<Uuid> {
-        let parent = parents.get(&track.parent_id?)?;
-        if parent.item_type == "MusicAlbum" {
-            Some(parent.id)
-        } else {
-            parent.parent_id
-        }
-    };
-
-    let mut slots: Vec<LatestSlot> = Vec::new();
-    let mut seen_album: std::collections::HashSet<Uuid> = Default::default();
-    let mut series_slot: HashMap<Uuid, usize> = HashMap::new();
-    for row in added {
-        if row.item_type == "Audio"
-            && let Some(album) = album_of(&row)
-        {
-            if seen_album.insert(album) {
-                slots.push(LatestSlot::Album(album));
-            }
-            continue;
-        }
-        if row.item_type == "Episode"
-            && let Some(series) = row.series_id
-        {
-            if let Some(&i) = series_slot.get(&series) {
-                if let LatestSlot::Series(_, _, n) = &mut slots[i] {
-                    *n += 1;
-                }
-            } else {
-                series_slot.insert(series, slots.len());
-                slots.push(LatestSlot::Series(series, row, 1));
-            }
-            continue;
-        }
-        slots.push(LatestSlot::Item(row));
-    }
-
-    let folder_ids: Vec<Uuid> = slots
-        .iter()
-        .filter_map(|s| match s {
-            LatestSlot::Album(id) => Some(*id),
-            LatestSlot::Series(id, _, n) if *n > 1 => Some(*id),
-            _ => None,
-        })
-        .collect();
-    let mut folders: HashMap<Uuid, MediaItem> = data
-        .media_items()
-        .find_by_ids(&folder_ids)
-        .await?
-        .into_iter()
-        .map(|r| (r.id, r))
-        .collect();
-    let wants = |t: &str| {
-        wanted.is_empty()
-            || wanted.iter().any(|w| {
-                w == t
-                    || (t == "Series" && w == "Episode")
-                    || (t == "Episode" && w == "Series")
-                    || (t == "MusicAlbum" && w == "Audio")
-            })
-    };
-    let mut out = Vec::new();
-    for slot in slots {
-        let row = match slot {
-            LatestSlot::Item(row) => Some(row),
-            LatestSlot::Album(id) => folders.remove(&id),
-            LatestSlot::Series(id, episode, n) => {
-                if n > 1 {
-                    folders.remove(&id)
-                } else {
-                    Some(episode)
-                }
-            }
-        };
-        if let Some(row) = row
-            && wants(&row.item_type)
-        {
-            out.push(row);
-            if out.len() as i64 >= limit {
-                break;
-            }
-        }
-    }
-    Ok(out)
-}
-
-/// How many in-progress items Continue Watching reads before filtering.
-const RESUME_SCAN: i64 = 500;
-
 /// `GET /UserItems/Resume` — Continue watching.
 pub async fn get_resume_items(
     State(state): State<AppState>,
@@ -1795,65 +1523,27 @@ pub async fn get_resume_items(
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(12).min(100);
 
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
-
-    // Filtered below by library, folder and type, so read past `limit`.
-    let resume_data = state
-        .data
-        .user_data()
-        .get_resume_items(auth.user_id, RESUME_SCAN)
-        .await?;
-    let wanted_types = parse_comma_delimited(&query.include_item_types);
-    let excluded_types = parse_comma_delimited(&query.exclude_item_types);
     let wanted_media = parse_comma_delimited(&query.media_types);
-
-    // The items in one query, then in resume order.
-    let resume_ids: Vec<Uuid> = resume_data.iter().map(|(_, id)| *id).collect();
-    let resume_items: HashMap<Uuid, MediaItem> = state
-        .data
-        .media_items()
-        .find_by_ids(&resume_ids)
-        .await?
-        .into_iter()
-        .map(|item| (item.id, item))
-        .collect();
-    let mut dtos = Vec::new();
-    for (ud, item_id) in &resume_data {
-        if let Some(item) = resume_items.get(item_id) {
-            // Filter by library access
-            if let Some(ref allowed) = accessible
-                && item.library_id.is_some_and(|lid| !allowed.contains(&lid))
-            {
-                continue;
-            }
-            // Continue Watching in one library (or show, or season) and of the
-            // kinds asked for: films are not in a TV library's list.
-            if let Some(pid) = query.parent_id
-                && item.library_id != Some(pid)
-                && item.parent_id != Some(pid)
-                && item.series_id != Some(pid)
-                && item.season_id != Some(pid)
-            {
-                continue;
-            }
-            if !wanted_types.is_empty() && !wanted_types.contains(&item.item_type) {
-                continue;
-            }
-            if excluded_types.contains(&item.item_type) {
-                continue;
-            }
-            if !wanted_media.is_empty()
-                && !media_type_for(&item.item_type).is_some_and(|m| wanted_media.contains(&m))
-            {
-                continue;
-            }
-            if dtos.len() as i64 >= limit {
-                break;
-            }
+    let started = state
+        .services
+        .browse()
+        .resume(
+            auth.user_id,
+            &Resume {
+                within: query.parent_id,
+                include_types: parse_comma_delimited(&query.include_item_types),
+                exclude_types: parse_comma_delimited(&query.exclude_item_types),
+                limit,
+            },
+            |item| {
+                wanted_media.is_empty()
+                    || media_type_for(&item.item_type).is_some_and(|m| wanted_media.contains(&m))
+            },
+        )
+        .await?;
+    let mut dtos: Vec<BaseItemDto> = started
+        .iter()
+        .map(|(ud, item)| {
             let mut dto = media_item_to_dto(item, &state.server_id);
             dto.user_data = Some(UserItemDataDto {
                 playback_position_ticks: ud.playback_position_ticks,
@@ -1865,9 +1555,9 @@ pub async fn get_resume_items(
                 last_played_date: ud.last_played_date,
                 ..Default::default()
             });
-            dtos.push(dto);
-        }
-    }
+            dto
+        })
+        .collect();
 
     // Batch load images for resume items
     let item_ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();

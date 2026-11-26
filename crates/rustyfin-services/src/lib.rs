@@ -14,6 +14,7 @@
 
 pub mod access;
 pub mod api_keys;
+pub mod browse;
 pub mod collections;
 pub mod error;
 pub mod image;
@@ -111,6 +112,15 @@ impl<D: Data> Services<D> {
 }
 
 impl Services<Store> {
+    /// Lists of items, Latest and Continue Watching, ranked by the
+    /// server's search index.
+    pub fn browse(&self) -> browse::Browse<'_, Store> {
+        browse::Browse {
+            data: &self.data,
+            search: Some(&self.scans.search),
+        }
+    }
+
     /// Starting library scans (Postgres only for now, see [`scans`]).
     pub fn scans(&self) -> scans::Scans<'_> {
         scans::Scans {
