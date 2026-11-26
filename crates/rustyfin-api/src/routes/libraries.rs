@@ -6,8 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use rustyfin_models::data::{
-    CollectionStore, Data, Library, LibraryAccessStore, LibraryStore, LinkStore, MediaItemStore,
-    UserStore,
+    CollectionStore, Data, Library, LibraryStore, MediaItemStore, UserStore,
 };
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
@@ -142,15 +141,9 @@ pub async fn get_grouping_options(
     auth: AuthenticatedUser,
     axum::extract::Path(_user_id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<Vec<NameGuidPair>>, ApiError> {
-    let libs = state.data.libraries().list_all().await?;
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
+    let libs = state.services.libraries().accessible(auth.user_id).await?;
     Ok(Json(
         libs.into_iter()
-            .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
             .map(|lib| NameGuidPair {
                 name: lib.name,
                 id: lib.id,
@@ -211,17 +204,7 @@ pub(crate) async fn visible_collection_count(
     state: &AppState,
     user_id: uuid::Uuid,
 ) -> Result<i64, ApiError> {
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(user_id)
-        .await?;
-    state
-        .data
-        .collections()
-        .count_visible(accessible.as_deref())
-        .await
-        .map_err(ApiError::from)
+    Ok(state.services.collections().visible_count(user_id).await?)
 }
 
 /// The Collections view: a virtual library of every collection the user may
@@ -244,7 +227,6 @@ pub(crate) fn collections_view_dto(server_id: &str, count: i64) -> BaseItemDto {
     dto
 }
 
-/// The libraries `user_id` may see.
 /// The library with this id as its `CollectionFolder`, with its child count,
 /// when the user may see it.
 pub(crate) async fn visible_library_folder(
@@ -274,21 +256,11 @@ async fn visible_libraries(
     state: &AppState,
     user_id: uuid::Uuid,
 ) -> Result<Vec<Library>, ApiError> {
-    let libs = state.data.libraries().list_all().await?;
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(user_id)
-        .await?;
-    // A library made for a friend's, while their server is down: hidden.
-    let offline = state.data.links().offline_ids().await?;
-    Ok(libs
-        .into_iter()
-        .filter(|lib| accessible.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
-        .filter(|lib| lib.link_id.is_none_or(|l| !offline.contains(&l)))
-        // A server linking this one: not the libraries made for its links.
-        .filter(|lib| !state.local_only || lib.link_id.is_none())
-        .collect())
+    Ok(state
+        .services
+        .libraries()
+        .shown(user_id, state.local_only)
+        .await?)
 }
 
 /// `GET /Items/Root`: the caller's root folder.

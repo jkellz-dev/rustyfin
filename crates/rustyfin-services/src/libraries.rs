@@ -5,7 +5,9 @@
 //! `rustyfin.toml` (`[[link]]`) and the next sync would make it again, so
 //! it is never renamed, deleted or given folders here.
 
-use rustyfin_models::data::{ActivityLogStore, Data, Library, LibraryStore};
+use rustyfin_models::data::{
+    ActivityLogStore, Data, Library, LibraryAccessStore, LibraryStore, LinkStore,
+};
 use uuid::Uuid;
 
 use crate::error::{ServiceError, ServiceResult};
@@ -52,6 +54,34 @@ pub struct Libraries<'a, D> {
 }
 
 impl<D: Data> Libraries<'_, D> {
+    /// The libraries `user` may see.
+    pub async fn accessible(&self, user: Uuid) -> ServiceResult<Vec<Library>> {
+        let all = self.data.libraries().list_all().await?;
+        let allowed = self
+            .data
+            .user_library_access()
+            .get_accessible_library_ids(user)
+            .await?;
+        Ok(all
+            .into_iter()
+            .filter(|lib| allowed.as_ref().is_none_or(|ids| ids.contains(&lib.id)))
+            .collect())
+    }
+
+    /// The libraries `user` is shown: those they may see, less those made
+    /// for a linked server that is down; for a server linking this one
+    /// (`for_linking`), less every library made for a link.
+    pub async fn shown(&self, user: Uuid, for_linking: bool) -> ServiceResult<Vec<Library>> {
+        let offline = self.data.links().offline_ids().await?;
+        Ok(self
+            .accessible(user)
+            .await?
+            .into_iter()
+            .filter(|lib| lib.link_id.is_none_or(|l| !offline.contains(&l)))
+            .filter(|lib| !for_linking || lib.link_id.is_none())
+            .collect())
+    }
+
     /// Make a library after checking its name, kind and folders.
     pub async fn create(&self, new: NewLibrary) -> ServiceResult<Library> {
         let name = require_new_name(&new.name)?.to_owned();

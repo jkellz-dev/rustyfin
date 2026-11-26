@@ -5,7 +5,7 @@
 use axum::Json;
 use axum::extract::{Query, State};
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_models::data::{CatalogStore, Data, LibraryAccessStore, UserStore};
+use rustyfin_models::data::{CatalogStore, Data, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -83,11 +83,7 @@ pub async fn catalog(
         None => None,
     };
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let libraries = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(user.id)
-        .await?;
+    let libraries = state.services.access().limited_to(user.id).await?;
     let page = state
         .data
         .catalog()

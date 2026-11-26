@@ -6,8 +6,7 @@ use axum::{
     response::Response,
 };
 use rustyfin_models::data::{
-    CollectionStore, Data, ImageStore, LibraryAccessStore, LibraryStore, MediaItemStore,
-    PeopleStore, Person,
+    CollectionStore, Data, ImageStore, LibraryStore, MediaItemStore, PeopleStore, Person,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -82,11 +81,7 @@ async fn check_image_access(
         return super::access::require_item_access(state, user.user_id, item_id).await;
     }
     // Otherwise it may be a library (a collection folder's image).
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(user.user_id)
-        .await?;
+    let accessible = state.services.access().limited_to(user.user_id).await?;
     match accessible {
         // A genre's picture is anyone's (its albums are checked when opened).
         Some(allowed)

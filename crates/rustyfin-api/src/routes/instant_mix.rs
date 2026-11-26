@@ -6,7 +6,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use rustyfin_models::data::{Data, ImageStore, LibraryAccessStore, MediaItemStore};
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -101,11 +101,7 @@ async fn mix(
         .filter(|l| *l > 0)
         .unwrap_or(DEFAULT_LIMIT)
         .min(1000);
-    let allowed = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
+    let allowed = state.services.access().limited_to(auth.user_id).await?;
     let rows = if genres.is_empty() {
         Vec::new()
     } else {

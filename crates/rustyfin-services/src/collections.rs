@@ -1,7 +1,7 @@
 //! Collections made by hand (box sets): making them and changing what they
 //! hold, and which collections a title is in.
 
-use rustyfin_models::data::{CollectionStore, Data, MediaItem, MediaItemStore};
+use rustyfin_models::data::{CollectionStore, Data, LibraryAccessStore, MediaItem, MediaItemStore};
 use uuid::Uuid;
 
 use crate::access::Access;
@@ -13,6 +13,20 @@ pub struct Collections<'a, D> {
 }
 
 impl<D: Data> Collections<'_, D> {
+    /// How many collections `user` may see.
+    pub async fn visible_count(&self, user: Uuid) -> ServiceResult<i64> {
+        let allowed = self
+            .data
+            .user_library_access()
+            .get_accessible_library_ids(user)
+            .await?;
+        Ok(self
+            .data
+            .collections()
+            .count_visible(allowed.as_deref())
+            .await?)
+    }
+
     /// Make a collection ("New Collection" when unnamed), in `library` when
     /// given, holding `items`; returns its id. Items that cannot be added
     /// are skipped rather than failing the collection just made.

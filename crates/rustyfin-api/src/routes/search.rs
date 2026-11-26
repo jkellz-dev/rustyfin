@@ -2,9 +2,7 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use rustyfin_models::data::{
-    CollectionStore, Data, ImageStore, LibraryAccessStore, MediaItemStore,
-};
+use rustyfin_models::data::{CollectionStore, Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -53,11 +51,7 @@ pub async fn search_hints(
         })
     };
 
-    let accessible = state
-        .data
-        .user_library_access()
-        .get_accessible_library_ids(auth.user_id)
-        .await?;
+    let accessible = state.services.access().limited_to(auth.user_id).await?;
 
     // Results are filtered below (access, library), so ask for more.
     let wanted = if query.parent_id.is_some() {
