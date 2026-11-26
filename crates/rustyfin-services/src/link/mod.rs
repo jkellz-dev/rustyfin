@@ -20,7 +20,6 @@ use rustyfin_models::data::{ActivityLogStore, Data, LinkStore};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rustyfin_data::PgData;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -141,7 +140,11 @@ impl Default for Links {
 
 impl Links {
     /// Record a link (by name) and keep a client for it.
-    pub async fn register(&self, data: &PgData, settings: LinkSettings) -> anyhow::Result<Uuid> {
+    pub async fn register<D: Data>(
+        &self,
+        data: &D,
+        settings: LinkSettings,
+    ) -> anyhow::Result<Uuid> {
         let url = settings.url.trim_end_matches('/').to_string();
         let id = data
             .links()
@@ -169,7 +172,7 @@ impl Links {
     /// stood for move to a copy that is up (going down) or the shows are
     /// placed again (coming back), the activity log says so, and
     /// subscribers hear of it.
-    async fn mark(&self, data: &PgData, link: &Link, online: bool) {
+    async fn mark<D: Data>(&self, data: &D, link: &Link, online: bool) {
         let changed = match data.links().set_offline(link.id, !online).await {
             Ok(changed) => changed,
             Err(e) => {
@@ -218,7 +221,7 @@ impl Links {
 
     /// Check a link that just failed to answer (a stream, say): mark it down
     /// if it does not answer now. Skipped while it syncs.
-    pub async fn check(&self, data: &PgData, id: Uuid) {
+    pub async fn check<D: Data>(&self, data: &D, id: Uuid) {
         let Some(link) = self.get(id).await else {
             return;
         };
@@ -232,7 +235,7 @@ impl Links {
 
     /// Sync each link whose server is down, which brings back those that
     /// answer again. Returns how many came back.
-    pub async fn recheck_offline(&self, data: &PgData) -> usize {
+    pub async fn recheck_offline<D: Data>(&self, data: &D) -> usize {
         let Ok(offline) = data.links().offline_ids().await else {
             return 0;
         };
@@ -297,7 +300,7 @@ impl Links {
     /// Sync, one after another, each link that fills any of `libraries`
     /// ((name, the link that made it)), each once: a library's scan is
     /// followed by its links' syncs (owner, 2026-11-23).
-    pub async fn sync_for(&self, data: &PgData, libraries: &[(String, Option<Uuid>)]) {
+    pub async fn sync_for<D: Data>(&self, data: &D, libraries: &[(String, Option<Uuid>)]) {
         let mut ids: Vec<Uuid> = Vec::new();
         for (name, made_by) in libraries {
             for (id, _, _) in self.sources(name, *made_by).await {
@@ -316,7 +319,7 @@ impl Links {
     }
 
     /// Bring the link's copies up to date, and record how it went.
-    pub async fn sync(&self, data: &PgData, id: Uuid) -> anyhow::Result<SyncReport> {
+    pub async fn sync<D: Data>(&self, data: &D, id: Uuid) -> anyhow::Result<SyncReport> {
         let link = self
             .get(id)
             .await
@@ -377,7 +380,7 @@ impl Links {
     }
 
     /// Sync every link; failures are logged and recorded, not returned.
-    pub async fn sync_all(&self, data: &PgData) {
+    pub async fn sync_all<D: Data>(&self, data: &D) {
         for id in self.ids().await {
             let _ = self.sync(data, id).await;
         }

@@ -3,15 +3,13 @@
 //! library is followed by a sync of the links that fill it, and what the
 //! scans changed goes into the search index straight after.
 //!
-//! Transitional: the scanner, links and search still take Postgres
-//! (`PgData`) rather than any `Data`, so this area is only on
-//! `Services<PgData>`.
+//! Only on `Services<Store>`: the search index it refreshes is the
+//! server's ([`crate::Search`]).
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rustyfin_data::PgData;
 use rustyfin_models::data::{ActivityLogStore, Data, Library, LibraryStore, MediaItemStore};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -34,7 +32,7 @@ pub struct ScanRuntime {
 
 /// Scan starting over the data layer.
 pub struct Scans<'a> {
-    pub(crate) data: &'a PgData,
+    pub(crate) data: &'a crate::Store,
     pub(crate) runtime: &'a ScanRuntime,
 }
 

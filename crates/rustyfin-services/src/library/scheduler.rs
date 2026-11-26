@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cron::Schedule;
 use rand::RngExt;
-use rustyfin_data::PgData;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -73,9 +72,9 @@ pub struct SearchReindexScheduleConfig {
 
 // ── TaskScheduler ─────────────────────────────────────────────────────
 
-pub struct TaskScheduler {
+pub struct TaskScheduler<D = crate::Store> {
     config: SchedulerConfig,
-    data: PgData,
+    data: D,
     in_flight: Arc<RwLock<HashSet<Uuid>>>,
     people_cache_dir: Option<std::path::PathBuf>,
     static_tasks: RwLock<Vec<(String, Arc<dyn ScheduledTask>)>>, // (schedule_name, task)
@@ -84,10 +83,10 @@ pub struct TaskScheduler {
     links: std::sync::OnceLock<Arc<crate::link::Links>>,
 }
 
-impl TaskScheduler {
+impl<D: Data> TaskScheduler<D> {
     pub fn new(
         config: SchedulerConfig,
-        data: PgData,
+        data: D,
         in_flight: Arc<RwLock<HashSet<Uuid>>>,
         people_cache_dir: Option<std::path::PathBuf>,
     ) -> Self {

@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
-use rustyfin_data::PgData;
 use rustyfin_models::data::{LinkedItem, remote_item};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -17,7 +16,7 @@ use super::{Link, SyncReport};
 /// Details are fetched this many at a time.
 const DETAIL_BATCH: usize = 100;
 
-pub(super) async fn sync_link(data: &PgData, link: &Link) -> anyhow::Result<SyncReport> {
+pub(super) async fn sync_link<D: Data>(data: &D, link: &Link) -> anyhow::Result<SyncReport> {
     if link.settings.kind == super::LinkKind::Rustyfin {
         return sync_rustyfin(data, link).await;
     }
@@ -65,8 +64,8 @@ pub(super) async fn sync_link(data: &PgData, link: &Link) -> anyhow::Result<Sync
 
 /// The friend's collections: store them, and when they or the link's films
 /// changed, make the collections of the films libraries the link fills again.
-async fn sync_collections(
-    data: &PgData,
+async fn sync_collections<D: Data>(
+    data: &D,
     link: &Link,
     report: &mut SyncReport,
 ) -> anyhow::Result<()> {
@@ -106,8 +105,8 @@ struct Progress {
 
 /// One `[[link.libraries]]`: find (or make) the local library, list the
 /// friend's items with their tags, store the new and changed ones.
-async fn sync_library(
-    data: &PgData,
+async fn sync_library<D: Data>(
+    data: &D,
     link: &Link,
     map: &super::LibraryMap,
     remote_libraries: &[(String, String, String)],
@@ -167,8 +166,8 @@ async fn sync_library(
 /// Where a `[[link.libraries]]` goes: the friend's library id, the local
 /// library (made for the link when there is no `local`), and whether it holds
 /// shows.
-async fn target(
-    data: &PgData,
+async fn target<D: Data>(
+    data: &D,
     link: &Link,
     map: &super::LibraryMap,
     remote_libraries: &[(String, String, String)],
@@ -220,7 +219,7 @@ fn plain(id: &str) -> String {
 /// from its change feed (`/api/v1/catalog`), so a quiet sync is one call and a
 /// busy one fetches only what changed. The first sync (or one after the
 /// friend refused the cursor) takes everything and removes what it lacks.
-async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport> {
+async fn sync_rustyfin<D: Data>(data: &D, link: &Link) -> anyhow::Result<SyncReport> {
     let started = std::time::Instant::now();
     let client = &link.client;
     let remote_libraries = client.libraries().await?;

@@ -5,7 +5,6 @@ use rustyfin_models::data::{
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crate::Store as PgData;
 use uuid::Uuid;
 
 use rustyfin_media::probe;
@@ -22,8 +21,8 @@ use rustyfin_common::naming::{
 };
 use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
-pub struct LibraryScanner {
-    data: PgData,
+pub struct LibraryScanner<D = crate::Store> {
+    data: D,
     enrichment: EnrichmentService,
     /// Collection art (`<tmdb-id>/poster.jpg`, ...), beside the people folder.
     collection_art_dir: Option<std::path::PathBuf>,
@@ -57,8 +56,8 @@ pub struct ScanResult {
     pub duration: std::time::Duration,
 }
 
-impl LibraryScanner {
-    pub fn new(data: PgData, people_cache_dir: Option<std::path::PathBuf>) -> Self {
+impl<D: Data> LibraryScanner<D> {
+    pub fn new(data: D, people_cache_dir: Option<std::path::PathBuf>) -> Self {
         let collection_art_dir = people_cache_dir
             .as_deref()
             .map(rustyfin_common::images::collection_art_dir);
@@ -2301,8 +2300,8 @@ async fn probe_file_graceful(path: &Path) -> Option<probe::ProbeResult> {
 /// keeps its own collection, and an id-bearing name here names the
 /// collection. Collections made by hand are never touched. Returns (how
 /// many, created, removed).
-pub async fn rebuild_movie_collections(
-    data: &PgData,
+pub async fn rebuild_movie_collections<D: Data>(
+    data: &D,
     library_id: Uuid,
 ) -> Result<(usize, usize, usize), DataError> {
     // Films only: a film's extras and other versions share its folder and
@@ -2372,9 +2371,9 @@ pub async fn rebuild_movie_collections(
 
 /// Adds the time since its start to a scan phase when dropped, so every
 /// return path of a step counts.
-struct SpentOnDrop<'a>(&'a LibraryScanner, &'static str, Instant);
+struct SpentOnDrop<'a, D: Data>(&'a LibraryScanner<D>, &'static str, Instant);
 
-impl Drop for SpentOnDrop<'_> {
+impl<D: Data> Drop for SpentOnDrop<'_, D> {
     fn drop(&mut self) {
         self.0.spent(self.1, self.2);
     }

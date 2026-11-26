@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use rustyfin_data::PgData;
 
 use super::scheduler::ScheduledTask;
 
@@ -42,13 +41,13 @@ impl ScheduledTask for SearchReindexTask {
 
 // ── ActivityLogPruneTask ─────────────────────────────────────────────
 
-pub struct ActivityLogPruneTask {
-    data: PgData,
+pub struct ActivityLogPruneTask<D = crate::Store> {
+    data: D,
     retention_days: u32,
 }
 
-impl ActivityLogPruneTask {
-    pub fn new(data: PgData, retention_days: u32) -> Self {
+impl<D: Data> ActivityLogPruneTask<D> {
+    pub fn new(data: D, retention_days: u32) -> Self {
         Self {
             data,
             retention_days,
@@ -57,7 +56,7 @@ impl ActivityLogPruneTask {
 }
 
 #[async_trait]
-impl ScheduledTask for ActivityLogPruneTask {
+impl<D: Data> ScheduledTask for ActivityLogPruneTask<D> {
     fn name(&self) -> &str {
         "activity_log_prune"
     }
@@ -89,15 +88,15 @@ impl ScheduledTask for ActivityLogPruneTask {
 
 // ── SessionCleanupTask ───────────────────────────────────────────────
 
-pub struct SessionCleanupTask {
-    data: PgData,
+pub struct SessionCleanupTask<D = crate::Store> {
+    data: D,
     session_manager: Arc<crate::session::SessionManager>,
     inactive_days: u32,
 }
 
-impl SessionCleanupTask {
+impl<D: Data> SessionCleanupTask<D> {
     pub fn new(
-        data: PgData,
+        data: D,
         session_manager: Arc<crate::session::SessionManager>,
         inactive_days: u32,
     ) -> Self {
@@ -110,7 +109,7 @@ impl SessionCleanupTask {
 }
 
 #[async_trait]
-impl ScheduledTask for SessionCleanupTask {
+impl<D: Data> ScheduledTask for SessionCleanupTask<D> {
     fn name(&self) -> &str {
         "session_cleanup"
     }
@@ -213,18 +212,18 @@ impl ScheduledTask for TranscodeTempCleanupTask {
 
 // ── DatabaseOptimizeTask ─────────────────────────────────────────────
 
-pub struct DatabaseOptimizeTask {
-    data: PgData,
+pub struct DatabaseOptimizeTask<D = crate::Store> {
+    data: D,
 }
 
-impl DatabaseOptimizeTask {
-    pub fn new(data: PgData) -> Self {
+impl<D: Data> DatabaseOptimizeTask<D> {
+    pub fn new(data: D) -> Self {
         Self { data }
     }
 }
 
 #[async_trait]
-impl ScheduledTask for DatabaseOptimizeTask {
+impl<D: Data> ScheduledTask for DatabaseOptimizeTask<D> {
     fn name(&self) -> &str {
         "database_optimize"
     }

@@ -110,7 +110,7 @@ impl<D: Data> Services<D> {
     }
 }
 
-impl Services<rustyfin_data::PgData> {
+impl Services<Store> {
     /// Starting library scans (Postgres only for now, see [`scans`]).
     pub fn scans(&self) -> scans::Scans<'_> {
         scans::Scans {

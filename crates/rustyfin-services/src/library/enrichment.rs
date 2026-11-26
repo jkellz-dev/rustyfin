@@ -3,7 +3,6 @@ use rustyfin_models::data::{
 };
 use std::path::{Path, PathBuf};
 
-use rustyfin_data::PgData;
 use uuid::Uuid;
 
 use rustyfin_common::nfo::{
@@ -12,13 +11,13 @@ use rustyfin_common::nfo::{
     parse_series_nfo,
 };
 
-pub struct EnrichmentService {
-    data: PgData,
+pub struct EnrichmentService<D = crate::Store> {
+    data: D,
     people_cache_dir: Option<PathBuf>,
 }
 
-impl EnrichmentService {
-    pub fn new(data: PgData, people_cache_dir: Option<PathBuf>) -> Self {
+impl<D: Data> EnrichmentService<D> {
+    pub fn new(data: D, people_cache_dir: Option<PathBuf>) -> Self {
         Self {
             data,
             people_cache_dir,

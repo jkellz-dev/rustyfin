@@ -1,14 +1,13 @@
-use rustyfin_data::PgData;
 use rustyfin_models::data::{Data, ImageStore};
 use uuid::Uuid;
 
 /// Serves and processes images for media items and users.
-pub struct ImageProvider {
-    data: PgData,
+pub struct ImageProvider<D = crate::Store> {
+    data: D,
 }
 
-impl ImageProvider {
-    pub fn new(data: PgData) -> Self {
+impl<D: Data> ImageProvider<D> {
+    pub fn new(data: D) -> Self {
         Self { data }
     }
 

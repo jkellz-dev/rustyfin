@@ -2,14 +2,13 @@ use rustyfin_models::data::{Data, SessionStore, UserStore};
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use rustyfin_data::PgData;
 use rustyfin_models::dto::{DeviceProfile, SessionCommand};
 use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 /// Tracks active session state and playback in memory.
-pub struct SessionManager {
-    data: PgData,
+pub struct SessionManager<D = crate::Store> {
+    data: D,
     sessions: RwLock<HashMap<Uuid, TrackedSession>>,
     channels: RwLock<HashMap<Uuid, broadcast::Sender<SessionCommand>>>,
 }
@@ -54,8 +53,8 @@ pub struct ClientCapabilities {
     pub icon_url: Option<String>,
 }
 
-impl SessionManager {
-    pub fn new(data: PgData) -> Self {
+impl<D: Data> SessionManager<D> {
+    pub fn new(data: D) -> Self {
         Self {
             data,
             sessions: RwLock::new(HashMap::new()),
@@ -63,7 +62,7 @@ impl SessionManager {
         }
     }
 
-    pub fn data(&self) -> &PgData {
+    pub fn data(&self) -> &D {
         &self.data
     }
 
