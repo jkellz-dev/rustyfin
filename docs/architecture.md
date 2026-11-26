@@ -69,11 +69,11 @@ Each crate starts with a `//!` overview of what it holds.
 ## How the crates depend on each other
 
 ```text
-rustyfin-server
-├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-data, rustyfin-models
-│                  ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-data, rustyfin-models
-│                  ├── rustyfin-media ─── rustyfin-data, rustyfin-models
-│                  ├── rustyfin-search ── rustyfin-data
+rustyfin-server ─── rustyfin-data (the one place Postgres is chosen)
+├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-services, rustyfin-models
+│                  ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-models
+│                  ├── rustyfin-media ─── rustyfin-models
+│                  ├── rustyfin-search ── rustyfin-models
 │                  └── rustyfin-common
 └── rustyfin-frontend (no internal dependencies)
 
@@ -160,12 +160,13 @@ the only writer to the media folders and runs with its own writable mount (a con
 
 ## Application state
 
-`AppState` (in `rustyfin-api/src/router.rs`) is cloned into every handler. It holds the Postgres pool; the server's id,
+`AppState<D>` (in `rustyfin-api/src/router.rs`) is cloned into every handler. It holds the data layer `D` and the
+services over it; the server's id,
 name, address and port; the session manager, search service and transcode manager; the forward-auth settings;
 the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the
 shutdown signal; and the linked servers (`links`), whose copies the stream and image routes
-relay. `PgPool` is reachable through `FromRef`, so extractors can use the database
-without knowing the whole state. The scan board is one shared instance for the process
+relay. Handlers are generic over `D: Data`; the server binary builds `AppState<PgData>`. The auth extractors reach the
+data layer through the `DataState` trait the state implements. The scan board is one shared instance for the process
 (`ScanBoard::global()`), so the scanner can report without being handed the state.
 
 ## Startup

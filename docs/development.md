@@ -221,31 +221,33 @@ database connection needed).
 ## Adding a New API Endpoint
 
 1. **Define DTOs** (if needed) in `crates/rustyfin-models/src/dto/`
-2. **Add DB functions** (if needed) in `crates/rustyfin-data/src/repo/`
-3. **Write the handler** in `crates/rustyfin-api/src/routes/<resource>.rs`
-4. **Register the route** in `crates/rustyfin-api/src/router.rs`
+2. **Add data access** (if needed): SQL in `crates/rustyfin-data/src/repo/`, behind a method on the area's trait in
+   `crates/rustyfin-models/src/data/`, implemented in `crates/rustyfin-data/src/pg/`
+3. **Put the rule in a service** (anything that decides something) in `crates/rustyfin-services/src/`
+4. **Write the handler** in `crates/rustyfin-api/src/routes/<resource>.rs`
+5. **Register the route** in `crates/rustyfin-api/src/router.rs`
 
 ### Handler Pattern
 
 ```rust
 // In crates/rustyfin-api/src/routes/my_resource.rs
 
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State};
 use rustyfin_auth::middleware::AuthenticatedUser; // or AdminUser
+use rustyfin_models::data::Data;
 use crate::error::ApiError;
 use crate::router::AppState;
 
-pub async fn my_handler(
-    State(state): State<AppState>,
+pub async fn my_handler<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     // Path(id): Path<Uuid>,           // for path parameters
     // Query(q): Query<MyQuery>,       // for query parameters
     // Json(body): Json<MyRequest>,    // for request body
 ) -> Result<Json<MyResponse>, ApiError> {
-    let data = my_db_function(&state.pool, auth.user_id)
-        .await
-        .map_err(ApiError::Database)?;
-    Ok(Json(data))
+    // A ServiceError converts into ApiError with `?`.
+    let found = state.services.my_area().my_rule(auth.user_id).await?;
+    Ok(Json(MyResponse::from(found)))
 }
 ```
 
@@ -253,7 +255,7 @@ pub async fn my_handler(
 
 ```rust
 // In crates/rustyfin-api/src/router.rs
-.route("/MyResource", get(my_resource::my_handler))
+.route("/MyResource", get(my_resource::my_handler::<D>))
 ```
 
 ## Code Conventions
@@ -302,10 +304,13 @@ pub enum ApiError {
     Unauthorized,
     Forbidden,
     BadRequest(String),
-    Database(sqlx::Error),    // From<sqlx::Error> is derived
+    Conflict(String),
+    Data(DataError),          // a data-layer failure: 404, 503 or 500
     Internal(String),
 }
 ```
+
+A service's `ServiceError` converts into it with `?`.
 
 ### Edition 2024 Features
 
@@ -319,7 +324,8 @@ The project uses Rust edition 2024, which supports:
 - Crate names: `rustyfin-<purpose>` (kebab-case)
 - Module names: snake_case
 - DTO structs: PascalCase
-- Database rows: `<Table>Row` (e.g., `UserRow`, `MediaItemRow`)
+- Data models: the plain name in `rustyfin_models::data` (e.g., `User`, `MediaItem`); the data crate's private row
+  structs are `<Table>Record`
 
 ## Testing
 
