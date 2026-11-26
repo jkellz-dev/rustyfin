@@ -26,7 +26,7 @@ pub fn build_router<D: Data>(state: ApiState<D>, observe: fn(Router) -> Router) 
         data: local_data,
         ..state.clone()
     };
-    let scope = Scope {
+    let linking = Scope {
         data: state.data.clone(),
         local_routes: routes(local, observe),
     };
@@ -39,7 +39,7 @@ pub fn build_router<D: Data>(state: ApiState<D>, observe: fn(Router) -> Router) 
                 identify,
                 crate::caller::identify::<D>,
             ))
-            .layer(axum::middleware::from_fn_with_state(scope, scope::<D>))
+            .layer(axum::middleware::from_fn_with_state(linking, scope::<D>))
             .service(routes),
     )
 }
