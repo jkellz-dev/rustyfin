@@ -1,7 +1,7 @@
 use rustyfin_models::data::{
     ChapterStore, CollectionStore, Data, Image, ImageStore, ItemQuery, LibraryAccessStore,
-    LibraryStore, MediaItem, MediaItemStore, MediaStream, MediaStreamStore, PeopleStore, Person,
-    UserData, UserDataStore,
+    LibraryStore, MediaItem, MediaItemStore, MediaStreamStore, PeopleStore, Person, UserData,
+    UserDataStore,
 };
 use std::collections::HashMap;
 
@@ -144,7 +144,7 @@ fn lyric_stream(
 pub(crate) fn attach_media_source(
     dto: &mut BaseItemDto,
     item: &MediaItem,
-    streams: &[MediaStream],
+    streams: &[rustyfin_models::data::MediaStream],
     reveal_path: bool,
 ) {
     if streams.is_empty() {
@@ -158,7 +158,7 @@ pub(crate) fn attach_media_source(
 /// The item's file as a media source: its streams, size, container.
 pub(crate) fn media_source(
     item: &MediaItem,
-    streams: &[MediaStream],
+    streams: &[rustyfin_models::data::MediaStream],
     reveal_path: bool,
 ) -> MediaSourceInfo {
     let mut media_stream_dtos: Vec<_> = streams.iter().map(stream_row_to_dto).collect();
@@ -250,7 +250,7 @@ pub(crate) async fn attach_media_sources_if_asked(
         .list_by_items(&ids)
         .await
         .or_log_default("media_streams::list_by_items");
-    let mut by_item: HashMap<Uuid, Vec<MediaStream>> = HashMap::new();
+    let mut by_item: HashMap<Uuid, Vec<rustyfin_models::data::MediaStream>> = HashMap::new();
     for row in rows {
         by_item.entry(row.item_id).or_default().push(row);
     }
