@@ -296,6 +296,97 @@ async fn genres_show_art_from_their_titles() {
     app.cleanup().await;
 }
 
+/// Each genre of a list gets its own title's picture (a backdrop before a
+/// poster, then the best-rated title) and its own counts, however many
+/// genres the page holds.
+#[tokio::test]
+async fn each_genre_in_a_list_gets_its_own_picture_and_counts() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let tree = Tree::new();
+    let rated =
+        |r: &str| format!(r#"<ratings><rating name="imdb"><value>{r}</value></rating></ratings>"#);
+    tree.movie(
+        "Alpha (2020)",
+        &format!("<genre>Comedy</genre><genre>Drama</genre>{}", rated("6.0")),
+    );
+    tree.write("movies/Alpha (2020)/backdrop.jpg", b"alpha backdrop");
+    tree.write("movies/Alpha (2020)/poster.jpg", b"alpha poster");
+    tree.movie(
+        "Beta (2021)",
+        &format!("<genre>Drama</genre>{}", rated("9.0")),
+    );
+    tree.write("movies/Beta (2021)/poster.jpg", b"beta poster");
+    tree.movie(
+        "Gamma (2022)",
+        &format!("<genre>Horror</genre>{}", rated("5.0")),
+    );
+    tree.write("movies/Gamma (2022)/poster.jpg", b"gamma poster");
+    tree.movie(
+        "Delta (2023)",
+        &format!("<genre>Horror</genre>{}", rated("7.0")),
+    );
+    tree.write("movies/Delta (2023)/poster.jpg", b"delta poster");
+    tree.movie("Epsilon (2024)", "<genre>Western</genre>");
+    let lib = libraries::create(&app.pool, "Movies", "movies", &[tree.root("movies")])
+        .await
+        .unwrap()
+        .id;
+    scan(&app, lib, tree.root("movies")).await;
+
+    // The tag each genre should carry: the id of the picture file it uses.
+    let image_of = |file: &'static str| {
+        let pool = app.pool.clone();
+        async move {
+            let id: Uuid = sqlx::query_scalar("SELECT id FROM images WHERE path LIKE $1")
+                .bind(format!("%/{file}"))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            id.simple().to_string()
+        }
+    };
+    let (alpha_backdrop, delta_poster) = (
+        image_of("Alpha (2020)/backdrop.jpg").await,
+        image_of("Delta (2023)/poster.jpg").await,
+    );
+
+    let genres = get(
+        &app,
+        &token,
+        &format!("/Genres?ParentId={lib}&IncludeItemTypes=Movie"),
+    )
+    .await;
+    let by_name = |name: &str| {
+        genres["Items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["Name"] == name)
+            .unwrap_or_else(|| panic!("no {name} in {genres}"))
+            .clone()
+    };
+    let tag = |g: &Value| g["ImageTags"]["Primary"].as_str().map(str::to_string);
+    assert_eq!(tag(&by_name("Comedy")), Some(alpha_backdrop.clone()));
+    assert_eq!(
+        tag(&by_name("Drama")),
+        Some(alpha_backdrop),
+        "a backdrop wins over a better-rated poster"
+    );
+    assert_eq!(
+        tag(&by_name("Horror")),
+        Some(delta_poster),
+        "the best-rated title's"
+    );
+    assert_eq!(tag(&by_name("Western")), None, "no art, no tag");
+    for (name, n) in [("Comedy", 1), ("Drama", 2), ("Horror", 2), ("Western", 1)] {
+        let g = by_name(name);
+        assert_eq!(g["MovieCount"], n, "{g}");
+        assert_eq!(g["ChildCount"], n, "{g}");
+    }
+    app.cleanup().await;
+}
+
 #[tokio::test]
 async fn changing_a_librarys_folders_scans_it() {
     let app = common::TestApp::new().await;

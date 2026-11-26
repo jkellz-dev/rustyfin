@@ -704,6 +704,24 @@ pub trait MediaItemStore {
         library: Option<uuid::Uuid>,
     ) -> impl Future<Output = DataResult<Option<Image>>> + Send;
 
+    /// The picture of each of `genres` that has one, as [`genre_image`]
+    /// picks it: (genre, image).
+    ///
+    /// [`genre_image`]: MediaItemStore::genre_image
+    fn genre_images(
+        &self,
+        genres: &[String],
+        library: Option<uuid::Uuid>,
+    ) -> impl Future<Output = DataResult<Vec<(String, Image)>>> + Send;
+
+    /// Items per type carrying each of `genres`, optionally in one library:
+    /// (genre, item type, items).
+    fn count_items_with_genres(
+        &self,
+        genres: &[String],
+        parent_id: Option<uuid::Uuid>,
+    ) -> impl Future<Output = DataResult<Vec<(String, String, i64)>>> + Send;
+
     /// Ids of the titles and tracks a library gained since `since` (a scan's
     /// new items, for clients' `LibraryChanged`), at most 500.
     fn added_since(

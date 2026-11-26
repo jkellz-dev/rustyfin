@@ -2624,6 +2624,74 @@ pub async fn genre_image(
     .map(opt)
 }
 
+/// The picture of each of `genres` that has one, as [`genre_image`] picks it,
+/// in one query: the titles carrying any of the genres are found once
+/// through the genre index, then the best picture is kept per genre.
+pub async fn genre_images(
+    pool: &PgPool,
+    genres: &[String],
+    library: Option<Uuid>,
+) -> Result<Vec<(String, crate::repo::images::ImageRow)>, sqlx::Error> {
+    #[derive(sqlx::FromRow)]
+    struct Pick {
+        genre: String,
+        #[sqlx(flatten)]
+        image: crate::repo::images::ImageRecord,
+    }
+    if genres.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query_as::<_, Pick>(
+        "SELECT DISTINCT ON (g.genre) g.genre, i.* \
+         FROM visible_media_items m \
+         CROSS JOIN LATERAL (SELECT DISTINCT unnest(m.genres) AS genre) g \
+         JOIN images i ON i.entity_id = m.id \
+         WHERE m.genres && $1::text[] AND g.genre = ANY($1::text[]) \
+           AND ($2::uuid IS NULL OR m.library_id = $2) \
+           AND m.item_type IN ('Movie', 'Series', 'MusicAlbum', 'MusicArtist') \
+           AND i.image_type IN ('Backdrop', 'Primary') AND i.image_index = 0 \
+         ORDER BY g.genre, (i.image_type = 'Backdrop') DESC, m.community_rating DESC NULLS LAST, \
+                  m.sort_name, i.id",
+    )
+    .bind(genres)
+    .bind(library)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|p| (p.genre, p.image.into()))
+        .collect())
+}
+
+/// [`count_items_with_genre`] for each of `genres`, in one query:
+/// (genre, item type, items).
+pub async fn count_items_with_genres(
+    pool: &PgPool,
+    genres: &[String],
+    parent_id: Option<Uuid>,
+) -> Result<Vec<(String, String, i64)>, sqlx::Error> {
+    if genres.is_empty() {
+        return Ok(Vec::new());
+    }
+    let scope = if parent_id.is_some() {
+        " AND m.library_id = $2"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "SELECT g.genre, m.item_type, COUNT(*) AS cnt \
+         FROM visible_media_items m \
+         CROSS JOIN LATERAL (SELECT DISTINCT unnest(m.genres) AS genre) g \
+         WHERE m.genres && $1::text[] AND g.genre = ANY($1::text[]){scope} \
+         GROUP BY g.genre, m.item_type"
+    );
+    let query = sqlx::query_as::<_, (String, String, i64)>(sqlx::AssertSqlSafe(sql)).bind(genres);
+    match parent_id {
+        Some(pid) => query.bind(pid).fetch_all(pool).await,
+        None => query.fetch_all(pool).await,
+    }
+}
+
 /// Ids of the titles and tracks a library gained since `since` (a scan's
 /// new items, for clients' `LibraryChanged`), at most 500.
 pub async fn added_since(

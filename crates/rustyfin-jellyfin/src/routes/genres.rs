@@ -69,6 +69,32 @@ pub async fn get_genres<D: Data>(
 
     let include_counts = query.include_item_types.is_some();
 
+    // A title's art stands in for each genre's picture; the page's pictures
+    // and counts come in one query each.
+    let names: Vec<String> = page.iter().map(|g| g.to_string()).collect();
+    let pictures: std::collections::HashMap<String, Uuid> = state
+        .data
+        .media_items()
+        .genre_images(&names, query.parent_id)
+        .await
+        .or_log_default("media_items::genre_images")
+        .into_iter()
+        .map(|(genre, image)| (genre, image.id))
+        .collect();
+    let mut counts: std::collections::HashMap<String, Vec<(String, i64)>> =
+        std::collections::HashMap::new();
+    if include_counts {
+        for (genre, item_type, n) in state
+            .data
+            .media_items()
+            .count_items_with_genres(&names, query.parent_id)
+            .await
+            .or_log_default("media_items::count_items_with_genres")
+        {
+            counts.entry(genre).or_default().push((item_type, n));
+        }
+    }
+
     let mut dtos = Vec::with_capacity(page.len());
     for genre_name in page {
         let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, genre_name.as_bytes());
@@ -80,29 +106,16 @@ pub async fn get_genres<D: Data>(
             ..Default::default()
         };
 
-        // A title's art stands in for the genre's picture.
-        if let Some(image) = state
-            .data
-            .media_items()
-            .genre_image(genre_name, query.parent_id)
-            .await
-            .or_log_default("media_items::genre_image")
-        {
+        if let Some(image) = pictures.get(genre_name.as_str()) {
             dto.image_tags = Some(std::collections::HashMap::from([(
                 "Primary".to_string(),
-                image.id.to_string(),
+                image.to_string(),
             )]));
         }
 
         if include_counts {
-            let counts = state
-                .data
-                .media_items()
-                .count_items_with_genre(genre_name, query.parent_id)
-                .await
-                .or_log_default("media_items::count_items_with_genre");
             let mut total_children = 0i32;
-            for (item_type, cnt) in &counts {
+            for (item_type, cnt) in counts.get(genre_name.as_str()).into_iter().flatten() {
                 let c = *cnt as i32;
                 total_children += c;
                 match item_type.as_str() {

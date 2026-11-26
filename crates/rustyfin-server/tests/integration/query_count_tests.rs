@@ -221,6 +221,13 @@ async fn fixture(n: usize) -> Fixture {
         film.production_year = Some(2000 + i as i32);
         let id = insert(film).await;
         picture(id).await;
+        // A genre of its own and one they share, for genre lists.
+        sqlx::query("UPDATE media_items SET genres = $2 WHERE id = $1")
+            .bind(id)
+            .bind(vec![format!("Genre {i}"), "Drama".to_string()])
+            .execute(&app.pool)
+            .await
+            .unwrap();
         for who in ["Actor A", &format!("Actor {i}")] {
             let p = people::find_or_create(&app.pool, who, "Actor", None, None)
                 .await
@@ -455,6 +462,12 @@ async fn artists() {
 #[tokio::test]
 async fn every_episode_of_a_show() {
     flat(|f| format!("/Shows/{}/Episodes", f.long_series)).await;
+}
+
+/// A video library's genres, each with a title's picture and its counts.
+#[tokio::test]
+async fn genres() {
+    flat(|f| format!("/Genres?ParentId={}&IncludeItemTypes=Movie", f.movies)).await;
 }
 
 #[tokio::test]

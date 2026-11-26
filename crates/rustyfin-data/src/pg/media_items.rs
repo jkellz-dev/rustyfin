@@ -606,6 +606,24 @@ impl MediaItemStore for PgMediaItems {
         repo::genre_image(&self.pool, genre, library).await.data()
     }
 
+    async fn genre_images(
+        &self,
+        genres: &[String],
+        library: Option<uuid::Uuid>,
+    ) -> DataResult<Vec<(String, Image)>> {
+        repo::genre_images(&self.pool, genres, library).await.data()
+    }
+
+    async fn count_items_with_genres(
+        &self,
+        genres: &[String],
+        parent_id: Option<uuid::Uuid>,
+    ) -> DataResult<Vec<(String, String, i64)>> {
+        repo::count_items_with_genres(&self.pool, genres, parent_id)
+            .await
+            .data()
+    }
+
     async fn added_since(
         &self,
         library_id: uuid::Uuid,
