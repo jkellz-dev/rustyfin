@@ -7,8 +7,8 @@
 //! something are looked up, by the id already known: `[tmdbid-N]` in the folder
 //! name or the NFO, else the `[tvdbid-N]` / IMDb id through TMDB's find. There
 //! is no title search, so nothing can be matched to the wrong show. Downloads go
-//! where the server reads them: `poster.jpg`, `fanart.jpg`, `season01-poster.jpg`,
-//! `season-specials-poster.jpg`.
+//! where the server reads them: `poster.jpg`, `fanart.jpg`, `clearlogo.png`,
+//! `season01-poster.jpg`, `season-specials-poster.jpg`.
 
 use std::path::{Path, PathBuf};
 
@@ -27,13 +27,15 @@ use crate::scan::ScanOpts;
 pub struct Missing {
     pub poster: bool,
     pub fanart: bool,
+    /// The title's logo (`clearlogo.png`), drawn over the backdrop by apps.
+    pub logo: bool,
     /// Seasons (by number) without a cover.
     pub seasons: Vec<i32>,
 }
 
 impl Missing {
     pub fn is_empty(&self) -> bool {
-        !self.poster && !self.fanart && self.seasons.is_empty()
+        !self.poster && !self.fanart && !self.logo && self.seasons.is_empty()
     }
 }
 
@@ -57,6 +59,7 @@ pub fn missing_art(dir: &Path, tv: bool) -> Missing {
     let mut missing = Missing {
         poster: !has_type(dir, "Primary"),
         fanart: !has_type(dir, "Backdrop"),
+        logo: !has_type(dir, "Logo"),
         seasons: Vec::new(),
     };
     if tv && let Ok(entries) = std::fs::read_dir(dir) {
@@ -473,7 +476,10 @@ pub async fn fill_missing(
             continue;
         };
 
-        if (missing.poster && art.poster.is_none()) || (missing.fanart && art.backdrop.is_none()) {
+        if (missing.poster && art.poster.is_none())
+            || (missing.fanart && art.backdrop.is_none())
+            || (missing.logo && art.logo.is_none())
+        {
             // Remembered in the title's .rustyfin.toml for NO_ART_MEMORY.
             if let Err(e) = title_settings::record_missing_checked_now(&dir) {
                 tracing::warn!("{name}: cannot record that TMDB has no art: {e}");
@@ -485,6 +491,10 @@ pub async fn fill_missing(
         }
         if missing.fanart || opts.force {
             wanted.extend(art.backdrop.clone().map(|u| (u, dir.join("fanart.jpg"))));
+        }
+        if missing.logo || opts.force {
+            // TMDB's logos are PNGs; kept as PNG so the transparency stays.
+            wanted.extend(art.logo.clone().map(|u| (u, dir.join("clearlogo.png"))));
         }
         for (n, url) in &art.season_posters {
             if missing.seasons.contains(n) || (opts.force && tv) {
@@ -840,6 +850,7 @@ mod tests {
             Missing {
                 poster: false,
                 fanart: false,
+                logo: true,
                 seasons: vec![0, 3]
             }
         );
@@ -851,10 +862,17 @@ mod tests {
         t.file("Film (2020)/Film (2020).mkv");
         t.file("Film (2020)/folder.jpg");
         t.file("Film (2020)/backdrop.png");
+        t.file("Film (2020)/clearlogo.png");
         assert!(missing_art(&t.0.join("Film (2020)"), false).is_empty());
         t.file("Bare (2021)/Bare (2021).mkv");
         let m = missing_art(&t.0.join("Bare (2021)"), false);
-        assert!(m.poster && m.fanart && m.seasons.is_empty());
+        assert!(m.poster && m.fanart && m.logo && m.seasons.is_empty());
+        // A logo alone is still something to fetch.
+        t.file("Logoless (2022)/Logoless (2022).mkv");
+        t.file("Logoless (2022)/poster.jpg");
+        t.file("Logoless (2022)/fanart.jpg");
+        let m = missing_art(&t.0.join("Logoless (2022)"), false);
+        assert!(m.logo && !m.poster && !m.fanart && !m.is_empty());
     }
 
     #[test]

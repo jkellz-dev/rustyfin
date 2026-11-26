@@ -1,9 +1,9 @@
 # Artwork (`rustyfin artwork`)
 
 `rustyfin artwork` (the `rustyfin-meta` binary) fills in missing artwork for a library folder from TMDB: posters,
-backdrops (fanart), season posters, cast and crew headshots and the art of the collections films belong to. It only
-adds what is missing; existing images are left alone unless `--force` is given. Folders are matched by the TMDB, TVDB
-or IMDb id in their name or NFO, never by title.
+backdrops (fanart), title logos, season posters, cast and crew headshots and the art of the collections films belong to.
+It only adds what is missing; existing images are left alone unless `--force` is given. Folders are matched by the TMDB,
+TVDB or IMDb id in their name or NFO, never by title.
 
 ```bash
 rustyfin artwork /data/media/movies -t movies
@@ -24,7 +24,7 @@ Done: checked=183, complete=182, downloaded=0, headshots=0, collections=0, colle
 
 | Art | Location |
 |-----|----------|
-| Poster, fanart, season posters | Beside the media (`poster.jpg`, `fanart.jpg`, `seasonNN-poster.jpg`) |
+| Poster, fanart, logo, season posters | Beside the media (`poster.jpg`, `fanart.jpg`, `clearlogo.png`, `seasonNN-poster.jpg`) |
 | Headshots | `[output] people_cache_dir`, `tmdb-<id>.jpg` or `img-<sha256>.jpg` |
 | Collection art | `collections/<tmdb-collection-id>/poster.jpg`, `backdrop.jpg` beside the people folder |
 
@@ -71,9 +71,9 @@ again after **30 days** (or now with `--force`); films whose NFO has a `tmdbcoli
 
 ## Titles TMDB has no art for (30-day memory)
 
-When TMDB has no poster or backdrop for a film or show that is missing one, the run records `missing_checked` in the
-title's [`.rustyfin.toml`](title-settings.md) and does not ask TMDB about it again for **30 days**. Without this every
-run would re-ask TMDB about the same titles. To try again sooner, delete that line (one title), every such line
+When TMDB has no poster, backdrop or logo for a film or show that is missing one, the run records `missing_checked` in
+the title's [`.rustyfin.toml`](title-settings.md) and does not ask TMDB about it again for **30 days**. Without this
+every run would re-ask TMDB about the same titles. To try again sooner, delete that line (one title), every such line
 (everything), or pass `--force` (one run); the commands are in
 [Per-title settings](title-settings.md#retrying-artwork-tmdb-did-not-have).
 

@@ -169,7 +169,7 @@ Sidecar images are discovered in the same directory as the media file:
 | `poster.jpg`, `folder.jpg`, `<name>-poster.jpg` | Primary |
 | `fanart.jpg`, `<name>-fanart.jpg` | Backdrop |
 | `banner.jpg`, `<name>-banner.jpg` | Banner |
-| `logo.png`, `<name>-logo.png` | Logo |
+| `logo.png`, `clearlogo.png`, `<name>-logo.png`, `<name>-clearlogo.png` | Logo |
 | `thumb.jpg`, `<name>-thumb.jpg` | Thumb |
 | `landscape.jpg`, `<name>-landscape.jpg` | Thumb |
 

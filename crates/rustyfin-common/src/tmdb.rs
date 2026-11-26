@@ -49,6 +49,9 @@ pub struct Artwork {
     pub backdrop: Option<String>,
     /// Season number and poster, for shows.
     pub season_posters: Vec<(i32, String)>,
+    /// The title's logo (a transparent PNG): English, else one without
+    /// words, best voted first. `None` when TMDB has none.
+    pub logo: Option<String>,
 }
 
 /// What `/movie/{id}` or `/tv/{id}` says about artwork.
@@ -59,15 +62,56 @@ pub fn parse_artwork(json: &str) -> Option<Artwork> {
         poster_path: Option<String>,
     }
     #[derive(Deserialize)]
+    struct Logo {
+        file_path: Option<String>,
+        iso_639_1: Option<String>,
+        vote_average: Option<f64>,
+        width: Option<u32>,
+    }
+    #[derive(Deserialize, Default)]
+    struct Images {
+        #[serde(default)]
+        logos: Vec<Logo>,
+    }
+    #[derive(Deserialize)]
     struct Detail {
         poster_path: Option<String>,
         backdrop_path: Option<String>,
         #[serde(default)]
         seasons: Vec<Season>,
+        #[serde(default)]
+        images: Option<Images>,
     }
     let d: Detail = serde_json::from_str(json).ok()?;
     let url = |p: String| tmdb_image_url(&p, "original");
+    // Logos in English first, then those with no language (no words); SVG
+    // logos are left out, as the server's artwork is raster images.
+    let mut logos: Vec<Logo> = d
+        .images
+        .unwrap_or_default()
+        .logos
+        .into_iter()
+        .filter(|l| {
+            l.file_path
+                .as_deref()
+                .is_some_and(|p| p.to_ascii_lowercase().ends_with(".png"))
+        })
+        .filter(|l| matches!(l.iso_639_1.as_deref(), Some("en") | None))
+        .collect();
+    logos.sort_by(|a, b| {
+        let lang = |l: &Logo| u8::from(l.iso_639_1.is_none());
+        lang(a)
+            .cmp(&lang(b))
+            .then(
+                b.vote_average
+                    .unwrap_or(0.0)
+                    .total_cmp(&a.vote_average.unwrap_or(0.0)),
+            )
+            .then(b.width.unwrap_or(0).cmp(&a.width.unwrap_or(0)))
+    });
+    let logo = logos.into_iter().next().and_then(|l| l.file_path).map(url);
     Some(Artwork {
+        logo,
         poster: d.poster_path.map(url),
         backdrop: d.backdrop_path.map(url),
         season_posters: d
@@ -112,10 +156,13 @@ pub fn parse_find(json: &str, tv: bool) -> Option<i64> {
 }
 
 impl TmdbClient {
-    /// A show's (`tv`) or film's artwork by TMDB id.
+    /// A show's (`tv`) or film's artwork by TMDB id, its logos in the same
+    /// request (`append_to_response=images`).
     pub async fn fetch_artwork(&self, id: i64, tv: bool) -> Option<Artwork> {
         let kind = if tv { "tv" } else { "movie" };
-        let url = format!("{TMDB_BASE_URL}/{kind}/{id}");
+        let url = format!(
+            "{TMDB_BASE_URL}/{kind}/{id}?append_to_response=images&include_image_language=en,null"
+        );
         let body = self.request(&url).send().await.ok()?.text().await.ok()?;
         parse_artwork(&body)
     }
@@ -228,6 +275,33 @@ mod artwork_tests {
         let art = parse_artwork(r#"{"poster_path": "/m.jpg", "backdrop_path": "/b.jpg"}"#).unwrap();
         assert!(art.season_posters.is_empty());
         assert!(art.backdrop.is_some());
+    }
+
+    #[test]
+    fn the_logo_is_english_else_wordless_best_voted_and_never_svg() {
+        let json = r#"{"poster_path": "/m.jpg", "images": {"logos": [
+            {"file_path": "/de.png", "iso_639_1": "de", "vote_average": 9.0, "width": 900},
+            {"file_path": "/plain.png", "iso_639_1": null, "vote_average": 8.0, "width": 800},
+            {"file_path": "/en-low.png", "iso_639_1": "en", "vote_average": 3.0, "width": 500},
+            {"file_path": "/en-svg.svg", "iso_639_1": "en", "vote_average": 9.9, "width": 999},
+            {"file_path": "/en-best.png", "iso_639_1": "en", "vote_average": 5.5, "width": 400}
+        ]}}"#;
+        assert_eq!(
+            parse_artwork(json).unwrap().logo.as_deref(),
+            Some("https://image.tmdb.org/t/p/original/en-best.png")
+        );
+        let wordless = r#"{"images": {"logos": [
+            {"file_path": "/de.png", "iso_639_1": "de", "vote_average": 9.0},
+            {"file_path": "/plain.png", "iso_639_1": null, "vote_average": 1.0}
+        ]}}"#;
+        assert_eq!(
+            parse_artwork(wordless).unwrap().logo.as_deref(),
+            Some("https://image.tmdb.org/t/p/original/plain.png")
+        );
+        assert_eq!(
+            parse_artwork(r#"{"poster_path": "/m.jpg"}"#).unwrap().logo,
+            None
+        );
     }
 
     #[test]
