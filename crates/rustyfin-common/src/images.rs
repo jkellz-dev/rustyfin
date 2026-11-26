@@ -54,6 +54,15 @@ pub fn discover_images(dir: &Path, item_stem: &str) -> Vec<DiscoveredImage> {
 }
 
 fn classify_image(stem_lower: &str, item_stem: &str, path: &str) -> Option<DiscoveredImage> {
+    // Art named after the video, as Jellyfin and Kodi read it:
+    // `<name>-poster.jpg`, `<name>-fanart.jpg`, `<name>-clearlogo.png`.
+    if !item_stem.is_empty()
+        && let Some(kind) = stem_lower
+            .strip_prefix(item_stem.to_lowercase().as_str())
+            .and_then(|rest| rest.strip_prefix('-'))
+    {
+        return classify_image(kind, "", path);
+    }
     // Primary / Poster
     if matches!(
         stem_lower,
@@ -270,6 +279,42 @@ pub fn headshot_file_name(
 #[cfg(test)]
 mod season_image_tests {
     use super::*;
+
+    #[test]
+    fn art_named_after_the_video_is_read() {
+        let dir = std::env::temp_dir().join(format!("rustyfin-named-art-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for f in [
+            "Film (2020).mkv",
+            "Film (2020)-poster.jpg",
+            "Film (2020)-fanart.jpg",
+            "Film (2020)-clearlogo.png",
+            "Other (2021)-logo.png",
+        ] {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        let found: Vec<(String, String)> = discover_images(&dir, "Film (2020)")
+            .into_iter()
+            .map(|i| {
+                let name = Path::new(&i.path)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+                (i.image_type, name)
+            })
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("Backdrop".to_string(), "Film (2020)-fanart.jpg".to_string()),
+                ("Logo".to_string(), "Film (2020)-clearlogo.png".to_string()),
+                ("Primary".to_string(), "Film (2020)-poster.jpg".to_string()),
+            ]
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn season_ten_is_not_season_one() {
