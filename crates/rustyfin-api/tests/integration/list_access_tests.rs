@@ -1,5 +1,5 @@
-//! Next up and upcoming episodes honour the libraries a user is limited to.
-//! Before, a user limited to one library was offered the first episode of
+//! Lists honour the libraries a user is limited to. Next up and upcoming
+//! episodes: before, a user limited to one library was offered the first episode of
 //! every unstarted show anywhere, could ask for any show's next episode by
 //! its id, and saw every library's upcoming episodes.
 use crate::common;
@@ -73,5 +73,50 @@ async fn next_up_and_upcoming_leave_out_libraries_the_user_may_not_see() {
     upcoming.sort();
     assert_eq!(upcoming, ["Seen 1", "Seen 2"], "{body}");
     assert_eq!(body["TotalRecordCount"], 2, "{body}");
+    app.cleanup().await;
+}
+
+/// Latest across libraries for a user limited to some: the newest of what
+/// they may see. Before, the newest of everything was read and then thinned,
+/// so newer titles elsewhere left them with fewer or none.
+#[tokio::test]
+async fn latest_fills_up_from_the_libraries_the_user_may_see() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", false).await;
+    let open = app.create_library("Films", "movies").await;
+    let closed = app.create_library("Kept", "movies").await;
+    for n in 1..=3 {
+        app.create_media_item(&format!("Seen {n}"), "Movie", open, None)
+            .await;
+    }
+    for n in 1..=5 {
+        let id = app
+            .create_media_item(&format!("Hidden {n}"), "Movie", closed, None)
+            .await;
+        sqlx::query("UPDATE media_items SET date_created = NOW() + interval '1 day' WHERE id = $1")
+            .bind(id)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+    users::update_policy(&app.pool, user, false, false)
+        .await
+        .unwrap();
+    user_library_access::set_enabled_libraries(&app.pool, user, &[open])
+        .await
+        .unwrap();
+
+    let (status, body) = app
+        .get("/Items/Latest?Limit=3&GroupItems=false", &token)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let mut got: Vec<String> = body
+        .as_array()
+        .unwrap_or_else(|| panic!("{body}"))
+        .iter()
+        .map(|i| i["Name"].as_str().unwrap().to_string())
+        .collect();
+    got.sort();
+    assert_eq!(got, ["Seen 1", "Seen 2", "Seen 3"], "{body}");
     app.cleanup().await;
 }
