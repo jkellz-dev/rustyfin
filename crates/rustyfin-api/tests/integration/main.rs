@@ -88,6 +88,7 @@ mod search_ranked_tests;
 mod season_art_tests;
 mod server_settings_tests;
 mod session_restart_tests;
+mod shows_access_tests;
 mod single_film_collections_tests;
 mod slice2_shape_tests;
 mod smoke;
