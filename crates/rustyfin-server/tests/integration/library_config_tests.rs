@@ -41,13 +41,13 @@ async fn the_config_makes_libraries_and_updates_those_it_names_keeping_their_ids
     let movies = app
         .data
         .libraries()
-        .create("movies", "tvshows", &[a.clone()])
+        .create("movies", "tvshows", std::slice::from_ref(&a))
         .await
         .unwrap();
     let stray = app
         .data
         .libraries()
-        .create("Old", "movies", &[c.clone()])
+        .create("Old", "movies", std::slice::from_ref(&c))
         .await
         .unwrap();
 
@@ -149,7 +149,7 @@ async fn libraries_in_the_config_are_not_changed_here() {
     let stray = app
         .data
         .libraries()
-        .create("Old", "movies", &[b.clone()])
+        .create("Old", "movies", std::slice::from_ref(&b))
         .await
         .unwrap();
     Libraries::over(&app.data)
@@ -261,8 +261,14 @@ async fn prune_removes_the_libraries_the_config_does_not_set() {
     let app = common::TestApp::new().await;
     let (a, b) = (real_dir("a"), real_dir("b"));
     let libs = app.data.libraries();
-    let kept = libs.create("Movies", "movies", &[a.clone()]).await.unwrap();
-    let stray = libs.create("Old", "movies", &[b.clone()]).await.unwrap();
+    let kept = libs
+        .create("Movies", "movies", std::slice::from_ref(&a))
+        .await
+        .unwrap();
+    let stray = libs
+        .create("Old", "movies", std::slice::from_ref(&b))
+        .await
+        .unwrap();
     let link = app
         .data
         .links()
