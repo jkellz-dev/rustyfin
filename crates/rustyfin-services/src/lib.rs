@@ -24,6 +24,7 @@ pub mod link;
 pub mod play_state;
 pub mod playback;
 pub mod playlists;
+pub mod proxy;
 pub mod scans;
 pub mod session;
 pub mod shows;

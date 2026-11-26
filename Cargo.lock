@@ -3210,7 +3210,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "ipnet",
  "rustyfin-models",
  "rustyfin-services",
  "serde",
@@ -3378,7 +3377,6 @@ dependencies = [
  "axum",
  "config",
  "ipnet",
- "rustyfin-auth",
  "rustyfin-data",
  "rustyfin-frontend",
  "rustyfin-jellyfin",
@@ -3405,6 +3403,7 @@ dependencies = [
  "cron",
  "futures-util",
  "hex",
+ "ipnet",
  "metrics",
  "rand 0.10.4",
  "regex",

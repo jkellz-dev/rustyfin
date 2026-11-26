@@ -14,8 +14,8 @@ use crate::routes::*;
 /// Forward auth state bundling trusted proxy list, header config, and admin group.
 #[derive(Debug, Clone)]
 pub struct ForwardAuthState {
-    pub trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies,
-    pub headers: rustyfin_auth::forward_auth::ForwardAuthHeaders,
+    pub trusted_proxies: rustyfin_services::proxy::TrustedProxies,
+    pub headers: rustyfin_services::proxy::ForwardAuthHeaders,
     pub admin_group: Option<String>,
 }
 

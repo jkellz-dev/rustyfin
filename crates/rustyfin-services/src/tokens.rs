@@ -92,3 +92,69 @@ pub async fn resolve_token<D: Data>(data: &D, token: &str) -> Result<ResolvedTok
 
     Ok(ResolvedToken { session, user })
 }
+
+/// The device a request says it comes from, as its API reads it.
+#[derive(Debug, Clone, Default)]
+pub struct DeviceHint {
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
+    pub client: Option<String>,
+    pub version: Option<String>,
+}
+
+/// The session of a request a trusted proxy vouched for `user_id` on: the
+/// one its token names, if that is this user's and still active; else the
+/// device's active one; else a new one for the device (`forward-auth` when it
+/// names none). The token only picks the session, never the user.
+pub async fn vouched_session<D: Data>(
+    data: &D,
+    user_id: Uuid,
+    token: Option<&str>,
+    device: &DeviceHint,
+) -> Result<Session, DataError> {
+    let by_token = match token {
+        Some(token) => data
+            .sessions()
+            .find_by_token(token)
+            .await?
+            .filter(|s| s.user_id == user_id)
+            .filter(|s| s.expires_at.is_none_or(|t| t > chrono::Utc::now())),
+        None => None,
+    };
+    let session = match by_token {
+        Some(session) => session,
+        None => {
+            let device_id = device
+                .device_id
+                .clone()
+                .filter(|d| !d.is_empty())
+                .unwrap_or_else(|| "forward-auth".to_string());
+            match data
+                .sessions()
+                .find_active_for_device(user_id, &device_id)
+                .await?
+            {
+                Some(session) => session,
+                None => {
+                    let (_, id) = create_session(
+                        data,
+                        user_id,
+                        &device_id,
+                        device.device_name.as_deref().unwrap_or("Browser"),
+                        device.client.as_deref().unwrap_or("Web"),
+                        device.version.as_deref(),
+                    )
+                    .await?;
+                    data.sessions()
+                        .find_active_by_id(id)
+                        .await?
+                        .ok_or_else(|| {
+                            DataError::Other("the session just made is missing".into())
+                        })?
+                }
+            }
+        }
+    };
+    let _ = data.sessions().touch(session.id).await;
+    Ok(session)
+}

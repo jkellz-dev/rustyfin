@@ -25,12 +25,12 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use rustyfin_auth::{
-    forward_auth::{self, ForwardAuthIdentity},
-    middleware::{AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token},
-    session,
+use rustyfin_auth::middleware::{
+    AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token,
 };
-use rustyfin_models::data::{Data, DataError, SessionStore};
+use rustyfin_models::data::{Data, DataError};
+use rustyfin_services::proxy::{self, ForwardAuthIdentity};
+use rustyfin_services::tokens::{DeviceHint, vouched_session};
 
 use crate::router::{AppState, ForwardAuthState};
 
@@ -49,7 +49,12 @@ pub async fn vouch<D: Data>(
         .map(|c| c.0.ip());
     let identity = peer
         .filter(|ip| fa.trusted_proxies.is_trusted(ip))
-        .and_then(|_| forward_auth::extract_identity(req.headers(), &fa.headers));
+        .and_then(|_| {
+            proxy::extract_identity(
+                |name| req.headers().get(name).and_then(|v| v.to_str().ok()),
+                &fa.headers,
+            )
+        });
     let Some(identity) = identity else {
         req.extensions_mut().insert(Unvouched);
         return next.run(req).await;
@@ -89,83 +94,33 @@ async fn vouched_user<D: Data>(
     let Some(user) = state
         .services
         .users()
-        .vouched(&vouched_by(identity), fa.admin_group.as_deref(), false)
+        .vouched(identity, fa.admin_group.as_deref(), false)
         .await
         .map_err(service_to_data)?
     else {
         return Ok(None);
     };
-    let is_administrator = user.is_administrator;
-
-    // The session the token names, if it is this user's and still active;
-    // else the device's; else a new one for the device.
-    let by_token = match request_token(headers, query) {
-        Some(token) => data
-            .sessions()
-            .find_by_token(&token)
-            .await?
-            .filter(|s| s.user_id == user.id)
-            .filter(|s| s.expires_at.is_none_or(|t| t > chrono::Utc::now())),
-        None => None,
+    let mb = ["Authorization", "X-Emby-Authorization"]
+        .iter()
+        .filter_map(|h| headers.get(*h).and_then(|v| v.to_str().ok()))
+        .find(|v| v.starts_with("MediaBrowser ") || v.starts_with("Emby "))
+        .map(parse_mediabrowser_header)
+        .unwrap_or_default();
+    let device = DeviceHint {
+        device_id: mb.device_id,
+        device_name: mb.device,
+        client: mb.client,
+        version: mb.version,
     };
-    let session = match by_token {
-        Some(session) => session,
-        None => {
-            let mb = ["Authorization", "X-Emby-Authorization"]
-                .iter()
-                .filter_map(|h| headers.get(*h).and_then(|v| v.to_str().ok()))
-                .find(|v| v.starts_with("MediaBrowser ") || v.starts_with("Emby "))
-                .map(parse_mediabrowser_header)
-                .unwrap_or_default();
-            let device_id = mb
-                .device_id
-                .clone()
-                .filter(|d| !d.is_empty())
-                .unwrap_or_else(|| "forward-auth".to_string());
-            match data
-                .sessions()
-                .find_active_for_device(user.id, &device_id)
-                .await?
-            {
-                Some(session) => session,
-                None => {
-                    let (_, id) = session::create_session(
-                        &state.data,
-                        user.id,
-                        &device_id,
-                        mb.device.as_deref().unwrap_or("Browser"),
-                        mb.client.as_deref().unwrap_or("Web"),
-                        mb.version.as_deref(),
-                    )
-                    .await?;
-                    data.sessions()
-                        .find_active_by_id(id)
-                        .await?
-                        .ok_or_else(|| {
-                            DataError::Other("the session just made is missing".into())
-                        })?
-                }
-            }
-        }
-    };
-    let _ = data.sessions().touch(session.id).await;
+    let token = request_token(headers, query);
+    let session = vouched_session(&state.data, user.id, token.as_deref(), &device).await?;
     Ok(Some(AuthenticatedUser {
         user_id: user.id,
         username: user.username,
-        is_administrator,
+        is_administrator: user.is_administrator,
         session_id: session.id,
         device_id: session.device_id,
     }))
-}
-
-/// The services' view of a forward-auth identity.
-pub(crate) fn vouched_by(identity: &ForwardAuthIdentity) -> rustyfin_services::users::Vouched {
-    rustyfin_services::users::Vouched {
-        remote_user: identity.remote_user.clone(),
-        display_name: identity.display_name.clone(),
-        email: identity.email.clone(),
-        groups: identity.groups.clone(),
-    }
 }
 
 /// `vouched` fails only in the data layer; anything else is a bug, reported

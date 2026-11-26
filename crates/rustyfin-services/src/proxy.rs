@@ -1,4 +1,12 @@
-use axum::http::HeaderMap;
+//! Who a trusted proxy says is asking (Tailscale, Authelia, ...): the
+//! proxies Rustyfin trusts and the headers they name the user in. The APIs
+//! read their own requests; this decides what the headers mean.
+
+use std::net::IpAddr;
+
+use ipnet::IpNet;
+
+use crate::users::Vouched;
 
 /// Configurable header names for forward auth.
 /// Supports Authelia, Authentik, oauth2-proxy, Tailscale, and custom proxies.
@@ -29,47 +37,31 @@ impl Default for ForwardAuthHeaders {
     }
 }
 
-/// Extracted identity from forward auth headers.
-#[derive(Debug, Clone)]
-pub struct ForwardAuthIdentity {
-    pub remote_user: String,
-    pub display_name: Option<String>,
-    pub email: Option<String>,
-    pub groups: Vec<String>,
-}
+/// Who a trusted proxy says is asking: the users service's [`Vouched`].
+pub type ForwardAuthIdentity = Vouched;
 
 /// Extract forward auth identity from request headers using configurable header names.
 /// Returns None if the user header is missing (and no configured app
 /// capability names a user).
-pub fn extract_identity(
-    headers: &HeaderMap,
+///
+/// `header` looks a header up by name (a value that is not text is no value).
+pub fn extract_identity<'h>(
+    header: impl Fn(&str) -> Option<&'h str>,
     header_config: &ForwardAuthHeaders,
 ) -> Option<ForwardAuthIdentity> {
-    let Some(remote_user) = headers
-        .get(&header_config.user)
-        .and_then(|v| v.to_str().ok())
-        .map(String::from)
-    else {
-        return capability_identity(headers, header_config);
+    let Some(remote_user) = header(&header_config.user).map(String::from) else {
+        return capability_identity(&header, header_config);
     };
 
-    let display_name = headers
-        .get(&header_config.name)
-        .and_then(|v| v.to_str().ok())
-        .map(String::from);
+    let display_name = header(&header_config.name).map(String::from);
 
-    let email = headers
-        .get(&header_config.email)
-        .and_then(|v| v.to_str().ok())
-        .map(String::from);
+    let email = header(&header_config.email).map(String::from);
 
-    let groups = headers
-        .get(&header_config.groups)
-        .and_then(|v| v.to_str().ok())
+    let groups = header(&header_config.groups)
         .map(|s| s.split(',').map(|g| g.trim().to_string()).collect())
         .unwrap_or_default();
 
-    Some(ForwardAuthIdentity {
+    Some(Vouched {
         remote_user,
         display_name,
         email,
@@ -81,22 +73,19 @@ pub fn extract_identity(
 /// `{"<capability>": [{"user": "...", "name": "..."}], ...}`; the first grant
 /// with a non-empty `user` counts. The caller has already checked the request
 /// came from a trusted proxy, as for the user header.
-fn capability_identity(
-    headers: &HeaderMap,
+fn capability_identity<'h>(
+    header: &impl Fn(&str) -> Option<&'h str>,
     header_config: &ForwardAuthHeaders,
 ) -> Option<ForwardAuthIdentity> {
     let capability = header_config.app_capability.as_deref()?;
-    let raw = headers
-        .get(&header_config.app_capabilities)?
-        .to_str()
-        .ok()?;
+    let raw = header(&header_config.app_capabilities)?;
     let granted: serde_json::Value = serde_json::from_str(raw).ok()?;
     let grant = granted
         .get(capability)?
         .as_array()?
         .iter()
         .find(|g| g["user"].as_str().is_some_and(|u| !u.is_empty()))?;
-    Some(ForwardAuthIdentity {
+    Some(Vouched {
         remote_user: grant["user"].as_str()?.to_string(),
         display_name: grant["name"].as_str().map(str::to_string),
         email: None,
@@ -104,19 +93,43 @@ fn capability_identity(
     })
 }
 
+/// Maintains a list of trusted proxy CIDRs.
+/// Forward auth headers are only honored from these IPs.
+#[derive(Debug, Clone)]
+pub struct TrustedProxies {
+    cidrs: Vec<IpNet>,
+}
+
+impl TrustedProxies {
+    pub fn new(cidrs: Vec<IpNet>) -> Self {
+        Self { cidrs }
+    }
+
+    /// Check whether the given IP address falls within any trusted CIDR.
+    pub fn is_trusted(&self, ip: &IpAddr) -> bool {
+        self.cidrs.iter().any(|cidr| cidr.contains(ip))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
+    use std::collections::HashMap;
+
+    type HeaderMap = HashMap<&'static str, &'static str>;
+
+    fn extract_identity(headers: &HeaderMap, config: &ForwardAuthHeaders) -> Option<Vouched> {
+        super::extract_identity(|name| headers.get(name).copied(), config)
+    }
 
     #[test]
     fn test_extract_with_default_headers() {
         let config = ForwardAuthHeaders::default();
         let mut headers = HeaderMap::new();
-        headers.insert("Remote-User", HeaderValue::from_static("john"));
-        headers.insert("Remote-Name", HeaderValue::from_static("John Doe"));
-        headers.insert("Remote-Email", HeaderValue::from_static("john@example.com"));
-        headers.insert("Remote-Groups", HeaderValue::from_static("admin,users"));
+        headers.insert("Remote-User", "john");
+        headers.insert("Remote-Name", "John Doe");
+        headers.insert("Remote-Email", "john@example.com");
+        headers.insert("Remote-Groups", "admin,users");
 
         let identity = extract_identity(&headers, &config).unwrap();
         assert_eq!(identity.remote_user, "john");
@@ -135,14 +148,8 @@ mod tests {
             ..Default::default()
         };
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "Tailscale-User-Login",
-            HeaderValue::from_static("alice@example.com"),
-        );
-        headers.insert(
-            "Tailscale-User-Name",
-            HeaderValue::from_static("Alice Smith"),
-        );
+        headers.insert("Tailscale-User-Login", "alice@example.com");
+        headers.insert("Tailscale-User-Name", "Alice Smith");
 
         let identity = extract_identity(&headers, &config).unwrap();
         assert_eq!(identity.remote_user, "alice@example.com");
@@ -173,7 +180,7 @@ mod tests {
 
     fn caps(json: &'static str) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert("Tailscale-App-Capabilities", HeaderValue::from_static(json));
+        headers.insert("Tailscale-App-Capabilities", json);
         headers
     }
 
@@ -211,11 +218,54 @@ mod tests {
     fn a_user_login_wins_over_a_capability() {
         let config = tailscale(Some("rustyfin.dev/cap/link"));
         let mut headers = caps(r#"{"rustyfin.dev/cap/link":[{"user":"server"}]}"#);
-        headers.insert(
-            "Tailscale-User-Login",
-            HeaderValue::from_static("alice@example.com"),
-        );
+        headers.insert("Tailscale-User-Login", "alice@example.com");
         let identity = extract_identity(&headers, &config).unwrap();
         assert_eq!(identity.remote_user, "alice@example.com");
+    }
+}
+
+#[cfg(test)]
+mod proxy_tests {
+    use super::*;
+
+    #[test]
+    fn test_ipv4_loopback_trusted() {
+        let proxies = TrustedProxies::new(vec!["127.0.0.1/32".parse().unwrap()]);
+        assert!(proxies.is_trusted(&"127.0.0.1".parse().unwrap()));
+        assert!(!proxies.is_trusted(&"127.0.0.2".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ipv4_cidr() {
+        let proxies = TrustedProxies::new(vec!["10.0.0.0/8".parse().unwrap()]);
+        assert!(proxies.is_trusted(&"10.0.0.1".parse().unwrap()));
+        assert!(proxies.is_trusted(&"10.255.255.255".parse().unwrap()));
+        assert!(!proxies.is_trusted(&"11.0.0.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_ipv6_cidr() {
+        let proxies = TrustedProxies::new(vec!["fd7a:115c:a1e0::/48".parse().unwrap()]);
+        assert!(proxies.is_trusted(&"fd7a:115c:a1e0::1".parse().unwrap()));
+        assert!(!proxies.is_trusted(&"fd7a:115c:a1e1::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_multiple_cidrs() {
+        let proxies = TrustedProxies::new(vec![
+            "10.0.0.0/8".parse().unwrap(),
+            "172.16.0.0/12".parse().unwrap(),
+            "100.64.0.0/10".parse().unwrap(),
+        ]);
+        assert!(proxies.is_trusted(&"10.1.2.3".parse().unwrap()));
+        assert!(proxies.is_trusted(&"172.20.0.1".parse().unwrap()));
+        assert!(proxies.is_trusted(&"100.100.0.1".parse().unwrap()));
+        assert!(!proxies.is_trusted(&"8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_empty_list() {
+        let proxies = TrustedProxies::new(vec![]);
+        assert!(!proxies.is_trusted(&"127.0.0.1".parse().unwrap()));
     }
 }

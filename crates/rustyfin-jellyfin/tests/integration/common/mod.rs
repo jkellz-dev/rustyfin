@@ -190,7 +190,7 @@ impl TestApp {
             session_manager: session_manager.clone(),
             forward_auth_config: forward_auth.then(|| {
                 rustyfin_jellyfin::router::ForwardAuthState {
-                    trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies::new(vec![
+                    trusted_proxies: rustyfin_services::proxy::TrustedProxies::new(vec![
                         "127.0.0.0/8".parse().unwrap(),
                     ]),
                     headers: Default::default(),

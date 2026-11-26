@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
 };
 
-use rustyfin_auth::{forward_auth, middleware::parse_mediabrowser_header, session};
+use rustyfin_auth::{middleware::parse_mediabrowser_header, session};
 use rustyfin_models::dto::{
     AuthenticateByNameRequest, AuthenticationResult, SessionInfoDto, UserConfiguration, UserDto,
     UserPolicy,
@@ -48,7 +48,10 @@ pub async fn authenticate_by_name<D: Data>(
         tracing::debug!("AuthenticateByName from {}: not a trusted proxy", addr.ip());
         return Err(ApiError::Unauthorized);
     };
-    let Some(identity) = forward_auth::extract_identity(&headers, &fa.headers) else {
+    let Some(identity) = rustyfin_services::proxy::extract_identity(
+        |name| headers.get(name).and_then(|v| v.to_str().ok()),
+        &fa.headers,
+    ) else {
         tracing::debug!("AuthenticateByName from {}: no identity header", addr.ip());
         return Err(ApiError::Unauthorized);
     };
@@ -56,11 +59,7 @@ pub async fn authenticate_by_name<D: Data>(
     let user = state
         .services
         .users()
-        .vouched(
-            &crate::identity::vouched_by(&identity),
-            fa.admin_group.as_deref(),
-            true,
-        )
+        .vouched(&identity, fa.admin_group.as_deref(), true)
         .await?
         .ok_or(ApiError::Unauthorized)?;
 

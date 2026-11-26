@@ -18,4 +18,3 @@ tracing.workspace = true
 thiserror.workspace = true
 
 url = "2"
-ipnet.workspace = true

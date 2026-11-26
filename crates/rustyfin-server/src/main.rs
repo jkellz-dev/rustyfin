@@ -15,8 +15,6 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 
-use rustyfin_auth::forward_auth::ForwardAuthHeaders;
-use rustyfin_auth::trusted_proxy::TrustedProxies;
 use rustyfin_data::pool;
 use rustyfin_jellyfin::router::{AppState, ForwardAuthState, build_router};
 use rustyfin_media::transcode::TranscodeManager;
@@ -25,6 +23,7 @@ use rustyfin_services::library::scheduler::{
     self, LibraryScanScheduleConfig, SearchReindexScheduleConfig,
 };
 use rustyfin_services::library::tasks::SearchReindexTask;
+use rustyfin_services::proxy::{ForwardAuthHeaders, TrustedProxies};
 use rustyfin_services::session::SessionManager;
 
 /// How often linked servers are synced.
