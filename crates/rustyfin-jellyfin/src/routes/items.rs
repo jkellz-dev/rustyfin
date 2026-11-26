@@ -13,12 +13,12 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::{AdminUser, AuthenticatedUser};
-use crate::playback_info::{default_audio_stream_index, source_video_type, stream_row_to_dto};
-use rustyfin_media::image_processing::Placeholder;
-use rustyfin_models::dto::{
+use crate::dto::{
     BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, MediaStream, NameGuidPair,
     QueryResult, UserItemDataDto,
 };
+use crate::playback_info::{default_audio_stream_index, source_video_type, stream_row_to_dto};
+use rustyfin_media::image_processing::Placeholder;
 use rustyfin_services::EnrichmentService;
 use rustyfin_services::browse::{Latest, Listing, Resume};
 
@@ -409,7 +409,7 @@ pub(crate) fn with_jellyfin_defaults(dto: &mut BaseItemDto) {
 pub(crate) fn external_urls(
     item_type: &str,
     ids: &HashMap<String, String>,
-) -> Vec<rustyfin_models::dto::ExternalUrl> {
+) -> Vec<crate::dto::ExternalUrl> {
     let tmdb_kind = if matches!(item_type, "Series" | "Season" | "Episode") {
         "tv"
     } else if item_type == "BoxSet" {
@@ -454,7 +454,7 @@ pub(crate) fn external_urls(
         .iter()
         .filter_map(|(key, name, url)| {
             let id = ids.get(*key)?;
-            Some(rustyfin_models::dto::ExternalUrl {
+            Some(crate::dto::ExternalUrl {
                 name: name.to_string(),
                 url: url.replace("{}", id),
             })
@@ -1130,9 +1130,9 @@ pub async fn get_items<D: Data>(
 pub async fn get_item_counts<D: Data>(
     State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
-) -> Result<Json<rustyfin_models::dto::ItemCounts>, ApiError> {
+) -> Result<Json<crate::dto::ItemCounts>, ApiError> {
     let rows = state.services.browse().counts(auth.user_id).await?;
-    Ok(Json(rustyfin_models::dto::ItemCounts::from_type_counts(
+    Ok(Json(crate::dto::ItemCounts::from_type_counts(
         rows.iter().map(|(t, n)| (t.as_str(), *n)),
     )))
 }

@@ -78,7 +78,7 @@ pub async fn get_item_collections<D: Data>(
     State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
-) -> Result<Json<rustyfin_models::dto::QueryResult<rustyfin_models::dto::BaseItemDto>>, ApiError> {
+) -> Result<Json<crate::dto::QueryResult<crate::dto::BaseItemDto>>, ApiError> {
     let rows = state
         .services
         .collections()
@@ -98,7 +98,7 @@ pub async fn get_item_collections<D: Data>(
     }
     super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     let total = dtos.len() as i32;
-    Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
+    Ok(Json(crate::dto::QueryResult::new(dtos, total)))
 }
 
 /// Ids from a comma-separated list; what does not parse is left out.

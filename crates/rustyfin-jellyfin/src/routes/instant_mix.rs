@@ -11,7 +11,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{BaseItemDto, QueryResult};
+use crate::dto::{BaseItemDto, QueryResult};
 
 use super::items::{
     apply_images_to_dto, attach_music_fields, attach_user_data, group_images_by_item,

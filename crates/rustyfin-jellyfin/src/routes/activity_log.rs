@@ -7,7 +7,7 @@ use rustyfin_models::data::{ActivityLogStore, Data};
 use serde::Deserialize;
 
 use crate::auth::middleware::AdminUser;
-use rustyfin_models::dto::{ActivityLogEntryDto, QueryResult};
+use crate::dto::{ActivityLogEntryDto, QueryResult};
 
 use crate::error::ApiError;
 use crate::router::AppState;

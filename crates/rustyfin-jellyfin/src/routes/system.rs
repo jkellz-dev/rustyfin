@@ -7,7 +7,7 @@ use axum::{
 use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, UserStore};
 
 use crate::auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_models::dto::{
+use crate::dto::{
     CastReceiverApplication, DashboardStats, EndPointInfo, LogFileInfo, PublicSystemInfo,
     StartupConfiguration, SystemInfo,
 };
@@ -175,7 +175,7 @@ pub async fn get_stats<D: Data>(
         item_count,
         libraries: library_stats
             .into_iter()
-            .map(|l| rustyfin_models::dto::LibraryStats {
+            .map(|l| crate::dto::LibraryStats {
                 id: l.id,
                 name: l.name,
                 collection_type: l.library_type,

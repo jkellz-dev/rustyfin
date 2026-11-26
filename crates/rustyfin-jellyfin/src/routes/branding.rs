@@ -1,5 +1,5 @@
+use crate::dto::BrandingOptions;
 use axum::Json;
-use rustyfin_models::dto::BrandingOptions;
 
 /// `GET /Branding/Configuration` — No auth required.
 pub async fn get_branding_configuration() -> Json<BrandingOptions> {

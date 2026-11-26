@@ -5,8 +5,8 @@ use rustyfin_models::data::Data;
 
 use std::collections::HashMap;
 
+use crate::dto::BaseItemDto;
 use chrono::{DateTime, Utc};
-use rustyfin_models::dto::BaseItemDto;
 use uuid::Uuid;
 
 use super::items::attach_user_data;

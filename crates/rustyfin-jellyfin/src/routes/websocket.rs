@@ -7,7 +7,7 @@ use rustyfin_models::data::{Data, SessionStore};
 use uuid::Uuid;
 
 use crate::auth::session::{TokenError, resolve_token};
-use rustyfin_models::dto::{OutboundWebSocketMessage, SessionCommand};
+use crate::dto::{OutboundWebSocketMessage, SessionCommand};
 
 use crate::router::AppState;
 
@@ -147,7 +147,7 @@ async fn handle_socket<D: Data>(
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(axum::extract::ws::Message::Text(text))) => {
-                        if let Ok(inbound) = serde_json::from_str::<rustyfin_models::dto::InboundWebSocketMessage>(&text) {
+                        if let Ok(inbound) = serde_json::from_str::<crate::dto::InboundWebSocketMessage>(&text) {
                             match inbound.message_type.as_str() {
                                 "KeepAlive" => {}
                                 other => {

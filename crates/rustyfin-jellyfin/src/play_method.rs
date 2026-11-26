@@ -1,7 +1,7 @@
 //! Direct play, direct stream or transcode: a file against the device
 //! profile a Jellyfin app sends.
 
-use rustyfin_models::dto::{DeviceProfile, MediaSourceInfo, MediaStream};
+use crate::dto::{DeviceProfile, MediaSourceInfo, MediaStream};
 
 /// How a media item should be played.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,7 +267,7 @@ fn csv_contains(csv: &str, value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rustyfin_models::dto::{DirectPlayProfile, TranscodingProfile};
+    use crate::dto::{DirectPlayProfile, TranscodingProfile};
 
     fn make_source(container: &str, bitrate: Option<i32>) -> MediaSourceInfo {
         MediaSourceInfo {

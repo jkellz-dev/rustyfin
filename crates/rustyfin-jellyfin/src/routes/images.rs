@@ -12,8 +12,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::{AuthenticatedUser, OptionalUser};
+use crate::dto::ImageInfo;
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
-use rustyfin_models::dto::ImageInfo;
 
 use crate::error::ApiError;
 use crate::router::AppState;

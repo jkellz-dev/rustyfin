@@ -12,7 +12,7 @@ use rustyfin_models::data::{Data, ImageStore, LibraryStore, MediaItemStore};
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{AllThemeMediaResult, BaseItemDto, ThemeMediaResult};
+use crate::dto::{AllThemeMediaResult, BaseItemDto, ThemeMediaResult};
 
 use super::items::{apply_images_to_dto, group_images_by_item, media_item_to_dto};
 use crate::error::{ApiError, DegradeExt};

@@ -2,6 +2,7 @@
 //! 12e). Administrators only. Tokens are never listed.
 
 use crate::auth::middleware::AdminUser;
+use crate::dto::QueryResult;
 use axum::{
     Json,
     extract::{Query, State},
@@ -9,7 +10,6 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use rustyfin_models::data::{Data, Device, SessionStore};
-use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

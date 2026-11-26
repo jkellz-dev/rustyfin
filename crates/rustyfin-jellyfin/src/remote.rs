@@ -2,7 +2,7 @@
 //! commands: requests arrive as Jellyfin's, travel as the service's, and
 //! reach the listening app as Jellyfin's again.
 
-use rustyfin_models::dto::{
+use crate::dto::{
     GeneralCommand, MessageCommand, PlayCommand, PlayRequest, PlaystateCommand, PlaystateRequest,
     SessionCommand,
 };

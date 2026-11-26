@@ -1,3 +1,7 @@
+//! Jellyfin's request and response types (`BaseItemDto`, `MediaSourceInfo`,
+//! `PlaybackInfoRequest`, session and user objects, ...), serialized in
+//! Jellyfin's PascalCase.
+
 pub mod activity;
 pub mod auth;
 pub mod base_item;

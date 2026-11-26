@@ -6,7 +6,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::{AdminUser, AuthenticatedUser};
-use rustyfin_models::dto::{BaseItemDto, QueryResult};
+use crate::dto::{BaseItemDto, QueryResult};
 
 // ── Reusable generic stubs ────────────────────────────────────────
 

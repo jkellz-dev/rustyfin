@@ -11,8 +11,8 @@
 //!   `DefaultAudioStreamIndex` and `DefaultSubtitleStreamIndex` in
 //!   PlaybackInfo, which apps start playback with.
 
+use crate::dto::{BaseItemDto, MediaStream, PlaybackInfoResponse, UserConfiguration};
 use rustyfin_models::data::{Data, UserStore};
-use rustyfin_models::dto::{BaseItemDto, MediaStream, PlaybackInfoResponse, UserConfiguration};
 use uuid::Uuid;
 
 /// The user's settings, or Jellyfin's defaults for a user who never saved any

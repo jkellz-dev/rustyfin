@@ -1,6 +1,6 @@
 use axum::Json;
 
-use rustyfin_models::dto::{CountryInfo, CultureDto, LocalizationOption, ParentalRating};
+use crate::dto::{CountryInfo, CultureDto, LocalizationOption, ParentalRating};
 
 /// `GET /Localization/Cultures` — Common cultures.
 pub async fn get_cultures() -> Json<Vec<CultureDto>> {

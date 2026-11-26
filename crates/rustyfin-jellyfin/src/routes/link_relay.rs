@@ -175,7 +175,7 @@ fn unreachable<D: Data>(
 /// not answer leaves the copy as it was (not playable here, listed last).
 pub(crate) async fn offer_transcodes<D: Data>(
     state: &AppState<D>,
-    info: &mut rustyfin_models::dto::PlaybackInfoResponse,
+    info: &mut crate::dto::PlaybackInfoResponse,
     request: &serde_json::Value,
 ) {
     for source in &mut info.media_sources {

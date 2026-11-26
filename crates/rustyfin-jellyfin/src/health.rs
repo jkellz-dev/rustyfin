@@ -1,10 +1,10 @@
 //! The dashboard's health panel, in Jellyfin's shape: what
 //! `rustyfin_services::health` reports, PascalCase.
 
-use rustyfin_models::data::{Data, Library};
-use rustyfin_models::dto::{
+use crate::dto::{
     CacheHealth, DatabaseHealth, FolderHealth, LibraryHealth, SearchHealth, SystemHealth,
 };
+use rustyfin_models::data::{Data, Library};
 use rustyfin_services::health as h;
 
 use crate::router::AppState;

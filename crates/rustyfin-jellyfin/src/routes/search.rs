@@ -7,7 +7,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{SearchHint, SearchHintResult};
+use crate::dto::{SearchHint, SearchHintResult};
 
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;

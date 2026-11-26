@@ -9,7 +9,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{BaseItemDto, QueryResult};
+use crate::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;

@@ -3,13 +3,13 @@
 //! plugin (Playback Reporting).
 
 use crate::auth::middleware::AuthenticatedUser;
+use crate::dto::QueryResult;
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
 use chrono::{DateTime, Utc};
 use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlayFilter};
-use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

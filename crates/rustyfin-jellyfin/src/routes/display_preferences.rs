@@ -6,8 +6,8 @@ use axum::{
 use serde::Deserialize;
 
 use crate::auth::middleware::AuthenticatedUser;
+use crate::dto::DisplayPreferencesDto;
 use rustyfin_models::data::{Data, DisplayPreferencesStore};
-use rustyfin_models::dto::DisplayPreferencesDto;
 
 use crate::error::ApiError;
 use crate::router::AppState;

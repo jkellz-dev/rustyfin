@@ -7,9 +7,7 @@ use rustyfin_models::data::Data;
 use serde::Deserialize;
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{
-    BaseItemDto, DeviceProfile, PlayerStateInfo, SessionInfoDto, TranscodingInfo,
-};
+use crate::dto::{BaseItemDto, DeviceProfile, PlayerStateInfo, SessionInfoDto, TranscodingInfo};
 use rustyfin_services::session::ClientCapabilities;
 
 use crate::error::ApiError;
@@ -143,7 +141,7 @@ pub async fn get_sessions<D: Data>(
             supported_commands: Some(vec![]),
             supports_media_control: true,
             now_viewing_item: None,
-            capabilities: Some(rustyfin_models::dto::ClientCapabilitiesDto::basic()),
+            capabilities: Some(crate::dto::ClientCapabilitiesDto::basic()),
             remote_end_point: None,
             now_playing_queue: Some(Vec::new()),
             user_primary_image_tag: None,

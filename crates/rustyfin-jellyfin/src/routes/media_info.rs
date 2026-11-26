@@ -7,8 +7,8 @@ use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
+use crate::dto::{DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use crate::playback_info;
-use rustyfin_models::dto::{DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 
 use crate::error::ApiError;
 use crate::router::AppState;

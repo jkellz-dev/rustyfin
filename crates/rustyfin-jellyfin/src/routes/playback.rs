@@ -3,7 +3,7 @@ use rustyfin_models::data::{Data, MediaItemStore};
 use rustyfin_services::playback::{Heard, Progress};
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
+use crate::dto::{PlaybackProgressInfo, PlaybackStartInfo, PlaybackStopInfo};
 
 use crate::error::ApiError;
 use crate::router::AppState;

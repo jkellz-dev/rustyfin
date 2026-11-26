@@ -1,13 +1,13 @@
 //! Lyrics and media segments (roadmap 11a: Plezy asks for both).
 
 use crate::auth::middleware::AuthenticatedUser;
+use crate::dto::lyrics::{LyricDto, LyricLineDto, LyricMetadata};
+use crate::dto::query_result::QueryResult;
 use axum::{
     Json,
     extract::{Path, State},
 };
 use rustyfin_models::data::{Data, MediaItemStore};
-use rustyfin_models::dto::lyrics::{LyricDto, LyricLineDto, LyricMetadata};
-use rustyfin_models::dto::query_result::QueryResult;
 use uuid::Uuid;
 
 use crate::error::ApiError;

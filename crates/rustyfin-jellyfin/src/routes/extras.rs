@@ -2,12 +2,12 @@
 //! theme videos, read from the extras the scan stored under it.
 
 use crate::auth::middleware::AuthenticatedUser;
+use crate::dto::{BaseItemDto, ThemeMediaResult};
 use axum::{
     Json,
     extract::{Path, State},
 };
 use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
-use rustyfin_models::dto::{BaseItemDto, ThemeMediaResult};
 use uuid::Uuid;
 
 use super::items::{

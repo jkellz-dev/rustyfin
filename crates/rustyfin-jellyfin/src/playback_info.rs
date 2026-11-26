@@ -1,8 +1,8 @@
-use rustyfin_models::data::{MediaItem as MediaItemRow, MediaStream as MediaStreamRow};
-use rustyfin_models::dto::{
+use crate::dto::{
     DeviceProfile, MediaSourceInfo, MediaStream, PlaybackInfoRequest, PlaybackInfoResponse,
     SubtitleProfile,
 };
+use rustyfin_models::data::{MediaItem as MediaItemRow, MediaStream as MediaStreamRow};
 use uuid::Uuid;
 
 use crate::play_method::{PlayMethod, decide_play_method};

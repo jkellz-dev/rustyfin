@@ -5,7 +5,7 @@ use axum::{
 use rustyfin_models::data::{Data, DataError, SessionStore};
 use uuid::Uuid;
 
-use rustyfin_models::dto::MediaBrowserAuth;
+use crate::dto::MediaBrowserAuth;
 
 use crate::auth::session::{ResolvedToken, TokenError, resolve_token};
 

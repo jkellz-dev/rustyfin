@@ -4,9 +4,9 @@
 //! `MediaSourceId`. The best copy comes first and plays when none is named
 //! (owner, 2026-11-18; `rustyfin_media::quality`).
 
+use crate::dto::{BaseItemDto, DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use rustyfin_media::quality::Quality;
 use rustyfin_models::data::{Data, MediaItem, MediaItemStore, MediaStream, MediaStreamStore};
-use rustyfin_models::dto::{BaseItemDto, DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 use uuid::Uuid;
 
 use crate::error::{ApiError, DegradeExt};
@@ -110,7 +110,7 @@ fn linked_name(item: &MediaItem) -> Option<String> {
 
 /// A linked copy plays as is: this server has no file to convert, so it
 /// offers no transcode (relayed transcodes are roadmap 16b.6).
-fn mark_linked(source: &mut rustyfin_models::dto::MediaSourceInfo) {
+fn mark_linked(source: &mut crate::dto::MediaSourceInfo) {
     source.supports_transcoding = false;
     source.supports_direct_stream = false;
     source.transcoding_url = None;

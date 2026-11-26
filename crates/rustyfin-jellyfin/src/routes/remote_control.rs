@@ -10,7 +10,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use rustyfin_models::dto::{
+use crate::dto::{
     GeneralCommand, MessageCommand, PlayCommand, PlayRequest, PlaystateCommand, PlaystateRequest,
     SessionCommand,
 };

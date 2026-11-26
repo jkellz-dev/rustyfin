@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::auth::{middleware::parse_mediabrowser_header, session};
-use rustyfin_models::dto::{
+use crate::dto::{
     AuthenticateByNameRequest, AuthenticationResult, SessionInfoDto, UserConfiguration, UserDto,
     UserPolicy,
 };
@@ -140,7 +140,7 @@ pub async fn authenticate_by_name<D: Data>(
         last_activity_date: chrono::Utc::now(),
         is_active: true,
         now_playing_item: None,
-        play_state: Some(rustyfin_models::dto::PlayerStateInfo::idle()),
+        play_state: Some(crate::dto::PlayerStateInfo::idle()),
         transcoding_info: None,
         supports_remote_control: false,
         server_id: state.server_id.clone(),
@@ -148,7 +148,7 @@ pub async fn authenticate_by_name<D: Data>(
         supported_commands: Some(vec![]),
         supports_media_control: true,
         now_viewing_item: None,
-        capabilities: Some(rustyfin_models::dto::ClientCapabilitiesDto::basic()),
+        capabilities: Some(crate::dto::ClientCapabilitiesDto::basic()),
         remote_end_point: None,
         now_playing_queue: Some(Vec::new()),
         user_primary_image_tag: None,

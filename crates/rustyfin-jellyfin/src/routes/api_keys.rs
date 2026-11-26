@@ -53,7 +53,7 @@ pub async fn create_api_key<D: Data>(
 pub async fn list_api_keys<D: Data>(
     State(state): State<AppState<D>>,
     _admin: AdminUser,
-) -> Result<Json<rustyfin_models::dto::QueryResult<ApiKeyDto>>, ApiError> {
+) -> Result<Json<crate::dto::QueryResult<ApiKeyDto>>, ApiError> {
     let rows = state.services.api_keys().list().await?;
 
     let dtos: Vec<ApiKeyDto> = rows
@@ -69,7 +69,7 @@ pub async fn list_api_keys<D: Data>(
         .collect();
 
     let total = dtos.len() as i32;
-    Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
+    Ok(Json(crate::dto::QueryResult::new(dtos, total)))
 }
 
 pub async fn delete_api_key<D: Data>(

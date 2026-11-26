@@ -218,7 +218,7 @@ database connection needed).
 
 ## Adding a New API Endpoint
 
-1. **Define DTOs** (if needed) in `crates/rustyfin-models/src/dto/`
+1. **Define DTOs** (if needed) in `crates/rustyfin-jellyfin/src/dto/`
 2. **Add data access** (if needed): SQL in `crates/rustyfin-data/src/repo/`, behind a method on the area's trait in
    `crates/rustyfin-models/src/data/`, implemented in `crates/rustyfin-data/src/pg/`
 3. **Put the rule in a service** (anything that decides something) in `crates/rustyfin-services/src/`
