@@ -4,7 +4,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
-use rustyfin_models::data::{ArtistFilter, Data, ImageStore, MediaItemStore};
+use rustyfin_models::data::{ArtistFilter, Data, ImageStore, MediaItemStore, SearchIndex};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -81,11 +81,12 @@ async fn get_artists_inner<D: Data>(
     let ranked = match params.search_term.as_deref().map(str::trim) {
         Some(term) if !term.is_empty() => {
             state
-                .search_service
+                .data
+                .search()
                 .ranked_ids(
                     term,
                     &["MusicArtist".to_string()],
-                    rustyfin_search::CANDIDATES,
+                    rustyfin_models::data::SEARCH_CANDIDATES,
                 )
                 .await
         }

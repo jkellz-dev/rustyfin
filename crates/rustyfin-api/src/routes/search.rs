@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use rustyfin_models::data::{CollectionStore, Data, ImageStore, MediaItemStore};
+use rustyfin_models::data::{CollectionStore, Data, ImageStore, MediaItemStore, SearchIndex};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -60,7 +60,8 @@ pub async fn search_hints<D: Data>(
         limit
     };
     let hits = state
-        .search_service
+        .data
+        .search()
         .search(&query.search_term, wanted, item_types.as_deref())
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -114,7 +115,8 @@ pub async fn search_hints<D: Data>(
             .is_none_or(|t| t.iter().any(|t| t.eq_ignore_ascii_case("Person")));
     let people = if want_people {
         state
-            .search_service
+            .data
+            .search()
             .search_people(&query.search_term, limit)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?

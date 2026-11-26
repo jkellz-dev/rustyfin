@@ -41,11 +41,11 @@ use rustyfin_models::data::Data;
 #[derive(Clone)]
 pub struct Services<D> {
     data: D,
-    scans: scans::ScanRuntime<D>,
+    scans: scans::ScanRuntime,
 }
 
 impl<D: Data> Services<D> {
-    pub fn new(data: D, scans: scans::ScanRuntime<D>) -> Self {
+    pub fn new(data: D, scans: scans::ScanRuntime) -> Self {
         Self { data, scans }
     }
 
@@ -106,10 +106,7 @@ impl<D: Data> Services<D> {
     /// Lists of items, Latest and Continue Watching, ranked by the search
     /// index.
     pub fn browse(&self) -> browse::Browse<'_, D> {
-        browse::Browse {
-            data: &self.data,
-            search: Some(&self.scans.search),
-        }
+        browse::Browse { data: &self.data }
     }
 
     /// Starting library scans.

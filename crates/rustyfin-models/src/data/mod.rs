@@ -26,6 +26,7 @@ mod media_streams;
 mod people;
 mod play_history;
 mod playlists;
+mod search;
 mod search_feed;
 mod sessions;
 mod status;
@@ -56,6 +57,9 @@ pub use media_streams::{MediaStream, MediaStreamStore, NewMediaStream};
 pub use people::{Credit, ItemCredit, MediaItemPerson, PeopleStore, Person};
 pub use play_history::{Play, PlayFilter, PlayHistoryStore, PlayReport};
 pub use playlists::{Playlist, PlaylistItem, PlaylistShare, PlaylistStore};
+pub use search::{
+    SEARCH_CANDIDATES, SearchError, SearchHealth, SearchHit, SearchIndex, SyncReport,
+};
 pub use search_feed::{PeopleFeedPage, SearchFeedPage, SearchFeedStore};
 pub use sessions::{Device, Session, SessionStore};
 pub use status::{Connections, StatusStore};
@@ -71,6 +75,10 @@ pub trait Data: Clone + Send + Sync + 'static {
     /// The same data without what linked servers hold: a server linking
     /// this one is served from it, so links never chain.
     fn local_only(&self) -> Self;
+
+    /// The search index over this data.
+    type Search: SearchIndex;
+    fn search(&self) -> &Self::Search;
 
     /// Activity log.
     type ActivityLog: ActivityLogStore + Send + Sync;

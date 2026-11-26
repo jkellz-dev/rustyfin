@@ -1,4 +1,4 @@
-use rustyfin_models::data::{ActivityLogStore, Data, SessionStore, StatusStore};
+use rustyfin_models::data::{ActivityLogStore, Data, SearchIndex, SessionStore, StatusStore};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,12 +10,12 @@ use super::scheduler::ScheduledTask;
 // ── SearchReindexTask ────────────────────────────────────────────────
 
 pub struct SearchReindexTask<D> {
-    search_service: Arc<rustyfin_search::SearchService<D>>,
+    data: D,
 }
 
 impl<D: Data> SearchReindexTask<D> {
-    pub fn new(search_service: Arc<rustyfin_search::SearchService<D>>) -> Self {
-        Self { search_service }
+    pub fn new(data: D) -> Self {
+        Self { data }
     }
 }
 
@@ -34,7 +34,7 @@ impl<D: Data> ScheduledTask for SearchReindexTask<D> {
     }
 
     async fn run(&self) -> anyhow::Result<()> {
-        self.search_service.reindex_all().await?;
+        self.data.search().reindex_all().await?;
         Ok(())
     }
 }

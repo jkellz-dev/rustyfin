@@ -32,6 +32,7 @@ use sqlx::PgPool;
 /// shared).
 #[derive(Clone)]
 pub struct PgData {
+    search: crate::search::PgSearch,
     activity_log: PgActivityLog,
     api_keys: PgApiKeys,
     catalog: PgCatalog,
@@ -61,8 +62,28 @@ impl PgData {
     /// Transitional: while route handlers still hold the pool themselves,
     /// they wrap it here. Once every caller goes through the traits, the
     /// server opens the data layer directly and this goes.
+    /// With Meilisearch at `url` (none when empty or `None`), its items
+    /// index called `index` (`media_items` unless tests give their own).
+    pub fn with_search(
+        mut self,
+        url: Option<&str>,
+        key: Option<&str>,
+        index: Option<&str>,
+    ) -> Self {
+        self.search.engine = std::sync::Arc::new(crate::search::Engine::new(
+            url,
+            key,
+            index.unwrap_or(crate::search::indexer::INDEX_NAME),
+        ));
+        self
+    }
+
     pub fn from_pool(pool: &PgPool) -> Self {
         Self {
+            search: crate::search::PgSearch {
+                pool: pool.clone(),
+                engine: crate::search::Engine::none(),
+            },
             activity_log: PgActivityLog { pool: pool.clone() },
             api_keys: PgApiKeys { pool: pool.clone() },
             catalog: PgCatalog { pool: pool.clone() },
@@ -97,12 +118,20 @@ impl Data for PgData {
         let options = (*pool.connect_options())
             .clone()
             .options([("rustyfin.local_only", "on")]);
-        Self::from_pool(
+        let mut narrower = Self::from_pool(
             &sqlx::postgres::PgPoolOptions::new()
                 .max_connections(5)
                 .acquire_timeout(crate::pool::ACQUIRE_TIMEOUT)
                 .connect_lazy_with(options),
-        )
+        );
+        // The same index, kept in step from the whole database.
+        narrower.search = self.search.clone();
+        narrower
+    }
+
+    type Search = crate::search::PgSearch;
+    fn search(&self) -> &crate::search::PgSearch {
+        &self.search
     }
 
     type ActivityLog = PgActivityLog;

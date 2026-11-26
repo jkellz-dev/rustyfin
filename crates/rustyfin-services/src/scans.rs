@@ -3,13 +3,15 @@
 //! library is followed by a sync of the links that fill it, and what the
 //! scans changed goes into the search index straight after.
 //!
-//! The search index it refreshes is the one over the same data layer.
+//! The search index it refreshes is the data layer's own.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rustyfin_models::data::{ActivityLogStore, Data, Library, LibraryStore, MediaItemStore};
+use rustyfin_models::data::{
+    ActivityLogStore, Data, Library, LibraryStore, MediaItemStore, SearchIndex,
+};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -20,11 +22,10 @@ use crate::link::Links;
 /// What starting scans needs besides the data layer; shared with the
 /// scheduler, which uses the same in-flight set.
 #[derive(Clone)]
-pub struct ScanRuntime<D> {
+pub struct ScanRuntime {
     /// Libraries being scanned now.
     pub in_flight: Arc<RwLock<HashSet<Uuid>>>,
     pub links: Arc<Links>,
-    pub search: Arc<rustyfin_search::SearchService<D>>,
     /// The shared people folder (headshots), when configured.
     pub people_cache_dir: Option<PathBuf>,
 }
@@ -32,7 +33,7 @@ pub struct ScanRuntime<D> {
 /// Scan starting over the data layer.
 pub struct Scans<'a, D> {
     pub(crate) data: &'a D,
-    pub(crate) runtime: &'a ScanRuntime<D>,
+    pub(crate) runtime: &'a ScanRuntime,
 }
 
 impl<D: Data> Scans<'_, D> {
@@ -199,7 +200,7 @@ impl<D: Data> Scans<'_, D> {
 
             // What the scans changed, into the search index now rather than
             // at the next periodic sync.
-            if let Err(e) = runtime.search.sync().await {
+            if let Err(e) = data.search().sync().await {
                 tracing::error!("Search index sync failed: {e}");
             }
         });
@@ -253,7 +254,7 @@ impl<D: Data> Scans<'_, D> {
                 }
             }
             runtime.in_flight.write().await.remove(&library);
-            if let Err(e) = runtime.search.sync().await {
+            if let Err(e) = data.search().sync().await {
                 tracing::error!("Search index sync failed after webhook scan: {e}");
             }
         });

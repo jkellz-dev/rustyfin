@@ -3223,7 +3223,6 @@ dependencies = [
  "rustyfin-data",
  "rustyfin-media",
  "rustyfin-models",
- "rustyfin-search",
  "rustyfin-services",
  "serde",
  "serde_json",
@@ -3297,6 +3296,7 @@ name = "rustyfin-data"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "meilisearch-sdk",
  "rustyfin-models",
  "serde",
  "serde_json",
@@ -3372,20 +3372,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustyfin-search"
-version = "0.1.0"
-dependencies = [
- "meilisearch-sdk",
- "rustyfin-models",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "rustyfin-server"
 version = "0.1.0"
 dependencies = [
@@ -3399,7 +3385,6 @@ dependencies = [
  "rustyfin-frontend",
  "rustyfin-media",
  "rustyfin-models",
- "rustyfin-search",
  "rustyfin-services",
  "serde",
  "serde_json",
@@ -3429,7 +3414,6 @@ dependencies = [
  "rustyfin-common",
  "rustyfin-media",
  "rustyfin-models",
- "rustyfin-search",
  "serde",
  "serde_json",
  "sha2 0.11.1",

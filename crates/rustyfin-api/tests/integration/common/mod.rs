@@ -17,7 +17,7 @@ use uuid::Uuid;
 use rustyfin_api::router::{AppState, build_router};
 use rustyfin_data::repo::{libraries, media_items, sessions, users};
 use rustyfin_media::transcode::TranscodeManager;
-use rustyfin_search::SearchService;
+use rustyfin_models::data::{Data, SearchIndex};
 use rustyfin_services::session::SessionManager;
 
 /// Integration test harness providing an isolated database schema and a ready-to-use Axum router.
@@ -40,7 +40,7 @@ pub struct TestApp {
     /// Linked servers (roadmap 16b), empty until a test registers one.
     pub links: Arc<rustyfin_services::link::Links>,
     /// Search; with Meilisearch in [`TestApp::with_meilisearch`].
-    pub search: Arc<SearchService<rustyfin_data::PgData>>,
+    pub search: rustyfin_data::PgSearch,
 }
 
 impl TestApp {
@@ -145,16 +145,16 @@ impl TestApp {
 
         // Build AppState with minimal config.
         let data = rustyfin_data::PgData::from_pool(&pool);
-        let session_manager = Arc::new(SessionManager::new(data.clone()));
-        let search_service = Arc::new(if meilisearch {
+        let data = if meilisearch {
             let url = std::env::var("MEILI_URL")
                 .expect("MEILI_URL: these tests need a Meilisearch (CI and the builder start one)");
             let key = std::env::var("MEILI_KEY").ok();
-            SearchService::with_index(data.clone(), Some(&url), key.as_deref(), &schema)
+            data.with_search(Some(&url), key.as_deref(), Some(&schema))
         } else {
-            SearchService::new(data.clone(), None, None)
-        });
-        let search = search_service.clone();
+            data
+        };
+        let session_manager = Arc::new(SessionManager::new(data.clone()));
+        let search = data.search().clone();
         let transcode_manager = Arc::new(TranscodeManager::new(
             "ffmpeg".to_string(),
             None,
@@ -175,7 +175,6 @@ impl TestApp {
             rustyfin_services::scans::ScanRuntime {
                 in_flight: scan_in_flight.clone(),
                 links: links.clone(),
-                search: search_service.clone(),
                 people_cache_dir: people_cache_dir.clone(),
             },
         );
@@ -189,7 +188,6 @@ impl TestApp {
             port: 8096,
             tmdb_api_key: None,
             session_manager: session_manager.clone(),
-            search_service,
             forward_auth_config: forward_auth.then(|| rustyfin_api::router::ForwardAuthState {
                 trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies::new(vec![
                     "127.0.0.0/8".parse().unwrap(),

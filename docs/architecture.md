@@ -44,15 +44,14 @@ The workspace below is today's layout, part-way through the move.
 
 ```text
 rustyfin/
-├── Cargo.toml                  # Workspace root (11 members)
+├── Cargo.toml                  # Workspace root (10 members)
 ├── crates/
 │   ├── rustyfin-server/        # The server binary: config, startup, wiring
 │   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
 │   ├── rustyfin-auth/          # Who is asking: forward auth, tokens, sessions
 │   ├── rustyfin-services/      # Scanner, enrichment, scheduler, sessions, scan progress
-│   ├── rustyfin-data/          # Postgres pool, migrations, repositories
+│   ├── rustyfin-data/          # Postgres and Meilisearch: migrations, repositories, the search index
 │   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
-│   ├── rustyfin-search/        # Meilisearch, with Postgres as the fallback
 │   ├── rustyfin-media/         # Probing, play-method decisions, streaming, HLS transcoding
 │   ├── rustyfin-common/        # Naming, NFO, subtitle files, metadata sources (TMDB, ...)
 │   ├── rustyfin-frontend/      # Embeds and serves the admin UI under /web
@@ -71,9 +70,8 @@ Each crate starts with a `//!` overview of what it holds.
 ```text
 rustyfin-server ─── rustyfin-data (the one place Postgres is chosen)
 ├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-services, rustyfin-models
-│                  ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-search, rustyfin-models
+│                  ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-models
 │                  ├── rustyfin-media ─── rustyfin-models
-│                  ├── rustyfin-search ── rustyfin-models
 │                  └── rustyfin-common
 └── rustyfin-frontend (no internal dependencies)
 
@@ -124,16 +122,16 @@ database. See [Database Schema](database-schema.md).
 Jellyfin's request and response objects (`BaseItemDto`, `MediaSourceInfo`, `PlaybackInfoRequest`, sessions, users, ...)
 in PascalCase JSON, and shared enums.
 
-### `rustyfin-search`
+### Search (in `rustyfin-data`)
 
-`SearchService`: Meilisearch ranks, Postgres filters. Every search (`/Items`, `/Artists` and `/Persons` with
-`SearchTerm`, search hints, which list people too) asks Meilisearch for the best-matching ids (typo-tolerant; items by
-name, original title, show name, genres, then overview, in one index; people by name, in a second), and the route reads
-those ids from Postgres with all its other filters (access, folder, played, linked servers), best first unless the app
-sorts. The index keeps itself in step from the database's change stamps (`change_xid`, `media_removals`,
-`people_removals`; `search_feed`): built whole at start (swapped in, so searches keep answering), then whatever changed
-every 10 seconds and right after a scan. Without Meilisearch, or until the index is built, names are matched in
-Postgres.
+The data layer's search index (`Data::search()`, `PgSearch` for Postgres): Meilisearch ranks, Postgres filters. Every
+search (`/Items`, `/Artists` and `/Persons` with `SearchTerm`, search hints, which list people too) asks Meilisearch for
+the best-matching ids (typo-tolerant; items by name, original title, show name, genres, then overview, in one index;
+people by name, in a second), and the route reads those ids from Postgres with all its other filters (access, folder,
+played, linked servers), best first unless the app sorts. The index keeps itself in step from the database's change
+stamps (`change_xid`, `media_removals`, `people_removals`; `search_feed`): built whole at start (swapped in, so searches
+keep answering), then whatever changed every 10 seconds and right after a scan. Without Meilisearch, or until the index
+is built, names are matched in Postgres.
 
 ### `rustyfin-media`
 

@@ -5,8 +5,8 @@
 use std::collections::{HashMap, HashSet};
 
 use rustyfin_models::data::{
-    CollectionStore, Data, ItemQuery, LibraryStore, MediaItem, MediaItemStore, UserData,
-    UserDataStore,
+    CollectionStore, Data, ItemQuery, LibraryStore, MediaItem, MediaItemStore, SEARCH_CANDIDATES,
+    SearchIndex, UserData, UserDataStore,
 };
 use uuid::Uuid;
 
@@ -54,10 +54,9 @@ pub struct Resume {
 /// How many in-progress items Continue Watching reads before filtering.
 const RESUME_SCAN: i64 = 500;
 
-/// Browsing rules over a data layer (and the search index, when there is one).
+/// Browsing rules over a data layer and its search index.
 pub struct Browse<'a, D> {
     pub(crate) data: &'a D,
-    pub(crate) search: Option<&'a rustyfin_search::SearchService<D>>,
 }
 
 impl<D: Data> Browse<'_, D> {
@@ -120,9 +119,10 @@ impl<D: Data> Browse<'_, D> {
         // it (or while it is not ready) the name is matched.
         if let Some(term) = query.search_term.as_deref().map(str::trim)
             && !term.is_empty()
-            && let Some(search) = self.search
-            && let Some((ids, tiers)) = search
-                .ranked_tiers(term, &query.include_item_types, rustyfin_search::CANDIDATES)
+            && let Some((ids, tiers)) = self
+                .data
+                .search()
+                .ranked_tiers(term, &query.include_item_types, SEARCH_CANDIDATES)
                 .await
         {
             query.ranked_ids = Some(ids);

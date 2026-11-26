@@ -8,18 +8,21 @@
 //! with all their other filters (access, folder, played, linked servers) and
 //! keep Meilisearch's order unless the app sorts.
 //!
-//! [`SearchService::sync`] keeps both indexes in step from the database's own
+//! The sync keeps both indexes in step from the database's own
 //! change stamps (`change_xid`, `media_removals`, `people_removals`), so a
 //! rename shows up within one sync instead of at the next full rebuild.
 //! Without Meilisearch, or while it is down or not yet built, searches match
 //! names in Postgres.
 
-pub mod indexer;
-pub mod query;
+pub(crate) mod indexer;
+pub(crate) mod query;
 
 use rustyfin_models::data::{
-    Data, DataError, MediaItem, MediaItemStore, PeopleStore, Person, SearchFeedStore,
+    Data, MediaItem, MediaItemStore, PeopleStore, Person, SearchError, SearchFeedStore,
+    SearchHealth as BackendHealth, SearchHit, SearchIndex, SyncReport,
 };
+use sqlx::PgPool;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -28,75 +31,8 @@ use uuid::Uuid;
 /// Documents per Meilisearch batch when indexing.
 const PAGE: i64 = 5_000;
 
-/// Ids a search asks Meilisearch for, at most (its own default cap).
-pub const CANDIDATES: usize = 1_000;
-
 /// How long an index task may take before the sync gives up for this round.
 const TASK_TIMEOUT: Duration = Duration::from_secs(600);
-
-/// A search hit with the fields needed to build a `SearchHint`.
-#[derive(Debug, Clone)]
-pub struct SearchHit {
-    pub id: Uuid,
-    pub name: String,
-    pub item_type: String,
-    pub production_year: Option<i32>,
-    pub series_name: Option<String>,
-    pub index_number: Option<i32>,
-    pub parent_index_number: Option<i32>,
-    pub runtime_ticks: Option<i64>,
-    pub library_id: Option<Uuid>,
-    /// Meilisearch's ranking score (0 to 1); 0 when Postgres answered.
-    pub score: f64,
-}
-
-impl From<MediaItem> for SearchHit {
-    fn from(item: MediaItem) -> Self {
-        Self {
-            id: item.id,
-            name: item.name,
-            item_type: item.item_type,
-            production_year: item.production_year,
-            series_name: item.series_name,
-            index_number: item.index_number,
-            parent_index_number: item.parent_index_number,
-            runtime_ticks: item.runtime_ticks,
-            library_id: item.library_id,
-            score: 0.0,
-        }
-    }
-}
-
-/// Whether search works, for the dashboard.
-#[derive(Debug, Clone)]
-pub struct BackendHealth {
-    /// `Meilisearch` or `Postgres` (the fallback, always there).
-    pub backend: &'static str,
-    pub ok: bool,
-    pub detail: Option<String>,
-}
-
-/// What a sync did.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SyncReport {
-    /// The items index was built whole (first sync, or after a reset).
-    pub rebuilt: bool,
-    pub indexed: usize,
-    pub removed: usize,
-    pub people_indexed: usize,
-    pub people_removed: usize,
-    /// The people index was built whole.
-    pub people_rebuilt: bool,
-}
-
-/// Search error type.
-#[derive(Debug, thiserror::Error)]
-pub enum SearchError {
-    #[error("Database error: {0}")]
-    Database(#[from] DataError),
-    #[error("Search engine error: {0}")]
-    Engine(String),
-}
 
 struct Meili {
     client: meilisearch_sdk::client::Client,
@@ -106,9 +42,9 @@ struct Meili {
     people: String,
 }
 
-/// Search backend: Meilisearch when configured and built, else Postgres.
-pub struct SearchService<D> {
-    data: D,
+/// Meilisearch, when configured, and what the process knows of it; shared
+/// by every copy of the data layer.
+pub(crate) struct Engine {
     meili: Option<Meili>,
     /// The indexes have been brought up to date at least once by this
     /// process, so their answers can be trusted.
@@ -117,52 +53,66 @@ pub struct SearchService<D> {
     syncing: tokio::sync::Mutex<()>,
 }
 
-/// (indexed, removed, rebuilt) for one index.
-type Counts = (usize, usize, bool);
-
-impl<D: Data> SearchService<D> {
-    pub fn new(data: D, meili_url: Option<&str>, meili_key: Option<&str>) -> Self {
-        Self::with_index(data, meili_url, meili_key, indexer::INDEX_NAME)
+impl Engine {
+    /// No Meilisearch: searches match names in Postgres. One for the
+    /// process, shared by every data layer built without one.
+    pub(crate) fn none() -> Arc<Self> {
+        static NONE: std::sync::LazyLock<Arc<Engine>> =
+            std::sync::LazyLock::new(|| Arc::new(Engine::new(None, None, indexer::INDEX_NAME)));
+        NONE.clone()
     }
 
-    /// With the items index called `index` (tests give each their own); the
-    /// people index is beside it.
-    pub fn with_index(
-        data: D,
-        meili_url: Option<&str>,
-        meili_key: Option<&str>,
-        index: &str,
-    ) -> Self {
-        let meili = meili_url
+    /// Meilisearch at `url` (none when empty), with the items index called
+    /// `index` (tests give each their own); the people index is beside it.
+    pub(crate) fn new(url: Option<&str>, key: Option<&str>, index: &str) -> Self {
+        let meili = url
             .filter(|u| !u.is_empty())
-            .and_then(|url| meilisearch_sdk::client::Client::new(url, meili_key).ok())
+            .and_then(|url| meilisearch_sdk::client::Client::new(url, key).ok())
             .map(|client| Meili {
                 client,
                 index: index.to_string(),
                 people: indexer::people_uid(index),
             });
         Self {
-            data,
             meili,
             ready: AtomicBool::new(false),
             syncing: tokio::sync::Mutex::new(()),
         }
     }
+}
 
+/// The search index of [`crate::PgData`]: Meilisearch when configured and
+/// built, else Postgres.
+#[derive(Clone)]
+pub struct PgSearch {
+    pub(crate) pool: PgPool,
+    pub(crate) engine: Arc<Engine>,
+}
+
+/// One search, over the data it reads.
+struct SearchService<D> {
+    data: D,
+    engine: Arc<Engine>,
+}
+
+/// (indexed, removed, rebuilt) for one index.
+type Counts = (usize, usize, bool);
+
+impl<D: Data> SearchService<D> {
     /// Whether Meilisearch is configured.
-    pub fn is_meilisearch_available(&self) -> bool {
-        self.meili.is_some()
+    fn is_meilisearch_available(&self) -> bool {
+        self.engine.meili.is_some()
     }
 
     /// Whether Meilisearch answers searches now (configured and built).
-    pub fn is_ready(&self) -> bool {
-        self.meili.is_some() && self.ready.load(Ordering::Acquire)
+    fn is_ready(&self) -> bool {
+        self.engine.meili.is_some() && self.engine.ready.load(Ordering::Acquire)
     }
 
     /// Whether the search backend answers. Without Meilisearch, search is
     /// Postgres and as healthy as the database.
-    pub async fn health(&self) -> BackendHealth {
-        if let Some(ref m) = self.meili {
+    async fn health(&self) -> BackendHealth {
+        if let Some(ref m) = self.engine.meili {
             let answer = tokio::time::timeout(Duration::from_secs(2), m.client.health()).await;
             return match answer {
                 Ok(Ok(h)) => BackendHealth {
@@ -205,7 +155,7 @@ impl<D: Data> SearchService<D> {
         filter: Option<String>,
         limit: usize,
     ) -> Option<Vec<(Uuid, f64)>> {
-        let m = self.meili.as_ref().filter(|_| self.is_ready())?;
+        let m = self.engine.meili.as_ref().filter(|_| self.is_ready())?;
         let uid = if people { &m.people } else { &m.index };
         match query::ranked(&m.client, uid, term, filter.as_deref(), limit).await {
             Ok(hits) => Some(hits),
@@ -220,7 +170,7 @@ impl<D: Data> SearchService<D> {
     /// empty), at most `limit`. `None` when Meilisearch cannot answer (not
     /// configured, not built yet, or failing): the caller then matches names
     /// in Postgres.
-    pub async fn ranked_ids(
+    async fn ranked_ids(
         &self,
         term: &str,
         item_types: &[String],
@@ -234,7 +184,7 @@ impl<D: Data> SearchService<D> {
 
     /// As [`ranked_ids`](Self::ranked_ids), with each match's tier: matches
     /// Meilisearch scores alike share one, so an app's sort orders them.
-    pub async fn ranked_tiers(
+    async fn ranked_tiers(
         &self,
         term: &str,
         item_types: &[String],
@@ -248,7 +198,7 @@ impl<D: Data> SearchService<D> {
 
     /// The people best matching `term`, best first, of `person_types` (any
     /// when empty). `None` as for [`ranked_ids`](Self::ranked_ids).
-    pub async fn ranked_people(
+    async fn ranked_people(
         &self,
         term: &str,
         person_types: &[String],
@@ -267,7 +217,7 @@ impl<D: Data> SearchService<D> {
 
     /// Search for items by term, for search hints: Meilisearch's best
     /// matches with their scores, or names in Postgres.
-    pub async fn search(
+    async fn search(
         &self,
         term: &str,
         limit: i64,
@@ -303,7 +253,7 @@ impl<D: Data> SearchService<D> {
 
     /// Search for people by term, for search hints: Meilisearch's best
     /// matches with their scores, or names in Postgres (score 0).
-    pub async fn search_people(
+    async fn search_people(
         &self,
         term: &str,
         limit: i64,
@@ -332,11 +282,11 @@ impl<D: Data> SearchService<D> {
 
     /// Bring both indexes up to date: everything changed or removed since the
     /// last sync, or everything the first time. A no-op without Meilisearch.
-    pub async fn sync(&self) -> Result<SyncReport, SearchError> {
-        let Some(ref m) = self.meili else {
+    async fn sync(&self) -> Result<SyncReport, SearchError> {
+        let Some(ref m) = self.engine.meili else {
             return Ok(SyncReport::default());
         };
-        let _one = self.syncing.lock().await;
+        let _one = self.engine.syncing.lock().await;
         self.sync_locked(m).await
     }
 
@@ -352,7 +302,7 @@ impl<D: Data> SearchService<D> {
             people_removed,
             people_rebuilt,
         };
-        self.ready.store(true, Ordering::Release);
+        self.engine.ready.store(true, Ordering::Release);
         if report != SyncReport::default() {
             tracing::info!(
                 "Search index: {} item(s){} and {} people{} indexed, {} and {} removed",
@@ -536,9 +486,9 @@ impl<D: Data> SearchService<D> {
 
     /// Rebuild both indexes whole, now. The lock is held from clearing the
     /// cursors on, so a sync already running cannot write its cursor back.
-    pub async fn reindex_all(&self) -> Result<(), SearchError> {
-        if let Some(ref m) = self.meili {
-            let _one = self.syncing.lock().await;
+    async fn reindex_all(&self) -> Result<(), SearchError> {
+        if let Some(ref m) = self.engine.meili {
+            let _one = self.engine.syncing.lock().await;
             self.data.search_feed().clear_cursor(&m.index).await?;
             self.data.search_feed().clear_cursor(&m.people).await?;
             self.sync_locked(m).await?;
@@ -547,8 +497,8 @@ impl<D: Data> SearchService<D> {
     }
 
     /// Drop this service's indexes (tests clean up with it).
-    pub async fn drop_indexes(&self) {
-        if let Some(ref m) = self.meili {
+    async fn drop_indexes(&self) {
+        if let Some(ref m) = self.engine.meili {
             for uid in [&m.index, &m.people] {
                 indexer::drop_index(&m.client, uid).await;
                 indexer::drop_index(&m.client, &format!("{uid}_building")).await;
@@ -557,9 +507,90 @@ impl<D: Data> SearchService<D> {
     }
 }
 
+impl PgSearch {
+    fn service(&self) -> SearchService<crate::PgData> {
+        SearchService {
+            data: crate::PgData::from_pool(&self.pool),
+            engine: self.engine.clone(),
+        }
+    }
+}
+
+impl SearchIndex for PgSearch {
+    fn is_configured(&self) -> bool {
+        self.engine.meili.is_some()
+    }
+
+    fn is_ready(&self) -> bool {
+        self.service().is_ready()
+    }
+
+    async fn health(&self) -> BackendHealth {
+        self.service().health().await
+    }
+
+    async fn ranked_ids(
+        &self,
+        term: &str,
+        item_types: &[String],
+        limit: usize,
+    ) -> Option<Vec<Uuid>> {
+        self.service().ranked_ids(term, item_types, limit).await
+    }
+
+    async fn ranked_tiers(
+        &self,
+        term: &str,
+        item_types: &[String],
+        limit: usize,
+    ) -> Option<(Vec<Uuid>, Vec<i32>)> {
+        self.service().ranked_tiers(term, item_types, limit).await
+    }
+
+    async fn ranked_people(
+        &self,
+        term: &str,
+        person_types: &[String],
+        limit: usize,
+    ) -> Option<Vec<Uuid>> {
+        self.service()
+            .ranked_people(term, person_types, limit)
+            .await
+    }
+
+    async fn search(
+        &self,
+        term: &str,
+        limit: i64,
+        item_types: Option<&[String]>,
+    ) -> Result<Vec<SearchHit>, SearchError> {
+        self.service().search(term, limit, item_types).await
+    }
+
+    async fn search_people(
+        &self,
+        term: &str,
+        limit: i64,
+    ) -> Result<Vec<(Person, f64)>, SearchError> {
+        self.service().search_people(term, limit).await
+    }
+
+    async fn sync(&self) -> Result<SyncReport, SearchError> {
+        self.service().sync().await
+    }
+
+    async fn reindex_all(&self) -> Result<(), SearchError> {
+        self.service().reindex_all().await
+    }
+
+    async fn drop_indexes(&self) {
+        self.service().drop_indexes().await
+    }
+}
+
 /// Hits, best first, with a tier each: one per distinct score (to four
 /// places), counting from 0.
-pub fn tiers(hits: Vec<(Uuid, f64)>) -> (Vec<Uuid>, Vec<i32>) {
+fn tiers(hits: Vec<(Uuid, f64)>) -> (Vec<Uuid>, Vec<i32>) {
     let mut ids = Vec::with_capacity(hits.len());
     let mut tiers = Vec::with_capacity(hits.len());
     let mut tier = 0;

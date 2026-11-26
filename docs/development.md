@@ -81,9 +81,8 @@ rustyfin/
     ├── rustyfin-api/           # Route handlers
     ├── rustyfin-auth/          # Auth extractors
     ├── rustyfin-services/      # Domain logic
-    ├── rustyfin-data/          # Database layer
+    ├── rustyfin-data/          # Database layer and search index
     ├── rustyfin-models/        # Shared DTOs
-    ├── rustyfin-search/        # Search service
     ├── rustyfin-media/         # Probing & streaming
     └── rustyfin-frontend/      # Asset embedding
 ```

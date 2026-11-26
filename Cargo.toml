@@ -6,7 +6,6 @@ members = [
     "crates/rustyfin-services",
     "crates/rustyfin-data",
     "crates/rustyfin-models",
-    "crates/rustyfin-search",
     "crates/rustyfin-media",
     "crates/rustyfin-frontend",
     "crates/rustyfin-common",
@@ -40,7 +39,6 @@ rustyfin-auth = { path = "crates/rustyfin-auth" }
 rustyfin-services = { path = "crates/rustyfin-services" }
 rustyfin-data = { path = "crates/rustyfin-data" }
 rustyfin-models = { path = "crates/rustyfin-models" }
-rustyfin-search = { path = "crates/rustyfin-search" }
 rustyfin-media = { path = "crates/rustyfin-media" }
 rustyfin-frontend = { path = "crates/rustyfin-frontend" }
 rustyfin-common = { path = "crates/rustyfin-common" }

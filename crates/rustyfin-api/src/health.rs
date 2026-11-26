@@ -3,7 +3,7 @@
 //! space is not reported: the libraries share two disks, so it repeated the
 //! same numbers on every row (owner, 2026-11-15).
 
-use rustyfin_models::data::{Data, Library, StatusStore};
+use rustyfin_models::data::{Data, Library, SearchIndex, StatusStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -30,7 +30,7 @@ const CACHE_COUNT_WAIT: Duration = Duration::from_secs(5);
 /// The whole report.
 pub async fn system_health<D: Data>(state: &AppState<D>, libs: &[Library]) -> SystemHealth {
     let database = database_health(state).await;
-    let search = state.search_service.health().await;
+    let search = state.data.search().health().await;
     let search = SearchHealth {
         backend: search.backend.to_string(),
         ok: search.ok,

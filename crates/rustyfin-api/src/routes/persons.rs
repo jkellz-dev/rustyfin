@@ -4,7 +4,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
-use rustyfin_models::data::{Data, ImageStore, MediaItemStore, NameKind, PeopleStore};
+use rustyfin_models::data::{Data, ImageStore, MediaItemStore, NameKind, PeopleStore, SearchIndex};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -52,8 +52,13 @@ pub async fn get_persons<D: Data>(
     let ranked = match query.search_term.as_deref().map(str::trim) {
         Some(term) if !term.is_empty() => {
             state
-                .search_service
-                .ranked_people(term, &person_types, rustyfin_search::CANDIDATES)
+                .data
+                .search()
+                .ranked_people(
+                    term,
+                    &person_types,
+                    rustyfin_models::data::SEARCH_CANDIDATES,
+                )
                 .await
         }
         _ => None,

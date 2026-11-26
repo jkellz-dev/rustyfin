@@ -72,7 +72,7 @@ rustyfin-server            glue: config, startup, builds the data layer, mounts 
 The code is moving to this layout one area at a time. Done: `rustyfin-db` is now `rustyfin-data`; database rows are
 private to it, behind one trait per area in `rustyfin_models::data`. `rustyfin-core` is now `rustyfin-services`, generic
 over `Data`, and holds the rules (access, users, libraries, playback, sessions, shows, browsing, tokens, API keys,
-collections, scans, links). `rustyfin-api`, `rustyfin-auth`, `rustyfin-search` and `rustyfin-media` no longer depend
-on `rustyfin-data`; the API is generic over `D: Data` and only `rustyfin-server` picks Postgres. Still to move: the
-split of `rustyfin-api` into `rustyfin-jellyfin` and the new `rustyfin-api`, and Meilisearch into the data layer. Code
-you touch moves towards the layout; never add new direct database access outside `rustyfin-data`.
+collections, scans, links). Meilisearch lives in `rustyfin-data` behind `Data::search()`. `rustyfin-api`,
+`rustyfin-auth` and `rustyfin-media` no longer depend on `rustyfin-data`; the API is generic over `D: Data` and only
+`rustyfin-server` picks Postgres. Still to move: the split of `rustyfin-api` into `rustyfin-jellyfin` and the new
+`rustyfin-api`. Code you touch moves towards the layout; never add new direct database access outside `rustyfin-data`.

@@ -10,7 +10,6 @@ rustyfin-common.workspace = true
 rustyfin-services.workspace = true
 rustyfin-models.workspace = true
 rustyfin-media.workspace = true
-rustyfin-search.workspace = true
 
 axum.workspace = true
 tokio.workspace = true

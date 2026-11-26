@@ -20,8 +20,7 @@ use rustyfin_auth::forward_auth::ForwardAuthHeaders;
 use rustyfin_auth::trusted_proxy::TrustedProxies;
 use rustyfin_data::pool;
 use rustyfin_media::transcode::TranscodeManager;
-use rustyfin_models::data::{Data, LinkStore, TaskResultStore};
-use rustyfin_search::SearchService;
+use rustyfin_models::data::{Data, LinkStore, SearchIndex, TaskResultStore};
 use rustyfin_services::library::scheduler::{
     self, LibraryScanScheduleConfig, SearchReindexScheduleConfig,
 };
@@ -63,7 +62,15 @@ async fn main() -> anyhow::Result<()> {
     // Run migrations
     tracing::info!("Running database migrations...");
     pool::run_migrations(&db_pool).await?;
-    let data = rustyfin_data::PgData::from_pool(&db_pool);
+    // The data layer, with the search index (Meilisearch when configured).
+    let data = rustyfin_data::PgData::from_pool(&db_pool).with_search(
+        config.search.as_ref().map(|s| s.meilisearch_url.as_str()),
+        config
+            .search
+            .as_ref()
+            .and_then(|s| s.meilisearch_key.as_deref()),
+        None,
+    );
     tracing::info!("Migrations complete");
 
     // Generate a stable server ID (based on hostname or random)
@@ -72,21 +79,11 @@ async fn main() -> anyhow::Result<()> {
     // Initialize session manager
     let session_manager = Arc::new(SessionManager::new(data.clone()));
 
-    // Initialize search service
-    let search_service = Arc::new(SearchService::new(
-        data.clone(),
-        config.search.as_ref().map(|s| s.meilisearch_url.as_str()),
-        config
-            .search
-            .as_ref()
-            .and_then(|s| s.meilisearch_key.as_deref()),
-    ));
-
     // Keep the search index in step: built at start (in the background,
     // Postgres answers searches meanwhile), then whatever changed every few
     // seconds.
-    if search_service.is_meilisearch_available() {
-        let search = search_service.clone();
+    if data.search().is_configured() {
+        let search = data.search().clone();
         tokio::spawn(async move {
             loop {
                 if let Err(e) = search.sync().await {
@@ -201,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
         task_scheduler
             .register(
                 config.tasks.search_reindex.schedule.clone(),
-                Arc::new(SearchReindexTask::new(search_service.clone())),
+                Arc::new(SearchReindexTask::new(data.clone())),
             )
             .await;
 
@@ -370,7 +367,6 @@ async fn main() -> anyhow::Result<()> {
         rustyfin_services::scans::ScanRuntime {
             in_flight: scan_in_flight.clone(),
             links: links.clone(),
-            search: search_service.clone(),
             people_cache_dir: people_cache_dir.clone(),
         },
     );
@@ -384,7 +380,6 @@ async fn main() -> anyhow::Result<()> {
         port: config.server.port,
         tmdb_api_key: config.metadata.tmdb_api_key,
         session_manager,
-        search_service,
         forward_auth_config,
         transcode_manager,
         image_cache_dir,

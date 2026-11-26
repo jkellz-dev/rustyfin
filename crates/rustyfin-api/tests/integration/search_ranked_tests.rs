@@ -5,6 +5,7 @@
 use crate::common;
 
 use axum::http::StatusCode;
+use rustyfin_models::data::SearchIndex;
 use serde_json::Value;
 use uuid::Uuid;
 
