@@ -30,7 +30,10 @@ impl ImageOptions {
     }
 }
 
-const CACHE_VERSION: &str = "v1";
+/// Part of every cached file's key and every ETag: bumped when what a
+/// request answers with changes (v2: a transparent picture resized without a
+/// named format stays a PNG instead of a JPEG on black).
+const CACHE_VERSION: &str = "v2";
 
 pub fn cache_path(cache_dir: &Path, source_path: &str, opts: &ImageOptions) -> PathBuf {
     let key = format!(
@@ -368,7 +371,12 @@ fn resize_and_save(
         return Ok(());
     }
 
+    // Transparency (a title logo) needs a format that keeps it: without a
+    // named format such a picture is answered as a PNG, as Jellyfin does.
+    // An alpha channel that is opaque everywhere (a poster saved as RGBA)
+    // still goes out as the smaller JPEG.
     let src_rgba = img.to_rgba8();
+    let keeps_alpha = img.color().has_alpha() && src_rgba.pixels().any(|p| p[3] < 255);
     let src_image =
         fr::images::Image::from_vec_u8(src_w, src_h, src_rgba.into_raw(), fr::PixelType::U8x4)?;
 
@@ -393,6 +401,9 @@ fn resize_and_save(
             result_img.save_with_format(output_path, image::ImageFormat::WebP)?;
         }
         ImageFormat::Png => {
+            result_img.save_with_format(output_path, image::ImageFormat::Png)?;
+        }
+        ImageFormat::Original if keeps_alpha => {
             result_img.save_with_format(output_path, image::ImageFormat::Png)?;
         }
         _ => {
