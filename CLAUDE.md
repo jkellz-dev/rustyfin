@@ -69,12 +69,15 @@ rustyfin-server            glue: config, startup, builds the data layer, mounts 
 
 ## Migration status
 
-The code is moving to this layout one area at a time. Done: `rustyfin-db` is now `rustyfin-data`; database rows are
-private to it, behind one trait per area in `rustyfin_models::data`. `rustyfin-core` is now `rustyfin-services`, generic
-over `Data`, and holds the rules (access, users, libraries, playback, sessions, shows, browsing, tokens, API keys,
-collections, scans, links). Meilisearch lives in `rustyfin-data` behind `Data::search()`. The HTTP crate is now
-`rustyfin-jellyfin` (with Jellyfin's request identity, once `rustyfin-auth`); it and `rustyfin-media` do not depend on
-`rustyfin-data`; the API is generic over `D: Data` and only `rustyfin-server` picks Postgres. Still to move: the
-`/api/v1` routes out of `rustyfin-jellyfin` into `rustyfin-api`, and the Jellyfin DTOs out of `rustyfin-models` into
-`rustyfin-jellyfin`. Code you touch moves towards the layout; never add new direct database access outside
-`rustyfin-data`.
+The crates follow this layout. Left on purpose, to change with the native client's work:
+
+- `rustyfin-api` reads the session token from the headers the admin and linked servers send today (`Authorization:
+  MediaBrowser ... Token=`, `X-Emby-Token`, `api_key`), writes ids as 32 hex digits and answers 404 with the same body
+  as before, so nothing that works today breaks. Its own identity, error shape and wire-model crate come with the
+  client endpoints.
+- Choosing direct play, remux or transcode is in `rustyfin-jellyfin` (`play_method.rs`): it reads a Jellyfin app's
+  device profile. A neutral playback decision moves into services when the native client needs one.
+- The relay of a linked copy's transcode stays in `rustyfin-jellyfin` at `/api/v1/links/{id}/relay/...`: Jellyfin apps
+  fetch it, and its address is published.
+
+Code you touch keeps to the layout; never add new direct database access outside `rustyfin-data`.

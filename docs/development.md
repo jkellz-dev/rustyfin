@@ -225,6 +225,9 @@ database connection needed).
 4. **Write the handler** in `crates/rustyfin-jellyfin/src/routes/<resource>.rs`
 5. **Register the route** in `crates/rustyfin-jellyfin/src/router.rs`
 
+That is a Jellyfin route. A route of Rustyfin's own API goes in `crates/rustyfin-api/src/routes/`, is registered in its
+`router.rs`, and is listed in `paths.rs` (`ROUTES`), which is how the server knows to send it there.
+
 ### Handler Pattern
 
 ```rust

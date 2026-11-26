@@ -6,8 +6,7 @@ read, never written, by the server.
 
 ## Layers
 
-The server is being split into layers. Each layer depends only on the ones below it. New code follows this layout,
-and existing code moves to it one area at a time.
+The server is built in layers. Each layer depends only on the ones below it, and new code follows this layout.
 
 ```text
 rustyfin-server            glue: config, startup, builds the data layer, mounts the API routers
@@ -38,20 +37,21 @@ Where new code goes: SQL in `rustyfin-data` behind a trait method, logic in `rus
 handler), Jellyfin behaviour in `rustyfin-jellyfin`, Rustyfin routes in `rustyfin-api`. An API crate never depends on
 `rustyfin-data`.
 
-The workspace below is today's layout, part-way through the move.
+The workspace below follows these layers.
 
 ## Workspace
 
 ```text
 rustyfin/
-├── Cargo.toml                  # Workspace root (10 members)
+├── Cargo.toml                  # Workspace root (11 members)
 ├── crates/
-│   ├── rustyfin-server/        # The server binary: config, startup, wiring
-│   ├── rustyfin-jellyfin/      # HTTP routes (Jellyfin's and Rustyfin's own), AppState
-│   ├── rustyfin-services/      # Scanner, enrichment, scheduler, sessions, scan progress
+│   ├── rustyfin-server/        # Config, startup, wiring; metrics, logs, CORS; the integration tests
+│   ├── rustyfin-jellyfin/      # The Jellyfin API: routes, DTOs, Jellyfin's identity and quirks
+│   ├── rustyfin-api/           # Rustyfin's own API under /api/v1
+│   ├── rustyfin-services/      # All rules: scanner, links, sessions, access, users, health, ...
 │   ├── rustyfin-data/          # Postgres and Meilisearch: migrations, repositories, the search index
-│   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
-│   ├── rustyfin-media/         # Probing, play-method decisions, streaming, HLS transcoding
+│   ├── rustyfin-models/        # The data traits and their models
+│   ├── rustyfin-media/         # Probing, streaming, HLS transcoding
 │   ├── rustyfin-common/        # Naming, NFO, subtitle files, metadata sources (TMDB, ...)
 │   ├── rustyfin-frontend/      # Embeds and serves the admin UI under /web
 │   └── rustyfin-meta/          # The `rustyfin` tool: artwork and lyrics into the media folders
@@ -71,6 +71,7 @@ rustyfin-server ─── rustyfin-data (the one place Postgres is chosen)
 ├── rustyfin-jellyfin ──┬── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-models
 │                       ├── rustyfin-media ─── rustyfin-models
 │                       └── rustyfin-common
+├── rustyfin-api ─────── rustyfin-services, rustyfin-models
 └── rustyfin-frontend (no internal dependencies)
 
 rustyfin-meta ──── rustyfin-common     (the tool shares no server code beyond common)
@@ -84,35 +85,53 @@ rustyfin-meta ──── rustyfin-common     (the tool shares no server code b
 
 Reads the configuration (`rustyfin.toml` and `RUSTYFIN__...` variables, see [Configuration](configuration.md)),
 connects to Postgres and runs the migrations, builds the shared services, and serves the API and the admin on one port,
-with Prometheus metrics on a second listener when `[metrics] listen` is set.
+with Prometheus metrics on a second listener when `[metrics] listen` is set. Its library (`rustyfin_server::app`) puts
+the two API routers together: a request for one of `rustyfin-api`'s routes goes there, everything else to
+`rustyfin-jellyfin`. Around every route it applies what is the same for both: request counting and timing
+(`metrics.rs`), the request log (`request_log.rs`), logs and traces (`telemetry.rs`) and CORS (`cors.rs`). The route
+tests live in `tests/` here, since they test the assembled server.
 
 ### `rustyfin-jellyfin`
 
-Every route, one module per area under `routes/` (items, playback, HLS, subtitles, sessions, users, libraries, play
-history, devices, WebSocket, ...). `router.rs` holds `AppState` and builds the router. Shared pieces: `error.rs` (one
-`ApiError` mapped to status codes and log levels), `query_case.rs` (Jellyfin's query names in any case), `play_state.rs`
-(Jellyfin 10.10's played and resume rules), `request_log.rs` and `metrics.rs` (what clients ask for), `health.rs`,
-`login_limit.rs` and `cors.rs`. Route rules are in the [API Reference](api-reference.md).
+Everything Jellyfin apps need, and nothing else depends on it. Every Jellyfin route, one module per area under
+`routes/` (items, playback, HLS, subtitles, sessions, users, libraries, play history, devices, WebSocket, ...).
+`router.rs` holds `AppState` and builds the router. Shared pieces: `dto/` (Jellyfin's request and response objects in
+PascalCase), `auth/` (Jellyfin's ways of naming a user: the `MediaBrowser` header, `X-Emby-Token`, `api_key`, and the
+`AuthenticatedUser`/`AdminUser` extractors), `identity.rs` (the trusted proxy's user on each request), `error.rs` (one
+`ApiError` mapped to status codes and log levels), `query_case.rs` and `route_case.rs` (names in any case),
+`guid_format.rs` (ids as 32 hex digits), `play_method.rs` and `playback_info.rs` (direct play, remux or transcode from
+the app's device profile), `remote.rs` (remote-control commands to and from the session service), `link_scope.rs` (a
+linking server's view) and `health.rs`. The relay of a linked copy's transcode (`/api/v1/links/{id}/relay/...`) is
+here too: only Jellyfin apps fetch it. Route rules are in the [API Reference](api-reference.md).
+
+### `rustyfin-api`
+
+Rustyfin's own API under `/api/v1` ([Rustyfin API](rustyfin-api.md)): linked servers for the admin, the catalogue feed
+a linked Rustyfin syncs from, and user permissions. Its own state, errors, caller extractors (`caller.rs`) and path
+matching in any case (`paths.rs`); a linking server's requests see only this server's media, as on the Jellyfin side.
 
 ### `rustyfin-services`
 
-The long-running parts: the library scanner (walks folders, probes files, reads NFOs and sidecar files, prunes what is
-gone), enrichment (NFO files and per-title settings into the database), the task scheduler and its tasks, the session
-manager (who is connected and what they play, commands to them), the scan board (scan progress and outcomes, sent over
-the WebSocket), and image resizing. See [Library Scanning](library-scanning.md). `link/` holds linked servers: the
-`Links` registry, a Jellyfin API client that signs in as the friend's link user, and the sync that mirrors the shared
-catalogue into `media_items` and merges it ([Linked Servers](linked-servers.md)).
+All the rules, generic over the data traits, with no HTTP: item access, users and permissions, libraries, playback
+reports, play history, shows, browsing, playlists, collections, tokens and API keys, what a trusted proxy's headers mean
+(`proxy.rs`), system health, and the long-running parts: the library scanner (walks folders, probes files, reads NFOs
+and sidecar files, prunes what is gone), enrichment (NFO files and per-title settings into the database), the task
+scheduler and its tasks, the session manager (who is connected and what they play, commands to them), the scan board
+(scan progress and outcomes, sent over the WebSocket), and image resizing. See [Library Scanning](library-scanning.md).
+`link/` holds linked servers: the `Links` registry, a Jellyfin API client that signs in as the friend's link user, and
+the sync that mirrors the shared catalogue into `media_items` and merges it ([Linked Servers](linked-servers.md)).
 
 ### `rustyfin-data`
 
-The sqlx pool, the migrations in `migrations/`, and one repository module per table or concern (media items, streams,
-user data, play history, sessions, libraries, people, images, ...). Queries are plain SQL strings, so building needs no
-database. See [Database Schema](database-schema.md).
+The only crate that talks to a database: the sqlx pool, the migrations in `migrations/`, and one repository module per
+table or concern (media items, streams, user data, play history, sessions, libraries, people, images, ...), behind the
+data traits (`PgData`). Queries are plain SQL strings, so building needs no database. See
+[Database Schema](database-schema.md).
 
 ### `rustyfin-models`
 
-Jellyfin's request and response objects (`BaseItemDto`, `MediaSourceInfo`, `PlaybackInfoRequest`, sessions, users, ...)
-in PascalCase JSON, and shared enums.
+The contract between services and the data layer (`data`): one trait per area (`UserStore`, `MediaItemStore`,
+`SearchIndex`, ...), combined in `Data`, with their models and one error type.
 
 ### Search (in `rustyfin-data`)
 
@@ -151,28 +170,29 @@ the only writer to the media folders and runs with its own writable mount (a con
 
 ## Application state
 
-`AppState<D>` (in `rustyfin-jellyfin/src/router.rs`) is cloned into every handler. It holds the data layer `D` and the
-services over it; the server's id,
-name, address and port; the session manager, search service and transcode manager; the forward-auth settings;
+`AppState<D>` (in `rustyfin-jellyfin/src/router.rs`) is cloned into every Jellyfin handler. It holds the data layer `D`
+and the services over it; the server's id,
+name, address and port; the session manager and transcode manager; the forward-auth settings;
 the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the
 shutdown signal; and the linked servers (`links`), whose copies the stream and image routes
 relay. Handlers are generic over `D: Data`; the server binary builds `AppState<PgData>`. The auth extractors reach the
-data layer through the `DataState` trait the state implements. The scan board is one shared instance for the process
+data layer through the `DataState` trait the state implements. `rustyfin-api` has its own, smaller `ApiState<D>`
+(data, services, links, the trusted proxy). The scan board is one shared instance for the process
 (`ScanBoard::global()`), so the scanner can report without being handed the state.
 
 ## Startup
 
 1. Tracing, then the configuration; the server refuses to start without a sign-in method.
 2. Postgres pool, then the migrations.
-3. Session manager, search service, and the transcode manager with its cleanup and throttle task.
+3. Session manager, the search index, and the transcode manager with its cleanup and throttle task.
 4. Image and people cache folders.
 5. The task scheduler and its tasks (library scans, search reindex, activity-log and session pruning, transcode and
    image-cache cleanup, database maintenance); with `run_on_startup` (off by default), each runs once now.
 6. Linked servers from `[[link]]`: each is recorded in the `links` table, and one task syncs them all 30 seconds later
    and then every 15 minutes.
-7. Forward-auth settings, CORS, `AppState`.
-8. The metrics listener (if configured), then the API router with the admin merged under `/web`, and `/` redirected to
-   it.
+7. Forward-auth settings, CORS, `AppState` and `ApiState`.
+8. The metrics listener (if configured), then the API routers (`rustyfin_server::app`) with the admin merged under
+   `/web`, and `/` redirected to it.
 
 ## Design principles
 
@@ -190,7 +210,7 @@ data layer through the `DataState` trait the state implements. The scan board is
 
 - **Edition 2024**, with let chains.
 - **Ticks**: durations are 100-nanosecond ticks (Jellyfin's unit), `seconds * 10_000_000`.
-- **PascalCase JSON** for every DTO.
+- **PascalCase JSON** for every Jellyfin DTO; snake_case under `/api/v1`.
 - **Legacy routes**: both `/Items/{id}` and `/Users/{userId}/Items/{id}` answer, as Jellyfin's do.
-- **Errors**: one `ApiError`, mapped to status codes; database errors are 500s and logged.
+- **Errors**: each API crate has one `ApiError`, mapped to status codes; database errors are 500s and logged.
 - How changes are made: [Contributing](contributing.md).
