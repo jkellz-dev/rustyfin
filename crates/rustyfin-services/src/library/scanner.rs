@@ -1,6 +1,6 @@
 use rustyfin_models::data::{
-    ActivityLogStore, ChapterStore, CollectionStore, Data, DataError, ImageStore, LibraryStore,
-    LinkStore, MediaItemStore, MediaStreamStore, NewMediaItem, NewMediaStream,
+    ActivityLogStore, AutoSet, ChapterStore, CollectionStore, Data, DataError, ImageStore,
+    LibraryStore, LinkStore, MediaItemStore, MediaStreamStore, NewMediaItem, NewMediaStream,
 };
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -2384,9 +2384,7 @@ impl<D: Data> Drop for SpentOnDrop<'_, D> {
 /// joins the collection of that name that has an id, if any, so a library
 /// mid-way between NFO writers does not split. Sorted by name.
 /// `found` is (film, set name, TMDB collection id).
-fn group_auto_sets(
-    found: Vec<(Uuid, String, Option<String>)>,
-) -> Vec<rustyfin_models::data::AutoSet> {
+fn group_auto_sets(found: Vec<(Uuid, String, Option<String>)>) -> Vec<AutoSet> {
     use std::collections::BTreeMap;
     // The id each set name has (the first film that gives one wins).
     let mut id_of_name: BTreeMap<String, String> = BTreeMap::new();
@@ -2396,7 +2394,7 @@ fn group_auto_sets(
         }
     }
     // Key: "tmdb:<id>" or "name:<name>"; value: (name, id, films).
-    let mut groups: BTreeMap<String, rustyfin_models::data::AutoSet> = BTreeMap::new();
+    let mut groups: BTreeMap<String, AutoSet> = BTreeMap::new();
     for (item, name, own_id) in found {
         let has_own_id = own_id.is_some();
         let tmdb_id = own_id.or_else(|| id_of_name.get(&name).cloned());
@@ -2404,13 +2402,11 @@ fn group_auto_sets(
             Some(id) => format!("tmdb:{id}"),
             None => format!("name:{name}"),
         };
-        let group = groups
-            .entry(key)
-            .or_insert_with(|| rustyfin_models::data::AutoSet {
-                name: name.clone(),
-                tmdb_id: tmdb_id.clone(),
-                items: Vec::new(),
-            });
+        let group = groups.entry(key).or_insert_with(|| AutoSet {
+            name: name.clone(),
+            tmdb_id: tmdb_id.clone(),
+            items: Vec::new(),
+        });
         // The id-bearing name wins over an older NFO's.
         if has_own_id {
             group.name = name;
