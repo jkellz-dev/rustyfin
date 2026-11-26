@@ -43,12 +43,77 @@ pub struct Permissions {
     pub may_link: bool,
 }
 
+/// Who the proxy in front says is asking.
+#[derive(Debug, Clone, Default)]
+pub struct Vouched {
+    /// The proxy's stable name for the person (the account's key).
+    pub remote_user: String,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+    /// Groups the proxy names; a member of the admin group administers.
+    pub groups: Vec<String>,
+}
+
 /// User rules over a data layer.
 pub struct Users<'a, D> {
     pub(crate) data: &'a D,
 }
 
 impl<D: Data> Users<'_, D> {
+    /// The account of someone the proxy vouches for, made on first sight;
+    /// `None` when that account is disabled. A new server's first account
+    /// administers it, and so does a member of `admin_group`.
+    ///
+    /// `refresh` also stores the name and email the proxy gives now (on a
+    /// sign-in); without it an existing account is only read (every
+    /// request).
+    pub async fn vouched(
+        &self,
+        who: &Vouched,
+        admin_group: Option<&str>,
+        refresh: bool,
+    ) -> ServiceResult<Option<User>> {
+        let users = self.data.users();
+        let existing = if refresh {
+            None
+        } else {
+            users.find_by_remote_user_id(&who.remote_user).await?
+        };
+        let mut user = match existing {
+            Some(user) => user,
+            None => {
+                let first = users.count().await? == 0;
+                let user = users
+                    .upsert_from_forward_auth(
+                        &who.remote_user,
+                        &who.remote_user,
+                        who.display_name.as_deref(),
+                        who.email.as_deref(),
+                    )
+                    .await?;
+                if first && !user.is_administrator {
+                    users
+                        .update_policy(user.id, true, user.enable_all_libraries)
+                        .await?;
+                    users.find_by_id(user.id).await?.unwrap_or(user)
+                } else {
+                    user
+                }
+            }
+        };
+        if user.is_disabled {
+            return Ok(None);
+        }
+        if !user.is_administrator && admin_group.is_some_and(|g| who.groups.iter().any(|x| x == g))
+        {
+            users
+                .update_policy(user.id, true, user.enable_all_libraries)
+                .await?;
+            user.is_administrator = true;
+        }
+        Ok(Some(user))
+    }
+
     /// Every user.
     pub async fn list(&self) -> ServiceResult<Vec<User>> {
         Ok(self.data.users().list_all().await?)

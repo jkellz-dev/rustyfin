@@ -230,39 +230,17 @@ async fn resolve_login(
             && fa_config.trusted_proxies.is_trusted(&addr.ip())
             && let Some(identity) = forward_auth::extract_identity(headers, &fa_config.headers)
         {
-            let user = state
-                .data
+            // A disabled account does not sign in.
+            state
+                .services
                 .users()
-                .upsert_from_forward_auth(
-                    &identity.remote_user,
-                    &identity.remote_user,
-                    identity.display_name.as_deref(),
-                    identity.email.as_deref(),
+                .vouched(
+                    &crate::identity::vouched_by(&identity),
+                    fa_config.admin_group.as_deref(),
+                    true,
                 )
-                .await?;
-
-            // First user becomes admin
-            if is_first_user {
-                let _ = state
-                    .data
-                    .users()
-                    .update_policy(user.id, true, user.enable_all_libraries)
-                    .await;
-            }
-
-            // Auto-admin from groups
-            if let Some(ref admin_group) = fa_config.admin_group
-                && identity.groups.iter().any(|g| g == admin_group)
-                && !user.is_administrator
-            {
-                let _ = state
-                    .data
-                    .users()
-                    .update_policy(user.id, true, user.enable_all_libraries)
-                    .await;
-            }
-
-            user
+                .await?
+                .ok_or(ApiError::Unauthorized)?
         } else if let Some(ref ldap_config) = state.ldap_config {
             // LDAPS authentication path
             let username = body.username.as_deref().ok_or(ApiError::Unauthorized)?;

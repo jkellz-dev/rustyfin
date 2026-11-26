@@ -82,49 +82,16 @@ async fn vouched_user(
     query: Option<&str>,
 ) -> Result<Option<AuthenticatedUser>, DataError> {
     let data = &state.data;
-    let user = match data
+    let Some(user) = state
+        .services
         .users()
-        .find_by_remote_user_id(&identity.remote_user)
-        .await?
-    {
-        Some(user) => user,
-        None => {
-            // A new server's first user is its administrator.
-            let first = data.users().count().await? == 0;
-            let user = data
-                .users()
-                .upsert_from_forward_auth(
-                    &identity.remote_user,
-                    &identity.remote_user,
-                    identity.display_name.as_deref(),
-                    identity.email.as_deref(),
-                )
-                .await?;
-            if first && !user.is_administrator {
-                data.users()
-                    .update_policy(user.id, true, user.enable_all_libraries)
-                    .await?;
-                data.users().find_by_id(user.id).await?.unwrap_or(user)
-            } else {
-                user
-            }
-        }
-    };
-    if user.is_disabled {
+        .vouched(&vouched_by(identity), fa.admin_group.as_deref(), false)
+        .await
+        .map_err(service_to_data)?
+    else {
         return Ok(None);
-    }
-    let mut is_administrator = user.is_administrator;
-    if !is_administrator
-        && fa
-            .admin_group
-            .as_ref()
-            .is_some_and(|g| identity.groups.iter().any(|x| x == g))
-    {
-        data.users()
-            .update_policy(user.id, true, user.enable_all_libraries)
-            .await?;
-        is_administrator = true;
-    }
+    };
+    let is_administrator = user.is_administrator;
 
     // The session the token names, if it is this user's and still active;
     // else the device's; else a new one for the device.
@@ -185,4 +152,23 @@ async fn vouched_user(
         session_id: session.id,
         device_id: session.device_id,
     }))
+}
+
+/// The services' view of a forward-auth identity.
+pub(crate) fn vouched_by(identity: &ForwardAuthIdentity) -> rustyfin_services::users::Vouched {
+    rustyfin_services::users::Vouched {
+        remote_user: identity.remote_user.clone(),
+        display_name: identity.display_name.clone(),
+        email: identity.email.clone(),
+        groups: identity.groups.clone(),
+    }
+}
+
+/// `vouched` fails only in the data layer; anything else is a bug, reported
+/// as one.
+fn service_to_data(e: rustyfin_services::ServiceError) -> DataError {
+    match e {
+        rustyfin_services::ServiceError::Data(e) => e,
+        other => DataError::Other(other.to_string()),
+    }
 }
