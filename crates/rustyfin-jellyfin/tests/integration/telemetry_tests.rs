@@ -8,7 +8,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
-use rustyfin_api::telemetry;
+use rustyfin_jellyfin::telemetry;
 
 /// Log output captured in memory.
 #[derive(Clone, Default)]
@@ -56,14 +56,14 @@ fn json_log_lines_carry_their_trace_id() {
     let subscriber = telemetry::subscriber(Some(&provider), true, out.clone(), "rustyfin=debug");
     tracing::subscriber::with_default(subscriber, || {
         let span =
-            tracing::info_span!(target: "rustyfin_api::albums", "album", name = "Wet Tennis");
+            tracing::info_span!(target: "rustyfin_jellyfin::albums", "album", name = "Wet Tennis");
         span.in_scope(|| {
-            tracing::info!(target: "rustyfin_api::albums", tracks = 2, "read the album");
+            tracing::info!(target: "rustyfin_jellyfin::albums", tracks = 2, "read the album");
         });
         // Outside any span: no trace.
-        tracing::warn!(target: "rustyfin_api::albums", "no span here");
+        tracing::warn!(target: "rustyfin_jellyfin::albums", "no span here");
         // Below the log filter: not written.
-        tracing::trace!(target: "rustyfin_api::albums", "too quiet");
+        tracing::trace!(target: "rustyfin_jellyfin::albums", "too quiet");
     });
     provider.force_flush().unwrap();
     let spans = exporter.get_finished_spans().unwrap();
@@ -75,7 +75,7 @@ fn json_log_lines_carry_their_trace_id() {
     let first = &lines[0];
     assert_eq!(first["message"], "read the album", "{first}");
     assert_eq!(first["level"], "INFO", "{first}");
-    assert_eq!(first["target"], "rustyfin_api::albums", "{first}");
+    assert_eq!(first["target"], "rustyfin_jellyfin::albums", "{first}");
     assert_eq!(first["tracks"], 2, "{first}");
     assert_eq!(first["span"], "album", "{first}");
     assert_eq!(
@@ -104,8 +104,8 @@ fn without_a_collector_json_lines_have_no_trace() {
     let out = Captured::default();
     let subscriber = telemetry::subscriber(None, true, out.clone(), "rustyfin=debug");
     tracing::subscriber::with_default(subscriber, || {
-        let span = tracing::info_span!(target: "rustyfin_api::albums", "album");
-        span.in_scope(|| tracing::info!(target: "rustyfin_api::albums", "read the album"));
+        let span = tracing::info_span!(target: "rustyfin_jellyfin::albums", "album");
+        span.in_scope(|| tracing::info!(target: "rustyfin_jellyfin::albums", "read the album"));
     });
     let lines = out.lines();
     assert_eq!(lines.len(), 1, "{lines:?}");
@@ -118,7 +118,7 @@ fn a_scans_sql_stays_out_of_its_trace_and_a_requests_is_kept() {
     let (exporter, provider) = traced();
     let subscriber = telemetry::subscriber(Some(&provider), true, Captured::default(), "off");
     tracing::subscriber::with_default(subscriber, || {
-        let request = tracing::info_span!(target: "rustyfin_api::metrics", "http.request");
+        let request = tracing::info_span!(target: "rustyfin_jellyfin::metrics", "http.request");
         request.in_scope(|| {
             tracing::debug!(target: "sqlx::query", summary = "select name", elapsed_secs = 0.002, "select name from items");
         });

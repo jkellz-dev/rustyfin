@@ -1,4 +1,4 @@
-//! Debug log of every request (`RUST_LOG=rustyfin_api::request_log=debug`):
+//! Debug log of every request (`RUST_LOG=rustyfin_jellyfin::request_log=debug`):
 //! method, path, query and status, for finding what a client asks for.
 //! Query values that are credentials are replaced by `***`; headers and
 //! bodies are never logged.
@@ -34,7 +34,7 @@ pub fn redact_query(query: &str) -> String {
 
 /// Logs each request at debug level once it is answered.
 pub async fn log_request(req: Request, next: Next) -> Response {
-    if !tracing::enabled!(target: "rustyfin_api::request_log", tracing::Level::DEBUG) {
+    if !tracing::enabled!(target: "rustyfin_jellyfin::request_log", tracing::Level::DEBUG) {
         return next.run(req).await;
     }
     let method = req.method().clone();
@@ -43,7 +43,7 @@ pub async fn log_request(req: Request, next: Next) -> Response {
     let started = std::time::Instant::now();
     let response = next.run(req).await;
     tracing::debug!(
-        target: "rustyfin_api::request_log",
+        target: "rustyfin_jellyfin::request_log",
         "{method} {path}{}{query} -> {} in {:?}",
         if query.is_empty() { "" } else { "?" },
         response.status().as_u16(),

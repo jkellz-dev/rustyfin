@@ -13,9 +13,9 @@ planned, and the design boundaries every change must respect, are at the top of 
 
 ## Making a change
 
-1. **Write the test first and see it fail.** Server routes are tested in `crates/rustyfin-api/tests/` against a real
-   Postgres; logic elsewhere gets unit tests next to it; the admin's logic is tested on the host with `cargo test` in
-   `frontend/`. Commit the failing test on its own (`test: ...`), so the red run is on record.
+1. **Write the test first and see it fail.** Server routes are tested in `crates/rustyfin-jellyfin/tests/` against a
+   real Postgres; logic elsewhere gets unit tests next to it; the admin's logic is tested on the host with `cargo test`
+   in `frontend/`. Commit the failing test on its own (`test: ...`), so the red run is on record.
 2. **Make it pass, with no warnings.** All of these must pass:
 
    ```bash

@@ -6,7 +6,7 @@ purpose. Route details: [API Reference](api-reference.md).
 
 ## Answered for real
 
-Around 200 routes (method and path), grouped by area in `crates/rustyfin-api/src/routes/`:
+Around 200 routes (method and path), grouped by area in `crates/rustyfin-jellyfin/src/routes/`:
 
 - **Sign-in and sessions**: `AuthenticateByName` (the proxy names who signs in), API keys, sessions, devices,
   remote control commands, the WebSocket (`/socket`).
@@ -61,7 +61,7 @@ Extra fields and routes Jellyfin apps ignore:
 
 ## How compatibility is checked
 
-- **Integration tests** (`crates/rustyfin-api/tests/`) follow Jellyfin's own tests for each route.
+- **Integration tests** (`crates/rustyfin-jellyfin/tests/`) follow Jellyfin's own tests for each route.
 - **The parity suite** (`tests/parity`, nightly in CI): Hurl cases holding Jellyfin's recorded answers, run against
   the published image; a missing field or a different shape fails the run.
 - **Real requests**: the server logs and counts every route clients call, including the ones it does not answer

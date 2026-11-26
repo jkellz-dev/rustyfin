@@ -5,7 +5,7 @@ usage: python3 -I route_catalog.py <jellyfin source checkout> [<jellyfin checkou
 
 Reads the `[Route]`/`[Http*]` attributes of each controller in
 `Jellyfin.Api/Controllers` (several checkouts: the union, each route tagged with the
-versions that serve it), the `.route(...)` calls in `crates/rustyfin-api/src`, and the
+versions that serve it), the `.route(...)` calls in `crates/rustyfin-jellyfin/src`, and the
 request lines of `tests/parity/cases/*.hurl`, then writes `tests/parity/ROUTES.md`.
 
 A route is matched by method and path, with every `{param}` alike and in any case
@@ -105,7 +105,7 @@ def jellyfin_routes(src):
 
 def rustyfin_routes():
     keys = set()
-    for f in (REPO / "crates/rustyfin-api/src").rglob("*.rs"):
+    for f in (REPO / "crates/rustyfin-jellyfin/src").rglob("*.rs"):
         text = f.read_text()
         for m in re.finditer(r'\.route\(\s*"([^"]+)",', text):
             # The method chain runs to the `)` closing `.route(`.

@@ -78,7 +78,7 @@ rustyfin/
 ├── frontend/                   # Sycamore WASM app (not workspace member)
 └── crates/
     ├── rustyfin-server/        # Binary
-    ├── rustyfin-api/           # Route handlers
+    ├── rustyfin-jellyfin/      # Route handlers
     ├── rustyfin-auth/          # Auth extractors
     ├── rustyfin-services/      # Domain logic
     ├── rustyfin-data/          # Database layer and search index
@@ -223,13 +223,13 @@ database connection needed).
 2. **Add data access** (if needed): SQL in `crates/rustyfin-data/src/repo/`, behind a method on the area's trait in
    `crates/rustyfin-models/src/data/`, implemented in `crates/rustyfin-data/src/pg/`
 3. **Put the rule in a service** (anything that decides something) in `crates/rustyfin-services/src/`
-4. **Write the handler** in `crates/rustyfin-api/src/routes/<resource>.rs`
-5. **Register the route** in `crates/rustyfin-api/src/router.rs`
+4. **Write the handler** in `crates/rustyfin-jellyfin/src/routes/<resource>.rs`
+5. **Register the route** in `crates/rustyfin-jellyfin/src/router.rs`
 
 ### Handler Pattern
 
 ```rust
-// In crates/rustyfin-api/src/routes/my_resource.rs
+// In crates/rustyfin-jellyfin/src/routes/my_resource.rs
 
 use axum::{Json, extract::State};
 use rustyfin_auth::middleware::AuthenticatedUser; // or AdminUser
@@ -253,7 +253,7 @@ pub async fn my_handler<D: Data>(
 ### Route Registration
 
 ```rust
-// In crates/rustyfin-api/src/router.rs
+// In crates/rustyfin-jellyfin/src/router.rs
 .route("/MyResource", get(my_resource::my_handler::<D>))
 ```
 
@@ -330,12 +330,12 @@ The project uses Rust edition 2024, which supports:
 
 ```bash
 cargo test --lib                       # Unit tests (no database)
-cargo test -p rustyfin-api --test '*'  # Route tests against Postgres (DATABASE_URL)
+cargo test -p rustyfin-jellyfin --test '*'  # Route tests against Postgres (DATABASE_URL)
 cargo test naming                      # Tests with "naming" in the name
 cd frontend && cargo test              # The admin's logic, on the host
 ```
 
-- **Route tests** (`crates/rustyfin-api/tests/`) start the real router against a Postgres database named by
+- **Route tests** (`crates/rustyfin-jellyfin/tests/`) start the real router against a Postgres database named by
   `DATABASE_URL` (`docker compose up -d` provides one); each test makes its own users and libraries through
   `tests/common/mod.rs`.
 - **Unit tests** sit next to the code: file and folder naming, NFO parsing, play-method decisions, the scan board, ...

@@ -9,7 +9,7 @@ name = "rustyfin-server"
 path = "src/main.rs"
 
 [dependencies]
-rustyfin-api.workspace = true
+rustyfin-jellyfin.workspace = true
 rustyfin-auth.workspace = true
 rustyfin-services.workspace = true
 rustyfin-data.workspace = true

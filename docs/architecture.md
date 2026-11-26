@@ -47,7 +47,7 @@ rustyfin/
 ├── Cargo.toml                  # Workspace root (10 members)
 ├── crates/
 │   ├── rustyfin-server/        # The server binary: config, startup, wiring
-│   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
+│   ├── rustyfin-jellyfin/      # HTTP routes (Jellyfin's and Rustyfin's own), AppState
 │   ├── rustyfin-auth/          # Who is asking: forward auth, tokens, sessions
 │   ├── rustyfin-services/      # Scanner, enrichment, scheduler, sessions, scan progress
 │   ├── rustyfin-data/          # Postgres and Meilisearch: migrations, repositories, the search index
@@ -69,10 +69,10 @@ Each crate starts with a `//!` overview of what it holds.
 
 ```text
 rustyfin-server ─── rustyfin-data (the one place Postgres is chosen)
-├── rustyfin-api ──┬── rustyfin-auth ──── rustyfin-services, rustyfin-models
-│                  ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-models
-│                  ├── rustyfin-media ─── rustyfin-models
-│                  └── rustyfin-common
+├── rustyfin-jellyfin ──┬── rustyfin-auth ──── rustyfin-services, rustyfin-models
+│                       ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-models
+│                       ├── rustyfin-media ─── rustyfin-models
+│                       └── rustyfin-common
 └── rustyfin-frontend (no internal dependencies)
 
 rustyfin-meta ──── rustyfin-common     (the tool shares no server code beyond common)
@@ -88,7 +88,7 @@ Reads the configuration (`rustyfin.toml` and `RUSTYFIN__...` variables, see [Con
 connects to Postgres and runs the migrations, builds the shared services, and serves the API and the admin on one port,
 with Prometheus metrics on a second listener when `[metrics] listen` is set.
 
-### `rustyfin-api`
+### `rustyfin-jellyfin`
 
 Every route, one module per area under `routes/` (items, playback, HLS, subtitles, sessions, users, libraries, play
 history, devices, WebSocket, ...). `router.rs` holds `AppState` and builds the router. Shared pieces: `error.rs` (one
@@ -158,7 +158,7 @@ the only writer to the media folders and runs with its own writable mount (a con
 
 ## Application state
 
-`AppState<D>` (in `rustyfin-api/src/router.rs`) is cloned into every handler. It holds the data layer `D` and the
+`AppState<D>` (in `rustyfin-jellyfin/src/router.rs`) is cloned into every handler. It holds the data layer `D` and the
 services over it; the server's id,
 name, address and port; the session manager, search service and transcode manager; the forward-auth settings;
 the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the

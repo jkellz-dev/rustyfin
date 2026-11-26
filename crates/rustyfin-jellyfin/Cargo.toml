@@ -1,5 +1,5 @@
 [package]
-name = "rustyfin-api"
+name = "rustyfin-jellyfin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

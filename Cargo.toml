@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/rustyfin-server",
-    "crates/rustyfin-api",
+    "crates/rustyfin-jellyfin",
     "crates/rustyfin-auth",
     "crates/rustyfin-services",
     "crates/rustyfin-data",
@@ -34,7 +34,7 @@ license = "GPL-3.0-or-later"
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.18", default-features = false }
 # Internal crates
-rustyfin-api = { path = "crates/rustyfin-api" }
+rustyfin-jellyfin = { path = "crates/rustyfin-jellyfin" }
 rustyfin-auth = { path = "crates/rustyfin-auth" }
 rustyfin-services = { path = "crates/rustyfin-services" }
 rustyfin-data = { path = "crates/rustyfin-data" }

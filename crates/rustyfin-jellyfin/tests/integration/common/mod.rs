@@ -14,8 +14,8 @@ use tokio::sync::RwLock;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use rustyfin_api::router::{AppState, build_router};
 use rustyfin_data::repo::{libraries, media_items, sessions, users};
+use rustyfin_jellyfin::router::{AppState, build_router};
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_models::data::{Data, SearchIndex};
 use rustyfin_services::session::SessionManager;
@@ -188,12 +188,14 @@ impl TestApp {
             port: 8096,
             tmdb_api_key: None,
             session_manager: session_manager.clone(),
-            forward_auth_config: forward_auth.then(|| rustyfin_api::router::ForwardAuthState {
-                trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies::new(vec![
-                    "127.0.0.0/8".parse().unwrap(),
-                ]),
-                headers: Default::default(),
-                admin_group: None,
+            forward_auth_config: forward_auth.then(|| {
+                rustyfin_jellyfin::router::ForwardAuthState {
+                    trusted_proxies: rustyfin_auth::trusted_proxy::TrustedProxies::new(vec![
+                        "127.0.0.0/8".parse().unwrap(),
+                    ]),
+                    headers: Default::default(),
+                    admin_group: None,
+                }
             }),
             transcode_manager,
             image_cache_dir: image_cache_dir(&schema),
@@ -207,8 +209,8 @@ impl TestApp {
             prefer_direct_play,
         };
 
-        rustyfin_api::link_notices::spawn(state.clone());
-        let metrics_router = rustyfin_api::metrics::router(state.clone());
+        rustyfin_jellyfin::link_notices::spawn(state.clone());
+        let metrics_router = rustyfin_jellyfin::metrics::router(state.clone());
         let router = build_router(state);
 
         Self {

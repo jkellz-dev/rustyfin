@@ -10,7 +10,7 @@ credentials replaced by `***`, status, time) and use the client for a while,
 covering every screen:
 
 ```sh
-# on the server: RUST_LOG=rustyfin=info,tower_http=info,rustyfin_api::request_log=debug
+# on the server: RUST_LOG=rustyfin=info,tower_http=info,rustyfin_jellyfin::request_log=debug
 docker compose logs --no-log-prefix rustyfin > live.log
 python3 -I tests/parity/tools/rank_requests.py live.log tests/parity/cases
 ```

@@ -334,7 +334,7 @@ async fn changing_a_librarys_folders_scans_it() {
 
 #[test]
 fn request_logs_never_carry_secrets() {
-    use rustyfin_api::request_log::redact_query;
+    use rustyfin_jellyfin::request_log::redact_query;
     assert_eq!(
         redact_query("ParentId=1&api_key=abc&X-Emby-Token=def&ApiKey=x&SortBy=Name"),
         "ParentId=1&api_key=***&X-Emby-Token=***&ApiKey=***&SortBy=Name"
