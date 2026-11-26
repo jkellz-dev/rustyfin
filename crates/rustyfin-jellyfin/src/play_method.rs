@@ -1,3 +1,6 @@
+//! Direct play, direct stream or transcode: a file against the device
+//! profile a Jellyfin app sends.
+
 use rustyfin_models::dto::{DeviceProfile, MediaSourceInfo, MediaStream};
 
 /// How a media item should be played.

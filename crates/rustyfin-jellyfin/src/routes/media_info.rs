@@ -6,8 +6,8 @@ use axum::{
 use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use uuid::Uuid;
 
+use crate::playback_info;
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_media::playback_info;
 use rustyfin_models::dto::{DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 
 use crate::error::ApiError;

@@ -135,9 +135,10 @@ is built, names are matched in Postgres.
 
 ### `rustyfin-media`
 
-`probe` (ffprobe) and `audio_probe` (lofty, in-process, for music) read streams and tags; `playback_info` and
-`transcode` decide direct play, remux or transcode from the client's device profile; `transcode` also runs and
-throttles the ffmpeg HLS jobs; `streaming` serves files with HTTP ranges. See [Streaming & Media](streaming.md).
+`probe` (ffprobe) and `audio_probe` (lofty, in-process, for music) read streams and tags; `transcode` runs and throttles
+the ffmpeg HLS jobs; `streaming` serves files with HTTP ranges. Choosing direct play, remux or transcode from a Jellyfin
+app's device profile is `rustyfin-jellyfin`'s (`play_method.rs`, `playback_info.rs`). See
+[Streaming & Media](streaming.md).
 
 ### `rustyfin-common`
 

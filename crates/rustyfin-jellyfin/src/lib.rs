@@ -16,6 +16,8 @@ pub mod identity;
 pub mod link_notices;
 pub mod link_scope;
 pub mod metrics;
+pub mod play_method;
+pub mod playback_info;
 pub mod query_case;
 pub mod remote;
 pub mod request_log;

@@ -251,8 +251,7 @@ pub(crate) async fn add_playback_versions<D: Data>(
             quality(version, all_streams.get(&version.id).unwrap_or(&none)),
         );
         let streams = all_streams.get(&version.id).cloned().unwrap_or_default();
-        let built =
-            rustyfin_media::playback_info::build_playback_info(version, &streams, request, profile);
+        let built = crate::playback_info::build_playback_info(version, &streams, request, profile);
         for mut source in built.media_sources {
             source.name = source_name(version).or(source.name.take());
             if reveal_path {

@@ -5,7 +5,7 @@ use rustyfin_models::dto::{
 };
 use uuid::Uuid;
 
-use crate::transcode::profiles::{PlayMethod, decide_play_method};
+use crate::play_method::{PlayMethod, decide_play_method};
 
 /// Convert a `MediaStreamRow` to a `MediaStream` DTO.
 /// `SDR`, or `HDR` for the transfer functions HDR formats use: (range, range type).
@@ -310,7 +310,7 @@ pub fn apply_subtitle_delivery(
                 );
                 if let Some(key) = api_key {
                     url.push_str("?ApiKey=");
-                    url.push_str(&crate::transcode::names::encode_query_value(key));
+                    url.push_str(&rustyfin_media::transcode::names::encode_query_value(key));
                 }
                 stream.delivery_url = Some(url);
                 stream.is_external_url = Some(false);
@@ -324,7 +324,7 @@ fn apply_transcode_urls(
     source: &mut MediaSourceInfo,
     item_id: Uuid,
     play_session_id: &str,
-    decision: &crate::transcode::profiles::TranscodeDecision,
+    decision: &crate::play_method::TranscodeDecision,
     request: Option<&PlaybackInfoRequest>,
 ) {
     let video_codec = decision.target_video_codec.as_deref().unwrap_or("h264");
@@ -377,7 +377,7 @@ fn apply_transcode_urls(
         {
             let ranges: Vec<String> = ranges
                 .iter()
-                .map(|r| crate::transcode::names::encode_query_value(r))
+                .map(|r| rustyfin_media::transcode::names::encode_query_value(r))
                 .collect();
             url.push_str(&format!("&hevc-rangetype={}", ranges.join(",")));
         }
