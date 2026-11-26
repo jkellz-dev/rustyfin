@@ -29,7 +29,7 @@ pub struct TestApp {
     /// The data layer over `pool`.
     pub data: rustyfin_data::PgData,
     pub schema: String,
-    pub session_manager: Arc<SessionManager>,
+    pub session_manager: Arc<SessionManager<rustyfin_data::PgData>>,
     /// What `POST /System/Shutdown` and `/System/Restart` fire.
     pub shutdown: Arc<tokio::sync::Notify>,
     /// For planting transcode jobs without ffmpeg.

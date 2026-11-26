@@ -163,7 +163,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Initialize task scheduler
-    let mut task_scheduler_for_state: Option<Arc<rustyfin_services::TaskScheduler>> = None;
+    let mut task_scheduler_for_state: Option<
+        Arc<rustyfin_services::TaskScheduler<rustyfin_data::PgData>>,
+    > = None;
     if config.tasks.enabled {
         let raw_schedules: std::collections::HashMap<String, (String, Option<u64>)> = config
             .tasks
