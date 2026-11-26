@@ -9,18 +9,18 @@ use super::scheduler::ScheduledTask;
 
 // ── SearchReindexTask ────────────────────────────────────────────────
 
-pub struct SearchReindexTask {
-    search_service: Arc<crate::Search>,
+pub struct SearchReindexTask<D> {
+    search_service: Arc<rustyfin_search::SearchService<D>>,
 }
 
-impl SearchReindexTask {
-    pub fn new(search_service: Arc<crate::Search>) -> Self {
+impl<D: Data> SearchReindexTask<D> {
+    pub fn new(search_service: Arc<rustyfin_search::SearchService<D>>) -> Self {
         Self { search_service }
     }
 }
 
 #[async_trait]
-impl ScheduledTask for SearchReindexTask {
+impl<D: Data> ScheduledTask for SearchReindexTask<D> {
     fn name(&self) -> &str {
         "search_reindex"
     }
@@ -41,7 +41,7 @@ impl ScheduledTask for SearchReindexTask {
 
 // ── ActivityLogPruneTask ─────────────────────────────────────────────
 
-pub struct ActivityLogPruneTask<D = crate::Store> {
+pub struct ActivityLogPruneTask<D> {
     data: D,
     retention_days: u32,
 }
@@ -88,7 +88,7 @@ impl<D: Data> ScheduledTask for ActivityLogPruneTask<D> {
 
 // ── SessionCleanupTask ───────────────────────────────────────────────
 
-pub struct SessionCleanupTask<D = crate::Store> {
+pub struct SessionCleanupTask<D> {
     data: D,
     session_manager: Arc<crate::session::SessionManager<D>>,
     inactive_days: u32,
@@ -212,7 +212,7 @@ impl ScheduledTask for TranscodeTempCleanupTask {
 
 // ── DatabaseOptimizeTask ─────────────────────────────────────────────
 
-pub struct DatabaseOptimizeTask<D = crate::Store> {
+pub struct DatabaseOptimizeTask<D> {
     data: D,
 }
 

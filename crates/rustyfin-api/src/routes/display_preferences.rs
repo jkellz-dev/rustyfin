@@ -19,8 +19,8 @@ pub struct DisplayPreferencesQuery {
     pub client: Option<String>,
 }
 
-pub async fn get_display_preferences(
-    State(state): State<AppState>,
+pub async fn get_display_preferences<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(display_prefs_id): Path<String>,
     Query(query): Query<DisplayPreferencesQuery>,
@@ -44,8 +44,8 @@ pub async fn get_display_preferences(
     }
 }
 
-pub async fn update_display_preferences(
-    State(state): State<AppState>,
+pub async fn update_display_preferences<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(display_prefs_id): Path<String>,
     Query(query): Query<DisplayPreferencesQuery>,

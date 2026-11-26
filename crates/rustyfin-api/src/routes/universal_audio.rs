@@ -27,8 +27,8 @@ pub struct UniversalAudioParams {
 ///
 /// HLS redirects to the audio playlist; otherwise the file is streamed from
 /// this URL, as Jellyfin does (a redirect lost a token sent in the query).
-pub async fn get_universal_audio(
-    State(state): State<AppState>,
+pub async fn get_universal_audio<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<UniversalAudioParams>,

@@ -21,8 +21,8 @@ pub struct YearsQuery {
 }
 
 /// `GET /Years` — Browsable year list with per-type child counts.
-pub async fn get_years(
-    State(state): State<AppState>,
+pub async fn get_years<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<YearsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -82,8 +82,8 @@ pub async fn get_years(
 }
 
 /// `GET /Years/{year}` — Get a specific year entity with per-type counts.
-pub async fn get_year(
-    State(state): State<AppState>,
+pub async fn get_year<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(year): Path<i32>,
 ) -> Result<Json<BaseItemDto>, ApiError> {

@@ -38,8 +38,8 @@ pub struct PlayStats {
 }
 
 /// `GET /Users/{userId}/PlayStats`: minutes and plays per kind of media.
-pub async fn get_play_stats(
-    State(state): State<AppState>,
+pub async fn get_play_stats<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<PlayStats>, ApiError> {
@@ -100,8 +100,8 @@ pub struct PlayEntry {
 }
 
 /// The picture of each item still in the library: (item to ask, tag).
-async fn pictures(
-    state: &AppState,
+async fn pictures<D: Data>(
+    state: &AppState<D>,
     item_ids: &[Uuid],
 ) -> std::collections::HashMap<Uuid, (Uuid, String)> {
     use super::items;
@@ -153,8 +153,8 @@ async fn pictures(
 
 /// `GET /Users/{userId}/PlayHistory`: plays, newest first, filterable by
 /// kind, words and dates.
-pub async fn get_play_history(
-    State(state): State<AppState>,
+pub async fn get_play_history<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(user_id): Path<Uuid>,
     Query(q): Query<HistoryQuery>,

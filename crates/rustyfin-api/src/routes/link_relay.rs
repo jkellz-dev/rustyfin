@@ -25,8 +25,8 @@ const STREAM_HEADERS: [HeaderName; 6] = [
 
 /// Play a linked copy as is: the friend's `/Videos/{id}/stream`, ranges
 /// passed through both ways.
-pub(crate) async fn stream(
-    state: &AppState,
+pub(crate) async fn stream<D: Data>(
+    state: &AppState<D>,
     item: &MediaItem,
     headers: &HeaderMap,
 ) -> Result<Response, ApiError> {
@@ -96,8 +96,8 @@ pub(crate) fn head(item: &MediaItem, content_type: &str) -> Response {
 
 /// Artwork of a linked copy (`link://...` in `images.path`), sized by the
 /// friend's server.
-pub(crate) async fn image(
-    state: &AppState,
+pub(crate) async fn image<D: Data>(
+    state: &AppState<D>,
     source_path: &str,
     opts: &ImageOptions,
     etag_matches: impl Fn(&str) -> bool,
@@ -154,8 +154,8 @@ pub(crate) async fn image(
         .unwrap())
 }
 
-fn unreachable(
-    state: &AppState,
+fn unreachable<D: Data>(
+    state: &AppState<D>,
     link: &rustyfin_services::link::Link,
     e: &impl std::fmt::Display,
 ) -> ApiError {
@@ -173,8 +173,8 @@ fn unreachable(
 /// URL is rewritten to this server's relay and loses the link's token: the
 /// client adds its own, as for this server's transcodes. A friend that does
 /// not answer leaves the copy as it was (not playable here, listed last).
-pub(crate) async fn offer_transcodes(
-    state: &AppState,
+pub(crate) async fn offer_transcodes<D: Data>(
+    state: &AppState<D>,
     info: &mut rustyfin_models::dto::PlaybackInfoResponse,
     request: &serde_json::Value,
 ) {
@@ -259,8 +259,8 @@ pub(crate) async fn offer_transcodes(
 /// `audio/<id>/...` of the link's own copies the user may see; the link's
 /// token is added here and taken out of every playlist, and the client's
 /// `api_key` (if it sent one) is put on every URI in its place.
-pub async fn relay_media(
-    State(state): State<AppState>,
+pub async fn relay_media<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((link_id, path)): Path<(uuid::Uuid, String)>,
     RawQuery(query): RawQuery,

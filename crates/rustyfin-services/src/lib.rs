@@ -35,24 +35,17 @@ pub mod viewer;
 pub use error::{ServiceError, ServiceResult};
 pub use viewer::Viewer;
 
-/// The data layer the server runs on. The API crates name it through here,
-/// never the data crate itself (`CLAUDE.md`, "Layers").
-pub type Store = rustyfin_data::PgData;
-
-/// Search over [`Store`].
-pub type Search = rustyfin_search::SearchService<Store>;
-
 use rustyfin_models::data::Data;
 
 /// The services over one data layer. Cheap to clone when the data layer is.
 #[derive(Clone)]
 pub struct Services<D> {
     data: D,
-    scans: scans::ScanRuntime,
+    scans: scans::ScanRuntime<D>,
 }
 
 impl<D: Data> Services<D> {
-    pub fn new(data: D, scans: scans::ScanRuntime) -> Self {
+    pub fn new(data: D, scans: scans::ScanRuntime<D>) -> Self {
         Self { data, scans }
     }
 
@@ -109,20 +102,18 @@ impl<D: Data> Services<D> {
     pub fn playlists(&self) -> playlists::Playlists<'_, D> {
         playlists::Playlists { data: &self.data }
     }
-}
 
-impl Services<Store> {
-    /// Lists of items, Latest and Continue Watching, ranked by the
-    /// server's search index.
-    pub fn browse(&self) -> browse::Browse<'_, Store> {
+    /// Lists of items, Latest and Continue Watching, ranked by the search
+    /// index.
+    pub fn browse(&self) -> browse::Browse<'_, D> {
         browse::Browse {
             data: &self.data,
             search: Some(&self.scans.search),
         }
     }
 
-    /// Starting library scans (Postgres only for now, see [`scans`]).
-    pub fn scans(&self) -> scans::Scans<'_> {
+    /// Starting library scans.
+    pub fn scans(&self) -> scans::Scans<'_, D> {
         scans::Scans {
             data: &self.data,
             runtime: &self.scans,

@@ -3,6 +3,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
+use rustyfin_models::data::Data;
 use serde::Deserialize;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
@@ -55,8 +56,8 @@ fn default_true() -> bool {
 
 /// `GET /Sessions` — List active sessions.
 /// Non-admin users only see their own sessions.
-pub async fn get_sessions(
-    State(state): State<AppState>,
+pub async fn get_sessions<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<SessionsQuery>,
 ) -> Result<Json<Vec<SessionInfoDto>>, ApiError> {
@@ -165,8 +166,8 @@ pub async fn logout(_auth: AuthenticatedUser) -> StatusCode {
 }
 
 /// `POST /Sessions/Capabilities` — Report basic capabilities (query params).
-pub async fn post_capabilities(
-    State(state): State<AppState>,
+pub async fn post_capabilities<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<CapabilitiesQuery>,
 ) -> StatusCode {
@@ -209,8 +210,8 @@ pub async fn post_capabilities(
 }
 
 /// `POST /Sessions/Capabilities/Full` — Report full capabilities (JSON body).
-pub async fn post_full_capabilities(
-    State(state): State<AppState>,
+pub async fn post_full_capabilities<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Json(body): Json<ClientCapabilitiesDto>,
 ) -> StatusCode {

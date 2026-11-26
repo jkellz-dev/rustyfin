@@ -1,6 +1,7 @@
 //! Items that stand for a name: a person, genre, music genre, studio or year.
 //! Jellyfin sends them with the fields of any item (user data, image fields,
 //! counts, dates); clients read those off them without checking.
+use rustyfin_models::data::Data;
 
 use std::collections::HashMap;
 
@@ -12,8 +13,8 @@ use super::items::attach_user_data;
 
 /// The fields every name item in a list carries; `user_data` for the lists
 /// Jellyfin sends it on (people, studios, years).
-pub(crate) async fn finish_list(
-    data: &rustyfin_services::Store,
+pub(crate) async fn finish_list<D: Data>(
+    data: &D,
     user_id: Uuid,
     dtos: &mut [BaseItemDto],
     user_data: bool,
@@ -27,8 +28,8 @@ pub(crate) async fn finish_list(
 }
 
 /// A single name item, as `/Persons/{name}` and the like answer it.
-pub(crate) async fn finish_detail(
-    data: &rustyfin_services::Store,
+pub(crate) async fn finish_detail<D: Data>(
+    data: &D,
     user_id: Uuid,
     mut dto: BaseItemDto,
     date_created: Option<DateTime<Utc>>,

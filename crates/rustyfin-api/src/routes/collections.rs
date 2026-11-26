@@ -25,8 +25,8 @@ pub struct CollectionItemsQuery {
     pub ids: Option<String>,
 }
 
-pub async fn create_collection(
-    State(state): State<AppState>,
+pub async fn create_collection<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(query): Query<CreateCollectionRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -42,8 +42,8 @@ pub async fn create_collection(
     Ok(Json(serde_json::json!({ "Id": id })))
 }
 
-pub async fn add_collection_items(
-    State(state): State<AppState>,
+pub async fn add_collection_items<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Path(collection_id): Path<Uuid>,
     Query(query): Query<CollectionItemsQuery>,
@@ -57,8 +57,8 @@ pub async fn add_collection_items(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-pub async fn remove_collection_items(
-    State(state): State<AppState>,
+pub async fn remove_collection_items<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Path(collection_id): Path<Uuid>,
     Query(query): Query<CollectionItemsQuery>,
@@ -74,8 +74,8 @@ pub async fn remove_collection_items(
 
 /// `GET /Items/{itemId}/Collections` (Rustyfin): the collections an item is in,
 /// by name, for the film page's link to its collection.
-pub async fn get_item_collections(
-    State(state): State<AppState>,
+pub async fn get_item_collections<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<rustyfin_models::dto::QueryResult<rustyfin_models::dto::BaseItemDto>>, ApiError> {

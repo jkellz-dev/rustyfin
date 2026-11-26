@@ -1,9 +1,8 @@
 use axum::{
-    extract::{FromRef, FromRequestParts},
+    extract::FromRequestParts,
     http::{StatusCode, header, request::Parts},
 };
 use rustyfin_models::data::{Data, DataError, SessionStore};
-use rustyfin_services::Store as PgData;
 use uuid::Uuid;
 
 use rustyfin_models::dto::MediaBrowserAuth;
@@ -41,7 +40,7 @@ pub fn socket_token(headers: &axum::http::HeaderMap, query: Option<&str>) -> Opt
 }
 
 /// Authenticated user extracted from the MediaBrowser auth header.
-/// Used as an Axum extractor on any state `S` where `PgData: FromRef<S>`.
+/// Used as an Axum extractor on any state `S` that is a [`DataState`].
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
     pub user_id: Uuid,
@@ -108,8 +107,7 @@ pub fn parse_mediabrowser_header(value: &str) -> MediaBrowserAuth {
 
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
-    PgData: FromRef<S>,
-    S: Send + Sync,
+    S: DataState,
 {
     type Rejection = StatusCode;
 
@@ -123,14 +121,14 @@ where
         if parts.extensions.get::<Unvouched>().is_some() {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        let data = PgData::from_ref(state);
+        let data = state.data();
 
         let token = request_token(&parts.headers, parts.uri.query());
 
         let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
 
         let ResolvedToken { session, user } =
-            resolve_token(&data, &token).await.map_err(|e| match e {
+            resolve_token(data, &token).await.map_err(|e| match e {
                 // Busy or unreachable database: 503, never a 401 that would
                 // sign the client out.
                 TokenError::Database(DataError::Unavailable(_)) => StatusCode::SERVICE_UNAVAILABLE,
@@ -154,6 +152,12 @@ where
     }
 }
 
+/// Application state that holds a data layer, for the extractors here.
+pub trait DataState: Send + Sync {
+    type Data: Data;
+    fn data(&self) -> &Self::Data;
+}
+
 /// Marks a request a forward-auth proxy named nobody on, where one is
 /// configured: no token makes it anybody's (the proxy is the authentication).
 #[derive(Debug, Clone, Copy)]
@@ -165,8 +169,7 @@ pub struct AdminUser(pub AuthenticatedUser);
 
 impl<S> FromRequestParts<S> for AdminUser
 where
-    PgData: FromRef<S>,
-    S: Send + Sync,
+    S: DataState,
 {
     type Rejection = StatusCode;
 
@@ -185,8 +188,7 @@ pub struct OptionalUser(pub Option<AuthenticatedUser>);
 
 impl<S> FromRequestParts<S> for OptionalUser
 where
-    PgData: FromRef<S>,
-    S: Send + Sync,
+    S: DataState,
 {
     type Rejection = StatusCode;
 

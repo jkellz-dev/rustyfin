@@ -14,8 +14,8 @@ use crate::error::ApiError;
 use crate::router::AppState;
 
 /// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.vtt`
-pub async fn get_subtitle_stream(
-    State(state): State<AppState>,
+pub async fn get_subtitle_stream<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, stream_index)): Path<(Uuid, i32)>,
 ) -> Result<Response, ApiError> {
@@ -24,8 +24,8 @@ pub async fn get_subtitle_stream(
 }
 
 /// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.vtt`
-pub async fn get_subtitle_stream_with_source(
-    State(state): State<AppState>,
+pub async fn get_subtitle_stream_with_source<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, media_source_id, stream_index)): Path<(Uuid, String, i32)>,
 ) -> Result<Response, ApiError> {
@@ -35,8 +35,8 @@ pub async fn get_subtitle_stream_with_source(
 }
 
 /// `GET /Videos/{itemId}/Subtitles/{streamIndex}/Stream.{format}`
-pub async fn get_subtitle_stream_format(
-    State(state): State<AppState>,
+pub async fn get_subtitle_stream_format<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, stream_index, format)): Path<(Uuid, i32, String)>,
 ) -> Result<Response, ApiError> {
@@ -46,8 +46,8 @@ pub async fn get_subtitle_stream_format(
 }
 
 /// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}`
-pub async fn get_subtitle_stream_source_format(
-    State(state): State<AppState>,
+pub async fn get_subtitle_stream_source_format<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, media_source_id, stream_index, format)): Path<(Uuid, String, i32, String)>,
 ) -> Result<Response, ApiError> {
@@ -60,8 +60,8 @@ pub async fn get_subtitle_stream_source_format(
 /// `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/{startPositionTicks}/Stream.{format}`:
 /// the address PlaybackInfo's `DeliveryUrl` gives (as Jellyfin's does, with a
 /// start of 0). A later start is not applied: the whole file is sent.
-pub async fn get_subtitle_stream_at(
-    State(state): State<AppState>,
+pub async fn get_subtitle_stream_at<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, media_source_id, stream_index, _start, format)): Path<(
         Uuid,
@@ -77,8 +77,8 @@ pub async fn get_subtitle_stream_at(
     serve_subtitle(&state, file, stream_index, fmt).await
 }
 
-async fn serve_subtitle(
-    state: &AppState,
+async fn serve_subtitle<D: Data>(
+    state: &AppState<D>,
     item_id: Uuid,
     stream_index: i32,
     output_format: &str,

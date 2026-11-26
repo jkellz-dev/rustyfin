@@ -11,8 +11,8 @@ use rustyfin_models::dto::{TaskInfoDto, TaskResultDto, TaskTriggerDto};
 use crate::error::ApiError;
 use crate::router::AppState;
 
-pub async fn get_tasks(
-    State(state): State<AppState>,
+pub async fn get_tasks<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
 ) -> Result<Json<Vec<TaskInfoDto>>, ApiError> {
     let Some(ref scheduler) = state.task_scheduler else {
@@ -67,8 +67,8 @@ pub async fn get_tasks(
     Ok(Json(dtos))
 }
 
-pub async fn get_task(
-    State(state): State<AppState>,
+pub async fn get_task<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskInfoDto>, ApiError> {
@@ -123,8 +123,8 @@ pub async fn get_task(
     }))
 }
 
-pub async fn start_task(
-    State(state): State<AppState>,
+pub async fn start_task<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
     Path(task_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
@@ -151,7 +151,7 @@ const TICKS_PER_SECOND: i64 = 10_000_000;
 /// time every day (`DailyTrigger`), on one weekday (`WeeklyTrigger`), or every
 /// N minutes or hours (`IntervalTrigger`). Anything else lists no trigger
 /// rather than a wrong one.
-fn triggers_for(state: &AppState, schedule_name: &str) -> Vec<TaskTriggerDto> {
+fn triggers_for<D: Data>(state: &AppState<D>, schedule_name: &str) -> Vec<TaskTriggerDto> {
     state.scan_schedules["Schedules"][schedule_name]
         .as_str()
         .and_then(trigger_for_cron)

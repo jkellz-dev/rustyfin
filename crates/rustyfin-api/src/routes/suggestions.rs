@@ -25,8 +25,8 @@ pub struct SuggestionsQuery {
     pub enable_total_record_count: Option<bool>,
 }
 
-pub async fn get_suggestions(
-    State(state): State<AppState>,
+pub async fn get_suggestions<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<SuggestionsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {

@@ -32,8 +32,8 @@ pub struct ImageParams {
 }
 
 /// `GET /Items/{itemId}/Images/{imageType}` -- Serve item image.
-pub async fn get_item_image(
-    State(state): State<AppState>,
+pub async fn get_item_image<D: Data>(
+    State(state): State<AppState<D>>,
     user: OptionalUser,
     Path((item_id, image_type)): Path<(Uuid, String)>,
     Query(params): Query<ImageParams>,
@@ -63,8 +63,8 @@ pub async fn get_item_image(
 /// answer 404, as every other item route does. Requests without a user are served
 /// as before: clients load images through plain `<img>` tags that carry no token,
 /// and item ids are random.
-async fn check_image_access(
-    state: &AppState,
+async fn check_image_access<D: Data>(
+    state: &AppState<D>,
     user: &OptionalUser,
     item_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -98,7 +98,10 @@ async fn check_image_access(
 
 /// A person's headshot in the shared people folder, if the metadata CLI has
 /// fetched one: by TMDB id, else by the photo's address (never by name).
-pub(crate) fn headshot_path(state: &AppState, person: &Person) -> Option<std::path::PathBuf> {
+pub(crate) fn headshot_path<D: Data>(
+    state: &AppState<D>,
+    person: &Person,
+) -> Option<std::path::PathBuf> {
     let dir = state.people_cache_dir.as_ref()?;
     let path = dir.join(rustyfin_services::headshot_file_name(
         person.provider_person_id.as_deref(),
@@ -121,8 +124,8 @@ pub(crate) fn headshot_tag(path: &std::path::Path) -> Option<String> {
 
 /// The placeholder for an item or library with no primary artwork. Other image
 /// types have no placeholder: clients only require a primary image.
-async fn serve_placeholder(
-    state: &AppState,
+async fn serve_placeholder<D: Data>(
+    state: &AppState<D>,
     item_id: Uuid,
     image_type: &str,
     opts: &ImageOptions,
@@ -261,8 +264,8 @@ type ImagePathTail = (Uuid, String, i32, String, String, u32, u32, String, Strin
 /// `GET /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}`:
 /// Jellyfin's older form, the query's options as path segments. The played
 /// and unplayed overlays are not drawn (as in Jellyfin, which ignores them).
-pub async fn get_item_image_by_path(
-    state: State<AppState>,
+pub async fn get_item_image_by_path<D: Data>(
+    state: State<AppState<D>>,
     user: OptionalUser,
     Path((item_id, image_type, image_index, tag, format, max_width, max_height, _, _)): Path<
         ImagePathTail,
@@ -284,8 +287,8 @@ pub async fn get_item_image_by_path(
     .await
 }
 
-pub async fn get_item_image_by_index(
-    State(state): State<AppState>,
+pub async fn get_item_image_by_index<D: Data>(
+    State(state): State<AppState<D>>,
     user: OptionalUser,
     Path((item_id, image_type, image_index)): Path<(Uuid, String, i32)>,
     Query(params): Query<ImageParams>,
@@ -308,8 +311,8 @@ pub async fn get_item_image_by_index(
     }
 }
 /// `GET /Items/{itemId}/Images` -- List all images for an item.
-pub async fn get_item_images_list(
-    State(state): State<AppState>,
+pub async fn get_item_images_list<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<Vec<ImageInfo>>, ApiError> {
@@ -347,8 +350,8 @@ pub async fn get_item_images_list(
 }
 
 /// Serve an image for any entity by UUID lookup.
-pub(crate) async fn serve_entity_image(
-    state: &AppState,
+pub(crate) async fn serve_entity_image<D: Data>(
+    state: &AppState<D>,
     entity_id: Uuid,
     image_type: &str,
     image_index: i32,
@@ -425,10 +428,10 @@ fn etag_matches(if_none_match: Option<&str>, etag: &str) -> bool {
 
 /// Serve an image, processing (resize/format convert) if needed. A request that
 /// already holds the current version gets a 304 before any resizing.
-pub(crate) async fn serve_image(
+pub(crate) async fn serve_image<D: Data>(
     source_path: &str,
     opts: &ImageOptions,
-    state: &AppState,
+    state: &AppState<D>,
     req: &ImageRequest<'_>,
 ) -> Result<Response, ApiError> {
     if source_path.starts_with(rustyfin_services::link::LINK_SCHEME) {

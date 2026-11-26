@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
-use rustyfin_models::data::User;
+use rustyfin_models::data::{Data, User};
 use rustyfin_services::users::{PolicyChange, SettingsChange};
 use uuid::Uuid;
 
@@ -81,8 +81,8 @@ pub struct UserIdQuery {
 
 /// `POST /Users/Configuration`: as `POST /Users/{userId}/Configuration`, for
 /// `?userId=` or else the signed-in user.
-pub async fn update_own_configuration(
-    state: State<AppState>,
+pub async fn update_own_configuration<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Query(q): axum::extract::Query<UserIdQuery>,
     config: Json<UserConfiguration>,
@@ -91,8 +91,8 @@ pub async fn update_own_configuration(
     update_user_configuration(state, auth, Path(user_id), config).await
 }
 
-pub async fn update_user_configuration(
-    State(state): State<AppState>,
+pub async fn update_user_configuration<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(user_id): Path<Uuid>,
     Json(config): Json<UserConfiguration>,
@@ -120,7 +120,7 @@ pub async fn update_user_configuration(
 }
 
 /// A user as Jellyfin shows them, with the libraries they are limited to.
-async fn user_dto(state: &AppState, user: &User) -> UserDto {
+async fn user_dto<D: Data>(state: &AppState<D>, user: &User) -> UserDto {
     let mut dto = user_row_to_dto(user, &state.server_id);
     if let Some(ids) = state.services.users().enabled_libraries(user).await {
         dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();
@@ -129,8 +129,8 @@ async fn user_dto(state: &AppState, user: &User) -> UserDto {
 }
 
 /// `GET /Users` — List all users.
-pub async fn list_users(
-    State(state): State<AppState>,
+pub async fn list_users<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<UserDto>>, ApiError> {
     let mut dtos = Vec::new();
@@ -141,8 +141,8 @@ pub async fn list_users(
 }
 
 /// `GET /Users/Me` — Get current user.
-pub async fn get_current_user(
-    State(state): State<AppState>,
+pub async fn get_current_user<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<UserDto>, ApiError> {
     let user = state.services.users().get(auth.user_id).await?;
@@ -150,8 +150,8 @@ pub async fn get_current_user(
 }
 
 /// `GET /Users/{id}` — Get user by ID.
-pub async fn get_user_by_id(
-    State(state): State<AppState>,
+pub async fn get_user_by_id<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserDto>, ApiError> {
@@ -166,8 +166,8 @@ pub async fn get_public_users() -> Json<Vec<UserDto>> {
 }
 
 /// `DELETE /Users/{userId}` — Delete a user (admin only). Cannot delete self.
-pub async fn delete_user(
-    State(state): State<AppState>,
+pub async fn delete_user<D: Data>(
+    State(state): State<AppState<D>>,
     admin: AdminUser,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
@@ -181,8 +181,8 @@ pub async fn delete_user(
 
 /// `POST /Users/{userId}/Policy` — Update user policy (admin only).
 /// Jellyfin clients send the full UserPolicy object as the request body.
-pub async fn update_user_policy(
-    State(state): State<AppState>,
+pub async fn update_user_policy<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Path(user_id): Path<Uuid>,
     Json(req): Json<UpdateUserPolicyRequest>,
@@ -201,8 +201,8 @@ pub async fn update_user_policy(
 }
 
 /// `GET /Users/{userId}/Images/{imageType}` — Redirect to configured user image URL.
-pub async fn get_user_image(
-    State(state): State<AppState>,
+pub async fn get_user_image<D: Data>(
+    State(state): State<AppState<D>>,
     Path((user_id, _image_type)): Path<(Uuid, String)>,
 ) -> Result<Response, ApiError> {
     let Some(ref template) = state.user_image_url_template else {
@@ -226,8 +226,8 @@ pub struct UserImageQuery {
 }
 
 /// `GET /UserImage?userId=` — a user's picture by query (Jellyfin 10.9+).
-pub async fn get_user_image_by_query(
-    State(state): State<AppState>,
+pub async fn get_user_image_by_query<D: Data>(
+    State(state): State<AppState<D>>,
     axum::extract::Query(query): axum::extract::Query<UserImageQuery>,
 ) -> Result<Response, ApiError> {
     let user_id = query.user_id.ok_or(ApiError::NotFound)?;
@@ -235,8 +235,8 @@ pub async fn get_user_image_by_query(
 }
 
 /// `GET /Users/{userId}/Images/{imageType}/{imageIndex}` — Same as above, ignoring index.
-pub async fn get_user_image_by_index(
-    State(state): State<AppState>,
+pub async fn get_user_image_by_index<D: Data>(
+    State(state): State<AppState<D>>,
     Path((user_id, image_type, _image_index)): Path<(Uuid, String, i32)>,
 ) -> Result<Response, ApiError> {
     get_user_image(State(state), Path((user_id, image_type))).await

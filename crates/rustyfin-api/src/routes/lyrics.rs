@@ -15,8 +15,8 @@ use crate::router::AppState;
 
 /// `GET /Audio/{itemId}/Lyrics`: the track's sidecar `.lrc`/`.txt` or tagged
 /// lyrics; 404 when it has none, as Jellyfin.
-pub async fn get_lyrics(
-    State(state): State<AppState>,
+pub async fn get_lyrics<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<LyricDto>, ApiError> {
@@ -52,8 +52,8 @@ pub async fn get_lyrics(
 /// `GET /MediaSegments/{itemId}`: Rustyfin detects no intros or credits, so
 /// an item's segments are an empty list (Jellyfin's answer without a segment
 /// provider); 404 for an item the caller cannot see.
-pub async fn get_media_segments(
-    State(state): State<AppState>,
+pub async fn get_media_segments<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<QueryResult<serde_json::Value>>, ApiError> {

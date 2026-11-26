@@ -14,8 +14,8 @@ use crate::error::ApiError;
 use crate::router::AppState;
 
 /// `GET /Items/{itemId}/PlaybackInfo` — Simple playback info (no device profile).
-pub async fn get_playback_info(
-    State(state): State<AppState>,
+pub async fn get_playback_info<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     headers: HeaderMap,
     uri: Uri,
@@ -67,8 +67,8 @@ pub async fn get_playback_info(
 }
 
 /// `POST /Items/{itemId}/PlaybackInfo` — Full playback info with device profile.
-pub async fn post_playback_info(
-    State(state): State<AppState>,
+pub async fn post_playback_info<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     headers: HeaderMap,
     uri: Uri,

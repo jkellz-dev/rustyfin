@@ -19,8 +19,8 @@ use crate::router::AppState;
 /// `POST /Users/AuthenticateByName` — a session for whoever the trusted
 /// proxy in front says is asking. The name and password the app sends are
 /// ignored: Rustyfin checks no passwords. Nobody vouched for: 401.
-pub async fn authenticate_by_name(
-    State(state): State<AppState>,
+pub async fn authenticate_by_name<D: Data>(
+    State(state): State<AppState<D>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(_credentials): Json<AuthenticateByNameRequest>,

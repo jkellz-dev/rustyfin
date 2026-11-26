@@ -23,8 +23,8 @@ pub struct GenresQuery {
 }
 
 /// `GET /Genres` — Browsable genre list with optional per-type counts.
-pub async fn get_genres(
-    State(state): State<AppState>,
+pub async fn get_genres<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<GenresQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -126,8 +126,8 @@ pub async fn get_genres(
 }
 
 /// `GET /Genres/{genreName}` — Get a specific genre by name.
-pub async fn get_genre(
-    State(state): State<AppState>,
+pub async fn get_genre<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(genre_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -177,8 +177,8 @@ pub async fn get_genre(
 
 /// `GET /Genres/{name}/Images/{imageType}`: the genre's picture, a title's
 /// backdrop (else poster); 404 when none of its titles has art.
-pub async fn get_genre_image(
-    State(state): State<AppState>,
+pub async fn get_genre_image<D: Data>(
+    State(state): State<AppState<D>>,
     axum::extract::Path((name, _image_type)): axum::extract::Path<(String, String)>,
     axum::extract::Query(params): axum::extract::Query<super::images::ImageParams>,
     headers: axum::http::HeaderMap,
@@ -195,8 +195,8 @@ pub async fn get_genre_image(
 }
 
 /// `GET /Genres/{name}/Images/{imageType}/{imageIndex}`: as above.
-pub async fn get_genre_image_by_index(
-    state: State<AppState>,
+pub async fn get_genre_image_by_index<D: Data>(
+    state: State<AppState<D>>,
     axum::extract::Path((name, image_type, _index)): axum::extract::Path<(String, String, i32)>,
     params: axum::extract::Query<super::images::ImageParams>,
     headers: axum::http::HeaderMap,

@@ -74,8 +74,8 @@ pub(super) fn session_id_param(raw: Option<&str>) -> Result<&str, ApiError> {
 }
 
 /// `GET /Videos/{itemId}/master.m3u8` — HLS master playlist.
-pub async fn get_master_playlist(
-    State(state): State<AppState>,
+pub async fn get_master_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
@@ -167,8 +167,8 @@ pub async fn get_master_playlist(
 
 /// `GET /Videos/{itemId}/main.m3u8` — HLS variant playlist.
 /// Starts a transcode job if one isn't already running.
-pub async fn get_variant_playlist(
-    State(state): State<AppState>,
+pub async fn get_variant_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
@@ -299,8 +299,8 @@ pub async fn get_variant_playlist(
 }
 
 /// `GET /Videos/{itemId}/hls1/{playSessionId}/{segmentId}.{container}` — HLS segment.
-pub async fn get_segment(
-    State(state): State<AppState>,
+pub async fn get_segment<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_item_id, play_session_id, segment_file)): Path<(Uuid, String, String)>,
 ) -> Result<Response, ApiError> {
@@ -316,8 +316,8 @@ fn segment_number(segment_file: &str) -> Option<u32> {
 }
 
 /// Shared segment-serving logic for both video and audio HLS segments.
-async fn get_segment_inner(
-    state: &AppState,
+async fn get_segment_inner<D: Data>(
+    state: &AppState<D>,
     user_id: Uuid,
     play_session_id: &str,
     segment_file: &str,
@@ -396,8 +396,8 @@ pub struct DeleteEncodingParams {
 }
 
 /// `DELETE /Videos/ActiveEncodings` — Kill active transcode jobs.
-pub async fn delete_active_encodings(
-    State(state): State<AppState>,
+pub async fn delete_active_encodings<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(params): Query<DeleteEncodingParams>,
 ) -> StatusCode {
@@ -435,8 +435,8 @@ pub async fn head_master_playlist(_auth: AuthenticatedUser) -> Response {
 // ── Audio HLS endpoints ─────────────────────────────────────────────
 
 /// `GET /Audio/{itemId}/master.m3u8` — Audio HLS master playlist.
-pub async fn get_audio_master_playlist(
-    State(state): State<AppState>,
+pub async fn get_audio_master_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
@@ -485,8 +485,8 @@ pub async fn get_audio_master_playlist(
 }
 
 /// `GET /Audio/{itemId}/main.m3u8` — Audio HLS variant playlist.
-pub async fn get_audio_variant_playlist(
-    State(state): State<AppState>,
+pub async fn get_audio_variant_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<HlsQueryParams>,
@@ -583,8 +583,8 @@ pub async fn get_audio_variant_playlist(
 }
 
 /// `GET /Audio/{itemId}/hls1/{playSessionId}/{segmentFile}` — Audio HLS segment.
-pub async fn get_audio_segment(
-    State(state): State<AppState>,
+pub async fn get_audio_segment<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_item_id, play_session_id, segment_file)): Path<(Uuid, String, String)>,
 ) -> Result<Response, ApiError> {

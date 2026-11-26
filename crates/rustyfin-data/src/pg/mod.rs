@@ -61,22 +61,6 @@ impl PgData {
     /// Transitional: while route handlers still hold the pool themselves,
     /// they wrap it here. Once every caller goes through the traits, the
     /// server opens the data layer directly and this goes.
-    /// The same database seen without what links hold: a server linking
-    /// this one is served from it (its connections set
-    /// `rustyfin.local_only`, which the views read).
-    pub fn local_only(&self) -> Self {
-        let pool = &self.activity_log.pool;
-        let options = (*pool.connect_options())
-            .clone()
-            .options([("rustyfin.local_only", "on")]);
-        Self::from_pool(
-            &sqlx::postgres::PgPoolOptions::new()
-                .max_connections(5)
-                .acquire_timeout(crate::pool::ACQUIRE_TIMEOUT)
-                .connect_lazy_with(options),
-        )
-    }
-
     pub fn from_pool(pool: &PgPool) -> Self {
         Self {
             activity_log: PgActivityLog { pool: pool.clone() },
@@ -105,6 +89,22 @@ impl PgData {
 }
 
 impl Data for PgData {
+    /// The same database seen without what links hold: a server linking
+    /// this one is served from it (its connections set
+    /// `rustyfin.local_only`, which the views read).
+    fn local_only(&self) -> Self {
+        let pool = &self.activity_log.pool;
+        let options = (*pool.connect_options())
+            .clone()
+            .options([("rustyfin.local_only", "on")]);
+        Self::from_pool(
+            &sqlx::postgres::PgPoolOptions::new()
+                .max_connections(5)
+                .acquire_timeout(crate::pool::ACQUIRE_TIMEOUT)
+                .connect_lazy_with(options),
+        )
+    }
+
     type ActivityLog = PgActivityLog;
     fn activity_log(&self) -> &PgActivityLog {
         &self.activity_log

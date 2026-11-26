@@ -16,7 +16,7 @@ use crate::router::AppState;
 const SHOW_MS: u32 = 10_000;
 
 /// Listen for links going down and coming back, for as long as the server runs.
-pub fn spawn(state: AppState) {
+pub fn spawn<D: Data>(state: AppState<D>) {
     let mut events = state.links.subscribe();
     tokio::spawn(async move {
         loop {
@@ -45,7 +45,7 @@ pub fn message(event: &LinkEvent) -> (String, String) {
     }
 }
 
-async fn tell(state: &AppState, event: &LinkEvent) {
+async fn tell<D: Data>(state: &AppState<D>, event: &LinkEvent) {
     let users = match who_sees(state, event.link_id).await {
         Ok(users) => users,
         Err(e) => {
@@ -77,7 +77,7 @@ async fn tell(state: &AppState, event: &LinkEvent) {
 }
 
 /// Users who can see a library holding the link's titles.
-async fn who_sees(state: &AppState, link_id: Uuid) -> DataResult<Vec<Uuid>> {
+async fn who_sees<D: Data>(state: &AppState<D>, link_id: Uuid) -> DataResult<Vec<Uuid>> {
     let libraries = state.data.links().libraries_of(link_id).await?;
     state.data.users().seeing_libraries(&libraries).await
 }

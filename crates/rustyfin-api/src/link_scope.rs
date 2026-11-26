@@ -12,6 +12,7 @@
 //! from a link is left out there, in every view at once (lists, search,
 //! Latest, a title's versions, an item by id). Libraries made for a friend's
 //! library are left out too, and the relay to friends answers 404.
+use rustyfin_models::data::Data;
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -42,13 +43,13 @@ pub fn forget() {
 /// What [`dispatch`] needs: the full data layer to look tokens up, and the routes
 /// for linking servers.
 #[derive(Clone)]
-pub struct LinkScope {
-    pub data: rustyfin_services::Store,
+pub struct LinkScope<D> {
+    pub data: D,
     pub local_routes: Router,
 }
 
-impl LinkScope {
-    pub fn new(data: rustyfin_services::Store, local_routes: Router) -> Self {
+impl<D: Data> LinkScope<D> {
+    pub fn new(data: D, local_routes: Router) -> Self {
         Self { data, local_routes }
     }
 
@@ -73,7 +74,11 @@ impl LinkScope {
 
 /// Middleware before routing: a linking server's request goes to the
 /// local-only routes.
-pub async fn dispatch(State(scope): State<LinkScope>, req: Request, next: Next) -> Response {
+pub async fn dispatch<D: Data>(
+    State(scope): State<LinkScope<D>>,
+    req: Request,
+    next: Next,
+) -> Response {
     let token = rustyfin_auth::middleware::request_token(req.headers(), req.uri().query());
     if let Some(token) = token
         && scope.is_linking(&token).await

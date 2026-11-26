@@ -1,9 +1,9 @@
+use crate::middleware::DataState;
 use axum::{
-    extract::{FromRef, FromRequestParts},
+    extract::FromRequestParts,
     http::{StatusCode, request::Parts},
 };
 use rustyfin_models::data::{ApiKeyStore, Data};
-use rustyfin_services::Store as PgData;
 
 /// Authenticated via API key (X-Api-Key header or api_key query param).
 #[derive(Debug, Clone)]
@@ -18,13 +18,12 @@ fn hash_key(key: &str) -> String {
 
 impl<S> FromRequestParts<S> for ApiKeyUser
 where
-    PgData: FromRef<S>,
-    S: Send + Sync,
+    S: DataState,
 {
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let data = PgData::from_ref(state);
+        let data = state.data();
 
         // Try X-Api-Key header
         let key = parts

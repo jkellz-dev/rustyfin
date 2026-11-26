@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 futures-util.workspace = true
 rustyfin-common.workspace = true
-rustyfin-data.workspace = true
 rustyfin-models.workspace = true
 
 tokio.workspace = true

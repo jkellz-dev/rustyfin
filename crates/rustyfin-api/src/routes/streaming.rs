@@ -24,8 +24,8 @@ pub struct StreamQueryParams {
 }
 
 /// `GET /Videos/{itemId}/stream` — Direct play video stream.
-pub async fn stream_video(
-    State(state): State<AppState>,
+pub async fn stream_video<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<StreamQueryParams>,
@@ -38,8 +38,8 @@ pub async fn stream_video(
 }
 
 /// `GET /Videos/{itemId}/stream.{container}` — Direct play video stream with container suffix.
-pub async fn stream_video_container(
-    State(state): State<AppState>,
+pub async fn stream_video_container<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
     Query(params): Query<StreamQueryParams>,
@@ -52,8 +52,8 @@ pub async fn stream_video_container(
 }
 
 /// `GET /Audio/{itemId}/stream` — Direct play audio stream.
-pub async fn stream_audio(
-    State(state): State<AppState>,
+pub async fn stream_audio<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     headers: HeaderMap,
@@ -63,8 +63,8 @@ pub async fn stream_audio(
 }
 
 /// `GET /Audio/{itemId}/stream.{container}` — Direct play audio stream with container suffix.
-pub async fn stream_audio_container(
-    State(state): State<AppState>,
+pub async fn stream_audio_container<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
     headers: HeaderMap,
@@ -75,8 +75,8 @@ pub async fn stream_audio_container(
 
 /// `GET /Items/{itemId}/File` — the title's file as it is on disk; Finamp
 /// plays tracks from here.
-pub async fn item_file(
-    State(state): State<AppState>,
+pub async fn item_file<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     headers: HeaderMap,
@@ -87,8 +87,8 @@ pub async fn item_file(
 
 /// `GET /Items/{itemId}/Download` — the file as an attachment named as on
 /// disk, for clients that keep a copy (Finamp's downloads).
-pub async fn download_item(
-    State(state): State<AppState>,
+pub async fn download_item<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     headers: HeaderMap,
@@ -141,8 +141,8 @@ fn content_disposition(name: &str) -> String {
 }
 
 /// `HEAD /Videos/{itemId}/stream` — Stream metadata without body.
-pub async fn head_stream(
-    State(state): State<AppState>,
+pub async fn head_stream<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Response, ApiError> {
@@ -151,8 +151,8 @@ pub async fn head_stream(
 }
 
 /// `HEAD /Videos/{itemId}/stream.{container}` — Stream metadata without body (container variant).
-pub async fn head_stream_container(
-    State(state): State<AppState>,
+pub async fn head_stream_container<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((item_id, _container)): Path<(Uuid, String)>,
 ) -> Result<Response, ApiError> {
@@ -160,7 +160,10 @@ pub async fn head_stream_container(
     head_stream_inner(&state, item_id).await
 }
 
-async fn head_stream_inner(state: &AppState, item_id: Uuid) -> Result<Response, ApiError> {
+async fn head_stream_inner<D: Data>(
+    state: &AppState<D>,
+    item_id: Uuid,
+) -> Result<Response, ApiError> {
     let item = state
         .data
         .media_items()
@@ -192,8 +195,8 @@ async fn head_stream_inner(state: &AppState, item_id: Uuid) -> Result<Response, 
     Ok(response.body(Body::empty()).unwrap())
 }
 
-pub(crate) async fn serve_item_file(
-    state: &AppState,
+pub(crate) async fn serve_item_file<D: Data>(
+    state: &AppState<D>,
     item_id: Uuid,
     headers: &HeaderMap,
 ) -> Result<Response, ApiError> {

@@ -14,8 +14,8 @@ use crate::router::AppState;
 
 /// The item whose file plays for `item_id` and a client's `MediaSourceId`: one
 /// of the film's versions when that is what it names, else the film itself.
-pub(crate) async fn source_item(
-    state: &AppState,
+pub(crate) async fn source_item<D: Data>(
+    state: &AppState<D>,
     item_id: Uuid,
     media_source_id: Option<&str>,
 ) -> Result<Uuid, ApiError> {
@@ -32,7 +32,7 @@ pub(crate) async fn source_item(
 }
 
 /// The film's best copy: itself, or one of its versions if better.
-async fn best_copy(state: &AppState, item_id: Uuid) -> Result<Uuid, ApiError> {
+async fn best_copy<D: Data>(state: &AppState<D>, item_id: Uuid) -> Result<Uuid, ApiError> {
     let versions = state.data.media_items().list_versions(&[item_id]).await?;
     if versions.is_empty() {
         return Ok(item_id);
@@ -61,8 +61,8 @@ fn quality(row: &MediaItem, streams: &[MediaStream]) -> Quality {
     Quality::of_rows(streams, row.total_bitrate.map(i64::from))
 }
 
-async fn streams_by_item(
-    data: &rustyfin_services::Store,
+async fn streams_by_item<D: Data>(
+    data: &D,
     ids: &[Uuid],
 ) -> std::collections::HashMap<Uuid, Vec<MediaStream>> {
     let mut streams: std::collections::HashMap<Uuid, Vec<MediaStream>> =
@@ -120,8 +120,8 @@ fn mark_linked(source: &mut rustyfin_models::dto::MediaSourceInfo) {
 /// Give films with versions one media source per version (the best first;
 /// on a tie the film's own) and `MediaSourceCount`, as Jellyfin does. One
 /// query for the page.
-pub(crate) async fn attach_versions(
-    data: &rustyfin_services::Store,
+pub(crate) async fn attach_versions<D: Data>(
+    data: &D,
     items: &[MediaItem],
     dtos: &mut [BaseItemDto],
     reveal_path: bool,
@@ -212,8 +212,8 @@ pub(crate) fn order_sources(
 /// best first and each named by its label; only the one asked for when the
 /// request names a `MediaSourceId` (as Jellyfin). Returns each copy's
 /// quality, to order the sources again once more of them can play.
-pub(crate) async fn add_playback_versions(
-    state: &AppState,
+pub(crate) async fn add_playback_versions<D: Data>(
+    state: &AppState<D>,
     item: &MediaItem,
     info: &mut PlaybackInfoResponse,
     request: Option<&PlaybackInfoRequest>,

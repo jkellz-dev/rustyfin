@@ -22,8 +22,8 @@ pub struct ActivityLogQuery {
 }
 
 /// `GET /System/ActivityLog/Entries` — List activity log entries (admin only).
-pub async fn get_log_entries(
-    State(state): State<AppState>,
+pub async fn get_log_entries<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(query): Query<ActivityLogQuery>,
 ) -> Result<Json<QueryResult<ActivityLogEntryDto>>, ApiError> {

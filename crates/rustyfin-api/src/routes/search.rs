@@ -28,8 +28,8 @@ pub struct SearchQuery {
 }
 
 /// `GET /Search/Hints` — Search across all media.
-pub async fn search_hints(
-    State(state): State<AppState>,
+pub async fn search_hints<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<SearchHintResult>, ApiError> {

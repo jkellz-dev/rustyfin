@@ -68,6 +68,10 @@ pub use users::{User, UserSettings, UserStore};
 /// (`data.libraries().find_by_id(id)`). Services are generic over this
 /// trait; `rustyfin-server` picks the implementation.
 pub trait Data: Clone + Send + Sync + 'static {
+    /// The same data without what linked servers hold: a server linking
+    /// this one is served from it, so links never chain.
+    fn local_only(&self) -> Self;
+
     /// Activity log.
     type ActivityLog: ActivityLogStore + Send + Sync;
     fn activity_log(&self) -> &Self::ActivityLog;

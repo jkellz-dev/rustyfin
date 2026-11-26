@@ -59,8 +59,8 @@ pub struct EpisodesQuery {
 }
 
 /// `GET /Shows/NextUp` — Next unwatched episode per series.
-pub async fn get_next_up(
-    State(state): State<AppState>,
+pub async fn get_next_up<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<NextUpQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -94,8 +94,8 @@ pub async fn get_next_up(
     Ok(Json(result))
 }
 
-async fn enrich_next_up_dtos(
-    state: &AppState,
+async fn enrich_next_up_dtos<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     items: &[MediaItem],
     dtos: &mut [BaseItemDto],
@@ -132,8 +132,8 @@ async fn enrich_next_up_dtos(
 }
 
 /// `GET /Shows/{seriesId}/Seasons` — List seasons for a series.
-pub async fn get_seasons(
-    State(state): State<AppState>,
+pub async fn get_seasons<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(series_id): Path<Uuid>,
     Query(query): Query<SeasonsQuery>,
@@ -195,8 +195,8 @@ pub async fn get_seasons(
 }
 
 /// `GET /Shows/{seriesId}/Episodes` — List episodes, optionally filtered by season.
-pub async fn get_episodes(
-    State(state): State<AppState>,
+pub async fn get_episodes<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(series_id): Path<Uuid>,
     Query(query): Query<EpisodesQuery>,
@@ -240,8 +240,8 @@ pub struct UpcomingQuery {
 }
 
 /// `GET /Shows/Upcoming` — Episodes with future air dates, ordered by premiere date.
-pub async fn get_upcoming(
-    State(state): State<AppState>,
+pub async fn get_upcoming<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<UpcomingQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -283,8 +283,8 @@ pub async fn get_upcoming(
 }
 
 /// Shared enrichment for episode DTOs: images + user data.
-async fn enrich_episode_dtos(
-    state: &AppState,
+async fn enrich_episode_dtos<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     items: &[MediaItem],
     dtos: &mut [BaseItemDto],

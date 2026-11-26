@@ -28,7 +28,7 @@ const CACHE_SIZE_TTL: Duration = Duration::from_secs(5 * 60);
 const CACHE_COUNT_WAIT: Duration = Duration::from_secs(5);
 
 /// The whole report.
-pub async fn system_health(state: &AppState, libs: &[Library]) -> SystemHealth {
+pub async fn system_health<D: Data>(state: &AppState<D>, libs: &[Library]) -> SystemHealth {
     let database = database_health(state).await;
     let search = state.search_service.health().await;
     let search = SearchHealth {
@@ -69,7 +69,7 @@ pub async fn system_health(state: &AppState, libs: &[Library]) -> SystemHealth {
     }
 }
 
-async fn database_health(state: &AppState) -> DatabaseHealth {
+async fn database_health<D: Data>(state: &AppState<D>) -> DatabaseHealth {
     let started = Instant::now();
     let result = state.data.status().ping().await;
     let connections = state.data.status().connections();

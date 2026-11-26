@@ -10,8 +10,8 @@ use crate::router::AppState;
 
 /// The start or progress report, for the play history: the session's app and
 /// device come from the session manager.
-async fn heard(
-    state: &AppState,
+async fn heard<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     item: uuid::Uuid,
     play_session: Option<&str>,
@@ -38,8 +38,8 @@ async fn heard(
 }
 
 /// `POST /Sessions/Playing` — Report playback started.
-pub async fn report_playback_start(
-    State(state): State<AppState>,
+pub async fn report_playback_start<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Json(body): Json<PlaybackStartInfo>,
 ) -> Result<StatusCode, ApiError> {
@@ -91,8 +91,8 @@ pub async fn report_playback_start(
 }
 
 /// `POST /Sessions/Playing/Progress` — Report playback progress.
-pub async fn report_playback_progress(
-    State(state): State<AppState>,
+pub async fn report_playback_progress<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Json(body): Json<PlaybackProgressInfo>,
 ) -> Result<StatusCode, ApiError> {
@@ -164,8 +164,8 @@ pub async fn report_playback_progress(
 }
 
 /// `POST /Sessions/Playing/Stopped` — Report playback stopped.
-pub async fn report_playback_stopped(
-    State(state): State<AppState>,
+pub async fn report_playback_stopped<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Json(body): Json<PlaybackStopInfo>,
 ) -> Result<StatusCode, ApiError> {
@@ -211,7 +211,10 @@ pub async fn report_playback_stopped(
 }
 
 /// `POST /Sessions/Playing/Ping` — Keep session alive.
-pub async fn playback_ping(State(state): State<AppState>, auth: AuthenticatedUser) -> StatusCode {
+pub async fn playback_ping<D: Data>(
+    State(state): State<AppState<D>>,
+    auth: AuthenticatedUser,
+) -> StatusCode {
     state.session_manager.ensure_tracked(auth.session_id).await;
     state.session_manager.touch(auth.session_id).await;
     StatusCode::NO_CONTENT
@@ -248,8 +251,8 @@ pub struct LegacyPlayingQuery {
 type LegacyQuery = axum::extract::Query<LegacyPlayingQuery>;
 
 /// `POST /PlayingItems/{itemId}` — the old start report.
-pub async fn legacy_playing_start(
-    state: State<AppState>,
+pub async fn legacy_playing_start<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path(item_id): axum::extract::Path<uuid::Uuid>,
     axum::extract::Query(q): LegacyQuery,
@@ -271,8 +274,8 @@ pub async fn legacy_playing_start(
 }
 
 /// `POST /PlayingItems/{itemId}/Progress` — the old progress report.
-pub async fn legacy_playing_progress(
-    state: State<AppState>,
+pub async fn legacy_playing_progress<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path(item_id): axum::extract::Path<uuid::Uuid>,
     axum::extract::Query(q): LegacyQuery,
@@ -295,8 +298,8 @@ pub async fn legacy_playing_progress(
 }
 
 /// `DELETE /PlayingItems/{itemId}` — the old stop report.
-pub async fn legacy_playing_stopped(
-    state: State<AppState>,
+pub async fn legacy_playing_stopped<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path(item_id): axum::extract::Path<uuid::Uuid>,
     axum::extract::Query(q): LegacyQuery,
@@ -315,8 +318,8 @@ type UserItemPath = axum::extract::Path<(uuid::Uuid, uuid::Uuid)>;
 
 /// `POST /Users/{userId}/PlayingItems/{itemId}` — obsolete in Jellyfin; the
 /// signed-in user reports, as there.
-pub async fn legacy_user_playing_start(
-    state: State<AppState>,
+pub async fn legacy_user_playing_start<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path((_, item_id)): UserItemPath,
     query: LegacyQuery,
@@ -325,8 +328,8 @@ pub async fn legacy_user_playing_start(
 }
 
 /// `POST /Users/{userId}/PlayingItems/{itemId}/Progress` — obsolete in Jellyfin.
-pub async fn legacy_user_playing_progress(
-    state: State<AppState>,
+pub async fn legacy_user_playing_progress<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path((_, item_id)): UserItemPath,
     query: LegacyQuery,
@@ -335,8 +338,8 @@ pub async fn legacy_user_playing_progress(
 }
 
 /// `DELETE /Users/{userId}/PlayingItems/{itemId}` — obsolete in Jellyfin.
-pub async fn legacy_user_playing_stopped(
-    state: State<AppState>,
+pub async fn legacy_user_playing_stopped<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path((_, item_id)): UserItemPath,
     query: LegacyQuery,

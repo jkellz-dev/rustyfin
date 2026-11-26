@@ -28,8 +28,8 @@ pub struct PersonsQuery {
 }
 
 /// `GET /Persons` — Browsable person list with optional per-type counts.
-pub async fn get_persons(
-    State(state): State<AppState>,
+pub async fn get_persons<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<PersonsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -156,8 +156,8 @@ pub async fn get_persons(
 }
 
 /// `GET /Persons/{name}` — Get a specific person by name.
-pub async fn get_person(
-    State(state): State<AppState>,
+pub async fn get_person<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(person_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -232,8 +232,8 @@ pub(crate) fn apply_counts(dto: &mut BaseItemDto, counts: &[(String, i64)]) {
 }
 
 /// `GET /Persons/{name}/Images/{imageType}` -- Serve person image.
-pub async fn get_person_image(
-    State(state): State<AppState>,
+pub async fn get_person_image<D: Data>(
+    State(state): State<AppState<D>>,
     Path((name, image_type)): Path<(String, String)>,
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
@@ -262,8 +262,8 @@ pub async fn get_person_image(
 }
 
 /// `GET /Persons/{name}/Images/{imageType}/{imageIndex}` -- Serve person image by index.
-pub async fn get_person_image_by_index(
-    State(state): State<AppState>,
+pub async fn get_person_image_by_index<D: Data>(
+    State(state): State<AppState<D>>,
     Path((name, image_type, image_index)): Path<(String, String, i32)>,
     Query(params): Query<ImageParams>,
     headers: HeaderMap,

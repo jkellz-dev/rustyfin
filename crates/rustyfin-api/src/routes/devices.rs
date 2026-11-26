@@ -46,7 +46,7 @@ pub struct DeviceCapabilities {
     pub supports_persistent_identifier: bool,
 }
 
-async fn device_infos(state: &AppState, rows: Vec<Device>) -> Vec<DeviceInfo> {
+async fn device_infos<D: Data>(state: &AppState<D>, rows: Vec<Device>) -> Vec<DeviceInfo> {
     let live = state.session_manager.get_sessions(None).await;
     rows.into_iter()
         .map(|d| {
@@ -79,8 +79,8 @@ async fn device_infos(state: &AppState, rows: Vec<Device>) -> Vec<DeviceInfo> {
 }
 
 /// `GET /Devices`: devices signed in, of one user with `UserId`.
-pub async fn get_devices(
-    State(state): State<AppState>,
+pub async fn get_devices<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(q): Query<DevicesQuery>,
 ) -> Result<Json<QueryResult<DeviceInfo>>, ApiError> {
@@ -102,7 +102,7 @@ pub struct DeviceIdQuery {
     pub id: String,
 }
 
-async fn one_device(state: &AppState, id: &str) -> Result<DeviceInfo, ApiError> {
+async fn one_device<D: Data>(state: &AppState<D>, id: &str) -> Result<DeviceInfo, ApiError> {
     let rows = state.data.sessions().devices(None).await?;
     let rows: Vec<_> = rows
         .into_iter()
@@ -116,8 +116,8 @@ async fn one_device(state: &AppState, id: &str) -> Result<DeviceInfo, ApiError> 
 }
 
 /// `GET /Devices/Info?id=`: one signed-in device.
-pub async fn get_device_info(
-    State(state): State<AppState>,
+pub async fn get_device_info<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(q): Query<DeviceIdQuery>,
 ) -> Result<Json<DeviceInfo>, ApiError> {
@@ -126,8 +126,8 @@ pub async fn get_device_info(
 
 /// `GET /Devices/Options?id=`: a device's options. Rustyfin keeps no custom
 /// device names, so there is none.
-pub async fn get_device_options(
-    State(state): State<AppState>,
+pub async fn get_device_options<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(q): Query<DeviceIdQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

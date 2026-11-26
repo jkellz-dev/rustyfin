@@ -4,6 +4,7 @@
 //! Jellyfin 10.10 answers, with what Rustyfin really does filled in, so
 //! Jellyfin's dashboard and apps that read settings get every field they expect.
 //! Writes are accepted and discarded, as before.
+use rustyfin_models::data::Data;
 
 use axum::{
     Json,
@@ -32,7 +33,7 @@ fn with(template: &str, overrides: Value) -> Value {
 /// The server settings: Jellyfin's defaults where Rustyfin behaves the same
 /// (the resume rules in `rustyfin_services::play_state` are Jellyfin's),
 /// Rustyfin's own values where it differs.
-pub(crate) fn server_configuration(state: &AppState) -> Value {
+pub(crate) fn server_configuration<D: Data>(state: &AppState<D>) -> Value {
     with(
         JELLYFIN_SERVER_CONFIGURATION,
         json!({
@@ -52,8 +53,8 @@ pub(crate) fn server_configuration(state: &AppState) -> Value {
 }
 
 /// `GET /System/Configuration`.
-pub async fn get_configuration(
-    State(state): State<AppState>,
+pub async fn get_configuration<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
 ) -> Json<Value> {
     Json(server_configuration(&state))
@@ -66,8 +67,8 @@ pub async fn update_configuration(_auth: AdminUser, _body: String) -> StatusCode
 
 /// `GET /System/Configuration/{key}` — `network` in Jellyfin's shape; other
 /// sections (encoding, metadata, branding) are empty objects.
-pub async fn get_named_configuration(
-    State(state): State<AppState>,
+pub async fn get_named_configuration<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
     Path(key): Path<String>,
 ) -> Json<Value> {

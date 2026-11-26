@@ -12,8 +12,8 @@ use rustyfin_models::dto::{OutboundWebSocketMessage, SessionCommand};
 use crate::router::AppState;
 
 /// `GET /socket` — WebSocket endpoint for real-time updates.
-pub async fn websocket_handler(
-    State(state): State<AppState>,
+pub async fn websocket_handler<D: Data>(
+    State(state): State<AppState<D>>,
     vouched: Option<axum::Extension<rustyfin_auth::middleware::AuthenticatedUser>>,
     unvouched: Option<axum::Extension<rustyfin_auth::middleware::Unvouched>>,
     headers: axum::http::HeaderMap,
@@ -58,7 +58,7 @@ pub async fn websocket_handler(
 
 /// True while the token still works. A database error counts as "still works": a
 /// brief outage should not drop every connected client.
-async fn token_still_valid(state: &AppState, token: &str) -> bool {
+async fn token_still_valid<D: Data>(state: &AppState<D>, token: &str) -> bool {
     !matches!(
         resolve_token(&state.data, token).await,
         Err(TokenError::Unknown
@@ -68,9 +68,9 @@ async fn token_still_valid(state: &AppState, token: &str) -> bool {
     )
 }
 
-async fn handle_socket(
+async fn handle_socket<D: Data>(
     socket: WebSocket,
-    state: AppState,
+    state: AppState<D>,
     session_id: Uuid,
     token: Option<String>,
 ) {

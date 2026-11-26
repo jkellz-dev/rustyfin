@@ -1,3 +1,4 @@
+use rustyfin_models::data::Data;
 use std::collections::HashMap;
 
 use axum::{
@@ -39,8 +40,8 @@ pub struct PlaystateQuery {
 }
 
 /// `POST /Sessions/{sessionId}/Playing` — Send a play command to a session.
-pub async fn send_play_command(
-    State(state): State<AppState>,
+pub async fn send_play_command<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Query(query): Query<PlayQuery>,
@@ -78,8 +79,8 @@ pub async fn send_play_command(
 }
 
 /// `POST /Sessions/{sessionId}/Playing/{command}` — Send a playstate command to a session.
-pub async fn send_playstate_command(
-    State(state): State<AppState>,
+pub async fn send_playstate_command<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((session_id, command)): Path<(String, PlaystateCommand)>,
     Query(query): Query<PlaystateQuery>,
@@ -107,8 +108,8 @@ pub async fn send_playstate_command(
 }
 
 /// `POST /Sessions/{sessionId}/Command/{command}` — Send a named general command to a session.
-pub async fn send_general_command(
-    State(state): State<AppState>,
+pub async fn send_general_command<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((session_id, command_name)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
@@ -135,8 +136,8 @@ pub async fn send_general_command(
 }
 
 /// `POST /Sessions/{sessionId}/Command` — Send a full general command (JSON body) to a session.
-pub async fn send_full_general_command(
-    State(state): State<AppState>,
+pub async fn send_full_general_command<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Json(command): Json<GeneralCommand>,
@@ -158,8 +159,8 @@ pub async fn send_full_general_command(
 }
 
 /// `POST /Sessions/{sessionId}/Message` — Send a message command to a session.
-pub async fn send_message_command(
-    State(state): State<AppState>,
+pub async fn send_message_command<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Json(mut command): Json<MessageCommand>,
@@ -198,8 +199,8 @@ pub struct DisplayContentQuery {
 
 /// `POST /Sessions/{sessionId}/Viewing` — ask a session to show an item
 /// (Jellyfin's `DisplayContent` command).
-pub async fn send_display_content(
-    State(state): State<AppState>,
+pub async fn send_display_content<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Query(query): Query<DisplayContentQuery>,

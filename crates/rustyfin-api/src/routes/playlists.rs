@@ -112,8 +112,8 @@ impl From<Share> for SharePermission {
     }
 }
 
-pub async fn create_playlist(
-    State(state): State<AppState>,
+pub async fn create_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Json(body): Json<CreatePlaylistRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -128,8 +128,8 @@ pub async fn create_playlist(
     Ok(Json(serde_json::json!({ "Id": id })))
 }
 
-pub async fn get_playlist_items(
-    State(state): State<AppState>,
+pub async fn get_playlist_items<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(playlist_id): Path<Uuid>,
     Query(query): Query<PlaylistItemsQuery>,
@@ -176,8 +176,8 @@ pub async fn get_playlist_items(
     Ok(Json(QueryResult::new(dtos, total)))
 }
 
-pub async fn add_playlist_items(
-    State(state): State<AppState>,
+pub async fn add_playlist_items<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(playlist_id): Path<Uuid>,
     Query(query): Query<ItemIdsQuery>,
@@ -190,8 +190,8 @@ pub async fn add_playlist_items(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-pub async fn remove_playlist_items(
-    State(state): State<AppState>,
+pub async fn remove_playlist_items<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(playlist_id): Path<Uuid>,
     Query(query): Query<ItemIdsQuery>,
@@ -208,8 +208,8 @@ pub async fn remove_playlist_items(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-pub async fn move_playlist_item(
-    State(state): State<AppState>,
+pub async fn move_playlist_item<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((playlist_id, item_id, new_index)): Path<(Uuid, Uuid, i32)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -222,8 +222,8 @@ pub async fn move_playlist_item(
 }
 
 /// `GET /Playlists/{playlistId}` — whether it is open, who it is shared with, its items.
-pub async fn get_playlist(
-    State(state): State<AppState>,
+pub async fn get_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(playlist_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -242,8 +242,8 @@ pub async fn get_playlist(
 
 /// `POST /Playlists/{playlistId}` — rename, replace items, shares or openness
 /// (owner or an editor).
-pub async fn update_playlist(
-    State(state): State<AppState>,
+pub async fn update_playlist<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(playlist_id): Path<Uuid>,
     Json(body): Json<UpdatePlaylistRequest>,
@@ -263,8 +263,8 @@ pub async fn update_playlist(
 }
 
 /// `GET /Playlists/{playlistId}/Users` — who it is shared with (owner only).
-pub async fn get_playlist_users(
-    State(state): State<AppState>,
+pub async fn get_playlist_users<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(playlist_id): Path<Uuid>,
 ) -> Result<Json<Vec<SharePermission>>, ApiError> {
@@ -278,8 +278,8 @@ pub async fn get_playlist_users(
 
 /// `GET /Playlists/{playlistId}/Users/{userId}` — one user's rights. The owner
 /// always may edit; the owner, an editor, or the user asked about may ask.
-pub async fn get_playlist_user(
-    State(state): State<AppState>,
+pub async fn get_playlist_user<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<SharePermission>, ApiError> {
@@ -292,8 +292,8 @@ pub async fn get_playlist_user(
 }
 
 /// `POST /Playlists/{playlistId}/Users/{userId}` — share with a user (owner only).
-pub async fn set_playlist_user(
-    State(state): State<AppState>,
+pub async fn set_playlist_user<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdatePlaylistUserRequest>,
@@ -311,8 +311,8 @@ pub async fn set_playlist_user(
 }
 
 /// `DELETE /Playlists/{playlistId}/Users/{userId}` — stop sharing (owner or an editor).
-pub async fn remove_playlist_user(
-    State(state): State<AppState>,
+pub async fn remove_playlist_user<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((playlist_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<axum::http::StatusCode, ApiError> {

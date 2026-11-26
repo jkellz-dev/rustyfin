@@ -52,8 +52,8 @@ pub struct CatalogPage {
 }
 
 /// `GET /api/v1/catalog?since=&after=&limit=`
-pub async fn catalog(
-    State(state): State<AppState>,
+pub async fn catalog<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(q): Query<CatalogQuery>,
 ) -> Result<Json<CatalogPage>, ApiError> {

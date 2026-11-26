@@ -16,7 +16,7 @@ use crate::error::ApiError;
 use crate::router::AppState;
 
 /// Check if startup wizard is considered complete (any libraries exist).
-async fn is_wizard_complete(state: &AppState) -> bool {
+async fn is_wizard_complete<D: Data>(state: &AppState<D>) -> bool {
     state
         .data
         .libraries()
@@ -27,7 +27,7 @@ async fn is_wizard_complete(state: &AppState) -> bool {
 }
 
 /// `GET /System/Info/Public` — No auth required. Server discovery endpoint.
-pub async fn get_public_info(State(state): State<AppState>) -> Json<PublicSystemInfo> {
+pub async fn get_public_info<D: Data>(State(state): State<AppState<D>>) -> Json<PublicSystemInfo> {
     let wizard_complete = is_wizard_complete(&state).await;
     Json(PublicSystemInfo {
         local_address: state.base_url.clone(),
@@ -41,7 +41,10 @@ pub async fn get_public_info(State(state): State<AppState>) -> Json<PublicSystem
 }
 
 /// `GET /System/Info` — Requires auth.
-pub async fn get_info(State(state): State<AppState>, _auth: AuthenticatedUser) -> Json<SystemInfo> {
+pub async fn get_info<D: Data>(
+    State(state): State<AppState<D>>,
+    _auth: AuthenticatedUser,
+) -> Json<SystemInfo> {
     let wizard_complete = is_wizard_complete(&state).await;
     Json(SystemInfo {
         local_address: state.base_url.clone(),
@@ -104,7 +107,7 @@ pub async fn get_endpoint(_auth: AuthenticatedUser) -> Json<EndPointInfo> {
 /// `GET /System/Ping` and `POST /System/Ping` — No auth required.
 ///
 /// Jellyfin answers with a JSON string, so the body is quoted.
-pub async fn ping(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn ping<D: Data>(State(state): State<AppState<D>>) -> impl IntoResponse {
     (StatusCode::OK, Json(state.server_name.clone()))
 }
 
@@ -119,8 +122,8 @@ pub struct StartupUser {
 /// `GET /Startup/User` and `/Startup/FirstUser`: the first user made. Jellyfin
 /// also sends that user's password hash; Rustyfin has no passwords (Tailscale
 /// signs users in), so `Password` is null. Admins only: setup is long done.
-pub async fn get_startup_user(
-    State(state): State<AppState>,
+pub async fn get_startup_user<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
 ) -> Result<Json<StartupUser>, ApiError> {
     let first = state
@@ -137,7 +140,9 @@ pub async fn get_startup_user(
 }
 
 /// `GET /Startup/Configuration` — Check if startup wizard is complete.
-pub async fn get_startup_config(State(state): State<AppState>) -> Json<StartupConfiguration> {
+pub async fn get_startup_config<D: Data>(
+    State(state): State<AppState<D>>,
+) -> Json<StartupConfiguration> {
     let wizard_complete = is_wizard_complete(&state).await;
     Json(StartupConfiguration {
         startup_wizard_completed: wizard_complete,
@@ -153,8 +158,8 @@ pub async fn complete_startup() -> StatusCode {
 }
 
 /// `GET /System/Stats` — Dashboard statistics (admin only).
-pub async fn get_stats(
-    State(state): State<AppState>,
+pub async fn get_stats<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
 ) -> Result<Json<DashboardStats>, ApiError> {
     let library_stats = state.data.libraries().stats().await?;
@@ -189,7 +194,7 @@ pub async fn get_stats(
 /// Answers 204 and then asks the server binary to drain in-flight requests and
 /// exit. Whatever supervises the process (the kubelet, systemd) decides whether it
 /// comes back.
-pub async fn shutdown(State(state): State<AppState>, _admin: AdminUser) -> StatusCode {
+pub async fn shutdown<D: Data>(State(state): State<AppState<D>>, _admin: AdminUser) -> StatusCode {
     tracing::warn!("Shutdown requested through POST /System/Shutdown");
     state.shutdown.notify_one();
     StatusCode::NO_CONTENT
@@ -200,7 +205,7 @@ pub async fn shutdown(State(state): State<AppState>, _admin: AdminUser) -> Statu
 /// Rustyfin cannot re-execute itself, so this is a graceful exit and relies on the
 /// supervisor to start it again, which is how it is deployed. The effect is the
 /// same as [`shutdown`].
-pub async fn restart(State(state): State<AppState>, _admin: AdminUser) -> StatusCode {
+pub async fn restart<D: Data>(State(state): State<AppState<D>>, _admin: AdminUser) -> StatusCode {
     tracing::warn!("Restart requested through POST /System/Restart");
     state.shutdown.notify_one();
     StatusCode::NO_CONTENT

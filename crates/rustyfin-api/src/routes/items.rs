@@ -226,8 +226,8 @@ fn numbered_sort_name(item: &MediaItem) -> Option<String> {
 
 /// `Fields=MediaSources` or `Fields=MediaStreams` on a list: clients decide direct
 /// play from the list without a request per item. One query for all the items.
-pub(crate) async fn attach_media_sources_if_asked(
-    data: &rustyfin_services::Store,
+pub(crate) async fn attach_media_sources_if_asked<D: Data>(
+    data: &D,
     fields: &Option<String>,
     items: &[MediaItem],
     dtos: &mut [BaseItemDto],
@@ -307,10 +307,7 @@ fn folder_user_data(ud: &mut UserItemDataDto, total: i64, unplayed: i64) {
 }
 
 /// Seasons carry only their parent link; name the series for them in one query.
-pub(crate) async fn name_series_for_seasons(
-    data: &rustyfin_services::Store,
-    dtos: &mut [BaseItemDto],
-) {
+pub(crate) async fn name_series_for_seasons<D: Data>(data: &D, dtos: &mut [BaseItemDto]) {
     let wanted: Vec<Uuid> = dtos
         .iter()
         .filter(|d| d.item_type == "Season" && d.series_id.is_none())
@@ -342,11 +339,7 @@ pub(crate) async fn name_series_for_seasons(
 /// Attach the caller's `UserData` to every item in two queries (their rows, then
 /// the unplayed counts for folders). A failing lookup leaves the zeros in place
 /// and logs: the list is the answer, the user data is an extra.
-pub(crate) async fn attach_user_data(
-    data: &rustyfin_services::Store,
-    user_id: Uuid,
-    dtos: &mut [BaseItemDto],
-) {
+pub(crate) async fn attach_user_data<D: Data>(data: &D, user_id: Uuid, dtos: &mut [BaseItemDto]) {
     let ids: Vec<Uuid> = dtos.iter().map(|d| d.id).collect();
     let rows = data
         .user_data()
@@ -651,7 +644,7 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[Image]) 
 
 /// Seasons and episodes name their show's poster (`SeriesPrimaryImageTag`), and a
 /// season without a cover of its own shows the show's (owner, 2026-11-14).
-pub(crate) async fn attach_series_art(data: &rustyfin_services::Store, dtos: &mut [BaseItemDto]) {
+pub(crate) async fn attach_series_art<D: Data>(data: &D, dtos: &mut [BaseItemDto]) {
     let series_of = |d: &BaseItemDto| match d.item_type.as_str() {
         "Season" => d.series_id.or(d.parent_id),
         "Episode" => d.series_id,
@@ -709,8 +702,8 @@ pub(crate) async fn attach_series_art(data: &rustyfin_services::Store, dtos: &mu
 /// artist; albums and artists total their tracks' running time. A few batch
 /// queries for the whole page. Artist names link to artist folders of the same
 /// library only, so a hidden library's artists never show up.
-pub(crate) async fn attach_music_fields(
-    data: &rustyfin_services::Store,
+pub(crate) async fn attach_music_fields<D: Data>(
+    data: &D,
     items: &[MediaItem],
     dtos: &mut [BaseItemDto],
 ) {
@@ -982,8 +975,8 @@ fn parse_comma_ints(s: &Option<String>) -> Vec<i32> {
 }
 
 /// `GET /Items` — Main query endpoint.
-pub async fn get_items(
-    State(state): State<AppState>,
+pub async fn get_items<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(mut query): Query<ItemsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -1136,8 +1129,8 @@ pub async fn get_items(
 }
 
 /// `GET /Items/Counts`: items of each kind over the libraries the caller may see.
-pub async fn get_item_counts(
-    State(state): State<AppState>,
+pub async fn get_item_counts<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<rustyfin_models::dto::ItemCounts>, ApiError> {
     let rows = state.services.browse().counts(auth.user_id).await?;
@@ -1148,8 +1141,8 @@ pub async fn get_item_counts(
 
 /// A genre is no stored item; clients open it by id (Finamp's genre page).
 /// Music first: a name both kinds use is a music genre there.
-async fn genre_by_id(
-    state: AppState,
+async fn genre_by_id<D: Data>(
+    state: AppState<D>,
     auth: AuthenticatedUser,
     id: Uuid,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -1169,8 +1162,8 @@ async fn genre_by_id(
 }
 
 /// `GET /Items/{itemId}` — Single item detail.
-pub async fn get_item_by_id(
-    State(state): State<AppState>,
+pub async fn get_item_by_id<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -1363,8 +1356,8 @@ type Billing = (Person, Option<String>, Option<i32>);
 
 /// Cast and crew as Jellyfin lists them, with a photo tag for whoever has one
 /// (a stored image, else the shared headshot folder).
-pub(crate) async fn people_dtos(
-    state: &AppState,
+pub(crate) async fn people_dtos<D: Data>(
+    state: &AppState<D>,
     people_rows: Vec<Billing>,
 ) -> Vec<BaseItemPerson> {
     if people_rows.is_empty() {
@@ -1403,8 +1396,8 @@ pub(crate) async fn people_dtos(
 }
 
 /// `Fields=People` on a list: each title's cast and crew, in one query.
-pub(crate) async fn attach_people_if_asked(
-    state: &AppState,
+pub(crate) async fn attach_people_if_asked<D: Data>(
+    state: &AppState<D>,
     fields: &Option<String>,
     dtos: &mut [BaseItemDto],
 ) {
@@ -1434,8 +1427,8 @@ pub(crate) async fn attach_people_if_asked(
 }
 
 /// `GET /Items/Latest` — Latest additions.
-pub async fn get_latest_items(
-    State(state): State<AppState>,
+pub async fn get_latest_items<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<ItemsQuery>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
@@ -1515,8 +1508,8 @@ pub async fn get_latest_items(
 }
 
 /// `GET /UserItems/Resume` — Continue watching.
-pub async fn get_resume_items(
-    State(state): State<AppState>,
+pub async fn get_resume_items<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<ItemsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -1582,8 +1575,8 @@ pub async fn get_resume_items(
 // Legacy route handlers that delegate to the new routes
 
 /// `GET /Users/{userId}/Items` — Legacy items route.
-pub async fn get_user_items_legacy(
-    state: State<AppState>,
+pub async fn get_user_items_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(_user_id): Path<Uuid>,
     query: Query<ItemsQuery>,
@@ -1592,8 +1585,8 @@ pub async fn get_user_items_legacy(
 }
 
 /// `GET /Users/{userId}/Items/Resume` — Legacy resume route.
-pub async fn get_user_resume_items_legacy(
-    state: State<AppState>,
+pub async fn get_user_resume_items_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(_user_id): Path<Uuid>,
     query: Query<ItemsQuery>,
@@ -1602,8 +1595,8 @@ pub async fn get_user_resume_items_legacy(
 }
 
 /// `GET /Users/{userId}/Items/Latest` — Legacy latest-additions route.
-pub async fn get_user_latest_items_legacy(
-    state: State<AppState>,
+pub async fn get_user_latest_items_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(_user_id): Path<Uuid>,
     query: Query<ItemsQuery>,
@@ -1612,8 +1605,8 @@ pub async fn get_user_latest_items_legacy(
 }
 
 /// `GET /Users/{userId}/Items/{itemId}` — Legacy item detail route.
-pub async fn get_user_item_legacy(
-    state: State<AppState>,
+pub async fn get_user_item_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -1621,8 +1614,8 @@ pub async fn get_user_item_legacy(
 }
 
 /// `POST /Items/{itemId}/Refresh` — Re-enrich an item's metadata.
-pub async fn refresh_item(
-    State(state): State<AppState>,
+pub async fn refresh_item<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {

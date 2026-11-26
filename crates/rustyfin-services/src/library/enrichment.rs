@@ -11,7 +11,7 @@ use rustyfin_common::nfo::{
     parse_series_nfo,
 };
 
-pub struct EnrichmentService<D = crate::Store> {
+pub struct EnrichmentService<D> {
     data: D,
     people_cache_dir: Option<PathBuf>,
 }

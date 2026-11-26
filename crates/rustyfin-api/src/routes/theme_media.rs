@@ -19,8 +19,8 @@ use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 /// `GET /Items/{itemId}/ThemeSongs`: `theme.mp3` and the `theme-music` folder.
-pub async fn get_theme_songs(
-    State(state): State<AppState>,
+pub async fn get_theme_songs<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<ThemeMediaResult>, ApiError> {
@@ -30,8 +30,8 @@ pub async fn get_theme_songs(
 }
 
 /// `GET /Items/{itemId}/ThemeVideos`: the videos in the title's `backdrops` folder.
-pub async fn get_theme_videos(
-    State(state): State<AppState>,
+pub async fn get_theme_videos<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<ThemeMediaResult>, ApiError> {
@@ -41,8 +41,8 @@ pub async fn get_theme_videos(
 }
 
 /// `GET /Items/{itemId}/ThemeMedia`
-pub async fn get_theme_media(
-    State(state): State<AppState>,
+pub async fn get_theme_media<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<AllThemeMediaResult>, ApiError> {
@@ -53,8 +53,8 @@ pub async fn get_theme_media(
 }
 
 /// `GET /Items/{itemId}/Ancestors` — the item's parents, nearest first.
-pub async fn get_ancestors(
-    State(state): State<AppState>,
+pub async fn get_ancestors<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {

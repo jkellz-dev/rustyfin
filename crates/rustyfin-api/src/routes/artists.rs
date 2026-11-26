@@ -36,8 +36,8 @@ pub struct ArtistQuery {
 }
 
 /// `GET /Artists` — Browsable artist list.
-pub async fn get_artists(
-    State(state): State<AppState>,
+pub async fn get_artists<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(params): Query<ArtistQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -45,8 +45,8 @@ pub async fn get_artists(
 }
 
 /// `GET /Artists/{name}` — an artist by name.
-pub async fn get_artist_by_name(
-    State(state): State<AppState>,
+pub async fn get_artist_by_name<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -60,16 +60,16 @@ pub async fn get_artist_by_name(
 }
 
 /// `GET /Artists/AlbumArtists` — Only artists that have at least one album.
-pub async fn get_album_artists(
-    State(state): State<AppState>,
+pub async fn get_album_artists<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(params): Query<ArtistQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     get_artists_inner(&state, &auth, &params, true).await
 }
 
-async fn get_artists_inner(
-    state: &AppState,
+async fn get_artists_inner<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     params: &ArtistQuery,
     album_artists_only: bool,
@@ -145,8 +145,8 @@ async fn get_artists_inner(
 }
 
 /// `GET /Artists/{name}/Images/{imageType}` -- Serve artist image.
-pub async fn get_artist_image(
-    State(state): State<AppState>,
+pub async fn get_artist_image<D: Data>(
+    State(state): State<AppState<D>>,
     Path((name, image_type)): Path<(String, String)>,
     Query(params): Query<ImageParams>,
     headers: HeaderMap,
@@ -170,8 +170,8 @@ pub async fn get_artist_image(
 }
 
 /// `GET /Artists/{name}/Images/{imageType}/{imageIndex}` -- Serve artist image by index.
-pub async fn get_artist_image_by_index(
-    State(state): State<AppState>,
+pub async fn get_artist_image_by_index<D: Data>(
+    State(state): State<AppState<D>>,
     Path((name, image_type, image_index)): Path<(String, String, i32)>,
     Query(params): Query<ImageParams>,
     headers: HeaderMap,

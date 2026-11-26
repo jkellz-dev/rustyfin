@@ -3,8 +3,7 @@
 //! library is followed by a sync of the links that fill it, and what the
 //! scans changed goes into the search index straight after.
 //!
-//! Only on `Services<Store>`: the search index it refreshes is the
-//! server's ([`crate::Search`]).
+//! The search index it refreshes is the one over the same data layer.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -21,22 +20,22 @@ use crate::link::Links;
 /// What starting scans needs besides the data layer; shared with the
 /// scheduler, which uses the same in-flight set.
 #[derive(Clone)]
-pub struct ScanRuntime {
+pub struct ScanRuntime<D> {
     /// Libraries being scanned now.
     pub in_flight: Arc<RwLock<HashSet<Uuid>>>,
     pub links: Arc<Links>,
-    pub search: Arc<crate::Search>,
+    pub search: Arc<rustyfin_search::SearchService<D>>,
     /// The shared people folder (headshots), when configured.
     pub people_cache_dir: Option<PathBuf>,
 }
 
 /// Scan starting over the data layer.
-pub struct Scans<'a> {
-    pub(crate) data: &'a crate::Store,
-    pub(crate) runtime: &'a ScanRuntime,
+pub struct Scans<'a, D> {
+    pub(crate) data: &'a D,
+    pub(crate) runtime: &'a ScanRuntime<D>,
 }
 
-impl Scans<'_> {
+impl<D: Data> Scans<'_, D> {
     /// What a library notification asks: rescan the folders of `paths` (a
     /// file's folder, or the folder itself) and drop the items whose path is
     /// gone.

@@ -20,8 +20,8 @@ pub struct FiltersQuery {
 }
 
 /// `GET /Items/Filters` — Distinct genre/year/rating/tag values from the library.
-pub async fn get_filters_legacy(
-    State(state): State<AppState>,
+pub async fn get_filters_legacy<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
     Query(query): Query<FiltersQuery>,
 ) -> Result<Json<QueryFiltersLegacy>, ApiError> {
@@ -45,8 +45,8 @@ pub async fn get_filters_legacy(
 }
 
 /// `GET /Items/Filters2` — Genres as name/id pairs.
-pub async fn get_filters(
-    State(state): State<AppState>,
+pub async fn get_filters<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
     Query(query): Query<FiltersQuery>,
 ) -> Result<Json<QueryFilters>, ApiError> {

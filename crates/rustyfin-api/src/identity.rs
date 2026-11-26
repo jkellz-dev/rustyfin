@@ -35,7 +35,11 @@ use rustyfin_models::data::{Data, DataError, SessionStore};
 use crate::router::{AppState, ForwardAuthState};
 
 /// Layer: put the vouched-for user on the request for `AuthenticatedUser`.
-pub async fn vouch(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
+pub async fn vouch<D: Data>(
+    State(state): State<AppState<D>>,
+    mut req: Request,
+    next: Next,
+) -> Response {
     let Some(fa) = state.forward_auth_config.as_ref() else {
         return next.run(req).await;
     };
@@ -74,8 +78,8 @@ pub async fn vouch(State(state): State<AppState>, mut req: Request, next: Next) 
     next.run(req).await
 }
 
-async fn vouched_user(
-    state: &AppState,
+async fn vouched_user<D: Data>(
+    state: &AppState<D>,
     fa: &ForwardAuthState,
     identity: &ForwardAuthIdentity,
     headers: &axum::http::HeaderMap,

@@ -35,8 +35,8 @@ pub struct MixQuery {
 
 /// `GET /Items/{itemId}/InstantMix` and the per-type forms (`/Songs`,
 /// `/Albums`, `/Artists`, `/Playlists`): a mix seeded by an item.
-pub async fn from_item(
-    State(state): State<AppState>,
+pub async fn from_item<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(query): Query<MixQuery>,
@@ -45,8 +45,8 @@ pub async fn from_item(
 }
 
 /// `GET /Artists/InstantMix?id=` (Jellyfin keeps it for older clients).
-pub async fn from_artist_query(
-    State(state): State<AppState>,
+pub async fn from_artist_query<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<MixQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -55,8 +55,8 @@ pub async fn from_artist_query(
 }
 
 /// `GET /MusicGenres/{name}/InstantMix`.
-pub async fn from_genre_name(
-    State(state): State<AppState>,
+pub async fn from_genre_name<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(name): Path<String>,
     Query(query): Query<MixQuery>,
@@ -65,8 +65,8 @@ pub async fn from_genre_name(
 }
 
 /// `GET /MusicGenres/InstantMix?id=`: a genre's id is derived from its name.
-pub async fn from_genre_id(
-    State(state): State<AppState>,
+pub async fn from_genre_id<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<MixQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -79,8 +79,8 @@ pub async fn from_genre_id(
     mix(&state, &auth, &[name], &query).await
 }
 
-async fn seeded_by_item(
-    state: &AppState,
+async fn seeded_by_item<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     item_id: Uuid,
     query: &MixQuery,
@@ -90,8 +90,8 @@ async fn seeded_by_item(
     mix(state, auth, &genres, query).await
 }
 
-async fn mix(
-    state: &AppState,
+async fn mix<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     genres: &[String],
     query: &MixQuery,

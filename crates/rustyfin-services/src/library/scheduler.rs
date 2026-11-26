@@ -72,7 +72,7 @@ pub struct SearchReindexScheduleConfig {
 
 // ── TaskScheduler ─────────────────────────────────────────────────────
 
-pub struct TaskScheduler<D = crate::Store> {
+pub struct TaskScheduler<D> {
     config: SchedulerConfig,
     data: D,
     in_flight: Arc<RwLock<HashSet<Uuid>>>,

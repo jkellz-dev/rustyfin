@@ -14,6 +14,7 @@
 //! `query_case`, is not applied). Requests sign in the same way as on the
 //! Jellyfin routes (a session token from a forward-auth sign-in). A Jellyfin
 //! client never calls these; Rustyfin's admin and linked Rustyfin servers do.
+use rustyfin_models::data::Data;
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -80,20 +81,23 @@ pub async fn lower_case_path(
 }
 
 /// The routes, relative to [`PREFIX`].
-pub fn router() -> Router<AppState> {
+pub fn router<D: Data>() -> Router<AppState<D>> {
     Router::new()
         // Linked servers, for the admin (roadmap 16b).
-        .route("/links", get(links::list))
-        .route("/links/{id}/sync", post(links::sync_now))
+        .route("/links", get(links::list::<D>))
+        .route("/links/{id}/sync", post(links::sync_now::<D>))
         // A linked copy's transcode, from the friend's server.
-        .route("/links/{id}/relay/{*path}", get(link_relay::relay_media))
+        .route(
+            "/links/{id}/relay/{*path}",
+            get(link_relay::relay_media::<D>),
+        )
         // The change feed a linked Rustyfin syncs from (roadmap 16b.2r).
-        .route("/catalog", get(link_catalog::catalog))
+        .route("/catalog", get(link_catalog::catalog::<D>))
         // What a user may do beyond Jellyfin's policy.
-        .route("/users/permissions", get(user_permissions::list))
+        .route("/users/permissions", get(user_permissions::list::<D>))
         .route(
             "/users/{id}/permissions",
-            get(user_permissions::get).patch(user_permissions::patch),
+            get(user_permissions::get::<D>).patch(user_permissions::patch::<D>),
         )
 }
 

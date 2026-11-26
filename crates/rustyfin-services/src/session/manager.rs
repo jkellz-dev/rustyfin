@@ -7,7 +7,7 @@ use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 /// Tracks active session state and playback in memory.
-pub struct SessionManager<D = crate::Store> {
+pub struct SessionManager<D> {
     data: D,
     sessions: RwLock<HashMap<Uuid, TrackedSession>>,
     channels: RwLock<HashMap<Uuid, broadcast::Sender<SessionCommand>>>,

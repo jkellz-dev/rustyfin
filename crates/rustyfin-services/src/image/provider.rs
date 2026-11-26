@@ -2,7 +2,7 @@ use rustyfin_models::data::{Data, ImageStore};
 use uuid::Uuid;
 
 /// Serves and processes images for media items and users.
-pub struct ImageProvider<D = crate::Store> {
+pub struct ImageProvider<D> {
     data: D,
 }
 

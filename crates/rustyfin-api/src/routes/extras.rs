@@ -28,8 +28,8 @@ const SPECIAL_FEATURES: &[&str] = &[
     "Unknown",
 ];
 
-async fn extras(
-    state: &AppState,
+async fn extras<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     owner: Uuid,
     types: &[&str],
@@ -77,8 +77,8 @@ async fn extras(
 }
 
 /// `GET /Items/{itemId}/LocalTrailers`
-pub async fn local_trailers(
-    State(state): State<AppState>,
+pub async fn local_trailers<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
@@ -86,8 +86,8 @@ pub async fn local_trailers(
 }
 
 /// `GET /Users/{userId}/Items/{itemId}/LocalTrailers` (older clients).
-pub async fn local_trailers_legacy(
-    state: State<AppState>,
+pub async fn local_trailers_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
@@ -95,8 +95,8 @@ pub async fn local_trailers_legacy(
 }
 
 /// `GET /Users/{userId}/Items/{itemId}/SpecialFeatures` (older clients).
-pub async fn special_features_legacy(
-    state: State<AppState>,
+pub async fn special_features_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
@@ -104,8 +104,8 @@ pub async fn special_features_legacy(
 }
 
 /// `GET /Items/{itemId}/SpecialFeatures`: every extra but trailers and theme media.
-pub async fn special_features(
-    State(state): State<AppState>,
+pub async fn special_features<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
@@ -115,8 +115,8 @@ pub async fn special_features(
 }
 
 /// A title's theme songs (`theme.mp3`, the `theme-music` folder).
-pub(crate) async fn theme_songs(
-    state: &AppState,
+pub(crate) async fn theme_songs<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     item_id: Uuid,
 ) -> Result<ThemeMediaResult, ApiError> {
@@ -128,8 +128,8 @@ pub(crate) async fn theme_songs(
 }
 
 /// The videos in a title's `backdrops` folder, for `ThemeVideos`/`ThemeMedia`.
-pub(crate) async fn theme_videos(
-    state: &AppState,
+pub(crate) async fn theme_videos<D: Data>(
+    state: &AppState<D>,
     auth: &AuthenticatedUser,
     item_id: Uuid,
 ) -> Result<ThemeMediaResult, ApiError> {

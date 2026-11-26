@@ -2,6 +2,7 @@
 //! Jellyfin's policy. For now one thing: link a server to this one
 //! (`may_link`, roadmap 16b.2r). Jellyfin's `Policy` is left as Jellyfin has
 //! it, so its web client neither sees nor resets these.
+use rustyfin_models::data::Data;
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -27,8 +28,8 @@ pub struct UserPermissions {
 
 /// `GET /api/v1/users/permissions`: every user's, for the admin's users list
 /// (which marks server accounts). Administrators only.
-pub async fn list(
-    State(state): State<AppState>,
+pub async fn list<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
 ) -> Result<Json<Vec<UserPermissions>>, ApiError> {
     let users = state.services.users().list().await?;
@@ -60,8 +61,8 @@ impl From<rustyfin_services::users::Permissions> for Permissions {
 }
 
 /// A user's own, or anyone's for an administrator.
-pub async fn get(
-    State(state): State<AppState>,
+pub async fn get<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Permissions>, ApiError> {
@@ -74,8 +75,8 @@ pub async fn get(
 }
 
 /// Administrators only; answers with the permissions as they now are.
-pub async fn patch(
-    State(state): State<AppState>,
+pub async fn patch<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Path(id): Path<Uuid>,
     Json(change): Json<PermissionsPatch>,

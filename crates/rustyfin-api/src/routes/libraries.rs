@@ -18,8 +18,8 @@ use crate::error::{ApiError, DegradeExt};
 use crate::router::AppState;
 
 /// `GET /Library/Schedules` — Return configured scan schedules (admin only).
-pub async fn get_schedules(
-    State(state): State<AppState>,
+pub async fn get_schedules<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
 ) -> Json<serde_json::Value> {
     Json(state.scan_schedules.clone())
@@ -32,8 +32,8 @@ pub struct UpdateScanScheduleRequest {
 }
 
 /// `POST /Library/VirtualFolders/{id}/ScanSchedule` — Update a library's scan schedule (admin only).
-pub async fn update_scan_schedule(
-    State(state): State<AppState>,
+pub async fn update_scan_schedule<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
     Json(req): Json<UpdateScanScheduleRequest>,
@@ -60,8 +60,8 @@ pub struct ViewsQuery {
 /// `GET /UserViews` — Get library root views (new route).
 /// Filters libraries based on per-user access settings, in the user's order
 /// without the ones they hid (`user_prefs::arrange_views`).
-pub async fn get_user_views(
-    state: State<AppState>,
+pub async fn get_user_views<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Query(query): axum::extract::Query<ViewsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -75,8 +75,8 @@ pub async fn get_user_views(
 }
 
 /// Every library root the caller may see, and the Collections view.
-async fn all_views(
-    State(state): State<AppState>,
+async fn all_views<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let libs = visible_libraries(&state, auth.user_id).await?;
@@ -107,16 +107,16 @@ async fn all_views(
 /// The same objects as the views, all of them (a user's hidden ones too);
 /// Jellyfin's `isHidden` filter has nothing to filter here, so it is accepted
 /// and ignored.
-pub async fn get_media_folders(
-    state: State<AppState>,
+pub async fn get_media_folders<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     all_views(state, auth).await
 }
 
 /// `GET /Library/PhysicalPaths` — every library root, for administrators.
-pub async fn get_physical_paths(
-    State(state): State<AppState>,
+pub async fn get_physical_paths<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
 ) -> Result<Json<Vec<String>>, ApiError> {
     let libs = state.data.libraries().list_all().await?;
@@ -124,8 +124,8 @@ pub async fn get_physical_paths(
 }
 
 /// `GET /UserViews/GroupingOptions` — the same, for the caller.
-pub async fn get_user_views_grouping_options(
-    state: State<AppState>,
+pub async fn get_user_views_grouping_options<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<Vec<NameGuidPair>>, ApiError> {
     let user = auth.user_id;
@@ -134,8 +134,8 @@ pub async fn get_user_views_grouping_options(
 
 /// `GET /Users/{userId}/GroupingOptions` — the libraries the caller may group
 /// into a single view.
-pub async fn get_grouping_options(
-    State(state): State<AppState>,
+pub async fn get_grouping_options<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path(_user_id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<Vec<NameGuidPair>>, ApiError> {
@@ -158,8 +158,8 @@ pub(crate) fn root_folder_id(server_id: &str) -> uuid::Uuid {
 
 /// The caller's root folder (Jellyfin's `UserRootFolder`): the parent of
 /// every library, counting the ones the user may see.
-pub(crate) async fn root_folder_dto(
-    state: &AppState,
+pub(crate) async fn root_folder_dto<D: Data>(
+    state: &AppState<D>,
     user_id: uuid::Uuid,
 ) -> Result<BaseItemDto, ApiError> {
     let views = visible_libraries(state, user_id).await?;
@@ -198,8 +198,8 @@ pub(crate) fn collections_view_id(server_id: &str) -> uuid::Uuid {
 }
 
 /// How many collections `user_id` may see.
-pub(crate) async fn visible_collection_count(
-    state: &AppState,
+pub(crate) async fn visible_collection_count<D: Data>(
+    state: &AppState<D>,
     user_id: uuid::Uuid,
 ) -> Result<i64, ApiError> {
     Ok(state.services.collections().visible_count(user_id).await?)
@@ -227,8 +227,8 @@ pub(crate) fn collections_view_dto(server_id: &str, count: i64) -> BaseItemDto {
 
 /// The library with this id as its `CollectionFolder`, with its child count,
 /// when the user may see it.
-pub(crate) async fn visible_library_folder(
-    state: &AppState,
+pub(crate) async fn visible_library_folder<D: Data>(
+    state: &AppState<D>,
     user_id: uuid::Uuid,
     id: uuid::Uuid,
 ) -> Result<Option<BaseItemDto>, ApiError> {
@@ -250,8 +250,8 @@ pub(crate) async fn visible_library_folder(
     Ok(Some(dto))
 }
 
-async fn visible_libraries(
-    state: &AppState,
+async fn visible_libraries<D: Data>(
+    state: &AppState<D>,
     user_id: uuid::Uuid,
 ) -> Result<Vec<Library>, ApiError> {
     Ok(state
@@ -262,8 +262,8 @@ async fn visible_libraries(
 }
 
 /// `GET /Items/Root`: the caller's root folder.
-pub async fn get_root_folder(
-    State(state): State<AppState>,
+pub async fn get_root_folder<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<BaseItemDto>, ApiError> {
     Ok(Json(root_folder_dto(&state, auth.user_id).await?))
@@ -271,8 +271,8 @@ pub async fn get_root_folder(
 
 /// `GET /Users/{userId}/Items/Root`: the legacy form; 404 for an unknown user,
 /// as Jellyfin.
-pub async fn get_root_folder_legacy(
-    State(state): State<AppState>,
+pub async fn get_root_folder_legacy<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path(user_id): axum::extract::Path<uuid::Uuid>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -311,8 +311,8 @@ pub(crate) fn collection_folder_dto(lib: &Library, server_id: &str) -> BaseItemD
 }
 
 /// `GET /Users/{userId}/Views` — Legacy user views route.
-pub async fn get_user_views_legacy(
-    state: State<AppState>,
+pub async fn get_user_views_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     axum::extract::Path(_user_id): axum::extract::Path<uuid::Uuid>,
     query: axum::extract::Query<ViewsQuery>,
@@ -321,8 +321,8 @@ pub async fn get_user_views_legacy(
 }
 
 /// `GET /Library/VirtualFolders` — Library listing.
-pub async fn get_virtual_folders(
-    State(state): State<AppState>,
+pub async fn get_virtual_folders<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<VirtualFolderInfo>>, ApiError> {
     let libs = state.data.libraries().list_all().await?;
@@ -380,8 +380,8 @@ pub struct RefreshLibraryQuery {
 }
 
 /// `POST /Library/Refresh` — Trigger a library scan.
-pub async fn refresh_library(
-    State(state): State<AppState>,
+pub async fn refresh_library<D: Data>(
+    State(state): State<AppState<D>>,
     _auth: AdminUser,
     axum::extract::Query(query): axum::extract::Query<RefreshLibraryQuery>,
 ) -> Result<StatusCode, ApiError> {
@@ -409,8 +409,8 @@ pub struct UpdateLibraryQuery {
 }
 
 /// `POST /Library/VirtualFolders/Update?Id={uuid}` — Update a library (admin only).
-pub async fn update_virtual_folder(
-    State(state): State<AppState>,
+pub async fn update_virtual_folder<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     axum::extract::Query(query): axum::extract::Query<UpdateLibraryQuery>,
     Json(req): Json<UpdateLibraryRequest>,
@@ -428,8 +428,8 @@ pub async fn update_virtual_folder(
 }
 
 /// `DELETE /Library/VirtualFolders` — Delete a library by `name` (Jellyfin) or `id` (admin UI).
-pub async fn delete_virtual_folder(
-    State(state): State<AppState>,
+pub async fn delete_virtual_folder<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
 ) -> Result<StatusCode, ApiError> {
@@ -580,8 +580,8 @@ pub struct UpdateLibraryOptionsRequest {
 /// `{ "LibraryOptions": {...} }` body, answered with 204. Without a `name` query
 /// parameter this is the admin UI's JSON form (`{Name, CollectionType, Paths}`),
 /// answered with the created library.
-pub async fn create_virtual_folder(
-    State(state): State<AppState>,
+pub async fn create_virtual_folder<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
     body: Bytes,
@@ -633,8 +633,8 @@ pub async fn create_virtual_folder(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-async fn create_from_json(
-    state: &AppState,
+async fn create_from_json<D: Data>(
+    state: &AppState<D>,
     req: CreateLibraryRequest,
 ) -> Result<Json<VirtualFolderInfo>, ApiError> {
     let lib = state
@@ -646,8 +646,8 @@ async fn create_from_json(
 }
 
 /// `POST /Library/VirtualFolders/Name?name=&newName=` — Rename a library (admin only).
-pub async fn rename_virtual_folder(
-    State(state): State<AppState>,
+pub async fn rename_virtual_folder<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
 ) -> Result<StatusCode, ApiError> {
@@ -663,8 +663,8 @@ pub async fn rename_virtual_folder(
 }
 
 /// `POST /Library/VirtualFolders/Paths` — Add a media path to a library (admin only).
-pub async fn add_media_path(
-    State(state): State<AppState>,
+pub async fn add_media_path<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Json(req): Json<AddMediaPathRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -684,8 +684,8 @@ pub async fn add_media_path(
 ///
 /// Jellyfin uses this to set a path's `NetworkPath`. Rustyfin keeps only the path
 /// itself, so this verifies the path belongs to the library and changes nothing.
-pub async fn update_media_path(
-    State(state): State<AppState>,
+pub async fn update_media_path<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Json(req): Json<UpdateMediaPathRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -698,8 +698,8 @@ pub async fn update_media_path(
 }
 
 /// `DELETE /Library/VirtualFolders/Paths?name=&path=` — Remove a media path (admin only).
-pub async fn remove_media_path(
-    State(state): State<AppState>,
+pub async fn remove_media_path<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Query(pairs): Query<Vec<(String, String)>>,
 ) -> Result<StatusCode, ApiError> {
@@ -715,8 +715,8 @@ pub async fn remove_media_path(
 }
 
 /// `POST /Library/VirtualFolders/LibraryOptions` — Replace a library's options (admin only).
-pub async fn update_library_options(
-    State(state): State<AppState>,
+pub async fn update_library_options<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Json(req): Json<UpdateLibraryOptionsRequest>,
 ) -> Result<StatusCode, ApiError> {

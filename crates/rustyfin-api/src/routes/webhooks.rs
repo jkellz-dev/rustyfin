@@ -3,6 +3,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
 };
+use rustyfin_models::data::Data;
 use serde::Deserialize;
 
 use rustyfin_auth::api_key::ApiKeyUser;
@@ -22,8 +23,8 @@ pub struct MediaUpdateInfoPathDto {
     pub path: String,
 }
 
-pub async fn post_updated_media(
-    State(state): State<AppState>,
+pub async fn post_updated_media<D: Data>(
+    State(state): State<AppState<D>>,
     _api_key: ApiKeyUser,
     Json(dto): Json<MediaUpdateInfoDto>,
 ) -> Result<StatusCode, ApiError> {
@@ -45,8 +46,8 @@ pub struct ProviderIdQuery {
 /// `POST /Library/Movies/Added` and `/Library/Movies/Updated`: Jellyfin's older
 /// notification for films. As Jellyfin: the films with that IMDb id if one is given,
 /// else that TMDB id, else none; their folders are rescanned.
-pub async fn post_updated_movies(
-    State(state): State<AppState>,
+pub async fn post_updated_movies<D: Data>(
+    State(state): State<AppState<D>>,
     _api_key: ApiKeyUser,
     Query(q): Query<ProviderIdQuery>,
 ) -> Result<StatusCode, ApiError> {
@@ -60,8 +61,8 @@ pub async fn post_updated_movies(
 
 /// `POST /Library/Series/Added` and `/Library/Series/Updated`: Jellyfin's older
 /// notification for shows; the series with that TVDB id are rescanned.
-pub async fn post_updated_series(
-    State(state): State<AppState>,
+pub async fn post_updated_series<D: Data>(
+    State(state): State<AppState<D>>,
     _api_key: ApiKeyUser,
     Query(q): Query<ProviderIdQuery>,
 ) -> Result<StatusCode, ApiError> {

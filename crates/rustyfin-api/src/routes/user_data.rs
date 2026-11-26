@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use rustyfin_models::data::Data;
 use rustyfin_services::user_data::UserDataUpdate;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -40,8 +41,8 @@ pub struct UpdateUserItemData {
 }
 
 /// `GET /UserItems/{itemId}/UserData`: the caller's data, zeros when untouched.
-pub async fn get_user_item_data(
-    State(state): State<AppState>,
+pub async fn get_user_item_data<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -58,8 +59,8 @@ pub async fn get_user_item_data(
 
 /// `POST /UserItems/{itemId}/UserData`: update the fields sent (Jellyfin 10.9+;
 /// clients such as Plezzy mark played this way).
-pub async fn update_user_item_data(
-    State(state): State<AppState>,
+pub async fn update_user_item_data<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Json(body): Json<UpdateUserItemData>,
@@ -85,8 +86,8 @@ pub async fn update_user_item_data(
 }
 
 /// `GET /Users/{userId}/Items/{itemId}/UserData` — legacy form.
-pub async fn get_user_item_data_legacy(
-    state: State<AppState>,
+pub async fn get_user_item_data_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -94,8 +95,8 @@ pub async fn get_user_item_data_legacy(
 }
 
 /// `POST /Users/{userId}/Items/{itemId}/UserData` — legacy form.
-pub async fn update_user_item_data_legacy(
-    state: State<AppState>,
+pub async fn update_user_item_data_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
     body: Json<UpdateUserItemData>,
@@ -103,8 +104,8 @@ pub async fn update_user_item_data_legacy(
     update_user_item_data(state, auth, Path(item_id), body).await
 }
 /// `POST /UserFavoriteItems/{itemId}` — Mark as favorite.
-pub async fn mark_favorite(
-    State(state): State<AppState>,
+pub async fn mark_favorite<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -117,8 +118,8 @@ pub async fn mark_favorite(
 }
 
 /// `DELETE /UserFavoriteItems/{itemId}` — Unmark favorite.
-pub async fn unmark_favorite(
-    State(state): State<AppState>,
+pub async fn unmark_favorite<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -131,8 +132,8 @@ pub async fn unmark_favorite(
 }
 
 /// `POST /UserPlayedItems/{itemId}` — Mark as played.
-pub async fn mark_played(
-    State(state): State<AppState>,
+pub async fn mark_played<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -145,8 +146,8 @@ pub async fn mark_played(
 }
 
 /// `DELETE /UserPlayedItems/{itemId}` — Mark as unplayed.
-pub async fn mark_unplayed(
-    State(state): State<AppState>,
+pub async fn mark_unplayed<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -161,8 +162,8 @@ pub async fn mark_unplayed(
 // Legacy routes
 
 /// `POST /Users/{userId}/FavoriteItems/{itemId}` — Legacy mark favorite.
-pub async fn mark_favorite_legacy(
-    state: State<AppState>,
+pub async fn mark_favorite_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -170,8 +171,8 @@ pub async fn mark_favorite_legacy(
 }
 
 /// `DELETE /Users/{userId}/FavoriteItems/{itemId}` — Legacy unmark favorite.
-pub async fn unmark_favorite_legacy(
-    state: State<AppState>,
+pub async fn unmark_favorite_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -179,8 +180,8 @@ pub async fn unmark_favorite_legacy(
 }
 
 /// `POST /Users/{userId}/PlayedItems/{itemId}` — Legacy mark played.
-pub async fn mark_played_legacy(
-    state: State<AppState>,
+pub async fn mark_played_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -188,16 +189,16 @@ pub async fn mark_played_legacy(
 }
 
 /// `DELETE /Users/{userId}/PlayedItems/{itemId}` — Legacy mark unplayed.
-pub async fn mark_unplayed_legacy(
-    state: State<AppState>,
+pub async fn mark_unplayed_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
     mark_unplayed(state, auth, Path(item_id)).await
 }
 
-pub async fn update_rating(
-    State(state): State<AppState>,
+pub async fn update_rating<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(params): Query<RatingParams>,
@@ -210,8 +211,8 @@ pub async fn update_rating(
     Ok(Json(to_dto(&ud)))
 }
 
-pub async fn delete_rating(
-    State(state): State<AppState>,
+pub async fn delete_rating<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {
@@ -223,8 +224,8 @@ pub async fn delete_rating(
     Ok(Json(to_dto(&ud)))
 }
 
-pub async fn update_rating_legacy(
-    state: State<AppState>,
+pub async fn update_rating_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
     query: Query<RatingParams>,
@@ -232,8 +233,8 @@ pub async fn update_rating_legacy(
     update_rating(state, auth, Path(item_id), query).await
 }
 
-pub async fn delete_rating_legacy(
-    state: State<AppState>,
+pub async fn delete_rating_legacy<D: Data>(
+    state: State<AppState<D>>,
     auth: AuthenticatedUser,
     Path((_user_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<UserItemDataDto>, ApiError> {

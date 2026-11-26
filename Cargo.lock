@@ -3427,7 +3427,6 @@ dependencies = [
  "regex",
  "reqwest 0.13.5",
  "rustyfin-common",
- "rustyfin-data",
  "rustyfin-media",
  "rustyfin-models",
  "rustyfin-search",

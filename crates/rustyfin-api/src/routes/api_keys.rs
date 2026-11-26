@@ -1,4 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
+use rustyfin_models::data::Data;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -33,8 +34,8 @@ pub struct ApiKeyDto {
     pub is_active: bool,
 }
 
-pub async fn create_api_key(
-    State(state): State<AppState>,
+pub async fn create_api_key<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> Result<Json<CreateApiKeyResponse>, ApiError> {
@@ -49,8 +50,8 @@ pub async fn create_api_key(
 
 /// `GET /Auth/Keys` — Jellyfin's query result. The keys themselves are shown
 /// once, when made, and never listed.
-pub async fn list_api_keys(
-    State(state): State<AppState>,
+pub async fn list_api_keys<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
 ) -> Result<Json<rustyfin_models::dto::QueryResult<ApiKeyDto>>, ApiError> {
     let rows = state.services.api_keys().list().await?;
@@ -71,8 +72,8 @@ pub async fn list_api_keys(
     Ok(Json(rustyfin_models::dto::QueryResult::new(dtos, total)))
 }
 
-pub async fn delete_api_key(
-    State(state): State<AppState>,
+pub async fn delete_api_key<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {

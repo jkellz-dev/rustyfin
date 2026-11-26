@@ -44,8 +44,8 @@ pub struct LinkInfo {
 }
 
 /// `GET /api/v1/links`
-pub async fn list(
-    State(state): State<AppState>,
+pub async fn list<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
 ) -> Result<Json<Vec<LinkInfo>>, ApiError> {
     let rows = state.data.links().list().await?;
@@ -78,8 +78,8 @@ pub async fn list(
 }
 
 /// `POST /api/v1/links/{id}/sync`: start a sync now; 204 at once.
-pub async fn sync_now(
-    State(state): State<AppState>,
+pub async fn sync_now<D: Data>(
+    State(state): State<AppState<D>>,
     _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {

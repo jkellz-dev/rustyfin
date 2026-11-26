@@ -21,8 +21,8 @@ pub struct SimilarQuery {
     pub user_id: Option<Uuid>,
 }
 
-pub async fn get_similar(
-    State(state): State<AppState>,
+pub async fn get_similar<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(item_id): Path<Uuid>,
     Query(query): Query<SimilarQuery>,
@@ -72,8 +72,8 @@ pub async fn get_similar(
     Ok(Json(QueryResult::new(dtos, total)))
 }
 
-pub async fn get_recommendations(
-    State(state): State<AppState>,
+pub async fn get_recommendations<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
 ) -> Result<Json<Vec<BaseItemDto>>, ApiError> {
     let recent = state

@@ -21,7 +21,7 @@ use rustyfin_common::naming::{
 };
 use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
-pub struct LibraryScanner<D = crate::Store> {
+pub struct LibraryScanner<D> {
     data: D,
     enrichment: EnrichmentService<D>,
     /// Collection art (`<tmdb-id>/poster.jpg`, ...), beside the people folder.

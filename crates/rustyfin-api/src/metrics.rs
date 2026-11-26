@@ -64,14 +64,14 @@ pub fn handle() -> &'static PrometheusHandle {
 }
 
 /// The metrics listener: `GET /metrics`.
-pub fn router(state: AppState) -> Router {
+pub fn router<D: Data>(state: AppState<D>) -> Router {
     handle();
     Router::new()
         .route("/metrics", get(render))
         .with_state(state)
 }
 
-async fn render(State(state): State<AppState>) -> Response {
+async fn render<D: Data>(State(state): State<AppState<D>>) -> Response {
     collect(&state).await;
     let handle = handle();
     handle.run_upkeep();
@@ -148,7 +148,7 @@ fn counts_due(database: &str) -> bool {
 }
 
 /// Scrape-time gauges.
-async fn collect(state: &AppState) {
+async fn collect<D: Data>(state: &AppState<D>) {
     metrics::gauge!("rustyfin_up").set(1.0);
     metrics::gauge!("rustyfin_build_info", "version" => env!("CARGO_PKG_VERSION")).set(1.0);
 

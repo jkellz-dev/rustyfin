@@ -33,8 +33,8 @@ static GENRE_PAGES: std::sync::Mutex<Option<GenrePages>> = std::sync::Mutex::new
 const GENRE_PAGES_FRESH: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// `GET /MusicGenres` — Browsable music genre list with per-type counts.
-pub async fn get_music_genres(
-    State(state): State<AppState>,
+pub async fn get_music_genres<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Query(query): Query<MusicGenresQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
@@ -70,14 +70,14 @@ pub async fn get_music_genres(
 
 /// The cache key of a library's genre list: database and schema (tests share
 /// one database, a schema each), and the library.
-async fn genre_list_key(state: &AppState, parent_id: Option<Uuid>) -> String {
+async fn genre_list_key<D: Data>(state: &AppState<D>, parent_id: Option<Uuid>) -> String {
     let schema: String = state.data.status().scope().await.unwrap_or_default();
     format!("{schema}|{parent_id:?}")
 }
 
 /// Build a library's genre list and keep it.
-async fn rebuild_genre_list(
-    state: &AppState,
+async fn rebuild_genre_list<D: Data>(
+    state: &AppState<D>,
     key: String,
     parent_id: Option<Uuid>,
 ) -> Result<Vec<BaseItemDto>, ApiError> {
@@ -98,7 +98,7 @@ const GENRE_LISTS_REBUILD: std::time::Duration = std::time::Duration::from_secs(
 /// start, in the background, and again every four minutes, before the five
 /// the cache keeps them (owner, 2026-11-24: the first open after the cache
 /// expired took 1.1 s). A failed build is logged and tried next time.
-pub fn spawn_genre_list_builder(state: AppState) {
+pub fn spawn_genre_list_builder<D: Data>(state: AppState<D>) {
     tokio::spawn(async move {
         loop {
             let started = std::time::Instant::now();
@@ -128,8 +128,8 @@ pub fn spawn_genre_list_builder(state: AppState) {
 
 /// Every music genre of `parent_id` (or everywhere), in name order, without
 /// the caller's own data.
-async fn build_music_genres(
-    state: &AppState,
+async fn build_music_genres<D: Data>(
+    state: &AppState<D>,
     parent_id: Option<Uuid>,
 ) -> Result<Vec<BaseItemDto>, ApiError> {
     let names = state
@@ -187,8 +187,8 @@ async fn build_music_genres(
 }
 
 /// `GET /MusicGenres/{genreName}` — Get a specific music genre by name.
-pub async fn get_music_genre(
-    State(state): State<AppState>,
+pub async fn get_music_genre<D: Data>(
+    State(state): State<AppState<D>>,
     auth: AuthenticatedUser,
     Path(genre_name): Path<String>,
 ) -> Result<Json<BaseItemDto>, ApiError> {
@@ -256,8 +256,8 @@ const GENRE_IDS_REREAD: std::time::Duration = std::time::Duration::from_secs(10)
 /// The genre named by `id` (a Genre or MusicGenre item's id), if any.
 /// `GenreIds` (comma-separated) as genre names; `None` when not given. Ids
 /// that name no genre are left out, so an unknown id matches nothing.
-pub(crate) async fn genre_names_by_ids(
-    data: &rustyfin_services::Store,
+pub(crate) async fn genre_names_by_ids<D: Data>(
+    data: &D,
     ids: Option<&str>,
 ) -> Option<Vec<String>> {
     let ids: Vec<Uuid> = ids?
@@ -273,7 +273,7 @@ pub(crate) async fn genre_names_by_ids(
     Some(names)
 }
 
-pub(crate) async fn genre_name_by_id(data: &rustyfin_services::Store, id: Uuid) -> Option<String> {
+pub(crate) async fn genre_name_by_id<D: Data>(data: &D, id: Uuid) -> Option<String> {
     // The database and schema: tests share one database, a schema each.
     let database: String = data.status().scope().await.unwrap_or_default();
     if let Ok(cached) = GENRE_IDS.lock()
