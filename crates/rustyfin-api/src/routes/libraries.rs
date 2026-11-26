@@ -5,9 +5,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use rustyfin_models::data::{
-    CollectionStore, Data, Library, LibraryStore, MediaItemStore, UserStore,
-};
+use rustyfin_models::data::{Data, Library, LibraryStore, MediaItemStore, UserStore};
 
 use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_models::dto::{
