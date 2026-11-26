@@ -721,7 +721,7 @@ pub trait MediaItemStore {
 
 /// What a list of items asks for: scope, filters, sort and page (`GET
 /// /Items` and the lists built like it).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ItemQuery {
     /// `GenreIds`, as names: items in any of them. An album or artist is in
     /// a genre when it or one of its tracks is.
