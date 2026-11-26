@@ -90,7 +90,6 @@ async fn vouched_user<D: Data>(
     headers: &axum::http::HeaderMap,
     query: Option<&str>,
 ) -> Result<Option<AuthenticatedUser>, DataError> {
-    let data = &state.data;
     let Some(user) = state
         .services
         .users()
