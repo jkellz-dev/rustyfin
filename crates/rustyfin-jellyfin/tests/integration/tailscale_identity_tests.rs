@@ -169,7 +169,7 @@ async fn the_library_webhook_comes_from_inside_with_a_server_key() {
     rustyfin_data::repo::api_keys::create(
         &app.pool,
         "Library tool",
-        &rustyfin_auth::api_key::hash_api_key(key),
+        &rustyfin_jellyfin::auth::api_key::hash_api_key(key),
     )
     .await
     .unwrap();

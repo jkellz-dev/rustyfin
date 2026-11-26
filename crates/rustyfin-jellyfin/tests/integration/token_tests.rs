@@ -1,7 +1,7 @@
 //! One answer to "does this access token still work?".
 //!
 //! The HTTP extractor and the `/socket` WebSocket both resolve a token through
-//! `rustyfin_auth::session::resolve_token`. The socket used to look the token up
+//! `rustyfin_jellyfin::auth::session::resolve_token`. The socket used to look the token up
 //! with no expiry check and no look at the user, so an expired session or a
 //! disabled account could still open one (and an open one was never re-checked).
 //! A WebSocket cannot be driven through the in-process test router, so the shared
@@ -9,8 +9,8 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_auth::session::{TokenError, resolve_token};
 use rustyfin_data::repo::{sessions, users};
+use rustyfin_jellyfin::auth::session::{TokenError, resolve_token};
 
 #[tokio::test]
 async fn a_live_token_resolves_to_its_session_and_user() {

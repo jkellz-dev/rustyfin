@@ -6,8 +6,8 @@ use axum::{
 use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use uuid::Uuid;
 
+use crate::auth::middleware::AuthenticatedUser;
 use crate::playback_info;
-use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_models::dto::{DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 
 use crate::error::ApiError;
@@ -54,7 +54,7 @@ pub async fn get_playback_info<D: Data>(
         auth.is_administrator,
     )
     .await?;
-    let token = rustyfin_auth::middleware::request_token(&headers, uri.query());
+    let token = crate::auth::middleware::request_token(&headers, uri.query());
     playback_info::apply_subtitle_delivery(
         &mut info,
         item_id,
@@ -119,7 +119,7 @@ pub async fn post_playback_info<D: Data>(
     super::link_relay::offer_transcodes(&state, &mut info, &raw).await;
     // Linked copies the friend converts can play now: in order again.
     super::versions::order_sources(&mut info, &ranks, state.prefer_direct_play);
-    let token = rustyfin_auth::middleware::request_token(&headers, uri.query());
+    let token = crate::auth::middleware::request_token(&headers, uri.query());
     let profile = body.device_profile.as_ref().or(stored_profile.as_ref());
     playback_info::apply_subtitle_delivery(&mut info, item_id, profile, token.as_deref());
     // The user's languages pick each copy's starting tracks.

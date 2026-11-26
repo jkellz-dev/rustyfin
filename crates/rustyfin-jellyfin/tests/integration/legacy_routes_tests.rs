@@ -23,7 +23,7 @@ async fn the_arrs_older_notifications_rescan_the_title_they_name() {
     rustyfin_data::repo::api_keys::create(
         &app.pool,
         "Library tool",
-        &rustyfin_auth::api_key::hash_api_key(key),
+        &rustyfin_jellyfin::auth::api_key::hash_api_key(key),
     )
     .await
     .unwrap();

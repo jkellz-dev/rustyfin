@@ -1,11 +1,11 @@
 //! A title's extras (roadmap 11j): `LocalTrailers`, `SpecialFeatures` and
 //! theme videos, read from the extras the scan stored under it.
 
+use crate::auth::middleware::AuthenticatedUser;
 use axum::{
     Json,
     extract::{Path, State},
 };
-use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
 use rustyfin_models::dto::{BaseItemDto, ThemeMediaResult};
 use uuid::Uuid;

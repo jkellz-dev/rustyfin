@@ -113,7 +113,7 @@ proxy.
 
 The `identity` layer (`crates/rustyfin-jellyfin/src/identity.rs`) runs before every route: a request from a trusted
 proxy that names someone becomes that user's, in the request's extensions, with the session the token picks (or the
-device's, or a new one). Routes take the user through extractors from `rustyfin-auth`:
+device's, or a new one). Routes take the user through extractors in `rustyfin-jellyfin`'s `auth` module:
 
 - `AuthenticatedUser`: the user (from the identity layer, or a token where no proxy is configured); 401 without one.
 - `AdminUser`: the same, and an administrator; 403 for anyone else.

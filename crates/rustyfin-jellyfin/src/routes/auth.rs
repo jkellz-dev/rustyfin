@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
 };
 
-use rustyfin_auth::{middleware::parse_mediabrowser_header, session};
+use crate::auth::{middleware::parse_mediabrowser_header, session};
 use rustyfin_models::dto::{
     AuthenticateByNameRequest, AuthenticationResult, SessionInfoDto, UserConfiguration, UserDto,
     UserPolicy,

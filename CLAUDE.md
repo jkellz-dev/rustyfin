@@ -73,7 +73,8 @@ The code is moving to this layout one area at a time. Done: `rustyfin-db` is now
 private to it, behind one trait per area in `rustyfin_models::data`. `rustyfin-core` is now `rustyfin-services`, generic
 over `Data`, and holds the rules (access, users, libraries, playback, sessions, shows, browsing, tokens, API keys,
 collections, scans, links). Meilisearch lives in `rustyfin-data` behind `Data::search()`. The HTTP crate is now
-`rustyfin-jellyfin`; it, `rustyfin-auth` and `rustyfin-media` do not depend on `rustyfin-data`; the API is generic over
-`D: Data` and only `rustyfin-server` picks Postgres. Still to move: the `/api/v1` routes out of `rustyfin-jellyfin` into
-`rustyfin-api`, and the Jellyfin DTOs out of `rustyfin-models` into `rustyfin-jellyfin`. Code you touch moves towards
-the layout; never add new direct database access outside `rustyfin-data`.
+`rustyfin-jellyfin` (with Jellyfin's request identity, once `rustyfin-auth`); it and `rustyfin-media` do not depend on
+`rustyfin-data`; the API is generic over `D: Data` and only `rustyfin-server` picks Postgres. Still to move: the
+`/api/v1` routes out of `rustyfin-jellyfin` into `rustyfin-api`, and the Jellyfin DTOs out of `rustyfin-models` into
+`rustyfin-jellyfin`. Code you touch moves towards the layout; never add new direct database access outside
+`rustyfin-data`.

@@ -6,7 +6,7 @@ use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, NameKind};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use crate::auth::middleware::AuthenticatedUser;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 use crate::error::{ApiError, DegradeExt};

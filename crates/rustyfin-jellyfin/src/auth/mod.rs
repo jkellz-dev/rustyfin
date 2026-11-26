@@ -1,4 +1,5 @@
-//! Who is asking: turning a request into a user and a session.
+//! Who is asking, the way Jellyfin apps say it: a request into a user and
+//! a session.
 //!
 //! Identity comes only from a forward-auth proxy (Tailscale, Authelia, ...)
 //! that Rustyfin trusts (`rustyfin_services::proxy`); Rustyfin checks no

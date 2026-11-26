@@ -5,7 +5,7 @@ use chrono::Utc;
 use serde::Serialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
 
 // ── Reusable generic stubs ────────────────────────────────────────

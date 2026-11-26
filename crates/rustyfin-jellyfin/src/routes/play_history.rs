@@ -2,12 +2,12 @@
 //! user's page in the admin. Rustyfin's own routes; Jellyfin keeps this in a
 //! plugin (Playback Reporting).
 
+use crate::auth::middleware::AuthenticatedUser;
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
 use chrono::{DateTime, Utc};
-use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PlayFilter};
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};

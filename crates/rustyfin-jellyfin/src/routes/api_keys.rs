@@ -3,7 +3,7 @@ use rustyfin_models::data::Data;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AdminUser;
+use crate::auth::middleware::AdminUser;
 
 use crate::error::ApiError;
 use crate::router::AppState;

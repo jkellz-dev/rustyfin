@@ -1,7 +1,7 @@
 use axum::{Json, extract::Query};
 use serde::Deserialize;
 
-use rustyfin_auth::middleware::AdminUser;
+use crate::auth::middleware::AdminUser;
 use rustyfin_models::dto::FileSystemEntryInfo;
 
 use crate::error::ApiError;

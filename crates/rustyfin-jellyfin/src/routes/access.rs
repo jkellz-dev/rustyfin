@@ -33,7 +33,7 @@ pub async fn retain_accessible<D: Data>(
 }
 
 /// The caller, for the services' rules that depend on who asks.
-pub fn viewer(auth: &rustyfin_auth::middleware::AuthenticatedUser) -> rustyfin_services::Viewer {
+pub fn viewer(auth: &crate::auth::middleware::AuthenticatedUser) -> rustyfin_services::Viewer {
     rustyfin_services::Viewer {
         user: auth.user_id,
         is_administrator: auth.is_administrator,

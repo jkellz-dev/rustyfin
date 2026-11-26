@@ -48,7 +48,6 @@ rustyfin/
 ├── crates/
 │   ├── rustyfin-server/        # The server binary: config, startup, wiring
 │   ├── rustyfin-jellyfin/      # HTTP routes (Jellyfin's and Rustyfin's own), AppState
-│   ├── rustyfin-auth/          # Who is asking: forward auth, tokens, sessions
 │   ├── rustyfin-services/      # Scanner, enrichment, scheduler, sessions, scan progress
 │   ├── rustyfin-data/          # Postgres and Meilisearch: migrations, repositories, the search index
 │   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
@@ -69,8 +68,7 @@ Each crate starts with a `//!` overview of what it holds.
 
 ```text
 rustyfin-server ─── rustyfin-data (the one place Postgres is chosen)
-├── rustyfin-jellyfin ──┬── rustyfin-auth ──── rustyfin-services, rustyfin-models
-│                       ├── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-models
+├── rustyfin-jellyfin ──┬── rustyfin-services ─ rustyfin-common, rustyfin-media, rustyfin-models
 │                       ├── rustyfin-media ─── rustyfin-models
 │                       └── rustyfin-common
 └── rustyfin-frontend (no internal dependencies)
@@ -95,12 +93,6 @@ history, devices, WebSocket, ...). `router.rs` holds `AppState` and builds the r
 `ApiError` mapped to status codes and log levels), `query_case.rs` (Jellyfin's query names in any case), `play_state.rs`
 (Jellyfin 10.10's played and resume rules), `request_log.rs` and `metrics.rs` (what clients ask for), `health.rs`,
 `login_limit.rs` and `cors.rs`. Route rules are in the [API Reference](api-reference.md).
-
-### `rustyfin-auth`
-
-Turns a request into a user and a session. Identity comes only from a trusted forward-auth proxy; Rustyfin checks and
-stores no passwords. The `AuthenticatedUser`, `AdminUser` and `OptionalUser` extractors read Jellyfin's
-`Authorization: MediaBrowser ...` header (or `X-Emby-Token`, or `api_key`). See [Authentication](authentication.md).
 
 ### `rustyfin-services`
 

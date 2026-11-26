@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use crate::auth::middleware::AuthenticatedUser;
 use rustyfin_models::data::{Data, DisplayPreferencesStore};
 use rustyfin_models::dto::DisplayPreferencesDto;
 

@@ -19,14 +19,14 @@
 
 use std::net::SocketAddr;
 
+use crate::auth::middleware::{
+    AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token,
+};
 use axum::{
     extract::{ConnectInfo, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
-};
-use rustyfin_auth::middleware::{
-    AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token,
 };
 use rustyfin_models::data::{Data, DataError};
 use rustyfin_services::proxy::{self, ForwardAuthIdentity};

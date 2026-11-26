@@ -11,7 +11,7 @@ use rustyfin_models::data::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::{AuthenticatedUser, OptionalUser};
+use crate::auth::middleware::{AuthenticatedUser, OptionalUser};
 use rustyfin_media::image_processing::{self, ImageFormat, ImageOptions, Placeholder};
 use rustyfin_models::dto::ImageInfo;
 

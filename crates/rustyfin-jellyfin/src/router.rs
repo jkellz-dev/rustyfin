@@ -54,7 +54,7 @@ pub struct AppState<D> {
     pub prefer_direct_play: bool,
 }
 
-impl<D: Data> rustyfin_auth::middleware::DataState for AppState<D> {
+impl<D: Data> crate::auth::middleware::DataState for AppState<D> {
     type Data = D;
     fn data(&self) -> &D {
         &self.data

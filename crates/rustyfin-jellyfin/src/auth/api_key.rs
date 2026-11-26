@@ -1,4 +1,4 @@
-use crate::middleware::DataState;
+use crate::auth::middleware::DataState;
 use axum::{
     extract::FromRequestParts,
     http::{StatusCode, request::Parts},

@@ -4,9 +4,9 @@
 //! it, so its web client neither sees nor resets these.
 use rustyfin_models::data::Data;
 
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use axum::Json;
 use axum::extract::{Path, State};
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

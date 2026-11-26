@@ -1,11 +1,11 @@
 //! The admin's view of linked servers (roadmap 16b): `GET /api/v1/links`
 //! and `POST /api/v1/links/{id}/sync`. Administrators only.
 
+use crate::auth::middleware::AdminUser;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
-use rustyfin_auth::middleware::AdminUser;
 use rustyfin_models::data::{Data, LinkStore};
 use serde::Serialize;
 use uuid::Uuid;

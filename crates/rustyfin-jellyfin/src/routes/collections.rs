@@ -6,7 +6,7 @@ use rustyfin_models::data::{Data, ImageStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 
 use crate::error::ApiError;
 use crate::router::AppState;

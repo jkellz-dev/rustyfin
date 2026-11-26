@@ -7,7 +7,7 @@ use axum::{
 };
 use rustyfin_models::data::{Data, Library, LibraryStore, MediaItemStore, UserStore};
 
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_models::dto::{
     BaseItemDto, CreateLibraryRequest, LibraryOptions, LinkedServer, MediaPathInfo, NameGuidPair,
     QueryResult, UpdateLibraryRequest, VirtualFolderInfo,

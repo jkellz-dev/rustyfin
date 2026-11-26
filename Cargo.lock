@@ -3205,23 +3205,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-name = "rustyfin-auth"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "rustyfin-models",
- "rustyfin-services",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "rustyfin-bench"
 version = "0.1.0"
 dependencies = [
@@ -3300,7 +3283,6 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "rand 0.10.4",
- "rustyfin-auth",
  "rustyfin-common",
  "rustyfin-data",
  "rustyfin-media",
@@ -3316,6 +3298,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 

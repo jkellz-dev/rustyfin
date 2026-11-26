@@ -2,11 +2,11 @@
 //! from the friend's server through this one, so clients only ever talk to
 //! this one.
 
+use crate::auth::middleware::AuthenticatedUser;
 use axum::body::Body;
 use axum::extract::{Path, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
 use axum::response::Response;
-use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_media::image_processing::{self, ImageOptions};
 use rustyfin_models::data::{Data, LinkStore, MediaItem, MediaItemStore};
 

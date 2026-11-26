@@ -6,7 +6,7 @@ use futures_util::{SinkExt, StreamExt};
 use rustyfin_models::data::{Data, SessionStore};
 use uuid::Uuid;
 
-use rustyfin_auth::session::{TokenError, resolve_token};
+use crate::auth::session::{TokenError, resolve_token};
 use rustyfin_models::dto::{OutboundWebSocketMessage, SessionCommand};
 
 use crate::router::AppState;
@@ -14,8 +14,8 @@ use crate::router::AppState;
 /// `GET /socket` — WebSocket endpoint for real-time updates.
 pub async fn websocket_handler<D: Data>(
     State(state): State<AppState<D>>,
-    vouched: Option<axum::Extension<rustyfin_auth::middleware::AuthenticatedUser>>,
-    unvouched: Option<axum::Extension<rustyfin_auth::middleware::Unvouched>>,
+    vouched: Option<axum::Extension<crate::auth::middleware::AuthenticatedUser>>,
+    unvouched: Option<axum::Extension<crate::auth::middleware::Unvouched>>,
     headers: axum::http::HeaderMap,
     uri: axum::http::Uri,
     ws: WebSocketUpgrade,
@@ -33,7 +33,7 @@ pub async fn websocket_handler<D: Data>(
     }
     // The same check HTTP requests get: an unknown, logged-out or expired session,
     // or a disabled user, must not be able to open a socket.
-    let token = rustyfin_auth::middleware::socket_token(&headers, uri.query()).unwrap_or_default();
+    let token = crate::auth::middleware::socket_token(&headers, uri.query()).unwrap_or_default();
     let session = match resolve_token(&state.data, &token).await {
         Ok(resolved) => Some(resolved.session),
         Err(TokenError::Database(e)) => {

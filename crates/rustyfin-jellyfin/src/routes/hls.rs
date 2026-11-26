@@ -13,8 +13,8 @@ use serde::Deserialize;
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use crate::auth::middleware::AuthenticatedUser;
 use crate::playback_info::stream_row_to_dto;
-use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_media::transcode::{
     hls::{
         MasterPlaylistParams, generate_audio_master_playlist, generate_master_playlist,

@@ -6,7 +6,7 @@ use axum::{
 };
 use rustyfin_models::data::{Data, LibraryStore, MediaItemStore, UserStore};
 
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_models::dto::{
     CastReceiverApplication, DashboardStats, EndPointInfo, LogFileInfo, PublicSystemInfo,
     StartupConfiguration, SystemInfo,

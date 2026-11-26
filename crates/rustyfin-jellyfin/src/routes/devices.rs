@@ -1,13 +1,13 @@
 //! Devices signed in, and signing one out (Jellyfin's `/Devices`; roadmap
 //! 12e). Administrators only. Tokens are never listed.
 
+use crate::auth::middleware::AdminUser;
 use axum::{
     Json,
     extract::{Query, State},
     http::StatusCode,
 };
 use chrono::{DateTime, Utc};
-use rustyfin_auth::middleware::AdminUser;
 use rustyfin_models::data::{Data, Device, SessionStore};
 use rustyfin_models::dto::QueryResult;
 use serde::{Deserialize, Serialize};

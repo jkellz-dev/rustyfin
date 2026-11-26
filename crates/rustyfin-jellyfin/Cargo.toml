@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-rustyfin-auth.workspace = true
 rustyfin-common.workspace = true
 rustyfin-services.workspace = true
 rustyfin-models.workspace = true
@@ -32,6 +31,7 @@ tracing-opentelemetry.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
 rand.workspace = true
+url = "2"
 
 [dev-dependencies]
 # The tests set up rows straight in the database; the crate itself never

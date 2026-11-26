@@ -6,7 +6,7 @@ use axum::{
 use rustyfin_models::data::Data;
 use serde::Deserialize;
 
-use rustyfin_auth::api_key::ApiKeyUser;
+use crate::auth::api_key::ApiKeyUser;
 
 use crate::error::ApiError;
 use crate::router::AppState;

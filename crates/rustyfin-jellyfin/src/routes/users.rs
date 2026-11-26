@@ -8,7 +8,7 @@ use rustyfin_models::data::{Data, User};
 use rustyfin_services::users::{PolicyChange, SettingsChange};
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, UserPolicy};
 
 use crate::error::ApiError;

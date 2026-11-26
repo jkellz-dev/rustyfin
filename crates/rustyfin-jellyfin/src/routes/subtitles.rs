@@ -7,7 +7,7 @@ use axum::{
 use rustyfin_models::data::{Data, MediaItemStore, MediaStreamStore};
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use crate::auth::middleware::AuthenticatedUser;
 use rustyfin_media::transcode::subtitles;
 
 use crate::error::ApiError;

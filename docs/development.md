@@ -79,7 +79,6 @@ rustyfin/
 └── crates/
     ├── rustyfin-server/        # Binary
     ├── rustyfin-jellyfin/      # Route handlers
-    ├── rustyfin-auth/          # Auth extractors
     ├── rustyfin-services/      # Domain logic
     ├── rustyfin-data/          # Database layer and search index
     ├── rustyfin-models/        # Shared DTOs
@@ -232,7 +231,7 @@ database connection needed).
 // In crates/rustyfin-jellyfin/src/routes/my_resource.rs
 
 use axum::{Json, extract::State};
-use rustyfin_auth::middleware::AuthenticatedUser; // or AdminUser
+use crate::auth::middleware::AuthenticatedUser; // or AdminUser
 use rustyfin_models::data::Data;
 use crate::error::ApiError;
 use crate::router::AppState;

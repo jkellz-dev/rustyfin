@@ -7,7 +7,7 @@ use rustyfin_models::data::{Data, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use rustyfin_auth::middleware::AuthenticatedUser;
+use crate::auth::middleware::AuthenticatedUser;
 
 use crate::error::ApiError;
 use crate::router::AppState;

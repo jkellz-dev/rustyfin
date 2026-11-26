@@ -8,6 +8,7 @@
 //! [`metrics`] (what clients ask for, Prometheus), [`health`] and [`cors`].
 
 pub mod api_v1;
+pub mod auth;
 pub mod cors;
 pub mod error;
 pub mod guid_format;

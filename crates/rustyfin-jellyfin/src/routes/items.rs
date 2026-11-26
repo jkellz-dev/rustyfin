@@ -12,8 +12,8 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use crate::playback_info::{default_audio_stream_index, source_video_type, stream_row_to_dto};
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
 use rustyfin_media::image_processing::Placeholder;
 use rustyfin_models::dto::{
     BaseItemDto, BaseItemPerson, ChapterInfo, MediaSourceInfo, MediaStream, NameGuidPair,

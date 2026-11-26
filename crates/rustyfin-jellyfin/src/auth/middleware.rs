@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use rustyfin_models::dto::MediaBrowserAuth;
 
-use crate::session::{ResolvedToken, TokenError, resolve_token};
+use crate::auth::session::{ResolvedToken, TokenError, resolve_token};
 
 /// The access token a request carries, where Jellyfin clients put it: the
 /// `Authorization: MediaBrowser Token="..."` header, `X-Emby-Token` /

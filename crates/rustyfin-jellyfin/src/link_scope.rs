@@ -58,7 +58,7 @@ impl<D: Data> LinkScope<D> {
         if let Some(linking) = SEEN.lock().unwrap().get(token) {
             return *linking;
         }
-        let linking = match rustyfin_auth::session::resolve_token(&self.data, token).await {
+        let linking = match crate::auth::session::resolve_token(&self.data, token).await {
             Ok(r) => r.user.may_link || r.session.device_name == LINK_DEVICE,
             // Unknown or failing: the routes answer as they would.
             Err(_) => return false,
@@ -79,7 +79,7 @@ pub async fn dispatch<D: Data>(
     req: Request,
     next: Next,
 ) -> Response {
-    let token = rustyfin_auth::middleware::request_token(req.headers(), req.uri().query());
+    let token = crate::auth::middleware::request_token(req.headers(), req.uri().query());
     if let Some(token) = token
         && scope.is_linking(&token).await
     {

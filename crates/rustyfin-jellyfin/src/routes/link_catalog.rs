@@ -2,9 +2,9 @@
 //! 16b.2r). The caller is an ordinary user, signed in the usual way (forward
 //! auth), whom the admin lets link (`may_link`); it sees what that user can see.
 
+use crate::auth::middleware::AuthenticatedUser;
 use axum::Json;
 use axum::extract::{Query, State};
-use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_models::data::{CatalogStore, Data, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

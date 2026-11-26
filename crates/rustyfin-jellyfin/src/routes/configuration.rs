@@ -13,7 +13,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use rustyfin_auth::middleware::{AdminUser, AuthenticatedUser};
+use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 
 use crate::router::AppState;
 
