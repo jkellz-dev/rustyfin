@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Media item types in the Jellyfin object model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-#[sqlx(type_name = "text", rename_all = "PascalCase")]
 pub enum ItemType {
     Movie,
     Series,
