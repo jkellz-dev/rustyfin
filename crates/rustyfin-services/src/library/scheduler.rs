@@ -1,4 +1,4 @@
-use rustyfin_models::data::{ActivityLogStore, Data, LibraryStore, TaskResultStore};
+use rustyfin_models::data::{ActivityLogStore, Data, Library, LibraryStore, TaskResultStore};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -11,8 +11,6 @@ use rand::RngExt;
 use rustyfin_data::PgData;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-
-use rustyfin_data::repo::libraries;
 
 use crate::library::scanner::LibraryScanner;
 
@@ -500,7 +498,7 @@ impl TaskScheduler {
 
     /// Resolve which schedule a library should use.
     /// Three-tier: DB column -> config mapping -> default.
-    fn resolve_schedule_for_library(&self, lib: &libraries::LibraryRow) -> String {
+    fn resolve_schedule_for_library(&self, lib: &Library) -> String {
         // Tier 1: DB column
         if let Some(ref sched) = lib.scan_schedule {
             if self.config.schedules.contains_key(sched) {

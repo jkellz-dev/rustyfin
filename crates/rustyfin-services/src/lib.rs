@@ -38,6 +38,9 @@ pub use viewer::Viewer;
 /// never the data crate itself (`CLAUDE.md`, "Layers").
 pub type Store = rustyfin_data::PgData;
 
+/// Search over [`Store`].
+pub type Search = rustyfin_search::SearchService<Store>;
+
 use rustyfin_models::data::Data;
 
 /// The services over one data layer. Cheap to clone when the data layer is.

@@ -11,11 +11,11 @@ use super::scheduler::ScheduledTask;
 // ── SearchReindexTask ────────────────────────────────────────────────
 
 pub struct SearchReindexTask {
-    search_service: Arc<rustyfin_search::SearchService>,
+    search_service: Arc<crate::Search>,
 }
 
 impl SearchReindexTask {
-    pub fn new(search_service: Arc<rustyfin_search::SearchService>) -> Self {
+    pub fn new(search_service: Arc<crate::Search>) -> Self {
         Self { search_service }
     }
 }

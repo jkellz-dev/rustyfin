@@ -6,8 +6,7 @@
 //! lossless audio. A tie keeps the copies' existing order, so the caller's
 //! own preference (the film's own file, a local copy over a linked one) wins
 //! it.
-
-use rustyfin_data::repo::media_streams::MediaStreamRow;
+use rustyfin_models::data::MediaStream;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Kind {
@@ -31,8 +30,8 @@ pub struct Stream {
     pub profile: Option<String>,
 }
 
-impl From<&MediaStreamRow> for Stream {
-    fn from(row: &MediaStreamRow) -> Self {
+impl From<&MediaStream> for Stream {
+    fn from(row: &MediaStream) -> Self {
         Self {
             kind: match row.stream_type.as_str() {
                 "Video" => Kind::Video,
@@ -96,7 +95,7 @@ impl Quality {
     }
 
     /// From stored stream rows.
-    pub fn of_rows(rows: &[MediaStreamRow], total_bitrate: Option<i64>) -> Self {
+    pub fn of_rows(rows: &[MediaStream], total_bitrate: Option<i64>) -> Self {
         let streams: Vec<Stream> = rows.iter().map(Stream::from).collect();
         Self::of(&streams, total_bitrate)
     }

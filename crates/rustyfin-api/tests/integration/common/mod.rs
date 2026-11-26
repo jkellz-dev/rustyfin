@@ -40,7 +40,7 @@ pub struct TestApp {
     /// Linked servers (roadmap 16b), empty until a test registers one.
     pub links: Arc<rustyfin_services::link::Links>,
     /// Search; with Meilisearch in [`TestApp::with_meilisearch`].
-    pub search: Arc<SearchService>,
+    pub search: Arc<rustyfin_services::Search>,
 }
 
 impl TestApp {

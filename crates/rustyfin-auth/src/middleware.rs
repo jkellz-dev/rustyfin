@@ -2,8 +2,8 @@ use axum::{
     extract::{FromRef, FromRequestParts},
     http::{StatusCode, header, request::Parts},
 };
-use rustyfin_data::PgData;
 use rustyfin_models::data::{Data, DataError, SessionStore};
+use rustyfin_services::Store as PgData;
 use uuid::Uuid;
 
 use rustyfin_models::dto::MediaBrowserAuth;

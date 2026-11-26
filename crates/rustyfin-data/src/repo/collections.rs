@@ -45,45 +45,6 @@ pub async fn list_item_ids(pool: &PgPool, collection_id: Uuid) -> Result<Vec<Uui
 
 pub use rustyfin_models::data::AutoSet;
 
-/// Group films by the series their NFO names. A TMDB collection id (the NFO's
-/// `tmdbcolid`) is the key when known; a film whose NFO only names the set
-/// joins the collection of that name that has an id, if any, so a library
-/// mid-way between NFO writers does not split. Sorted by name.
-/// `found` is (film, set name, TMDB collection id).
-pub fn group_auto_sets(found: Vec<(Uuid, String, Option<String>)>) -> Vec<AutoSet> {
-    use std::collections::BTreeMap;
-    // The id each set name has (the first film that gives one wins).
-    let mut id_of_name: BTreeMap<String, String> = BTreeMap::new();
-    for (_, name, tmdb_id) in &found {
-        if let Some(id) = tmdb_id {
-            id_of_name.entry(name.clone()).or_insert_with(|| id.clone());
-        }
-    }
-    // Key: "tmdb:<id>" or "name:<name>"; value: (name, id, films).
-    let mut groups: BTreeMap<String, AutoSet> = BTreeMap::new();
-    for (item, name, own_id) in found {
-        let has_own_id = own_id.is_some();
-        let tmdb_id = own_id.or_else(|| id_of_name.get(&name).cloned());
-        let key = match &tmdb_id {
-            Some(id) => format!("tmdb:{id}"),
-            None => format!("name:{name}"),
-        };
-        let group = groups.entry(key).or_insert_with(|| AutoSet {
-            name: name.clone(),
-            tmdb_id: tmdb_id.clone(),
-            items: Vec::new(),
-        });
-        // The id-bearing name wins over an older NFO's.
-        if has_own_id {
-            group.name = name;
-        }
-        group.items.push(item);
-    }
-    let mut sets: Vec<AutoSet> = groups.into_values().collect();
-    sets.sort_by(|a, b| a.name.cmp(&b.name).then(a.tmdb_id.cmp(&b.tmdb_id)));
-    sets
-}
-
 /// Make the library's automatic collections (BoxSets marked
 /// `extra_data.AutoCollection`) exactly `sets`: one per TMDB collection id
 /// (else per name), holding those items, named and identified as given.

@@ -260,3 +260,22 @@ pub fn remote_item(remote_id: &str) -> &str {
         .split_once('/')
         .map_or(remote_id, |(item, _)| item)
 }
+
+/// Where a linked image is: `link://<link>/<remote item>/<type>/<index>?tag=<tag>`.
+pub fn image_path(link_id: Uuid, remote_id: &str, kind: &str, index: i32, tag: &str) -> String {
+    format!("{LINK_SCHEME}{link_id}/{remote_id}/{kind}/{index}?tag={tag}")
+}
+
+pub const LINK_SCHEME: &str = "link://";
+
+/// The parts of a linked image path: (link, remote item, type, index, tag).
+pub fn parse_image_path(path: &str) -> Option<(Uuid, &str, &str, i32, &str)> {
+    let rest = path.strip_prefix(LINK_SCHEME)?;
+    let (rest, tag) = rest.split_once("?tag=")?;
+    let mut parts = rest.splitn(4, '/');
+    let link = Uuid::parse_str(parts.next()?).ok()?;
+    let remote = parts.next()?;
+    let kind = parts.next()?;
+    let index = parts.next()?.parse().ok()?;
+    Some((link, remote, kind, index, tag))
+}

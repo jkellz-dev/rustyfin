@@ -45,7 +45,10 @@ pub use display_preferences::DisplayPreferencesStore;
 pub use error::{DataError, DataResult};
 pub use images::{Image, ImageStore, NewImage};
 pub use libraries::{Library, LibraryStat, LibraryStore};
-pub use links::{Link, LinkCollection, LinkStore, LinkedItem, remote_item};
+pub use links::{
+    LINK_SCHEME, Link, LinkCollection, LinkStore, LinkedItem, image_path, parse_image_path,
+    remote_item,
+};
 pub use media_item::{
     ArtistFilter, ItemMetadata, ItemQuery, MediaItem, MediaItemStore, NameKind, NewMediaItem,
 };

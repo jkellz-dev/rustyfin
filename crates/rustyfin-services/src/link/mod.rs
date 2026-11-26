@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 pub use jellyfin::{Changed, Feed, JellyfinClient};
 pub use oidc::OidcSettings;
-pub use rustyfin_data::repo::links::{LINK_SCHEME, parse_image_path};
+pub use rustyfin_models::data::{LINK_SCHEME, parse_image_path};
 pub use sync::items_from_jellyfin;
 
 /// What the friend runs. A Rustyfin is signed in to through its forward-auth

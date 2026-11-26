@@ -1,5 +1,4 @@
-use rustyfin_data::repo::media_items::MediaItemRow;
-use rustyfin_data::repo::media_streams::MediaStreamRow;
+use rustyfin_models::data::{MediaItem, MediaStream};
 use rustyfin_models::dto::{
     DeviceProfile, MediaSourceInfo, MediaStream, PlaybackInfoRequest, PlaybackInfoResponse,
     SubtitleProfile,
@@ -8,9 +7,9 @@ use uuid::Uuid;
 
 use crate::transcode::profiles::{PlayMethod, decide_play_method};
 
-/// Convert a `MediaStreamRow` to a `MediaStream` DTO.
+/// Convert a `MediaStream` to a `MediaStream` DTO.
 /// `SDR`, or `HDR` for the transfer functions HDR formats use: (range, range type).
-fn video_range(s: &MediaStreamRow) -> (&'static str, &'static str) {
+fn video_range(s: &MediaStream) -> (&'static str, &'static str) {
     match s.color_transfer.as_deref() {
         Some("smpte2084") => ("HDR", "HDR10"),
         Some("arib-std-b67") => ("HDR", "HLG"),
@@ -27,7 +26,7 @@ fn capitalised(word: &str) -> String {
 }
 
 /// Jellyfin's `DisplayTitle`: what a client shows in a track picker.
-fn display_title(s: &MediaStreamRow) -> String {
+fn display_title(s: &MediaStream) -> String {
     let codec = s.codec.as_deref().unwrap_or("").to_uppercase();
     if s.stream_type == "Video" {
         let mut parts = Vec::new();
@@ -64,7 +63,7 @@ fn display_title(s: &MediaStreamRow) -> String {
     parts.join(" - ")
 }
 
-pub fn stream_row_to_dto(s: &MediaStreamRow) -> MediaStream {
+pub fn stream_row_to_dto(s: &MediaStream) -> MediaStream {
     let is_video = s.stream_type == "Video";
     let (range, range_type) = if is_video {
         video_range(s)
@@ -143,8 +142,8 @@ pub fn default_audio_stream_index(streams: &[MediaStream]) -> Option<i32> {
 
 /// Build a PlaybackInfoResponse, choosing direct play vs transcode based on the device profile.
 pub fn build_playback_info(
-    item: &MediaItemRow,
-    streams: &[MediaStreamRow],
+    item: &MediaItem,
+    streams: &[MediaStream],
     request: Option<&PlaybackInfoRequest>,
     stored_profile: Option<&DeviceProfile>,
 ) -> PlaybackInfoResponse {

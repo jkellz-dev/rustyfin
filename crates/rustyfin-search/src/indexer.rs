@@ -1,13 +1,12 @@
 //! The Meilisearch indexes, their settings and documents: one for items
 //! (films, shows, episodes, albums, artists, tracks...) and one for people.
+use rustyfin_models::data::{MediaItem, Person};
 
 use std::time::Duration;
 
 use meilisearch_sdk::client::{Client, SwapIndexes};
 use meilisearch_sdk::settings::Settings;
 use meilisearch_sdk::task_info::TaskInfo;
-use rustyfin_data::repo::media_items::MediaItemRow;
-use rustyfin_data::repo::people::PersonRow;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -36,8 +35,8 @@ pub struct ItemDoc {
     library_id: Option<String>,
 }
 
-impl From<&MediaItemRow> for ItemDoc {
-    fn from(item: &MediaItemRow) -> Self {
+impl From<&MediaItem> for ItemDoc {
+    fn from(item: &MediaItem) -> Self {
         Self {
             id: item.id.to_string(),
             name: item.name.clone(),
@@ -65,8 +64,8 @@ pub struct PersonDoc {
     person_type: String,
 }
 
-impl From<&PersonRow> for PersonDoc {
-    fn from(p: &PersonRow) -> Self {
+impl From<&Person> for PersonDoc {
+    fn from(p: &Person) -> Self {
         Self {
             id: p.id.to_string(),
             name: p.name.clone(),

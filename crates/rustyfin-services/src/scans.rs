@@ -27,7 +27,7 @@ pub struct ScanRuntime {
     /// Libraries being scanned now.
     pub in_flight: Arc<RwLock<HashSet<Uuid>>>,
     pub links: Arc<Links>,
-    pub search: Arc<rustyfin_search::SearchService>,
+    pub search: Arc<crate::Search>,
     /// The shared people folder (headshots), when configured.
     pub people_cache_dir: Option<PathBuf>,
 }

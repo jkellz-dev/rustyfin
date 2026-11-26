@@ -1,14 +1,13 @@
 use rustyfin_models::data::{
     ActivityLogStore, ChapterStore, CollectionStore, Data, DataError, ImageStore, LibraryStore,
-    LinkStore, MediaItemStore, MediaStreamStore,
+    LinkStore, MediaItemStore, MediaStreamStore, NewMediaItem, NewMediaStream,
 };
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use rustyfin_data::PgData;
+use crate::Store as PgData;
 use uuid::Uuid;
 
-use rustyfin_data::repo::{collections, images as images_repo, media_items, media_streams};
 use rustyfin_media::probe;
 
 use crate::library::enrichment::EnrichmentService;
@@ -539,7 +538,7 @@ impl LibraryScanner {
             .to_string();
         // A year in the file name (`Film (2020)-trailer`), as Jellyfin reads it.
         let production_year = rustyfin_common::naming::extract_year(&name);
-        let item = media_items::NewMediaItem {
+        let item = NewMediaItem {
             item_type: item_type.to_string(),
             library_id: Some(library_id),
             parent_id: None,
@@ -621,7 +620,7 @@ impl LibraryScanner {
                 .as_ref()
                 .and_then(|p| p.streams.iter().find(|s| s.stream_type == "Video"));
 
-            let item = media_items::NewMediaItem {
+            let item = NewMediaItem {
                 item_type: resolved.item_type,
                 library_id: Some(library_id),
                 parent_id: None,
@@ -669,7 +668,7 @@ impl LibraryScanner {
             .as_ref()
             .and_then(|p| p.streams.iter().find(|s| s.stream_type == "Video"));
 
-        let item = media_items::NewMediaItem {
+        let item = NewMediaItem {
             item_type: resolved.item_type,
             library_id: Some(library_id),
             parent_id: None,
@@ -1275,7 +1274,7 @@ impl LibraryScanner {
         if let Some(existing) = existing {
             let probe_result = self.probe(file_path).await;
 
-            let item = media_items::NewMediaItem {
+            let item = NewMediaItem {
                 item_type: resolved.item_type.clone(),
                 library_id: Some(library_id),
                 parent_id: Some(album_id),
@@ -1311,7 +1310,7 @@ impl LibraryScanner {
         // New track
         let probe_result = self.probe(file_path).await;
 
-        let item = media_items::NewMediaItem {
+        let item = NewMediaItem {
             item_type: resolved.item_type,
             library_id: Some(library_id),
             parent_id: Some(album_id),
@@ -1393,7 +1392,7 @@ impl LibraryScanner {
             }
             return Ok(row.id);
         }
-        let item = media_items::NewMediaItem {
+        let item = NewMediaItem {
             item_type: item_type.to_string(),
             library_id: Some(library_id),
             parent_id,
@@ -1479,7 +1478,7 @@ impl LibraryScanner {
                 .as_ref()
                 .and_then(|p| p.streams.iter().find(|s| s.stream_type == "Video"));
 
-            let item = media_items::NewMediaItem {
+            let item = NewMediaItem {
                 item_type: "Episode".to_string(),
                 library_id: Some(library_id),
                 parent_id: Some(season_id),
@@ -1541,7 +1540,7 @@ impl LibraryScanner {
             .as_ref()
             .and_then(|p| p.streams.iter().find(|s| s.stream_type == "Video"));
 
-        let item = media_items::NewMediaItem {
+        let item = NewMediaItem {
             item_type: "Episode".to_string(),
             library_id: Some(library_id),
             parent_id: Some(season_id),
@@ -1818,7 +1817,7 @@ impl LibraryScanner {
         let Some(pr) = probe_result else { return };
 
         for stream in &pr.streams {
-            let new_stream = media_streams::NewMediaStream {
+            let new_stream = NewMediaStream {
                 item_id,
                 stream_index: stream.stream_index,
                 stream_type: stream.stream_type.clone(),
@@ -1870,7 +1869,7 @@ impl LibraryScanner {
             + 1;
         let files = rustyfin_common::subtitle_files::find_subtitle_files(file_path);
         for (stream_index, file) in (first..).zip(files) {
-            let new_stream = media_streams::NewMediaStream {
+            let new_stream = NewMediaStream {
                 item_id,
                 stream_index,
                 stream_type: "Subtitle".to_string(),
@@ -1971,7 +1970,7 @@ impl LibraryScanner {
             return;
         }
         for (image_type, image_index, path, file_mtime) in wanted {
-            let new_image = images_repo::NewImage {
+            let new_image = rustyfin_models::data::NewImage {
                 entity_id: item_id,
                 image_type,
                 path,
@@ -2303,7 +2302,7 @@ async fn probe_file_graceful(path: &Path) -> Option<probe::ProbeResult> {
 /// collection. Collections made by hand are never touched. Returns (how
 /// many, created, removed).
 pub async fn rebuild_movie_collections(
-    data: &rustyfin_data::PgData,
+    data: &PgData,
     library_id: Uuid,
 ) -> Result<(usize, usize, usize), DataError> {
     // Films only: a film's extras and other versions share its folder and
@@ -2366,7 +2365,7 @@ pub async fn rebuild_movie_collections(
     }
     // This server's own last: its id-bearing names win.
     all.extend(found);
-    let sets = collections::group_auto_sets(all);
+    let sets = group_auto_sets(all);
     let (created, removed) = data.collections().sync_auto(library_id, &sets).await?;
     Ok((sets.len(), created, removed))
 }
@@ -2379,4 +2378,47 @@ impl Drop for SpentOnDrop<'_> {
     fn drop(&mut self) {
         self.0.spent(self.1, self.2);
     }
+}
+
+/// Group films by the series their NFO names. A TMDB collection id (the NFO's
+/// `tmdbcolid`) is the key when known; a film whose NFO only names the set
+/// joins the collection of that name that has an id, if any, so a library
+/// mid-way between NFO writers does not split. Sorted by name.
+/// `found` is (film, set name, TMDB collection id).
+fn group_auto_sets(
+    found: Vec<(Uuid, String, Option<String>)>,
+) -> Vec<rustyfin_models::data::AutoSet> {
+    use std::collections::BTreeMap;
+    // The id each set name has (the first film that gives one wins).
+    let mut id_of_name: BTreeMap<String, String> = BTreeMap::new();
+    for (_, name, tmdb_id) in &found {
+        if let Some(id) = tmdb_id {
+            id_of_name.entry(name.clone()).or_insert_with(|| id.clone());
+        }
+    }
+    // Key: "tmdb:<id>" or "name:<name>"; value: (name, id, films).
+    let mut groups: BTreeMap<String, rustyfin_models::data::AutoSet> = BTreeMap::new();
+    for (item, name, own_id) in found {
+        let has_own_id = own_id.is_some();
+        let tmdb_id = own_id.or_else(|| id_of_name.get(&name).cloned());
+        let key = match &tmdb_id {
+            Some(id) => format!("tmdb:{id}"),
+            None => format!("name:{name}"),
+        };
+        let group = groups
+            .entry(key)
+            .or_insert_with(|| rustyfin_models::data::AutoSet {
+                name: name.clone(),
+                tmdb_id: tmdb_id.clone(),
+                items: Vec::new(),
+            });
+        // The id-bearing name wins over an older NFO's.
+        if has_own_id {
+            group.name = name;
+        }
+        group.items.push(item);
+    }
+    let mut sets: Vec<AutoSet> = groups.into_values().collect();
+    sets.sort_by(|a, b| a.name.cmp(&b.name).then(a.tmdb_id.cmp(&b.tmdb_id)));
+    sets
 }

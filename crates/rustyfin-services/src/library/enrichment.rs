@@ -1,10 +1,10 @@
-use rustyfin_models::data::{Data, ImageStore, MediaItemStore, PeopleStore};
+use rustyfin_models::data::{
+    Data, ImageStore, ItemMetadata, MediaItemStore, NewImage, PeopleStore,
+};
 use std::path::{Path, PathBuf};
 
 use rustyfin_data::PgData;
 use uuid::Uuid;
-
-use rustyfin_data::repo::media_items;
 
 use rustyfin_common::nfo::{
     NfoMetadata, find_album_nfo, find_artist_nfo, find_episode_nfo, find_movie_nfo,
@@ -148,7 +148,7 @@ impl EnrichmentService {
             .or(meta.sort_name.as_ref())
             .map(|t| rustyfin_common::naming::make_sort_name(t));
 
-        let item_meta = media_items::ItemMetadata {
+        let item_meta = ItemMetadata {
             name: meta.title.clone(),
             sort_name,
             overview: meta.overview.clone(),
@@ -235,7 +235,7 @@ impl EnrichmentService {
                                     .find_by_item_and_type(person_row.id, "Primary", 0)
                                     .await;
                                 if matches!(existing, Ok(None)) {
-                                    let new_image = rustyfin_data::repo::images::NewImage {
+                                    let new_image = NewImage {
                                         entity_id: person_row.id,
                                         image_type: "Primary".to_string(),
                                         path: headshot_path.to_string_lossy().into_owned(),
@@ -288,7 +288,7 @@ impl EnrichmentService {
             if !headshot_path.is_file() {
                 continue;
             }
-            let new_image = rustyfin_data::repo::images::NewImage {
+            let new_image = NewImage {
                 entity_id: person.id,
                 image_type: "Primary".to_string(),
                 path: headshot_path.to_string_lossy().into_owned(),

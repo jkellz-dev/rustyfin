@@ -2,14 +2,13 @@
 //! details of the new and changed ones, remove the ones gone, then merge. A
 //! Rustyfin friend says what changed itself (its change feed).
 
-use rustyfin_models::data::{Data, LibraryStore, LinkStore};
+use rustyfin_models::data::{Data, LibraryStore, LinkStore, NewMediaStream};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use rustyfin_data::PgData;
-use rustyfin_data::repo::links::{self, LinkedItem};
-use rustyfin_data::repo::media_streams::NewMediaStream;
+use rustyfin_models::data::{LinkedItem, remote_item};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -30,7 +29,7 @@ pub(super) async fn sync_link(data: &PgData, link: &Link) -> anyhow::Result<Sync
     let mut stored_tags: HashMap<&str, Vec<&Option<String>>> = HashMap::new();
     for (remote_id, (_, tag)) in &stored {
         stored_tags
-            .entry(links::remote_item(remote_id))
+            .entry(remote_item(remote_id))
             .or_default()
             .push(tag);
     }
@@ -136,7 +135,7 @@ async fn sync_library(
                 stored
                     .copies
                     .keys()
-                    .filter(|r| links::remote_item(r) == id)
+                    .filter(|r| remote_item(r) == id)
                     .cloned(),
             );
         } else {
@@ -289,7 +288,7 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
                 // A version the friend no longer keeps of an item it does.
                 let stale: Vec<String> = stored
                     .keys()
-                    .filter(|r| plain(links::remote_item(r)) == item_id && !written.contains(*r))
+                    .filter(|r| plain(remote_item(r)) == item_id && !written.contains(*r))
                     .cloned()
                     .collect();
                 report.removed += data.links().delete_copies(link.id, &stale).await?;
@@ -312,7 +311,7 @@ async fn sync_rustyfin(data: &PgData, link: &Link) -> anyhow::Result<SyncReport>
         let removed: HashSet<String> = feed.removed.iter().map(|r| plain(r)).collect();
         stored
             .keys()
-            .filter(|r| removed.contains(&plain(links::remote_item(r))))
+            .filter(|r| removed.contains(&plain(remote_item(r))))
             .cloned()
             .collect()
     };

@@ -36,7 +36,7 @@ pub struct AppState {
     pub port: u16,
     pub tmdb_api_key: Option<String>,
     pub session_manager: Arc<rustyfin_services::session::SessionManager>,
-    pub search_service: Arc<rustyfin_search::SearchService>,
+    pub search_service: Arc<rustyfin_services::Search>,
     pub forward_auth_config: Option<ForwardAuthState>,
     pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
     pub image_cache_dir: PathBuf,

@@ -2,8 +2,8 @@ use axum::{
     extract::{FromRef, FromRequestParts},
     http::{StatusCode, request::Parts},
 };
-use rustyfin_data::PgData;
 use rustyfin_models::data::{ApiKeyStore, Data};
+use rustyfin_services::Store as PgData;
 
 /// Authenticated via API key (X-Api-Key header or api_key query param).
 #[derive(Debug, Clone)]

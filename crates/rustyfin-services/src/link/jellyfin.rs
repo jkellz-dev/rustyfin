@@ -2,6 +2,7 @@
 //! can see, fetch items, and relay streams and images. A Rustyfin is signed in
 //! to the same way, through the friend's forward-auth proxy (which names the
 //! user, so no password is sent), and adds its change feed.
+use rustyfin_models::data::LinkCollection;
 
 use anyhow::{Context, bail};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
@@ -492,9 +493,7 @@ impl JellyfinClient {
     /// name their TMDB collection themselves (`TmdbCollection`), so only a
     /// collection without a TMDB id has its films listed: one light request,
     /// plus one per such collection.
-    pub async fn collections(
-        &self,
-    ) -> anyhow::Result<Vec<rustyfin_data::repo::links::LinkCollection>> {
+    pub async fn collections(&self) -> anyhow::Result<Vec<LinkCollection>> {
         let light = |q: &mut Vec<(&str, String)>| {
             q.push(("EnableImages", "false".into()));
             q.push(("EnableUserData", "false".into()));
@@ -526,7 +525,7 @@ impl JellyfinClient {
                     .filter_map(|f| f["Id"].as_str().map(str::to_string))
                     .collect()
             };
-            out.push(rustyfin_data::repo::links::LinkCollection {
+            out.push(LinkCollection {
                 remote_id: id.to_string(),
                 name: name.to_string(),
                 tmdb_id,

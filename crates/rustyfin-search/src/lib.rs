@@ -17,13 +17,12 @@
 pub mod indexer;
 pub mod query;
 
-use rustyfin_models::data::{Data, DataError, MediaItemStore, PeopleStore, SearchFeedStore};
+use rustyfin_models::data::{
+    Data, DataError, MediaItem, MediaItemStore, PeopleStore, Person, SearchFeedStore,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use rustyfin_data::PgData;
-use rustyfin_data::repo::media_items;
-use rustyfin_data::repo::people::PersonRow;
 use uuid::Uuid;
 
 /// Documents per Meilisearch batch when indexing.
@@ -51,8 +50,8 @@ pub struct SearchHit {
     pub score: f64,
 }
 
-impl From<media_items::MediaItemRow> for SearchHit {
-    fn from(item: media_items::MediaItemRow) -> Self {
+impl From<MediaItem> for SearchHit {
+    fn from(item: MediaItem) -> Self {
         Self {
             id: item.id,
             name: item.name,
@@ -108,8 +107,8 @@ struct Meili {
 }
 
 /// Search backend: Meilisearch when configured and built, else Postgres.
-pub struct SearchService {
-    data: PgData,
+pub struct SearchService<D> {
+    data: D,
     meili: Option<Meili>,
     /// The indexes have been brought up to date at least once by this
     /// process, so their answers can be trusted.
@@ -121,15 +120,15 @@ pub struct SearchService {
 /// (indexed, removed, rebuilt) for one index.
 type Counts = (usize, usize, bool);
 
-impl SearchService {
-    pub fn new(data: PgData, meili_url: Option<&str>, meili_key: Option<&str>) -> Self {
+impl<D: Data> SearchService<D> {
+    pub fn new(data: D, meili_url: Option<&str>, meili_key: Option<&str>) -> Self {
         Self::with_index(data, meili_url, meili_key, indexer::INDEX_NAME)
     }
 
     /// With the items index called `index` (tests give each their own); the
     /// people index is beside it.
     pub fn with_index(
-        data: PgData,
+        data: D,
         meili_url: Option<&str>,
         meili_key: Option<&str>,
         index: &str,
@@ -282,7 +281,7 @@ impl SearchService {
         {
             let ids: Vec<Uuid> = hits.iter().map(|(id, _)| *id).collect();
             let rows = self.data.media_items().find_by_ids(&ids).await?;
-            let mut by_id: std::collections::HashMap<Uuid, media_items::MediaItemRow> =
+            let mut by_id: std::collections::HashMap<Uuid, MediaItem> =
                 rows.into_iter().map(|r| (r.id, r)).collect();
             return Ok(hits
                 .into_iter()
@@ -308,7 +307,7 @@ impl SearchService {
         &self,
         term: &str,
         limit: i64,
-    ) -> Result<Vec<(PersonRow, f64)>, SearchError> {
+    ) -> Result<Vec<(Person, f64)>, SearchError> {
         if let Some(hits) = self.ranked(true, term, None, limit.max(0) as usize).await {
             let ids: Vec<Uuid> = hits.iter().map(|(id, _)| *id).collect();
             let rows = self
@@ -316,7 +315,7 @@ impl SearchService {
                 .people()
                 .list_people_by_ids(&ids, &[], &[], limit, 0)
                 .await?;
-            let mut by_id: std::collections::HashMap<Uuid, PersonRow> =
+            let mut by_id: std::collections::HashMap<Uuid, Person> =
                 rows.into_iter().map(|r| (r.id, r)).collect();
             return Ok(hits
                 .into_iter()
