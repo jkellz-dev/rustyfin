@@ -62,18 +62,8 @@ pub async fn get_sessions(
 ) -> Result<Json<Vec<SessionInfoDto>>, ApiError> {
     let tracked = state
         .session_manager
-        .get_sessions(query.active_within_seconds)
+        .sessions_for(super::access::viewer(&auth), query.active_within_seconds)
         .await;
-
-    // Non-admin users can only see their own sessions
-    let tracked: Vec<_> = if auth.is_administrator {
-        tracked
-    } else {
-        tracked
-            .into_iter()
-            .filter(|s| s.user_id == auth.user_id)
-            .collect()
-    };
 
     let mut dtos = Vec::with_capacity(tracked.len());
 

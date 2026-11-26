@@ -14,6 +14,7 @@ use rustyfin_models::dto::{
     SessionCommand,
 };
 
+use crate::error::ApiError;
 use crate::router::AppState;
 
 /// Query parameters for `POST /Sessions/{sessionId}/Playing`.
@@ -40,12 +41,12 @@ pub struct PlaystateQuery {
 /// `POST /Sessions/{sessionId}/Playing` — Send a play command to a session.
 pub async fn send_play_command(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Query(query): Query<PlayQuery>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
     let Ok(session_uuid) = session_id.parse::<Uuid>() else {
-        return StatusCode::NO_CONTENT;
+        return Ok(StatusCode::NO_CONTENT);
     };
 
     let item_ids: Vec<Uuid> = query
@@ -64,23 +65,27 @@ pub async fn send_play_command(
         start_index: query.start_index,
     };
 
-    let _ = state
+    state
         .session_manager
-        .send_command(session_uuid, SessionCommand::Play(request))
-        .await;
+        .command_as(
+            super::access::viewer(&auth),
+            session_uuid,
+            SessionCommand::Play(request),
+        )
+        .await?;
 
-    StatusCode::NO_CONTENT
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `POST /Sessions/{sessionId}/Playing/{command}` — Send a playstate command to a session.
 pub async fn send_playstate_command(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((session_id, command)): Path<(String, PlaystateCommand)>,
     Query(query): Query<PlaystateQuery>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
     let Ok(session_uuid) = session_id.parse::<Uuid>() else {
-        return StatusCode::NO_CONTENT;
+        return Ok(StatusCode::NO_CONTENT);
     };
 
     let request = PlaystateRequest {
@@ -89,22 +94,26 @@ pub async fn send_playstate_command(
         controlling_user_id: query.controlling_user_id,
     };
 
-    let _ = state
+    state
         .session_manager
-        .send_command(session_uuid, SessionCommand::Playstate(request))
-        .await;
+        .command_as(
+            super::access::viewer(&auth),
+            session_uuid,
+            SessionCommand::Playstate(request),
+        )
+        .await?;
 
-    StatusCode::NO_CONTENT
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `POST /Sessions/{sessionId}/Command/{command}` — Send a named general command to a session.
 pub async fn send_general_command(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path((session_id, command_name)): Path<(String, String)>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
     let Ok(session_uuid) = session_id.parse::<Uuid>() else {
-        return StatusCode::NO_CONTENT;
+        return Ok(StatusCode::NO_CONTENT);
     };
 
     let command = GeneralCommand {
@@ -113,42 +122,50 @@ pub async fn send_general_command(
         controlling_user_id: None,
     };
 
-    let _ = state
+    state
         .session_manager
-        .send_command(session_uuid, SessionCommand::GeneralCommand(command))
-        .await;
+        .command_as(
+            super::access::viewer(&auth),
+            session_uuid,
+            SessionCommand::GeneralCommand(command),
+        )
+        .await?;
 
-    StatusCode::NO_CONTENT
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `POST /Sessions/{sessionId}/Command` — Send a full general command (JSON body) to a session.
 pub async fn send_full_general_command(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Json(command): Json<GeneralCommand>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
     let Ok(session_uuid) = session_id.parse::<Uuid>() else {
-        return StatusCode::NO_CONTENT;
+        return Ok(StatusCode::NO_CONTENT);
     };
 
-    let _ = state
+    state
         .session_manager
-        .send_command(session_uuid, SessionCommand::GeneralCommand(command))
-        .await;
+        .command_as(
+            super::access::viewer(&auth),
+            session_uuid,
+            SessionCommand::GeneralCommand(command),
+        )
+        .await?;
 
-    StatusCode::NO_CONTENT
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `POST /Sessions/{sessionId}/Message` — Send a message command to a session.
 pub async fn send_message_command(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Json(mut command): Json<MessageCommand>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
     let Ok(session_uuid) = session_id.parse::<Uuid>() else {
-        return StatusCode::NO_CONTENT;
+        return Ok(StatusCode::NO_CONTENT);
     };
 
     // Default header if empty or absent
@@ -156,12 +173,16 @@ pub async fn send_message_command(
         command.header = Some("Message from Server".to_string());
     }
 
-    let _ = state
+    state
         .session_manager
-        .send_command(session_uuid, SessionCommand::Message(command))
-        .await;
+        .command_as(
+            super::access::viewer(&auth),
+            session_uuid,
+            SessionCommand::Message(command),
+        )
+        .await?;
 
-    StatusCode::NO_CONTENT
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Query of `POST /Sessions/{sessionId}/Viewing`.
@@ -179,12 +200,12 @@ pub struct DisplayContentQuery {
 /// (Jellyfin's `DisplayContent` command).
 pub async fn send_display_content(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Path(session_id): Path<String>,
     Query(query): Query<DisplayContentQuery>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
     let Ok(session_uuid) = session_id.parse::<Uuid>() else {
-        return StatusCode::NO_CONTENT;
+        return Ok(StatusCode::NO_CONTENT);
     };
     let arguments: HashMap<String, String> = [
         ("ItemType", query.item_type),
@@ -199,9 +220,13 @@ pub async fn send_display_content(
         arguments,
         controlling_user_id: None,
     };
-    let _ = state
+    state
         .session_manager
-        .send_command(session_uuid, SessionCommand::GeneralCommand(command))
-        .await;
-    StatusCode::NO_CONTENT
+        .command_as(
+            super::access::viewer(&auth),
+            session_uuid,
+            SessionCommand::GeneralCommand(command),
+        )
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }

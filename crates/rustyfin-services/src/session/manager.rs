@@ -313,6 +313,53 @@ impl SessionManager {
         }
     }
 
+    /// Send a command to a session on behalf of `viewer`: a user controls
+    /// their own sessions, an administrator anyone's (Jellyfin's default
+    /// without `EnableRemoteControlOfOtherUsers`). A session that is not
+    /// tracked or not listening is not an error, as before.
+    pub async fn command_as(
+        &self,
+        viewer: crate::Viewer,
+        session_id: Uuid,
+        cmd: SessionCommand,
+    ) -> crate::ServiceResult<()> {
+        if let Some(session) = self.get_session(session_id).await {
+            viewer.may_act_for(session.user_id)?;
+        } else if !viewer.is_administrator {
+            // Not tracked in memory: whose it is comes from the stored session.
+            let owner = self
+                .data
+                .sessions()
+                .find_active_by_id(session_id)
+                .await?
+                .map(|s| s.user_id);
+            if let Some(owner) = owner {
+                viewer.may_act_for(owner)?;
+            }
+        }
+        if let Err(e) = self.send_command(session_id, cmd).await {
+            tracing::debug!("command to session {session_id} not delivered: {e}");
+        }
+        Ok(())
+    }
+
+    /// The sessions `viewer` may see: their own, or everyone's for an
+    /// administrator.
+    pub async fn sessions_for(
+        &self,
+        viewer: crate::Viewer,
+        active_within_seconds: Option<i64>,
+    ) -> Vec<TrackedSession> {
+        let all = self.get_sessions(active_within_seconds).await;
+        if viewer.is_administrator {
+            all
+        } else {
+            all.into_iter()
+                .filter(|s| s.user_id == viewer.user)
+                .collect()
+        }
+    }
+
     /// Check if a session has an active WebSocket subscriber.
     pub async fn has_websocket(&self, session_id: Uuid) -> bool {
         let channels = self.channels.read().await;
