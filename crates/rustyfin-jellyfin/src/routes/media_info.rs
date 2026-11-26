@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
 use rustyfin_media::playback_info;
-use rustyfin_models::dto::{PlaybackInfoRequest, PlaybackInfoResponse};
+use rustyfin_models::dto::{DeviceProfile, PlaybackInfoRequest, PlaybackInfoResponse};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -34,7 +34,8 @@ pub async fn get_playback_info<D: Data>(
     let stored_profile = state
         .session_manager
         .get_device_profile(auth.session_id)
-        .await;
+        .await
+        .and_then(|p| p.get::<DeviceProfile>().cloned());
 
     let mut info =
         playback_info::build_playback_info(&item, &streams, None, stored_profile.as_ref());
@@ -93,6 +94,7 @@ pub async fn post_playback_info<D: Data>(
             .session_manager
             .get_device_profile(auth.session_id)
             .await
+            .and_then(|p| p.get::<DeviceProfile>().cloned())
     } else {
         None
     };

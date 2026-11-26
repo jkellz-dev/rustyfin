@@ -17,6 +17,7 @@ pub mod link_notices;
 pub mod link_scope;
 pub mod metrics;
 pub mod query_case;
+pub mod remote;
 pub mod request_log;
 pub mod route_case;
 pub mod router;

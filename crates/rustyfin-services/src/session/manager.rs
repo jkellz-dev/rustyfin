@@ -1,8 +1,8 @@
 use rustyfin_models::data::{Data, SessionStore, UserStore};
 use std::collections::HashMap;
 
+use super::command::{ClientProfile, Command};
 use chrono::{DateTime, Utc};
-use rustyfin_models::dto::{DeviceProfile, SessionCommand};
 use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
@@ -10,7 +10,7 @@ use uuid::Uuid;
 pub struct SessionManager<D> {
     data: D,
     sessions: RwLock<HashMap<Uuid, TrackedSession>>,
-    channels: RwLock<HashMap<Uuid, broadcast::Sender<SessionCommand>>>,
+    channels: RwLock<HashMap<Uuid, broadcast::Sender<Command>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ pub struct ClientCapabilities {
     pub supported_commands: Vec<String>,
     pub supports_media_control: bool,
     pub supports_persistent_identifier: bool,
-    pub device_profile: Option<DeviceProfile>,
+    pub device_profile: Option<ClientProfile>,
     pub app_store_url: Option<String>,
     pub icon_url: Option<String>,
 }
@@ -277,8 +277,8 @@ impl<D: Data> SessionManager<D> {
         }
     }
 
-    /// Get the DeviceProfile stored for a session, if any.
-    pub async fn get_device_profile(&self, session_id: Uuid) -> Option<DeviceProfile> {
+    /// The device profile stored for a session, if any.
+    pub async fn get_device_profile(&self, session_id: Uuid) -> Option<ClientProfile> {
         let sessions = self.sessions.read().await;
         sessions
             .get(&session_id)
@@ -287,7 +287,7 @@ impl<D: Data> SessionManager<D> {
     }
 
     /// Subscribe to commands for a session. Creates the channel if needed.
-    pub async fn subscribe(&self, session_id: Uuid) -> broadcast::Receiver<SessionCommand> {
+    pub async fn subscribe(&self, session_id: Uuid) -> broadcast::Receiver<Command> {
         let mut channels = self.channels.write().await;
         let sender = channels
             .entry(session_id)
@@ -296,11 +296,7 @@ impl<D: Data> SessionManager<D> {
     }
 
     /// Send a command to a session. Returns error if no receivers are listening.
-    pub async fn send_command(
-        &self,
-        session_id: Uuid,
-        cmd: SessionCommand,
-    ) -> Result<(), anyhow::Error> {
+    pub async fn send_command(&self, session_id: Uuid, cmd: Command) -> Result<(), anyhow::Error> {
         let channels = self.channels.read().await;
         if let Some(sender) = channels.get(&session_id) {
             sender
@@ -320,7 +316,7 @@ impl<D: Data> SessionManager<D> {
         &self,
         viewer: crate::Viewer,
         session_id: Uuid,
-        cmd: SessionCommand,
+        cmd: Command,
     ) -> crate::ServiceResult<()> {
         if let Some(session) = self.get_session(session_id).await {
             viewer.may_act_for(session.user_id)?;

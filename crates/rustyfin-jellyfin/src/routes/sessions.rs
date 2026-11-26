@@ -220,7 +220,9 @@ pub async fn post_full_capabilities<D: Data>(
         supported_commands: body.supported_commands,
         supports_media_control: body.supports_media_control,
         supports_persistent_identifier: body.supports_persistent_identifier,
-        device_profile: body.device_profile,
+        device_profile: body
+            .device_profile
+            .map(rustyfin_services::session::ClientProfile::new),
         app_store_url: body.app_store_url,
         icon_url: body.icon_url,
     };

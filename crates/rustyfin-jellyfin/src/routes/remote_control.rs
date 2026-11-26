@@ -71,7 +71,7 @@ pub async fn send_play_command<D: Data>(
         .command_as(
             super::access::viewer(&auth),
             session_uuid,
-            SessionCommand::Play(request),
+            crate::remote::to_service(SessionCommand::Play(request)),
         )
         .await?;
 
@@ -100,7 +100,7 @@ pub async fn send_playstate_command<D: Data>(
         .command_as(
             super::access::viewer(&auth),
             session_uuid,
-            SessionCommand::Playstate(request),
+            crate::remote::to_service(SessionCommand::Playstate(request)),
         )
         .await?;
 
@@ -128,7 +128,7 @@ pub async fn send_general_command<D: Data>(
         .command_as(
             super::access::viewer(&auth),
             session_uuid,
-            SessionCommand::GeneralCommand(command),
+            crate::remote::to_service(SessionCommand::GeneralCommand(command)),
         )
         .await?;
 
@@ -151,7 +151,7 @@ pub async fn send_full_general_command<D: Data>(
         .command_as(
             super::access::viewer(&auth),
             session_uuid,
-            SessionCommand::GeneralCommand(command),
+            crate::remote::to_service(SessionCommand::GeneralCommand(command)),
         )
         .await?;
 
@@ -179,7 +179,7 @@ pub async fn send_message_command<D: Data>(
         .command_as(
             super::access::viewer(&auth),
             session_uuid,
-            SessionCommand::Message(command),
+            crate::remote::to_service(SessionCommand::Message(command)),
         )
         .await?;
 
@@ -226,7 +226,7 @@ pub async fn send_display_content<D: Data>(
         .command_as(
             super::access::viewer(&auth),
             session_uuid,
-            SessionCommand::GeneralCommand(command),
+            crate::remote::to_service(SessionCommand::GeneralCommand(command)),
         )
         .await?;
     Ok(StatusCode::NO_CONTENT)

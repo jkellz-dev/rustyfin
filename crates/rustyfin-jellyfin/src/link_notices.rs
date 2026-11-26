@@ -69,7 +69,7 @@ async fn tell<D: Data>(state: &AppState<D>, event: &LinkEvent) {
                 .session_manager
                 .send_command(
                     session.session_id,
-                    SessionCommand::GeneralCommand(command.clone()),
+                    crate::remote::to_service(SessionCommand::GeneralCommand(command.clone())),
                 )
                 .await;
         }

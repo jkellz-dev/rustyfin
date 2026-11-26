@@ -1511,14 +1511,12 @@ async fn a_link_taken_out_of_the_config_is_removed_at_start() {
 
 /// The next "DisplayMessage" a session gets, as (header, text).
 async fn notice(
-    rx: &mut tokio::sync::broadcast::Receiver<rustyfin_models::dto::SessionCommand>,
+    rx: &mut tokio::sync::broadcast::Receiver<rustyfin_services::session::Command>,
 ) -> (String, String) {
     let wait = std::time::Duration::from_secs(5);
     loop {
         match tokio::time::timeout(wait, rx.recv()).await {
-            Ok(Ok(rustyfin_models::dto::SessionCommand::GeneralCommand(c)))
-                if c.name == "DisplayMessage" =>
-            {
+            Ok(Ok(rustyfin_services::session::Command::Named(c))) if c.name == "DisplayMessage" => {
                 return (
                     c.arguments.get("Header").cloned().unwrap_or_default(),
                     c.arguments.get("Text").cloned().unwrap_or_default(),

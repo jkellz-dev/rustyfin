@@ -135,7 +135,7 @@ async fn handle_socket<D: Data>(
             }
 
             Ok(cmd) = cmd_rx.recv() => {
-                let ws_msg = command_to_ws_message(cmd);
+                let ws_msg = command_to_ws_message(crate::remote::from_service(cmd));
                 if let Ok(json) = serde_json::to_string(&ws_msg)
             .map(|j| crate::guid_format::simplify_str(&j).into_owned())
                     && sender.send(axum::extract::ws::Message::text(json)).await.is_err()
