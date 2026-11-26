@@ -45,6 +45,11 @@ impl<D: Data> Access<'_, D> {
             .collect())
     }
 
+    /// Whether `user` is limited to some libraries.
+    pub async fn limited(&self, user: Uuid) -> ServiceResult<bool> {
+        Ok(self.libraries(user).await?.is_some())
+    }
+
     /// The libraries `user` is limited to; `None` when they see them all.
     async fn libraries(&self, user: Uuid) -> ServiceResult<Option<Vec<Uuid>>> {
         Ok(self

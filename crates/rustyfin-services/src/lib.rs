@@ -25,6 +25,7 @@ pub mod playback;
 pub mod playlists;
 pub mod scans;
 pub mod session;
+pub mod shows;
 pub mod tokens;
 pub mod user_data;
 pub mod users;
@@ -64,6 +65,11 @@ impl<D: Data> Services<D> {
     /// Collections made by hand.
     pub fn collections(&self) -> collections::Collections<'_, D> {
         collections::Collections { data: &self.data }
+    }
+
+    /// TV shows: seasons, episodes, next up, upcoming.
+    pub fn shows(&self) -> shows::Shows<'_, D> {
+        shows::Shows { data: &self.data }
     }
 
     /// Which items a user may see.

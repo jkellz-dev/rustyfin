@@ -1,4 +1,4 @@
-use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
+use rustyfin_models::data::{Data, ImageStore, MediaItem, MediaItemStore};
 use std::collections::HashMap;
 
 use axum::{
@@ -9,8 +9,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use rustyfin_auth::middleware::AuthenticatedUser;
-use rustyfin_data::repo::media_items;
 use rustyfin_models::dto::{BaseItemDto, QueryResult};
+use rustyfin_services::shows::{Episodes, NextUp};
 
 use super::items::{
     apply_images_to_dto, attach_media_sources_if_asked, attach_user_data, group_images_by_item,
@@ -64,116 +64,40 @@ pub async fn get_next_up(
     auth: AuthenticatedUser,
     Query(query): Query<NextUpQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    let limit = query.limit.unwrap_or(20).min(100);
     let start = query.start_index.unwrap_or(0);
-
-    // If filtering to a single series, just find its next episode
-    if let Some(series_id) = query.series_id {
-        let next = find_next_for_series(&state, &auth, series_id).await?;
-        let episodes: Vec<_> = next.into_iter().collect();
-        let total = episodes.len() as i32;
-        let mut dtos: Vec<BaseItemDto> = episodes
-            .iter()
-            .map(|item| media_item_to_dto(item, &state.server_id))
-            .collect();
-        enrich_next_up_dtos(&state, &auth, &episodes, &mut dtos, &query).await;
-        return Ok(Json(QueryResult::new(dtos, total)));
-    }
-
-    // Find all series with recent activity
-    let fetch_limit = start + limit + 10;
-    let active_series = state
-        .data
-        .media_items()
-        .get_active_series(auth.user_id, query.parent_id, fetch_limit)
+    let page = state
+        .services
+        .shows()
+        .next_up(
+            auth.user_id,
+            &NextUp {
+                series: query.series_id,
+                library: query.parent_id,
+                start,
+                limit: query.limit.unwrap_or(20).min(100),
+                watched_since: query.next_up_date_cutoff,
+                // Jellyfin's DisableFirstEpisode leaves unstarted shows out.
+                unstarted: !query.disable_first_episode.unwrap_or(false),
+            },
+        )
         .await?;
-
-    // The next episode of every series, in one query
-    let active_ids: Vec<Uuid> = active_series
-        .iter()
-        .filter(|(_, last)| {
-            query
-                .next_up_date_cutoff
-                .is_none_or(|cutoff| *last >= cutoff)
-        })
-        .map(|(id, _)| *id)
-        .collect();
-    let mut next_episodes = state
-        .data
-        .media_items()
-        .get_next_episodes(auth.user_id, &active_ids)
-        .await?;
-
-    // Shows the user never started come after the ones in progress, newest first,
-    // unless the client asked to leave them out (DisableFirstEpisode). As in
-    // Jellyfin 10.10 the date cutoff does not drop them (owner, 2026-11-15).
-    if !query.disable_first_episode.unwrap_or(false) {
-        let fresh = state
-            .data
-            .media_items()
-            .series_never_started(auth.user_id, query.parent_id, fetch_limit)
-            .await?;
-        next_episodes.extend(
-            state
-                .data
-                .media_items()
-                .get_next_episodes(auth.user_id, &fresh)
-                .await?,
-        );
-    }
-    let total = next_episodes.len() as i32;
-
-    // Apply pagination
-    let start_idx = start as usize;
-    let end_idx = (start_idx + limit as usize).min(next_episodes.len());
-    let page = if start_idx < next_episodes.len() {
-        &next_episodes[start_idx..end_idx]
-    } else {
-        &[]
-    };
-
     let mut dtos: Vec<BaseItemDto> = page
+        .items
         .iter()
         .map(|item| media_item_to_dto(item, &state.server_id))
         .collect();
-
-    let items_ref: Vec<_> = page.to_vec();
-    enrich_next_up_dtos(&state, &auth, &items_ref, &mut dtos, &query).await;
-
-    let mut result = QueryResult::new(dtos, total);
-    result.start_index = start as i32;
+    enrich_next_up_dtos(&state, &auth, &page.items, &mut dtos, &query).await;
+    let mut result = QueryResult::new(dtos, page.total as i32);
+    if query.series_id.is_none() {
+        result.start_index = start as i32;
+    }
     Ok(Json(result))
-}
-
-async fn find_next_for_series(
-    state: &AppState,
-    auth: &AuthenticatedUser,
-    series_id: Uuid,
-) -> Result<Option<media_items::MediaItemRow>, ApiError> {
-    let last_watched = state
-        .data
-        .media_items()
-        .get_last_watched_episode(auth.user_id, series_id)
-        .await?;
-
-    let (min_season, min_episode) = if let Some(ref ep) = last_watched {
-        (ep.parent_index_number, ep.index_number)
-    } else {
-        (None, None)
-    };
-
-    state
-        .data
-        .media_items()
-        .get_next_episode(auth.user_id, series_id, min_season, min_episode)
-        .await
-        .map_err(ApiError::from)
 }
 
 async fn enrich_next_up_dtos(
     state: &AppState,
     auth: &AuthenticatedUser,
-    items: &[media_items::MediaItemRow],
+    items: &[MediaItem],
     dtos: &mut [BaseItemDto],
     query: &NextUpQuery,
 ) {
@@ -214,14 +138,11 @@ pub async fn get_seasons(
     Path(series_id): Path<Uuid>,
     Query(query): Query<SeasonsQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, series_id).await?;
-    let season_types = vec!["Season".to_string()];
-    let items = state
-        .data
-        .media_items()
-        .list_by_parent(Some(series_id), &season_types, 0, 100)
+    let (series, items) = state
+        .services
+        .shows()
+        .seasons(auth.user_id, series_id)
         .await?;
-
     let total = items.len() as i32;
     let mut dtos: Vec<BaseItemDto> = items
         .iter()
@@ -246,17 +167,9 @@ pub async fn get_seasons(
     }
 
     // A season names its series; its row carries only the parent link.
-    let series = state
-        .data
-        .media_items()
-        .find_by_id(series_id)
-        .await
-        .or_log_default("media_items::find_by_id");
-    if let Some(series) = series {
-        for dto in &mut dtos {
-            dto.series_id.get_or_insert(series_id);
-            dto.series_name.get_or_insert_with(|| series.name.clone());
-        }
+    for dto in &mut dtos {
+        dto.series_id.get_or_insert(series_id);
+        dto.series_name.get_or_insert_with(|| series.name.clone());
     }
     // Batch load child counts for seasons (they're folders)
     if !item_ids.is_empty() {
@@ -288,79 +201,32 @@ pub async fn get_episodes(
     Path(series_id): Path<Uuid>,
     Query(query): Query<EpisodesQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
-    super::access::require_item_access(&state, auth.user_id, series_id).await?;
     let start = query.start_index.unwrap_or(0);
-    let limit = query.limit.unwrap_or(100).min(500);
-    let episode_types = vec!["Episode".to_string()];
-
-    // Determine parent for episode query
-    let parent_id = if let Some(season_id) = query.season_id {
-        // Direct season ID provided
-        season_id
-    } else if let Some(season_number) = query.season {
-        // Find the Season item by index_number under the series
-        let season_types = vec!["Season".to_string()];
-        let seasons = state
-            .data
-            .media_items()
-            .list_by_parent(Some(series_id), &season_types, 0, 100)
-            .await?;
-        let season = seasons
-            .iter()
-            .find(|s| s.index_number == Some(season_number));
-        match season {
-            Some(s) => s.id,
-            None => return Ok(Json(QueryResult::empty())),
-        }
-    } else {
-        // No season filter — get all episodes under the series (recursively)
-        // First get all seasons, then query episodes from each
-        let season_types = vec!["Season".to_string()];
-        let seasons = state
-            .data
-            .media_items()
-            .list_by_parent(Some(series_id), &season_types, 0, 100)
-            .await?;
-
-        // Every season's episodes in one query, season by season.
-        let season_ids: Vec<Uuid> = seasons.iter().map(|s| s.id).collect();
-        let all_episodes = state
-            .data
-            .media_items()
-            .list_by_parents(&season_ids, &episode_types, 500)
-            .await?;
-
-        let total = all_episodes.len() as i32;
-        let mut dtos: Vec<BaseItemDto> = all_episodes
-            .iter()
-            .map(|item| media_item_to_dto(item, &state.server_id))
-            .collect();
-
-        enrich_episode_dtos(&state, &auth, &all_episodes, &mut dtos, &query).await;
-
-        return Ok(Json(QueryResult::new(dtos, total)));
-    };
-
-    let items = state
-        .data
-        .media_items()
-        .list_by_parent(Some(parent_id), &episode_types, start, limit)
+    let page = state
+        .services
+        .shows()
+        .episodes(
+            auth.user_id,
+            series_id,
+            Episodes {
+                season: query.season_id,
+                season_number: query.season,
+                start,
+                limit: query.limit.unwrap_or(100).min(500),
+            },
+        )
         .await?;
-    let total = state
-        .data
-        .media_items()
-        .count_by_parent(Some(parent_id), &episode_types)
-        .await?;
-
-    let mut dtos: Vec<BaseItemDto> = items
+    let mut dtos: Vec<BaseItemDto> = page
+        .items
         .iter()
         .map(|item| media_item_to_dto(item, &state.server_id))
         .collect();
-
-    enrich_episode_dtos(&state, &auth, &items, &mut dtos, &query).await;
-
-    let mut result = QueryResult::new(dtos, total as i32);
-    result.start_index = start as i32;
+    enrich_episode_dtos(&state, &auth, &page.items, &mut dtos, &query).await;
+    let mut result = QueryResult::new(dtos, page.total as i32);
+    // Every season's episodes come whole, as before.
+    if query.season_id.is_some() || query.season.is_some() {
+        result.start_index = start as i32;
+    }
     Ok(Json(result))
 }
 
@@ -376,23 +242,17 @@ pub struct UpcomingQuery {
 /// `GET /Shows/Upcoming` — Episodes with future air dates, ordered by premiere date.
 pub async fn get_upcoming(
     State(state): State<AppState>,
-    _auth: AuthenticatedUser,
+    auth: AuthenticatedUser,
     Query(query): Query<UpcomingQuery>,
 ) -> Result<Json<QueryResult<BaseItemDto>>, ApiError> {
     let limit = query.limit.unwrap_or(20).min(100);
     let offset = query.start_index.unwrap_or(0);
-
-    let items = state
-        .data
-        .media_items()
-        .upcoming_episodes(query.parent_id, limit, offset)
+    let page = state
+        .services
+        .shows()
+        .upcoming(auth.user_id, query.parent_id, offset, limit)
         .await?;
-
-    let total = state
-        .data
-        .media_items()
-        .count_upcoming_episodes(query.parent_id)
-        .await? as i32;
+    let (items, total) = (page.items, page.total as i32);
 
     // Batch image loading
     let item_ids: Vec<Uuid> = items.iter().map(|i| i.id).collect();
@@ -426,7 +286,7 @@ pub async fn get_upcoming(
 async fn enrich_episode_dtos(
     state: &AppState,
     auth: &AuthenticatedUser,
-    items: &[media_items::MediaItemRow],
+    items: &[MediaItem],
     dtos: &mut [BaseItemDto],
     query: &EpisodesQuery,
 ) {
