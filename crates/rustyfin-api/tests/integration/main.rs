@@ -76,6 +76,7 @@ mod plezy_episode_fields_tests;
 mod pool_exhaustion_tests;
 mod prune_tests;
 mod query_count_tests;
+mod remote_control_permission_tests;
 mod repo_tests;
 mod rescan_tests;
 mod root_folder_tests;
