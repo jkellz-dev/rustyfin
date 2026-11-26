@@ -25,6 +25,7 @@ pub mod playback;
 pub mod playlists;
 pub mod scans;
 pub mod session;
+pub mod tokens;
 pub mod user_data;
 pub mod users;
 pub mod viewer;
