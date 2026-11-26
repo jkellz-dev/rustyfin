@@ -99,11 +99,6 @@ struct SearchService<D> {
 type Counts = (usize, usize, bool);
 
 impl<D: Data> SearchService<D> {
-    /// Whether Meilisearch is configured.
-    fn is_meilisearch_available(&self) -> bool {
-        self.engine.meili.is_some()
-    }
-
     /// Whether Meilisearch answers searches now (configured and built).
     fn is_ready(&self) -> bool {
         self.engine.meili.is_some() && self.engine.ready.load(Ordering::Acquire)
