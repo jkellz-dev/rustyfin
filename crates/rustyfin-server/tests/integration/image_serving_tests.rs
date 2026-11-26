@@ -203,6 +203,49 @@ async fn image_tags_survive_rescans_and_change_when_the_file_does() {
     app.cleanup().await;
 }
 
+/// A logo resized without a named format used to come back as a JPEG on
+/// black; it keeps its transparency now. Apps keep a tagged URL's answer for
+/// a year, so a logo's tag is not its old one (the image id) and they fetch
+/// it again; a poster's tag, whose answer did not change, stays.
+#[tokio::test]
+async fn a_logos_tag_changed_with_its_transparency() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", true).await;
+    let tree = Tree::new();
+    let film = film_with_poster(&app, &tree.png("Film/poster.jpg")).await;
+    let logo: Uuid = sqlx::query_scalar(
+        "INSERT INTO images (entity_id, image_type, path, image_index) \
+         VALUES ($1, 'Logo', $2, 0) RETURNING id",
+    )
+    .bind(film)
+    .bind(tree.png("Film/clearlogo.png").to_string_lossy().to_string())
+    .fetch_one(&app.pool)
+    .await
+    .expect("logo row");
+    let poster: Uuid =
+        sqlx::query_scalar("SELECT id FROM images WHERE entity_id = $1 AND image_type = 'Primary'")
+            .bind(film)
+            .fetch_one(&app.pool)
+            .await
+            .unwrap();
+
+    let (status, item) = app
+        .get(&format!("/Users/{user}/Items/{film}"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    let tag = |kind: &str| {
+        item["ImageTags"][kind]
+            .as_str()
+            .unwrap_or_default()
+            .replace('-', "")
+    };
+    assert_eq!(tag("Primary"), poster.simple().to_string(), "{item}");
+    let logo_tag = tag("Logo");
+    assert!(!logo_tag.is_empty(), "{item}");
+    assert_ne!(logo_tag, logo.simple().to_string(), "{item}");
+    app.cleanup().await;
+}
+
 #[tokio::test]
 async fn requests_write_the_session_at_most_once_a_minute() {
     let app = common::TestApp::new().await;

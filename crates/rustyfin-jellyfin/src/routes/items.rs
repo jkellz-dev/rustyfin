@@ -573,6 +573,22 @@ pub(crate) struct ImageFields {
     primary_image_aspect_ratio: Option<f64>,
 }
 
+/// Pictures that may be transparent (a logo, clear art, disc art) are served
+/// as a PNG that keeps its transparency since 2026-11-26; before, a resized
+/// one came back as a JPEG on black. Apps keep a tagged URL's answer for a
+/// year (`immutable`), so these tags changed with it: apps fetch them again
+/// instead of showing the black box they kept.
+const MAY_BE_TRANSPARENT_TAG: &[u8] = b"kept-transparent-1";
+
+/// The tag an image is listed with: its id, or for a picture that may be
+/// transparent, a tag derived from it (see [`MAY_BE_TRANSPARENT_TAG`]).
+pub(crate) fn image_tag(img: &Image) -> String {
+    match img.image_type.as_str() {
+        "Logo" | "Art" | "Disc" => Uuid::new_v5(&img.id, MAY_BE_TRANSPARENT_TAG).to_string(),
+        _ => img.id.to_string(),
+    }
+}
+
 /// Build image-related fields from a slice of `Image`s for a single item.
 pub(crate) fn build_image_fields(item_images: &[Image]) -> ImageFields {
     if item_images.is_empty() {
@@ -590,7 +606,7 @@ pub(crate) fn build_image_fields(item_images: &[Image]) -> ImageFields {
     let mut primary_aspect_ratio: Option<f64> = None;
 
     for img in item_images {
-        let tag = img.id.to_string();
+        let tag = image_tag(img);
 
         match img.image_type.as_str() {
             "Backdrop" => {
@@ -642,6 +658,9 @@ pub(crate) fn apply_images_to_dto(dto: &mut BaseItemDto, item_images: &[Image]) 
 
 /// Seasons and episodes name their show's poster (`SeriesPrimaryImageTag`), and a
 /// season without a cover of its own shows the show's (owner, 2026-11-14).
+/// A season or episode without a logo, backdrop, thumb or clear art of its
+/// own names its show's (`ParentLogoItemId`/`ParentLogoImageTag` and so on),
+/// as Jellyfin does: apps draw the show's logo over an episode's page.
 pub(crate) async fn attach_series_art<D: Data>(data: &D, dtos: &mut [BaseItemDto]) {
     let series_of = |d: &BaseItemDto| match d.item_type.as_str() {
         "Season" => d.series_id.or(d.parent_id),
@@ -654,27 +673,70 @@ pub(crate) async fn attach_series_art<D: Data>(data: &D, dtos: &mut [BaseItemDto
     }
     series_ids.sort();
     series_ids.dedup();
-    let posters: HashMap<Uuid, Image> = data
+    let mut art: HashMap<Uuid, Vec<Image>> = HashMap::new();
+    for img in data
         .images()
         .list_by_items(&series_ids)
         .await
         .or_log_default("images::list_by_items")
-        .into_iter()
-        .filter(|img| img.image_type == "Primary" && img.image_index == 0)
-        .filter_map(|img| img.entity_id.map(|e| (e, img)))
-        .collect();
+    {
+        if let Some(e) = img.entity_id {
+            art.entry(e).or_default().push(img);
+        }
+    }
+    for list in art.values_mut() {
+        list.sort_by_key(|img| img.image_index);
+    }
     for dto in dtos.iter_mut() {
-        let Some(poster) = series_of(dto).and_then(|s| posters.get(&s)) else {
+        let Some(series) = series_of(dto) else {
+            continue;
+        };
+        let Some(images) = art.get(&series) else {
+            continue;
+        };
+        let first = |kind: &str| images.iter().find(|img| img.image_type == kind);
+        let has_own = |dto: &BaseItemDto, kind: &str| {
+            dto.image_tags
+                .as_ref()
+                .and_then(|t| t.get(kind))
+                .is_some_and(|t| !t.starts_with("placeholder-"))
+        };
+        if let Some(logo) = first("Logo")
+            && !has_own(dto, "Logo")
+        {
+            dto.parent_logo_item_id = Some(series);
+            dto.parent_logo_image_tag = Some(image_tag(logo));
+        }
+        if let Some(thumb) = first("Thumb")
+            && !has_own(dto, "Thumb")
+        {
+            dto.parent_thumb_item_id = Some(series);
+            dto.parent_thumb_image_tag = Some(image_tag(thumb));
+        }
+        if let Some(clear) = first("Art")
+            && !has_own(dto, "Art")
+        {
+            dto.parent_art_item_id = Some(series);
+            dto.parent_art_image_tag = Some(image_tag(clear));
+        }
+        let backdrops: Vec<String> = images
+            .iter()
+            .filter(|img| img.image_type == "Backdrop")
+            .map(image_tag)
+            .collect();
+        if !backdrops.is_empty() && dto.backdrop_image_tags.as_ref().is_none_or(Vec::is_empty) {
+            dto.parent_backdrop_item_id = Some(series);
+            dto.parent_backdrop_image_tags = Some(backdrops);
+        }
+        let Some(poster) = images
+            .iter()
+            .find(|img| img.image_type == "Primary" && img.image_index == 0)
+        else {
             continue;
         };
         let tag = poster.id.to_string();
         dto.series_primary_image_tag = Some(tag.clone());
-        let has_own = dto
-            .image_tags
-            .as_ref()
-            .and_then(|t| t.get("Primary"))
-            .is_some_and(|t| !t.starts_with("placeholder-"));
-        if dto.item_type != "Season" || has_own {
+        if dto.item_type != "Season" || has_own(dto, "Primary") {
             continue;
         }
         dto.image_tags
@@ -1502,6 +1564,7 @@ pub async fn get_latest_items<D: Data>(
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     }
+    attach_series_art(&state.data, &mut dtos).await;
     Ok(Json(dtos))
 }
 
@@ -1567,6 +1630,7 @@ pub async fn get_resume_items<D: Data>(
     }
 
     let total = dtos.len() as i32;
+    attach_series_art(&state.data, &mut dtos).await;
     Ok(Json(QueryResult::new(dtos, total)))
 }
 

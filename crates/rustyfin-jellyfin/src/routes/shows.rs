@@ -129,6 +129,8 @@ async fn enrich_next_up_dtos<D: Data>(
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.data, auth.user_id, dtos).await;
     }
+    // After its own images: the show stands in only for what it lacks.
+    super::items::attach_series_art(&state.data, dtos).await;
 }
 
 /// `GET /Shows/{seriesId}/Seasons` — List seasons for a series.
@@ -191,6 +193,7 @@ pub async fn get_seasons<D: Data>(
         attach_user_data(&state.data, auth.user_id, &mut dtos).await;
     }
 
+    super::items::attach_series_art(&state.data, &mut dtos).await;
     Ok(Json(QueryResult::new(dtos, total)))
 }
 
@@ -318,4 +321,6 @@ async fn enrich_episode_dtos<D: Data>(
     if query.enable_user_data.unwrap_or(true) {
         attach_user_data(&state.data, auth.user_id, dtos).await;
     }
+    // After its own images: the show stands in only for what it lacks.
+    super::items::attach_series_art(&state.data, dtos).await;
 }

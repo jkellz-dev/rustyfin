@@ -186,13 +186,25 @@ pub struct BaseItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub studio_items: Option<Vec<NameGuidPair>>,
 
-    // Parent image inheritance (for fallback images)
+    // Parent image inheritance: a season or episode without a logo, backdrop,
+    // thumb or clear art of its own names its show's (Jellyfin's
+    // ParentLogoItemId and ParentLogoImageTag, and so on).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_logo_item_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_logo_image_tag: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_backdrop_item_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_backdrop_image_tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_thumb_item_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_thumb_image_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_art_item_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_art_image_tag: Option<String>,
 
     // Music-specific
     #[serde(skip_serializing_if = "Option::is_none")]

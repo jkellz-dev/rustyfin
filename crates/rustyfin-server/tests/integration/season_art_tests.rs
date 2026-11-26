@@ -217,3 +217,82 @@ async fn a_season_without_a_cover_shows_the_shows() {
     );
     app.cleanup().await;
 }
+
+/// A season or episode without a logo, backdrop or thumb of its own names
+/// its show's, as Jellyfin does (`ParentLogoItemId`, `ParentLogoImageTag`,
+/// `ParentBackdropItemId`, `ParentBackdropImageTags`, `ParentThumb...`):
+/// apps draw the show's logo over an episode's page (owner, 2026-11-26: most
+/// titles had no logo).
+#[tokio::test]
+async fn seasons_and_episodes_name_their_shows_logo_backdrop_and_thumb() {
+    let app = common::TestApp::new().await;
+    let (user, token) = app.create_user("viewer", true).await;
+    let tree = Tree::new();
+    tree.png("tv/Show (2021)/poster.jpg", Placeholder::Poster);
+    tree.png("tv/Show (2021)/clearlogo.png", Placeholder::Square);
+    tree.png("tv/Show (2021)/fanart.jpg", Placeholder::Square);
+    tree.png("tv/Show (2021)/landscape.jpg", Placeholder::Square);
+    tree.png("tv/Show (2021)/season01-fanart.jpg", Placeholder::Square);
+    tree.file("tv/Show (2021)/Season 01/Show - S01E01.mkv");
+    tree.file("tv/Show (2021)/Season 02/Show - S02E01.mkv");
+    scan_tv(&app, &tree).await;
+
+    let (_, shows) = app
+        .get("/Items?Recursive=true&IncludeItemTypes=Series", &token)
+        .await;
+    let show = shows["Items"][0].clone();
+    let show_id = show["Id"].as_str().unwrap().to_string();
+    let logo = show["ImageTags"]["Logo"]
+        .as_str()
+        .expect("show logo")
+        .to_string();
+    let thumb = show["ImageTags"]["Thumb"]
+        .as_str()
+        .expect("show thumb")
+        .to_string();
+    let backdrops = show["BackdropImageTags"].clone();
+    assert_eq!(backdrops.as_array().map(Vec::len), Some(1), "{show}");
+
+    let (status, episodes) = app
+        .get(&format!("/Shows/{show_id}/Episodes?UserId={user}"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{episodes}");
+    let episodes = episodes["Items"].as_array().expect("episodes").clone();
+    assert_eq!(episodes.len(), 2);
+    for ep in &episodes {
+        assert_eq!(ep["ParentLogoItemId"], show_id.as_str(), "{ep}");
+        assert_eq!(ep["ParentLogoImageTag"], logo.as_str(), "{ep}");
+        assert_eq!(ep["ParentBackdropItemId"], show_id.as_str(), "{ep}");
+        assert_eq!(ep["ParentBackdropImageTags"], backdrops, "{ep}");
+        assert_eq!(ep["ParentThumbItemId"], show_id.as_str(), "{ep}");
+        assert_eq!(ep["ParentThumbImageTag"], thumb.as_str(), "{ep}");
+    }
+
+    // One item's page says the same.
+    let ep_id = episodes[0]["Id"].as_str().unwrap();
+    let (_, one) = app
+        .get(&format!("/Users/{user}/Items/{ep_id}"), &token)
+        .await;
+    assert_eq!(one["ParentLogoImageTag"], logo.as_str(), "{one}");
+
+    // A season with a backdrop of its own keeps it; the other borrows the show's.
+    let (_, seasons) = app
+        .get(&format!("/Shows/{show_id}/Seasons?UserId={user}"), &token)
+        .await;
+    let seasons = seasons["Items"].as_array().expect("seasons").clone();
+    let (s1, s2) = (&seasons[0], &seasons[1]);
+    assert_eq!(s1["IndexNumber"], 1, "{s1}");
+    assert!(s1.get("ParentBackdropItemId").is_none(), "{s1}");
+    assert_eq!(s2["ParentBackdropImageTags"], backdrops, "{s2}");
+    for season in [s1, s2] {
+        assert_eq!(season["ParentLogoItemId"], show_id.as_str(), "{season}");
+    }
+
+    // And the show's logo is served from the id named.
+    let (status, _, bytes) = app
+        .get_bytes(&format!("/Items/{show_id}/Images/Logo?tag={logo}"), &token)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!bytes.is_empty());
+    app.cleanup().await;
+}
