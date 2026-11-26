@@ -58,3 +58,8 @@ git_tag_name = "rustyfin-services-v{{ version }}"
 name = "rustyfin-jellyfin"
 release = false
 git_tag_name = "rustyfin-jellyfin-v{{ version }}"
+
+[[package]]
+name = "rustyfin-api"
+release = false
+git_tag_name = "rustyfin-api-v{{ version }}"

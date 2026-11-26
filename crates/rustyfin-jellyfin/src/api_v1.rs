@@ -1,32 +1,27 @@
-//! Rustyfin's own API, apart from the Jellyfin routes (owner, 2026-11-19: "I
-//! want any new api routes that are rustyfin specific to be isolated from
-//! any of the old Jellyfin routes").
+//! The one route under `/api/v1` that is Jellyfin's side: a linked copy's
+//! transcode, relayed from the friend's server (`routes::link_relay`). Jellyfin
+//! apps fetch it, from the `TranscodingUrl` this server's `PlaybackInfo`
+//! gives them, with their Jellyfin token; its address was published under
+//! `/api/v1` and stays there. Rustyfin's own API (`rustyfin-api`) has the
+//! rest of `/api/v1`; the server sends it its requests before this crate
+//! sees them.
 //!
-//! `/api` is free in Jellyfin: none of Jellyfin 10.10.7's 309 API paths starts
-//! with it (its docs are at `/api-docs`, another first segment). Should a
-//! Jellyfin release take it, the prefix becomes `/rfapi/v1` (owner,
-//! 2026-11-19).
-//!
-//! Everything here is under `/api/v1`: paths written in lower case (a test
-//! below holds every route to it) and matched in any case ([`match_case`]),
-//! snake_case JSON and
-//! snake_case query keys (the Jellyfin routes' camelCase fix-up,
-//! `query_case`, is not applied). Requests sign in the same way as on the
-//! Jellyfin routes (a session token from a forward-auth sign-in). A Jellyfin
-//! client never calls these; Rustyfin's admin and linked Rustyfin servers do.
+//! Paths are written in lower case and matched in any case ([`match_case`]);
+//! the Jellyfin routes' camelCase query fix-up (`query_case`) is not applied
+//! under `/api/v1`.
 use rustyfin_models::data::Data;
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::get;
 
 use crate::router::AppState;
-use crate::routes::{link_catalog, link_relay, links, user_permissions};
+use crate::routes::link_relay;
 
 /// Where the API is mounted.
 pub const PREFIX: &str = "/api/v1";
 
 /// Every fixed word in the routes below (a test checks none is missing).
-const WORDS: &[&str] = &["links", "sync", "relay", "catalog", "users", "permissions"];
+const WORDS: &[&str] = &["links", "relay"];
 
 /// A request path for this API, its fixed words in lower case, so routes
 /// match in any case (owner, 2026-11-19), like Jellyfin's ASP.NET routes.
@@ -82,23 +77,11 @@ pub async fn lower_case_path(
 
 /// The routes, relative to [`PREFIX`].
 pub fn router<D: Data>() -> Router<AppState<D>> {
-    Router::new()
-        // Linked servers, for the admin (roadmap 16b).
-        .route("/links", get(links::list::<D>))
-        .route("/links/{id}/sync", post(links::sync_now::<D>))
-        // A linked copy's transcode, from the friend's server.
-        .route(
-            "/links/{id}/relay/{*path}",
-            get(link_relay::relay_media::<D>),
-        )
-        // The change feed a linked Rustyfin syncs from (roadmap 16b.2r).
-        .route("/catalog", get(link_catalog::catalog::<D>))
-        // What a user may do beyond Jellyfin's policy.
-        .route("/users/permissions", get(user_permissions::list::<D>))
-        .route(
-            "/users/{id}/permissions",
-            get(user_permissions::get::<D>).patch(user_permissions::patch::<D>),
-        )
+    // A linked copy's transcode, from the friend's server.
+    Router::new().route(
+        "/links/{id}/relay/{*path}",
+        get(link_relay::relay_media::<D>),
+    )
 }
 
 #[cfg(test)]
@@ -119,7 +102,7 @@ mod tests {
     #[test]
     fn every_route_here_is_lower_case() {
         let paths = route_paths();
-        assert!(paths.len() >= 5, "{paths:?}");
+        assert!(!paths.is_empty(), "{paths:?}");
         for path in paths {
             let fixed: String = path
                 .split('/')
@@ -152,10 +135,6 @@ mod tests {
         assert_eq!(
             match_case("/API/V1/Links").as_deref(),
             Some("/api/v1/links")
-        );
-        assert_eq!(
-            match_case("/Api/v1/Users/ABC/Permissions").as_deref(),
-            Some("/api/v1/users/ABC/permissions")
         );
         assert_eq!(
             match_case("/api/v1/LINKS/x/RELAY/videos/Ab/Master.m3u8").as_deref(),

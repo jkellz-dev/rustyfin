@@ -369,6 +369,19 @@ async fn main() -> anyhow::Result<()> {
             people_cache_dir: people_cache_dir.clone(),
         },
     );
+    // Rustyfin's own API: the same data, rules, links and proxy.
+    let api_state = rustyfin_api::state::ApiState {
+        data: data.clone(),
+        services: services.clone(),
+        links: links.clone(),
+        proxy: forward_auth_config
+            .as_ref()
+            .map(|fa| rustyfin_api::state::Proxy {
+                trusted: fa.trusted_proxies.clone(),
+                headers: fa.headers.clone(),
+                admin_group: fa.admin_group.clone(),
+            }),
+    };
     let state = AppState {
         services,
         data: data.clone(),
@@ -426,7 +439,7 @@ async fn main() -> anyhow::Result<()> {
     rustyfin_jellyfin::link_notices::spawn(state.clone());
     // Genre lists, built before anyone opens one and kept fresh.
     rustyfin_jellyfin::routes::music_genres::spawn_genre_list_builder(state.clone());
-    let app = rustyfin_server::app(state)
+    let app = rustyfin_server::app(state, api_state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
     // Redirect root to admin UI

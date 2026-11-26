@@ -14,6 +14,7 @@
 mod jellyfin;
 pub use jellyfin::LinkStats;
 mod oidc;
+pub mod scope;
 mod sync;
 
 use rustyfin_models::data::{ActivityLogStore, Data, LinkStore};

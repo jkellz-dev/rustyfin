@@ -1,7 +1,6 @@
 //! The admin's view of linked servers (roadmap 16b): `GET /api/v1/links`
 //! and `POST /api/v1/links/{id}/sync`. Administrators only.
 
-use crate::auth::middleware::AdminUser;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -10,11 +9,13 @@ use rustyfin_models::data::{Data, LinkStore};
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::caller::Admin;
 use crate::error::ApiError;
-use crate::router::AppState;
+use crate::state::ApiState;
 
 #[derive(Debug, Serialize)]
 pub struct LinkInfo {
+    #[serde(serialize_with = "crate::ids::simple")]
     pub id: Uuid,
     pub name: String,
     pub kind: String,
@@ -45,8 +46,8 @@ pub struct LinkInfo {
 
 /// `GET /api/v1/links`
 pub async fn list<D: Data>(
-    State(state): State<AppState<D>>,
-    _admin: AdminUser,
+    State(state): State<ApiState<D>>,
+    _admin: Admin,
 ) -> Result<Json<Vec<LinkInfo>>, ApiError> {
     let rows = state.data.links().list().await?;
     let counts = state.data.links().counts().await?;
@@ -79,8 +80,8 @@ pub async fn list<D: Data>(
 
 /// `POST /api/v1/links/{id}/sync`: start a sync now; 204 at once.
 pub async fn sync_now<D: Data>(
-    State(state): State<AppState<D>>,
-    _admin: AdminUser,
+    State(state): State<ApiState<D>>,
+    _admin: Admin,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     if state.links.get(id).await.is_none() {

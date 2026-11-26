@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 rustyfin-jellyfin.workspace = true
+rustyfin-api.workspace = true
 rustyfin-services.workspace = true
 rustyfin-data.workspace = true
 rustyfin-models.workspace = true

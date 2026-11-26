@@ -2,15 +2,15 @@
 //! 16b.2r). The caller is an ordinary user, signed in the usual way (forward
 //! auth), whom the admin lets link (`may_link`); it sees what that user can see.
 
-use crate::auth::middleware::AuthenticatedUser;
 use axum::Json;
 use axum::extract::{Query, State};
 use rustyfin_models::data::{CatalogStore, Data, UserStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::caller::Caller;
 use crate::error::ApiError;
-use crate::router::AppState;
+use crate::state::ApiState;
 
 /// Items per page unless the caller asks for fewer (or more, up to `MAX`).
 const DEFAULT_LIMIT: i64 = 1000;
@@ -27,14 +27,17 @@ pub struct CatalogQuery {
 
 #[derive(Debug, Serialize)]
 pub struct Changed {
+    #[serde(serialize_with = "crate::ids::simple")]
     id: Uuid,
     #[serde(rename = "type")]
     item_type: String,
+    #[serde(serialize_with = "crate::ids::simple")]
     library_id: Uuid,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Removed {
+    #[serde(serialize_with = "crate::ids::simple")]
     id: Uuid,
 }
 
@@ -53,8 +56,8 @@ pub struct CatalogPage {
 
 /// `GET /api/v1/catalog?since=&after=&limit=`
 pub async fn catalog<D: Data>(
-    State(state): State<AppState<D>>,
-    auth: AuthenticatedUser,
+    State(state): State<ApiState<D>>,
+    auth: Caller,
     Query(q): Query<CatalogQuery>,
 ) -> Result<Json<CatalogPage>, ApiError> {
     let user = state

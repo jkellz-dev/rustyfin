@@ -4,14 +4,14 @@
 //! it, so its web client neither sees nor resets these.
 use rustyfin_models::data::Data;
 
-use crate::auth::middleware::{AdminUser, AuthenticatedUser};
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::caller::{Admin, Caller};
 use crate::error::ApiError;
-use crate::router::AppState;
+use crate::state::ApiState;
 
 #[derive(Debug, Serialize)]
 pub struct Permissions {
@@ -22,6 +22,7 @@ pub struct Permissions {
 /// One user's permissions, in the list for the admin.
 #[derive(Debug, Serialize)]
 pub struct UserPermissions {
+    #[serde(serialize_with = "crate::ids::simple")]
     pub id: Uuid,
     pub may_link: bool,
 }
@@ -29,8 +30,8 @@ pub struct UserPermissions {
 /// `GET /api/v1/users/permissions`: every user's, for the admin's users list
 /// (which marks server accounts). Administrators only.
 pub async fn list<D: Data>(
-    State(state): State<AppState<D>>,
-    _admin: AdminUser,
+    State(state): State<ApiState<D>>,
+    _admin: Admin,
 ) -> Result<Json<Vec<UserPermissions>>, ApiError> {
     let users = state.services.users().list().await?;
     Ok(Json(
@@ -62,22 +63,22 @@ impl From<rustyfin_services::users::Permissions> for Permissions {
 
 /// A user's own, or anyone's for an administrator.
 pub async fn get<D: Data>(
-    State(state): State<AppState<D>>,
-    auth: AuthenticatedUser,
+    State(state): State<ApiState<D>>,
+    auth: Caller,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Permissions>, ApiError> {
     let permissions = state
         .services
         .users()
-        .permissions(super::access::viewer(&auth), id)
+        .permissions(auth.viewer(), id)
         .await?;
     Ok(Json(permissions.into()))
 }
 
 /// Administrators only; answers with the permissions as they now are.
 pub async fn patch<D: Data>(
-    State(state): State<AppState<D>>,
-    _admin: AdminUser,
+    State(state): State<ApiState<D>>,
+    _admin: Admin,
     Path(id): Path<Uuid>,
     Json(change): Json<PermissionsPatch>,
 ) -> Result<Json<Permissions>, ApiError> {
@@ -88,7 +89,7 @@ pub async fn patch<D: Data>(
         .await?;
     if change.may_link.is_some() {
         // Requests from that user's sessions are scoped anew.
-        crate::link_scope::forget();
+        rustyfin_services::link::scope::forget();
     }
     Ok(Json(permissions.into()))
 }

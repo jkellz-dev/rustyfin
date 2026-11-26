@@ -178,6 +178,18 @@ impl TestApp {
                 people_cache_dir: people_cache_dir.clone(),
             },
         );
+        let api_state = rustyfin_api::state::ApiState {
+            data: data.clone(),
+            services: services.clone(),
+            links: links.clone(),
+            proxy: forward_auth.then(|| rustyfin_api::state::Proxy {
+                trusted: rustyfin_services::proxy::TrustedProxies::new(vec![
+                    "127.0.0.0/8".parse().unwrap(),
+                ]),
+                headers: Default::default(),
+                admin_group: None,
+            }),
+        };
         let state = AppState {
             services,
             data: data.clone(),
@@ -218,7 +230,7 @@ impl TestApp {
                 image_cache_dir: state.image_cache_dir.clone(),
                 people_cache_dir: state.people_cache_dir.clone(),
             });
-        let router = rustyfin_server::app(state);
+        let router = rustyfin_server::app(state, api_state);
 
         Self {
             router,
