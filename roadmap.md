@@ -90,7 +90,7 @@ Meilisearch, session playback tracking, activity logging, chapters, stubs.
 - [x] User data: favorites, played, playback position, resume items
 - [x] Per-user library access control
 - [x] File browser (`GET /Environment/DirectoryContents`)
-- [x] LDAP auth config (optional)
+- [x] LDAP auth config (optional) (removed 2026-11-26, owner: sign-in is the proxy's)
 - [x] Device authorization grant (RFC 8628) (removed 2026-11-26, never routed: signing in is Tailscale's)
 
 ### 6b. API Endpoint Stubs [DONE]
@@ -966,7 +966,8 @@ Port the most relevant unit tests from Jellyfin's domain test projects. These te
       user is disabled or removed
 - [x] Rate limiting on auth endpoints: a user name with 5 failed logins, or an address with 20, in 15 minutes gets
       429 + `Retry-After` until the oldest failure ages out; a throttle, never Jellyfin's account lockout; logins a
-      trusted forward-auth proxy vouches for are never counted
+      trusted forward-auth proxy vouches for are never counted (removed 2026-11-26 with LDAP: no password sign-in is
+      left to throttle)
 - [x] Review CORS / header configuration: same-origin by default, optional allowlist in `rustyfin.toml` (owner,
       2026-11-14); native clients are unaffected
 
@@ -1698,7 +1699,6 @@ Design, settled before any code:
   project folder on the NAS (`/volume1/docker/rustyfin`), the user and group ids of a DSM user that can read the media
   (`PUID`/`PGID`). No native package until the container route works.
 - **Sign-in on a NAS.** DSM's reverse proxy cannot do forward auth, so the project brings its own, chosen from:
-  - LDAPS against DSM's own LDAP Server package (NAS accounts sign in to Rustyfin; no extra service);
   - a small forward-auth proxy (Authelia behind Caddy) in the project;
   - Tailscale (the Synology Tailscale package, or a sidecar with `tailscale serve` identity headers).
 
@@ -1732,7 +1732,7 @@ Work:
 | API routes | ~90% | Core + stubs + parity stubs (~30 new); individual genre/studio/person endpoints |
 | Direct playback | ~95% | HTTP Range, stream metadata, audio/video |
 | Transcoding | ~80% | HLS pipeline, device profiles, subtitles, throttling, seek; no ABR |
-| Auth | ~90% | Forward auth + LDAP + device auth; admin/user audit done; Quick Connect disabled |
+| Auth | ~90% | Forward auth only (LDAP and device auth removed); admin/user audit done; Quick Connect disabled |
 | Users | ~80% | CRUD, preferences, library access, ratings; missing parental controls |
 | Libraries | ~90% | Movies, TV, music scanning; cron-based scheduled scans with per-library overrides |
 | Sessions | ~85% | Tracking + WebSocket + transcode status + remote control + capabilities + viewing stub |

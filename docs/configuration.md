@@ -35,8 +35,8 @@ tmdb_api_key = "your-tmdb-api-key"
 
 ## Environment Variables
 
-At least one way of signing in, `[auth.forward_auth]` or `[auth.ldap]`, must be configured: the server will not start
-without one. Every setting, with its default, is in [`rustyfin.example.toml`](../rustyfin.example.toml).
+`[auth.forward_auth]` must be configured: the server will not start without it, nor with the removed `[auth.ldap]`.
+Every setting, with its default, is in [`rustyfin.example.toml`](../rustyfin.example.toml).
 
 Environment variables use double-underscore `__` as a separator to map to nested TOML keys. For example,
 `RUSTYFIN__DATABASE__HOST` maps to `database.host`.
@@ -109,7 +109,6 @@ Metrics get their own listener and are never served on the public port. Unset, t
 
 - `rustyfin_http_requests_total{method,route,status}`, `rustyfin_http_request_duration_seconds` (by route template)
 - `rustyfin_scans_total{library,result}`, `rustyfin_scan_duration_seconds`, `rustyfin_scan_items_total{library,outcome}`
-- `rustyfin_login_failures_total`, `rustyfin_login_throttled_total`
 - `rustyfin_library_items{library,type}`, `rustyfin_library_last_scan_timestamp_seconds{library}`
 - `rustyfin_users`, `rustyfin_sessions_active`, `rustyfin_sessions_playing`, `rustyfin_transcodes_active`
 - `rustyfin_db_up`, `rustyfin_db_latency_seconds`, `rustyfin_db_pool_connections{state}`, `rustyfin_search_up{backend}`
@@ -192,22 +191,6 @@ in. Rustyfin creates each user the first time they are named; the first user of 
 | `email` | `Remote-Email` | Email |
 | `groups` | `Remote-Groups` | Comma-separated groups |
 | `app_capabilities` | `Tailscale-App-Capabilities` | Granted app capabilities, as JSON (used with `app_capability`) |
-
-### `[auth.ldap]` (optional)
-
-Password sign-in, checked by binding to an LDAPS server, for setups without a sign-in proxy (with one, the proxy
-decides). Rustyfin stores no passwords.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `url` | `String` | (required) | Must start with `ldaps://` (STARTTLS is not supported) |
-| `bind_dn` | `String` | (required) | Service account used to find users |
-| `bind_password` | `String` | (required) | Its password |
-| `search_base` | `String` | (required) | Where users are searched |
-| `user_filter` | `String` | `(uid={})` | `{}` becomes the username |
-| `mail_attr` | `String` | `mail` | Attribute holding the email |
-| `display_name_attr` | `String` | `cn` | Attribute holding the display name |
-| `admin_group_dn` | `String` | --- | Members of this group are administrators |
 
 ### `[tasks]`
 

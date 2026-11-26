@@ -198,7 +198,6 @@ impl TestApp {
                 headers: Default::default(),
                 admin_group: None,
             }),
-            ldap_config: None,
             transcode_manager,
             image_cache_dir: image_cache_dir(&schema),
             scan_in_flight: scan_in_flight.clone(),
@@ -207,7 +206,6 @@ impl TestApp {
             user_image_url_template: None,
             task_scheduler: None,
             shutdown: shutdown.clone(),
-            login_limiter: Default::default(),
             links: links.clone(),
             prefer_direct_play,
         };

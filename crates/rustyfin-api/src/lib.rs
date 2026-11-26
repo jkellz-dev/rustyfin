@@ -5,8 +5,7 @@
 //! users, libraries, play history, devices, WebSocket, ...). Around them:
 //! [`error`] (one `ApiError` mapped to status codes and log levels),
 //! [`query_case`] (Jellyfin's query names in any case), [`request_log`] and
-//! [`metrics`] (what clients ask for, Prometheus), [`health`],
-//! [`login_limit`] and [`cors`].
+//! [`metrics`] (what clients ask for, Prometheus), [`health`] and [`cors`].
 
 pub mod api_v1;
 pub mod cors;
@@ -16,7 +15,6 @@ pub mod health;
 pub mod identity;
 pub mod link_notices;
 pub mod link_scope;
-pub mod login_limit;
 pub mod metrics;
 pub mod query_case;
 pub mod request_log;

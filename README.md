@@ -46,15 +46,15 @@ device on your tailnet is already a known person, so apps connect with nothing m
 
 ## What it leaves out, on purpose
 
-- **Passwords**: Tailscale (or another sign-in proxy) says who each request is from, or else an LDAPS server checks the
-  password; Rustyfin only decides what each person may see. [Authentication](docs/authentication.md).
+- **Passwords**: Tailscale (or another sign-in proxy) says who each request is from; Rustyfin checks no passwords and
+  only decides what each person may see. [Authentication](docs/authentication.md).
 - **Writing to media folders**: the server only reads them; the separate `rustyfin` tool is the one writer.
 - Plugins, Live TV and DVR, photo and book libraries.
 
 ## Documentation
 
 - [Getting Started](docs/getting-started.md): the Docker Compose setup, step by step.
-- [Authentication](docs/authentication.md): Tailscale, other sign-in proxies, LDAPS.
+- [Authentication](docs/authentication.md): Tailscale and other sign-in proxies.
 - [Configuration](docs/configuration.md): every setting.
 - [Deployment](docs/deployment.md): a single container, systemd, Caddy, nginx or Traefik; upgrades and backups.
 - [Moving from Jellyfin](docs/migrating-from-jellyfin.md): what comes across and what does not.

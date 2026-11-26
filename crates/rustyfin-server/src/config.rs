@@ -288,8 +288,10 @@ fn default_segment_duration() -> u32 {
 pub struct AuthConfig {
     #[serde(default)]
     pub forward_auth: Option<ForwardAuthConfig>,
+    /// Password sign-in against LDAPS was removed: only read to refuse a
+    /// config that still asks for it.
     #[serde(default)]
-    pub ldap: Option<LdapAuthConfig>,
+    pub ldap: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -337,29 +339,6 @@ impl Default for ForwardAuthHeadersConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct LdapAuthConfig {
-    /// LDAPS URL (must start with `ldaps://`).
-    pub url: String,
-    /// Service account DN for searching users.
-    pub bind_dn: String,
-    /// Service account password.
-    pub bind_password: String,
-    /// Base DN for user searches.
-    pub search_base: String,
-    /// LDAP filter with `{}` placeholder for username.
-    #[serde(default = "default_user_filter")]
-    pub user_filter: String,
-    /// Attribute for email.
-    #[serde(default = "default_mail_attr")]
-    pub mail_attr: String,
-    /// Attribute for display name.
-    #[serde(default = "default_display_name_attr")]
-    pub display_name_attr: String,
-    /// Group DN whose members are auto-promoted to admin.
-    pub admin_group_dn: Option<String>,
-}
-
 fn default_remote_user() -> String {
     "Remote-User".to_string()
 }
@@ -375,13 +354,6 @@ fn default_remote_groups() -> String {
 fn default_user_filter() -> String {
     "(uid={})".to_string()
 }
-fn default_mail_attr() -> String {
-    "mail".to_string()
-}
-fn default_display_name_attr() -> String {
-    "cn".to_string()
-}
-
 // ── Task scheduler configuration ─────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
@@ -691,18 +663,14 @@ impl Config {
 
     /// Validate auth configuration at startup.
     fn validate_auth(auth: &AuthConfig) -> anyhow::Result<()> {
-        // At least one auth method must be configured
-        if auth.forward_auth.is_none() && auth.ldap.is_none() {
+        if auth.ldap.is_some() {
             anyhow::bail!(
-                "At least one auth method must be configured ([auth.forward_auth] or [auth.ldap])"
+                "[auth.ldap] is no longer supported: Rustyfin checks no passwords; \
+                 sign in through a proxy ([auth.forward_auth]) and remove [auth.ldap]"
             );
         }
-
-        // LDAP URL must be ldaps://
-        if let Some(ref ldap) = auth.ldap
-            && !ldap.url.starts_with("ldaps://")
-        {
-            anyhow::bail!("LDAP URL must use ldaps:// (STARTTLS is not supported)");
+        if auth.forward_auth.is_none() {
+            anyhow::bail!("[auth.forward_auth] must be configured: it is how people sign in");
         }
 
         // Trusted proxies must parse as valid CIDRs
@@ -720,6 +688,23 @@ impl Config {
 #[cfg(test)]
 mod schedule_tests {
     use super::TasksConfig;
+
+    /// LDAPS sign-in was removed: a config still asking for it is refused at
+    /// start rather than quietly signing nobody in.
+    #[test]
+    fn a_config_with_ldap_is_refused() {
+        let auth: super::AuthConfig = config::Config::builder()
+            .add_source(config::File::from_str(
+                "[ldap]\nurl = \"ldaps://example\"\n[forward_auth]\ntrusted_proxies = []\n",
+                config::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+        let err = super::Config::validate_auth(&auth).unwrap_err().to_string();
+        assert!(err.contains("[auth.ldap] is no longer supported"), "{err}");
+    }
 
     fn tasks(toml: &str) -> TasksConfig {
         config::Config::builder()

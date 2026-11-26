@@ -70,9 +70,9 @@ const PUBLIC_ON_PURPOSE: &[(&str, &str)] = &[
         "/Localization/ParentalRatings",
         "static lists the setup wizard shows",
     ),
-    // Login itself. Refuses with 401 unless forward auth or LDAP vouches for the caller.
+    // Login itself. Refuses with 401 unless the trusted proxy vouches for the caller.
     ("/Users/AuthenticateByName", "the login route"),
-    // Empty list unless LDAP is configured, as in Jellyfin's login user picker.
+    // Always empty: the proxy signs people in, so the login screen picks no user.
     (
         "/Users/Public",
         "login user picker; empty under forward auth",

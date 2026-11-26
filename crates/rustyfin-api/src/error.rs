@@ -32,10 +32,6 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
-
-    /// Too many failed logins: try again after this many seconds.
-    #[error("Too many failed logins; retry in {0} s")]
-    TooManyRequests(u64),
 }
 
 impl From<rustyfin_services::ServiceError> for ApiError {
@@ -130,7 +126,6 @@ impl IntoResponse for ApiError {
             ApiError::Data(DataError::Unavailable(_)) => StatusCode::SERVICE_UNAVAILABLE,
             ApiError::Data(DataError::Other(_)) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
         };
 
         // A missing image or an unknown id is the client's answer, not a fault:
@@ -145,11 +140,7 @@ impl IntoResponse for ApiError {
         } else {
             (status, self.to_string()).into_response()
         };
-        if let ApiError::TooManyRequests(secs) = self {
-            response
-                .headers_mut()
-                .insert(axum::http::header::RETRY_AFTER, secs.into());
-        } else if status == StatusCode::SERVICE_UNAVAILABLE {
+        if status == StatusCode::SERVICE_UNAVAILABLE {
             response
                 .headers_mut()
                 .insert(axum::http::header::RETRY_AFTER, 5u64.into());

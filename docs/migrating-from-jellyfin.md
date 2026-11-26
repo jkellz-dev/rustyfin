@@ -23,7 +23,7 @@ server at your folders. What lives only in Jellyfin's database does not come acr
 ## What does not carry over
 
 - **Watched state, resume points, favourites and ratings.** They live in Jellyfin's database; everyone starts fresh.
-- **Users and passwords.** Rustyfin signs people in through a forward-auth proxy (or an LDAPS server) and creates each
+- **Users and passwords.** Rustyfin signs people in through a forward-auth proxy and creates each
   user the first time they arrive. Library access and the administrator role are set again in the admin.
 - **Metadata Jellyfin fetched but kept only in its database**, and artwork it downloaded into its own data folder.
   The server reads only what is beside the media; the `rustyfin` tool fetches metadata, artwork and lyrics from TMDB and

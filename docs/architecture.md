@@ -48,7 +48,7 @@ rustyfin/
 ├── crates/
 │   ├── rustyfin-server/        # The server binary: config, startup, wiring
 │   ├── rustyfin-api/           # HTTP routes (Jellyfin's and Rustyfin's own), AppState
-│   ├── rustyfin-auth/          # Who is asking: forward auth, LDAPS, tokens, sessions
+│   ├── rustyfin-auth/          # Who is asking: forward auth, tokens, sessions
 │   ├── rustyfin-services/      # Scanner, enrichment, scheduler, sessions, scan progress
 │   ├── rustyfin-data/          # Postgres pool, migrations, repositories
 │   ├── rustyfin-models/        # Jellyfin's JSON shapes (DTOs) and enums
@@ -100,7 +100,7 @@ history, devices, WebSocket, ...). `router.rs` holds `AppState` and builds the r
 
 ### `rustyfin-auth`
 
-Turns a request into a user and a session. Identity comes from a trusted forward-auth proxy or an LDAPS bind; Rustyfin
+Turns a request into a user and a session. Identity comes only from a trusted forward-auth proxy; Rustyfin checks and
 stores no passwords. The `AuthenticatedUser`, `AdminUser` and `OptionalUser` extractors read Jellyfin's
 `Authorization: MediaBrowser ...` header (or `X-Emby-Token`, or `api_key`). See [Authentication](authentication.md).
 
@@ -161,9 +161,9 @@ the only writer to the media folders and runs with its own writable mount (a con
 ## Application state
 
 `AppState` (in `rustyfin-api/src/router.rs`) is cloned into every handler. It holds the Postgres pool; the server's id,
-name, address and port; the session manager, search service and transcode manager; the forward-auth and LDAP settings;
+name, address and port; the session manager, search service and transcode manager; the forward-auth settings;
 the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the
-login limiter; the shutdown signal; and the linked servers (`links`), whose copies the stream and image routes
+shutdown signal; and the linked servers (`links`), whose copies the stream and image routes
 relay. `PgPool` is reachable through `FromRef`, so extractors can use the database
 without knowing the whole state. The scan board is one shared instance for the process
 (`ScanBoard::global()`), so the scanner can report without being handed the state.
@@ -178,7 +178,7 @@ without knowing the whole state. The scan board is one shared instance for the p
    image-cache cleanup, database maintenance); with `run_on_startup` (off by default), each runs once now.
 6. Linked servers from `[[link]]`: each is recorded in the `links` table, and one task syncs them all 30 seconds later
    and then every 15 minutes.
-7. Forward-auth and LDAP settings, CORS, `AppState`.
+7. Forward-auth settings, CORS, `AppState`.
 8. The metrics listener (if configured), then the API router with the admin merged under `/web`, and `/` redirected to
    it.
 
@@ -186,7 +186,7 @@ without knowing the whole state. The scan board is one shared instance for the p
 
 - **Jellyfin's wire format**: clients talk to Rustyfin as to Jellyfin; where Rustyfin adds something, it is extra
   fields or its own routes, never a changed shape.
-- **Forward auth first**: identity comes from the proxy (or LDAPS); no stored passwords, no OIDC, no plugins.
+- **Forward auth first**: identity comes from the proxy only; no passwords, no OIDC, no plugins.
 - **Read-only media**: the server never writes to media folders; the `rustyfin` tool is the one writer.
 - **One server for the apps**: a friend's films come through linked servers, merged into this server's libraries;
   apps never talk to the friend's server.

@@ -14,13 +14,13 @@ use rustyfin_models::dto::{UpdateUserPolicyRequest, UserConfiguration, UserDto, 
 use crate::error::ApiError;
 use crate::router::AppState;
 
-fn user_row_to_dto(row: &users::UserRow, server_id: &str, ldap_enabled: bool) -> UserDto {
+fn user_row_to_dto(row: &users::UserRow, server_id: &str) -> UserDto {
     UserDto {
         name: row.username.clone(),
         server_id: server_id.to_string(),
         id: row.id,
-        has_password: ldap_enabled,
-        has_configured_password: ldap_enabled,
+        has_password: false,
+        has_configured_password: false,
         has_configured_easy_password: false,
         enable_auto_login: false,
         last_login_date: row.last_login_date,
@@ -120,8 +120,8 @@ pub async fn update_user_configuration(
 }
 
 /// A user as Jellyfin shows them, with the libraries they are limited to.
-async fn user_dto(state: &AppState, user: &users::UserRow, ldap_enabled: bool) -> UserDto {
-    let mut dto = user_row_to_dto(user, &state.server_id, ldap_enabled);
+async fn user_dto(state: &AppState, user: &users::UserRow) -> UserDto {
+    let mut dto = user_row_to_dto(user, &state.server_id);
     if let Some(ids) = state.services.users().enabled_libraries(user).await {
         dto.policy.enabled_folders = ids.into_iter().map(|id| id.to_string()).collect();
     }
@@ -133,10 +133,9 @@ pub async fn list_users(
     State(state): State<AppState>,
     _auth: AuthenticatedUser,
 ) -> Result<Json<Vec<UserDto>>, ApiError> {
-    let ldap_enabled = state.ldap_config.is_some();
     let mut dtos = Vec::new();
     for user in state.services.users().list().await? {
-        dtos.push(user_dto(&state, &user, ldap_enabled).await);
+        dtos.push(user_dto(&state, &user).await);
     }
     Ok(Json(dtos))
 }
@@ -146,9 +145,8 @@ pub async fn get_current_user(
     State(state): State<AppState>,
     auth: AuthenticatedUser,
 ) -> Result<Json<UserDto>, ApiError> {
-    let ldap_enabled = state.ldap_config.is_some();
     let user = state.services.users().get(auth.user_id).await?;
-    Ok(Json(user_dto(&state, &user, ldap_enabled).await))
+    Ok(Json(user_dto(&state, &user).await))
 }
 
 /// `GET /Users/{id}` — Get user by ID.
@@ -157,28 +155,14 @@ pub async fn get_user_by_id(
     _auth: AuthenticatedUser,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserDto>, ApiError> {
-    let ldap_enabled = state.ldap_config.is_some();
     let user = state.services.users().get(user_id).await?;
-    Ok(Json(user_dto(&state, &user, ldap_enabled).await))
+    Ok(Json(user_dto(&state, &user).await))
 }
 
-/// `GET /Users/Public` — Public user list for login screen.
-/// When LDAPS is configured, returns user list so clients show a user picker.
-/// When forward-auth-only, returns empty list (proxy handles login).
-pub async fn get_public_users(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<UserDto>>, ApiError> {
-    if state.ldap_config.is_none() {
-        // Forward-auth-only: proxy handles login, no user picker needed
-        return Ok(Json(Vec::new()));
-    }
-
-    let rows = state.services.users().list().await?;
-    let dtos: Vec<UserDto> = rows
-        .iter()
-        .map(|r| user_row_to_dto(r, &state.server_id, true))
-        .collect();
-    Ok(Json(dtos))
+/// `GET /Users/Public` — the login screen's user picker: always empty, as
+/// the proxy in front signs people in.
+pub async fn get_public_users() -> Json<Vec<UserDto>> {
+    Json(Vec::new())
 }
 
 /// `DELETE /Users/{userId}` — Delete a user (admin only). Cannot delete self.

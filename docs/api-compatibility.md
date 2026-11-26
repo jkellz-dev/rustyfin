@@ -8,7 +8,7 @@ purpose. Route details: [API Reference](api-reference.md).
 
 Around 200 routes (method and path), grouped by area in `crates/rustyfin-api/src/routes/`:
 
-- **Sign-in and sessions**: `AuthenticateByName` (forward auth or LDAPS), API keys, sessions, devices,
+- **Sign-in and sessions**: `AuthenticateByName` (the proxy names who signs in), API keys, sessions, devices,
   remote control commands, the WebSocket (`/socket`).
 - **Users**: listing, policy, library access, app settings (`/Users/{userId}/Configuration`: kept and returned;
   ordered views and excludes are not yet applied to the home lists), display preferences, user data (played, favourite,

@@ -19,7 +19,7 @@ These estimates date from February 2026. What is answered today, route by route:
 | API routes | ~75% | Core routes + HLS transcoding + subtitle delivery + stubs |
 | Direct playback | ~95% | HTTP Range, stream metadata, audio/video serving |
 | Transcoding | ~80% | ffmpeg HLS pipeline, device profiles, seek, throttling; no ABR |
-| Auth | ~85% | Forward auth + LDAP, device auth unfinished |
+| Auth | ~85% | Forward auth only (passwords are the proxy's) |
 | Users | ~75% | CRUD, preferences, library access; missing ratings & parental enforcement |
 | Libraries | ~75% | Movies, TV, music scanning |
 | Sessions | ~75% | Tracking + WebSocket + transcode status; missing Sync Play & DLNA |

@@ -41,7 +41,6 @@ pub struct AppState {
     pub session_manager: Arc<rustyfin_services::session::SessionManager>,
     pub search_service: Arc<rustyfin_search::SearchService>,
     pub forward_auth_config: Option<ForwardAuthState>,
-    pub ldap_config: Option<rustyfin_auth::ldap::LdapConfig>,
     pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
     pub image_cache_dir: PathBuf,
     pub people_cache_dir: Option<PathBuf>,
@@ -52,8 +51,6 @@ pub struct AppState {
     /// Fired by `POST /System/Shutdown` and `/System/Restart`; the server binary
     /// waits on it to begin a graceful exit.
     pub shutdown: Arc<tokio::sync::Notify>,
-    /// Failed password logins, per name and per address (roadmap 11e).
-    pub login_limiter: Arc<crate::login_limit::LoginLimiter>,
     /// Linked servers, whose copies this server relays (roadmap 16b).
     pub links: Arc<rustyfin_services::link::Links>,
     /// `[playback] prefer_direct_play`: of a title's copies, those the app

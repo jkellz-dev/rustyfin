@@ -12,7 +12,7 @@
 //! snake_case JSON and
 //! snake_case query keys (the Jellyfin routes' camelCase fix-up,
 //! `query_case`, is not applied). Requests sign in the same way as on the
-//! Jellyfin routes (a session token from forward auth or LDAPS). A Jellyfin
+//! Jellyfin routes (a session token from a forward-auth sign-in). A Jellyfin
 //! client never calls these; Rustyfin's admin and linked Rustyfin servers do.
 
 use axum::Router;

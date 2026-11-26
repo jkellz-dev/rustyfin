@@ -105,15 +105,6 @@ pub trait UserStore {
         may_link: bool,
     ) -> impl Future<Output = DataResult<bool>> + Send;
 
-    /// Create or update a user from LDAP authentication.
-    /// Uses username as the conflict key (not remote_user_id).
-    fn upsert_from_ldap(
-        &self,
-        username: &str,
-        display_name: Option<&str>,
-        email: Option<&str>,
-    ) -> impl Future<Output = DataResult<User>> + Send;
-
     /// Update the disabled status of a user.
     fn update_disabled(
         &self,

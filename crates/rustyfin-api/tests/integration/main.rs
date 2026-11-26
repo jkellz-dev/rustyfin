@@ -51,7 +51,6 @@ mod link_rustyfin_tests;
 mod list_fields_tests;
 mod list_item_shape_tests;
 mod live_scan_fixes_tests;
-mod login_rate_limit_tests;
 mod lyrics_segments_tests;
 mod media_routes_tests;
 mod metrics_tests;

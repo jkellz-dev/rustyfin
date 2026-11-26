@@ -4,15 +4,10 @@ Rustyfin does not check passwords or keep them. Something in front of it says wh
 only decides what that person may do: whether they are an administrator, which libraries they see, whether their account
 is turned off.
 
-There are two ways to say who someone is:
-
-1. **A sign-in proxy** (forward auth): every request reaches Rustyfin through a proxy that adds a header naming the
-   person. [Tailscale Serve](#tailscale) is the simplest, and the one [Getting Started](getting-started.md) uses.
-2. **LDAPS**, for setups with no such proxy: Jellyfin's apps send a user name and password at sign-in, and Rustyfin
-   checks them against an LDAP server over TLS ([LDAPS](#ldaps)).
-
-Use one of them. When a sign-in proxy is configured, it is the only way in: a sign-in the proxy names no one for is
-refused, whatever user name and password the app sent.
+That something is **a sign-in proxy** (forward auth): every request reaches Rustyfin through a proxy that adds a header
+naming the person. [Tailscale Serve](#tailscale) is the simplest, and the one [Getting Started](getting-started.md)
+uses. It is the only way in: a sign-in the proxy names no one for is refused, whatever user name and password the app
+sent. `[auth.forward_auth]` must be configured, or the server does not start.
 
 ## Sign-in proxy
 
@@ -104,35 +99,7 @@ Any reverse proxy that asks an identity provider about each request and passes t
 nginx or Traefik with Authelia, Authentik or oauth2-proxy. [Deployment](deployment.md#reverse-proxy) has examples.
 
 Such a proxy usually signs people in with a login page in the browser. The admin and Jellyfin's web app can show it;
-apps on TVs and phones cannot, and the proxy refuses their requests. If those apps matter, use Tailscale, or LDAPS with
-no proxy.
-
-## LDAPS
-
-With no sign-in proxy, Jellyfin's apps sign in with a user name and password, which Rustyfin checks against an LDAP
-server (Kanidm, LLDAP, OpenLDAP, Active Directory, ...):
-
-1. It binds as a service account and searches for the user.
-2. It binds as the user with the password typed, which proves the password.
-3. It reads the user's email, display name and groups; members of `admin_group_dn` are administrators.
-
-The app then keeps the token sign-in gave it. Repeated failed sign-ins from one address or for one name are slowed down.
-
-```toml
-[auth.ldap]
-url = "ldaps://ldap.example.com:636"            # ldaps:// only
-bind_dn = "uid=rustyfin,ou=people,dc=example,dc=com"
-bind_password = "..."                            # or RUSTYFIN__AUTH__LDAP__BIND_PASSWORD
-search_base = "ou=people,dc=example,dc=com"
-user_filter = "(uid={})"                         # {} is the user name, escaped
-mail_attr = "mail"
-display_name_attr = "cn"
-admin_group_dn = "cn=media-admins,ou=groups,dc=example,dc=com"
-```
-
-Rustyfin refuses `ldap://` addresses at start: without TLS from the first byte (STARTTLS can be stripped), passwords
-would cross the network readable. Put the service account's password in the environment
-(`RUSTYFIN__AUTH__LDAP__BIND_PASSWORD`, from a `.env` file kept out of version control) rather than in the file.
+apps on TVs and phones cannot, and the proxy refuses their requests. If those apps matter, use Tailscale.
 
 ## Server API keys
 

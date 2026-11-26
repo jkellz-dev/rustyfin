@@ -226,34 +226,6 @@ pub async fn set_may_link(pool: &PgPool, id: Uuid, may_link: bool) -> Result<boo
     Ok(result.rows_affected() > 0)
 }
 
-/// Create or update a user from LDAP authentication.
-/// Uses username as the conflict key (not remote_user_id).
-pub async fn upsert_from_ldap(
-    pool: &PgPool,
-    username: &str,
-    display_name: Option<&str>,
-    email: Option<&str>,
-) -> Result<UserRow, sqlx::Error> {
-    sqlx::query_as::<_, UserRecord>(
-        r#"
-        INSERT INTO users (username, display_name, email, last_login_date)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (username) DO UPDATE SET
-            display_name = COALESCE(EXCLUDED.display_name, users.display_name),
-            email = COALESCE(EXCLUDED.email, users.email),
-            last_login_date = NOW(),
-            updated_at = NOW()
-        RETURNING *
-        "#,
-    )
-    .bind(username)
-    .bind(display_name)
-    .bind(email)
-    .fetch_one(pool)
-    .await
-    .map(Into::into)
-}
-
 /// Update the disabled status of a user.
 pub async fn update_disabled(
     pool: &PgPool,

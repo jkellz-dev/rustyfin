@@ -20,5 +20,4 @@ tracing.workspace = true
 thiserror.workspace = true
 
 url = "2"
-ldap3.workspace = true
 ipnet.workspace = true

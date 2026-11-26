@@ -65,17 +65,6 @@ impl UserStore for PgUsers {
         repo::set_may_link(&self.pool, id, may_link).await.data()
     }
 
-    async fn upsert_from_ldap(
-        &self,
-        username: &str,
-        display_name: Option<&str>,
-        email: Option<&str>,
-    ) -> DataResult<User> {
-        repo::upsert_from_ldap(&self.pool, username, display_name, email)
-            .await
-            .data()
-    }
-
     async fn update_disabled(&self, id: uuid::Uuid, is_disabled: bool) -> DataResult<bool> {
         repo::update_disabled(&self.pool, id, is_disabled)
             .await

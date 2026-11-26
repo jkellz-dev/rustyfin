@@ -47,7 +47,7 @@ name = "rustyfin"
 # prefer_direct_play = false   # true: a copy the app plays as is before a better one needing conversion
 
 # ── Authentication ────────────────────────────────────────
-# At least one of [auth.forward_auth] or [auth.ldap] must be configured.
+# [auth.forward_auth] is required: the proxy in front says who each request is from.
 
 # Forward auth: reverse proxy injects identity headers
 [auth.forward_auth]
@@ -61,17 +61,6 @@ trusted_proxies = ["127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/1
 # name = "Remote-Name"                         # Display name header
 # email = "Remote-Email"                       # Email header
 # groups = "Remote-Groups"                     # Comma-separated groups header
-
-# LDAPS bind authentication
-# [auth.ldap]
-# url = "ldaps://localhost:636"                # Must be ldaps:// (no STARTTLS)
-# bind_dn = "uid=admin,ou=people,dc=example,dc=com"
-# bind_password = "secret"
-# search_base = "ou=people,dc=example,dc=com"
-# user_filter = "(uid={})"                     # {} is replaced with the username
-# mail_attr = "mail"                           # LDAP attribute for email
-# display_name_attr = "cn"                     # LDAP attribute for display name
-# admin_group_dn = "cn=admins,ou=groups,dc=example,dc=com"  # Members auto-promoted to admin
 
 # ── Task Scheduler ────────────────────────────────────────
 [tasks]

@@ -14,7 +14,7 @@ Jellyfin Media Player) connect to it seamlessly.
 | [API Compatibility](api-compatibility.md) | What is answered for real, what is a no-op, what is left out |
 | [API Reference](api-reference.md) | Complete HTTP API documentation (40+ routes) |
 | [Rustyfin API](rustyfin-api.md) | Rustyfin's own routes under `/api/v1`, apart from the Jellyfin API |
-| [Authentication](authentication.md) | How people sign in: Tailscale, other sign-in proxies, LDAPS, API keys |
+| [Authentication](authentication.md) | How people sign in: Tailscale, other sign-in proxies, API keys |
 | [Database Schema](database-schema.md) | All tables, columns, indexes, relationships |
 | [Library Scanning](library-scanning.md) | Scanner workflow, file naming, NFO parsing, TMDB |
 | [Artwork](artwork.md) | `rustyfin artwork`: posters, headshots, collection art, the 30-day no-art memory |
@@ -44,8 +44,8 @@ More in the [Development Guide](development.md).
 
 ## Key Design Decisions
 
-- **Authentication**: a proxy in front (Tailscale Serve, or forward auth) says who each request is from, or else LDAPS
-  checks the password; Rustyfin keeps no passwords and only decides what each person may do.
+- **Authentication**: a proxy in front (Tailscale Serve, or forward auth) says who each request is from;
+  Rustyfin checks and keeps no passwords and only decides what each person may do.
 - **Database**: PostgreSQL via sqlx with runtime migrations.
 - **API Compatibility**: All JSON responses use PascalCase to match Jellyfin's format. Legacy routes preserved for
   client compatibility.

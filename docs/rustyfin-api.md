@@ -7,7 +7,7 @@ adds of its own lives apart from it, under `/api/v1`, so the two never mix:
 - JSON bodies and answers use snake_case keys (`last_sync_at`), and so do query keys (`?since=`). The Jellyfin routes'
   fix-up of camelCase query keys is not applied here.
 - Requests sign in as on the Jellyfin routes: a session token (`Authorization: MediaBrowser Token="..."`,
-  `X-Emby-Token`, or `api_key`) from a forward-auth or LDAPS sign-in.
+  `X-Emby-Token`, or `api_key`) from a forward-auth sign-in.
 - Jellyfin's own objects stay as Jellyfin has them. A Rustyfin setting about a user is not added to Jellyfin's
   `Policy`; it has a route here.
 

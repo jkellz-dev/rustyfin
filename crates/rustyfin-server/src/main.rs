@@ -287,27 +287,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Build LDAP config
-    let ldap_config = config
-        .auth
-        .ldap
-        .as_ref()
-        .map(|l| rustyfin_auth::ldap::LdapConfig {
-            url: l.url.clone(),
-            bind_dn: l.bind_dn.clone(),
-            bind_password: l.bind_password.clone(),
-            search_base: l.search_base.clone(),
-            user_filter: l.user_filter.clone(),
-            mail_attr: l.mail_attr.clone(),
-            display_name_attr: l.display_name_attr.clone(),
-            admin_group_dn: l.admin_group_dn.clone(),
-        });
-
-    tracing::info!(
-        "Auth: forward_auth={}, ldaps={}",
-        forward_auth_config.is_some(),
-        ldap_config.is_some()
-    );
+    tracing::info!("Auth: forward_auth={}", forward_auth_config.is_some());
 
     // Build scan schedules JSON for the /Library/Schedules endpoint
     let scan_schedules = {
@@ -405,7 +385,6 @@ async fn main() -> anyhow::Result<()> {
         session_manager,
         search_service,
         forward_auth_config,
-        ldap_config,
         transcode_manager,
         image_cache_dir,
         people_cache_dir,
@@ -413,7 +392,6 @@ async fn main() -> anyhow::Result<()> {
         scan_schedules,
         user_image_url_template: config.server.user_image_url_template,
         task_scheduler: task_scheduler_for_state,
-        login_limiter: Default::default(),
         shutdown: shutdown.clone(),
         links,
         prefer_direct_play: config.playback.prefer_direct_play,

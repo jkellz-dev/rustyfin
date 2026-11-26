@@ -11,8 +11,8 @@ a systemd service, or behind Caddy, nginx or Traefik. Every setting is in [Confi
 - **A writable cache folder** for resized images, transcode segments and people's pictures (`server.image_cache_dir`,
   `transcode.temp_dir`). Transcode segments can take several GB while people watch.
 - **Something that says who people are**: a proxy that signs them in and passes who they are in a header (Tailscale
-  Serve, or forward auth through Authelia and the like), or else an LDAPS server that checks the password Jellyfin's
-  apps send. Rustyfin stores no passwords ([Authentication](authentication.md)).
+  Serve, or forward auth through Authelia and the like). Rustyfin checks and stores no passwords
+  ([Authentication](authentication.md)).
 - Optional: Meilisearch for search (Postgres answers otherwise). The server makes no outside requests; a TMDB key is
   for the `rustyfin` metadata tool ([Artwork](artwork.md)).
 

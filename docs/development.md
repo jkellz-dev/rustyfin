@@ -174,43 +174,6 @@ curl http://localhost:8096/Users/Me \
   -H 'X-Emby-Token: <token-from-above>'
 ```
 
-### Testing LDAPS Locally
-
-To test LDAPS authentication, add LLDAP to `docker-compose.yml`:
-
-```yaml
-  lldap:
-    image: lldap/lldap:latest
-    environment:
-      LLDAP_LDAP_BASE_DN: "dc=example,dc=com"
-      LLDAP_LDAP_USER_PASS: "admin_secret"
-      LLDAP_LDAPS_OPTIONS__ENABLED: "true"
-      LLDAP_LDAPS_OPTIONS__PORT: 6360
-    ports:
-      - "6360:6360"
-      - "17170:17170"  # LLDAP web UI
-```
-
-Add LDAP config to `rustyfin.toml`:
-
-```toml
-[auth.ldap]
-url = "ldaps://localhost:6360"
-bind_dn = "uid=admin,ou=people,dc=example,dc=com"
-bind_password = "admin_secret"
-search_base = "ou=people,dc=example,dc=com"
-user_filter = "(uid={})"
-```
-
-Create test users in the LLDAP web UI at <http://localhost:17170>, then authenticate:
-
-```bash
-curl -X POST http://localhost:8096/Users/AuthenticateByName \
-  -H 'Authorization: MediaBrowser Client="curl", Device="dev", DeviceId="dev1", Version="1.0"' \
-  -H 'Content-Type: application/json' \
-  -d '{"Username":"testuser","Pw":"testpassword"}'
-```
-
 ### Direct Access (Port 8096)
 
 You can also hit Rustyfin directly on port 8096 without Caddy, but you'll need to provide auth headers yourself (e.g.,
