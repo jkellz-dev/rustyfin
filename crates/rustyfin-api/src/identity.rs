@@ -30,7 +30,7 @@ use rustyfin_auth::{
     middleware::{AuthenticatedUser, Unvouched, parse_mediabrowser_header, request_token},
     session,
 };
-use rustyfin_models::data::{Data, DataError, SessionStore, UserStore};
+use rustyfin_models::data::{Data, DataError, SessionStore};
 
 use crate::router::{AppState, ForwardAuthState};
 
