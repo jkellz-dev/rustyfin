@@ -23,7 +23,7 @@ use rustyfin_common::nfo::{find_album_nfo, find_episode_nfo, find_movie_nfo};
 
 pub struct LibraryScanner<D = crate::Store> {
     data: D,
-    enrichment: EnrichmentService,
+    enrichment: EnrichmentService<D>,
     /// Collection art (`<tmdb-id>/poster.jpg`, ...), beside the people folder.
     collection_art_dir: Option<std::path::PathBuf>,
     /// Probes run ahead of ingestion by `prefetch_probes`, taken by `probe`.

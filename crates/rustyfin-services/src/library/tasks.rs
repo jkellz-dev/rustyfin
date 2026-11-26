@@ -90,14 +90,14 @@ impl<D: Data> ScheduledTask for ActivityLogPruneTask<D> {
 
 pub struct SessionCleanupTask<D = crate::Store> {
     data: D,
-    session_manager: Arc<crate::session::SessionManager>,
+    session_manager: Arc<crate::session::SessionManager<D>>,
     inactive_days: u32,
 }
 
 impl<D: Data> SessionCleanupTask<D> {
     pub fn new(
         data: D,
-        session_manager: Arc<crate::session::SessionManager>,
+        session_manager: Arc<crate::session::SessionManager<D>>,
         inactive_days: u32,
     ) -> Self {
         Self {
