@@ -17,6 +17,7 @@ pub mod api_keys;
 pub mod browse;
 pub mod collections;
 pub mod error;
+pub mod health;
 pub mod image;
 pub mod libraries;
 pub mod library;

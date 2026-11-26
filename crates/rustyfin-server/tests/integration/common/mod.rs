@@ -15,7 +15,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 use rustyfin_data::repo::{libraries, media_items, sessions, users};
-use rustyfin_jellyfin::router::{AppState, build_router};
+use rustyfin_jellyfin::router::AppState;
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_models::data::{Data, SearchIndex};
 use rustyfin_services::session::SessionManager;
@@ -210,8 +210,15 @@ impl TestApp {
         };
 
         rustyfin_jellyfin::link_notices::spawn(state.clone());
-        let metrics_router = rustyfin_jellyfin::metrics::router(state.clone());
-        let router = build_router(state);
+        let metrics_router =
+            rustyfin_server::metrics::router(rustyfin_server::metrics::MetricsState {
+                data: state.data.clone(),
+                session_manager: state.session_manager.clone(),
+                transcode_manager: state.transcode_manager.clone(),
+                image_cache_dir: state.image_cache_dir.clone(),
+                people_cache_dir: state.people_cache_dir.clone(),
+            });
+        let router = rustyfin_server::app(state);
 
         Self {
             router,

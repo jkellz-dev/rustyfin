@@ -26,6 +26,20 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 anyhow.workspace = true
+chrono.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+tracing-opentelemetry.workspace = true
 
 config.workspace = true
 ipnet.workspace = true
+
+[dev-dependencies]
+# The tests set up rows straight in the database (CLAUDE.md, "Layers").
+sqlx.workspace = true
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
+tower = { workspace = true, features = ["util"] }
+tokio = { workspace = true, features = ["full", "test-util"] }

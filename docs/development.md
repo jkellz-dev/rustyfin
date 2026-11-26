@@ -329,12 +329,12 @@ The project uses Rust edition 2024, which supports:
 
 ```bash
 cargo test --lib                       # Unit tests (no database)
-cargo test -p rustyfin-jellyfin --test '*'  # Route tests against Postgres (DATABASE_URL)
+cargo test -p rustyfin-server --test '*'  # Route tests against Postgres (DATABASE_URL)
 cargo test naming                      # Tests with "naming" in the name
 cd frontend && cargo test              # The admin's logic, on the host
 ```
 
-- **Route tests** (`crates/rustyfin-jellyfin/tests/`) start the real router against a Postgres database named by
+- **Route tests** (`crates/rustyfin-server/tests/`) start the real router against a Postgres database named by
   `DATABASE_URL` (`docker compose up -d` provides one); each test makes its own users and libraries through
   `tests/common/mod.rs`.
 - **Unit tests** sit next to the code: file and folder naming, NFO parsing, play-method decisions, the scan board, ...

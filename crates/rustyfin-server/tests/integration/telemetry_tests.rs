@@ -8,7 +8,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
-use rustyfin_jellyfin::telemetry;
+use rustyfin_server::telemetry;
 
 /// Log output captured in memory.
 #[derive(Clone, Default)]
@@ -118,7 +118,7 @@ fn a_scans_sql_stays_out_of_its_trace_and_a_requests_is_kept() {
     let (exporter, provider) = traced();
     let subscriber = telemetry::subscriber(Some(&provider), true, Captured::default(), "off");
     tracing::subscriber::with_default(subscriber, || {
-        let request = tracing::info_span!(target: "rustyfin_jellyfin::metrics", "http.request");
+        let request = tracing::info_span!(target: "rustyfin_server::metrics", "http.request");
         request.in_scope(|| {
             tracing::debug!(target: "sqlx::query", summary = "select name", elapsed_secs = 0.002, "select name from items");
         });

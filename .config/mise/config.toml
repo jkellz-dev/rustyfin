@@ -73,7 +73,7 @@ run = "cargo test --lib"
 
 [tasks."test:integration"]
 description = "Run integration tests (requires Postgres)"
-run = "cargo test -p rustyfin-jellyfin --test '*' -- --test-threads=1"
+run = "cargo test -p rustyfin-server --test '*' -- --test-threads=1"
 
 [tasks.bench]
 description = "Benchmark: scan and browse a generated library (docs/performance.md); args after --, e.g. -- --scale 0.1"

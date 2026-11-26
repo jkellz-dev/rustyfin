@@ -82,7 +82,7 @@ jobs:
   # saved a ~9 GB target/ each, over GitHub's 10 GB per repository, so caches
   # evicted each other (lint, frontend and the release builds found none); and
   # each restored the other's tree, built with other features (`--lib` across
-  # the workspace against `-p rustyfin-jellyfin`), so ~90 crates recompiled anyway.
+  # the workspace against `-p rustyfin-server`), so ~90 crates recompiled anyway.
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -147,12 +147,12 @@ jobs:
         run: mbx test --lib
 
       - name: Run integration tests
-        run: mbx test -p rustyfin-jellyfin --test integration -- --test-threads=1
+        run: mbx test -p rustyfin-server --test integration -- --test-threads=1
 
-      # The other crates' own test files (rustyfin-common, -media, -core...);
+      # The other crates' own test files (rustyfin-common, -media, -services...);
       # --tests reruns their unit tests too, which are quick.
       - name: Run other crates' integration tests
-        run: mbx test --workspace --exclude rustyfin-jellyfin --exclude rustyfin-server --tests
+        run: mbx test --workspace --exclude rustyfin-server --tests
 
   build-frontend:
     name: Build Frontend

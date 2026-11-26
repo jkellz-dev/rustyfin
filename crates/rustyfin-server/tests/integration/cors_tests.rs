@@ -10,7 +10,7 @@ use crate::common;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use rustyfin_jellyfin::cors::cors_layer;
+use rustyfin_server::cors::cors_layer;
 use tower::ServiceExt;
 
 async fn send(router: &Router, req: Request<Body>) -> (StatusCode, axum::http::HeaderMap) {

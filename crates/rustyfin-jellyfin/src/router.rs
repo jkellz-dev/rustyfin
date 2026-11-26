@@ -68,7 +68,11 @@ impl<D: Data> crate::auth::middleware::DataState for AppState<D> {
 ///
 /// A server linking this one is served by a second copy of the routes that
 /// sees only this server's own media (`link_scope`).
-pub fn build_router<D: Data>(state: AppState<D>) -> Router {
+///
+/// `observe` is what the server does to every route (metrics, the request
+/// log): it gets the routes, their state given, before Jellyfin's query-name
+/// fix-up wraps them.
+pub fn build_router<D: Data>(state: AppState<D>, observe: fn(Router) -> Router) -> Router {
     let local_data = state.data.local_only();
     let local_state = AppState {
         services: state.services.with_data(local_data.clone()),
@@ -76,9 +80,9 @@ pub fn build_router<D: Data>(state: AppState<D>) -> Router {
         local_only: true,
         ..state.clone()
     };
-    let scope = crate::link_scope::LinkScope::new(state.data.clone(), routes(local_state));
+    let scope = crate::link_scope::LinkScope::new(state.data.clone(), routes(local_state, observe));
     let vouch_state = state.clone();
-    let routes = routes(state);
+    let routes = routes(state, observe);
     Router::new().fallback_service(
         tower::ServiceBuilder::new()
             // Ids in answers as Jellyfin writes them (32 hex digits).
@@ -98,8 +102,8 @@ pub fn build_router<D: Data>(state: AppState<D>) -> Router {
     )
 }
 
-fn routes<D: Data>(state: AppState<D>) -> Router {
-    Router::new()
+fn routes<D: Data>(state: AppState<D>, observe: fn(Router) -> Router) -> Router {
+    let routes = Router::new()
         // ── System (no auth) ────────────────────────────────────
         .route("/System/Info/Public", get(system::get_public_info::<D>))
         .route("/System/Ping", get(system::ping::<D>).post(system::ping::<D>))
@@ -732,11 +736,10 @@ fn routes<D: Data>(state: AppState<D>) -> Router {
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler::<D>))
         // ── State ───────────────────────────────────────────────
-        // Every matched API route is counted and timed (metrics::track_requests).
-        .route_layer(axum::middleware::from_fn(crate::metrics::track_requests))
         .fallback(unmatched_route)
-        .with_state(state)
-        .layer(axum::middleware::from_fn(crate::request_log::log_request))
+        .with_state(state);
+    // Every matched route is counted, timed and logged by the server.
+    observe(routes)
         // Jellyfin clients send camelCase query keys; our extractors expect PascalCase.
         .layer(axum::middleware::from_fn(
             crate::query_case::normalize_query_keys,

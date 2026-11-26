@@ -1,7 +1,7 @@
-//! rustyfin-jellyfin's integration tests, one module per former test file, in a
+//! The server's integration tests, one module per former test file, in a
 //! single binary: as ~90 binaries each linked the whole server with debug
 //! info, so CI linked, cached and downloaded every one of them (27 GiB a run).
-//! Run one file's tests with `mbx test -p rustyfin-jellyfin --test integration -- <module>::`.
+//! Run one file's tests with `mbx test -p rustyfin-server --test integration -- <module>::`.
 
 mod common;
 

@@ -80,7 +80,7 @@ const PUBLIC_ON_PURPOSE: &[(&str, &str)] = &[
 ];
 
 fn route_patterns() -> Vec<String> {
-    let src = include_str!("../../src/router.rs");
+    let src = include_str!("../../../rustyfin-jellyfin/src/router.rs");
     let mut out = Vec::new();
     let mut rest = src;
     while let Some(i) = rest.find(".route(") {

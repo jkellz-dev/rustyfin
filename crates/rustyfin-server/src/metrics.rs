@@ -5,7 +5,8 @@
 //! time.
 
 use rustyfin_models::data::{Data, LibraryStore, LinkStore, StatusStore, UserStore};
-use std::sync::OnceLock;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use axum::Router;
@@ -16,7 +17,15 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 
-use crate::router::AppState;
+/// What the scrape reads.
+#[derive(Clone)]
+pub struct MetricsState<D> {
+    pub data: D,
+    pub session_manager: Arc<rustyfin_services::session::SessionManager<D>>,
+    pub transcode_manager: Arc<rustyfin_media::transcode::TranscodeManager>,
+    pub image_cache_dir: PathBuf,
+    pub people_cache_dir: Option<PathBuf>,
+}
 
 static HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 
@@ -64,14 +73,14 @@ pub fn handle() -> &'static PrometheusHandle {
 }
 
 /// The metrics listener: `GET /metrics`.
-pub fn router<D: Data>(state: AppState<D>) -> Router {
+pub fn router<D: Data>(state: MetricsState<D>) -> Router {
     handle();
     Router::new()
         .route("/metrics", get(render))
         .with_state(state)
 }
 
-async fn render<D: Data>(State(state): State<AppState<D>>) -> Response {
+async fn render<D: Data>(State(state): State<MetricsState<D>>) -> Response {
     collect(&state).await;
     let handle = handle();
     handle.run_upkeep();
@@ -148,7 +157,7 @@ fn counts_due(database: &str) -> bool {
 }
 
 /// Scrape-time gauges.
-async fn collect<D: Data>(state: &AppState<D>) {
+async fn collect<D: Data>(state: &MetricsState<D>) {
     metrics::gauge!("rustyfin_up").set(1.0);
     metrics::gauge!("rustyfin_build_info", "version" => env!("CARGO_PKG_VERSION")).set(1.0);
 
@@ -219,7 +228,13 @@ async fn collect<D: Data>(state: &AppState<D>) {
         .set(state.transcode_manager.active_job_count().await as f64);
 
     let libs = state.data.libraries().list_all().await.unwrap_or_default();
-    let health = crate::health::system_health(state, &libs).await;
+    let health = rustyfin_services::health::system_health(
+        &state.data,
+        &libs,
+        &state.image_cache_dir,
+        state.people_cache_dir.as_deref(),
+    )
+    .await;
     let db = &health.database;
     metrics::gauge!("rustyfin_db_up").set(if db.ok { 1.0 } else { 0.0 });
     metrics::gauge!("rustyfin_db_latency_seconds").set(db.latency_ms / 1000.0);

@@ -16,7 +16,7 @@ use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 
 use rustyfin_data::pool;
-use rustyfin_jellyfin::router::{AppState, ForwardAuthState, build_router};
+use rustyfin_jellyfin::router::{AppState, ForwardAuthState};
 use rustyfin_media::transcode::TranscodeManager;
 use rustyfin_models::data::{Data, LinkStore, SearchIndex, TaskResultStore};
 use rustyfin_services::library::scheduler::{
@@ -36,7 +36,7 @@ const SEARCH_SYNC_INTERVAL: std::time::Duration = std::time::Duration::from_secs
 async fn main() -> anyhow::Result<()> {
     // Configuration first: it says how to log and where traces go.
     let config = config::Config::load()?;
-    let tracer = rustyfin_jellyfin::telemetry::init(
+    let tracer = rustyfin_server::telemetry::init(
         config.tracing.otlp_endpoint.as_deref(),
         config.tracing.json_logs,
     )?;
@@ -393,7 +393,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Same-origin unless origins are allowlisted (owner decision 2026-11-14).
-    let cors = rustyfin_jellyfin::cors::cors_layer(&cors_origins).map_err(anyhow::Error::msg)?;
+    let cors = rustyfin_server::cors::cors_layer(&cors_origins).map_err(anyhow::Error::msg)?;
     if cors_origins.is_empty() {
         tracing::info!("CORS: same-origin only");
     } else {
@@ -407,7 +407,14 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("[metrics] listen = {listen:?}: {e}"))?;
         let listener = TcpListener::bind(addr).await?;
         tracing::info!("Metrics on http://{addr}/metrics");
-        let metrics_app = rustyfin_jellyfin::metrics::router(state.clone());
+        let metrics_app =
+            rustyfin_server::metrics::router(rustyfin_server::metrics::MetricsState {
+                data: state.data.clone(),
+                session_manager: state.session_manager.clone(),
+                transcode_manager: state.transcode_manager.clone(),
+                image_cache_dir: state.image_cache_dir.clone(),
+                people_cache_dir: state.people_cache_dir.clone(),
+            });
         tokio::spawn(async move {
             if let Err(e) = axum::serve(listener, metrics_app).await {
                 tracing::error!("metrics listener stopped: {e}");
@@ -419,7 +426,7 @@ async fn main() -> anyhow::Result<()> {
     rustyfin_jellyfin::link_notices::spawn(state.clone());
     // Genre lists, built before anyone opens one and kept fresh.
     rustyfin_jellyfin::routes::music_genres::spawn_genre_list_builder(state.clone());
-    let app = build_router(state)
+    let app = rustyfin_server::app(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
     // Redirect root to admin UI
