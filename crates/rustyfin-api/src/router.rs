@@ -11,7 +11,7 @@ use rustyfin_models::data::Data;
 use tower::ServiceExt;
 
 use crate::paths::PREFIX;
-use crate::routes::{catalog, links, permissions};
+use crate::routes::{catalog, links, permissions, relay};
 use crate::state::ApiState;
 
 /// The API's router. A server linking this one is served by a second copy
@@ -24,6 +24,7 @@ pub fn build_router<D: Data>(state: ApiState<D>, observe: fn(Router) -> Router) 
     let local = ApiState {
         services: state.services.with_data(local_data.clone()),
         data: local_data,
+        local_only: true,
         ..state.clone()
     };
     let linking = Scope {
@@ -49,6 +50,8 @@ fn routes<D: Data>(state: ApiState<D>, observe: fn(Router) -> Router) -> Router 
         // Linked servers, for the admin (roadmap 16b).
         .route("/links", get(links::list::<D>))
         .route("/links/{id}/sync", post(links::sync_now::<D>))
+        // A linked copy's transcode, from the friend's server.
+        .route("/links/{id}/relay/{*path}", get(relay::relay_media::<D>))
         // The change feed a linked Rustyfin syncs from (roadmap 16b.2r).
         .route("/catalog", get(catalog::catalog::<D>))
         // What a user may do beyond what the Jellyfin API sets.

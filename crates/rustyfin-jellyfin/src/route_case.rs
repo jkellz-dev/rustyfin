@@ -2,8 +2,8 @@
 //! it: some ask for `/users/{id}/items`, others for `/Users/{id}/Items`. Axum
 //! matches exactly, so before routing a request's path is given the case its
 //! route is written in (owner, 2026-11-19: "all routes must be case
-//! insensitive"). Rustyfin's own `/api/v1` does the same in
-//! [`crate::api_v1::match_case`].
+//! insensitive"). Rustyfin's own `/api/v1` (`rustyfin-api`) does the same
+//! for its routes.
 //!
 //! The routes are read from `router.rs` itself, so a new route is covered
 //! without being listed twice; a test checks every `.route(` is read.

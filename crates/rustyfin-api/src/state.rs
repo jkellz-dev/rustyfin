@@ -22,6 +22,9 @@ pub struct ApiState<D> {
     pub services: rustyfin_services::Services<D>,
     /// Linked servers (roadmap 16b).
     pub links: Arc<rustyfin_services::link::Links>,
+    /// The routes a server linking this one is served by: only this
+    /// server's own media, and nothing relayed on from its friends.
+    pub local_only: bool,
     /// The proxy that names who is asking; `None` in development, where a
     /// session token alone does.
     pub proxy: Option<Proxy>,

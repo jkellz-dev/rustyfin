@@ -8,7 +8,6 @@
 //! dashboard's health panel). Metrics, the request log, CORS and tracing
 //! are the server's (`rustyfin-server`), applied to every route.
 
-pub mod api_v1;
 pub mod auth;
 pub mod dto;
 pub mod enums;

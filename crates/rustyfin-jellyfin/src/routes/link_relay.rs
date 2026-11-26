@@ -2,13 +2,11 @@
 //! from the friend's server through this one, so clients only ever talk to
 //! this one.
 
-use crate::auth::middleware::AuthenticatedUser;
 use axum::body::Body;
-use axum::extract::{Path, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
 use axum::response::Response;
 use rustyfin_media::image_processing::{self, ImageOptions};
-use rustyfin_models::data::{Data, LinkStore, MediaItem, MediaItemStore};
+use rustyfin_models::data::{Data, MediaItem, MediaItemStore};
 
 use crate::error::ApiError;
 use crate::router::AppState;
@@ -169,7 +167,8 @@ fn unreachable<D: Data>(
 
 /// For each linked copy in `info` this client cannot play as is, ask the
 /// friend's server to convert it (its `PlaybackInfo`, with the client's
-/// request), and offer that transcode through [`relay_media`]. The friend's
+/// request), and offer that transcode through Rustyfin's API's relay
+/// (`rustyfin_services::link::relay`). The friend's
 /// URL is rewritten to this server's relay and loses the link's token: the
 /// client adds its own, as for this server's transcodes. A friend that does
 /// not answer leaves the copy as it was (not playable here, listed last).
@@ -235,11 +234,7 @@ pub(crate) async fn offer_transcodes<D: Data>(
             continue;
         };
         source.supports_transcoding = true;
-        source.transcoding_url = Some(format!(
-            "{}/links/{link_id}/relay{}",
-            crate::api_v1::PREFIX,
-            without_api_key(url, None)
-        ));
+        source.transcoding_url = Some(rustyfin_services::link::relay::relay_url(link_id, url));
         source.transcoding_sub_protocol = theirs["TranscodingSubProtocol"]
             .as_str()
             .map(str::to_string)
@@ -252,177 +247,4 @@ pub(crate) async fn offer_transcodes<D: Data>(
             s.supports_direct_play || s.supports_direct_stream || s.supports_transcoding,
         )
     });
-}
-
-/// `GET /api/v1/links/{link}/relay/{*path}`: a linked copy's transcode (playlists and
-/// segments) from the friend's server. Only `videos/<id>/...` and
-/// `audio/<id>/...` of the link's own copies the user may see; the link's
-/// token is added here and taken out of every playlist, and the client's
-/// `api_key` (if it sent one) is put on every URI in its place.
-pub async fn relay_media<D: Data>(
-    State(state): State<AppState<D>>,
-    auth: AuthenticatedUser,
-    Path((link_id, path)): Path<(uuid::Uuid, String)>,
-    RawQuery(query): RawQuery,
-    headers: HeaderMap,
-) -> Result<Response, ApiError> {
-    // A server linking this one is never relayed on to this one's friends.
-    if state.local_only {
-        return Err(ApiError::NotFound);
-    }
-    let mut parts = path.split('/');
-    let kind = parts.next().unwrap_or_default().to_ascii_lowercase();
-    let remote = parts.next().unwrap_or_default();
-    if !matches!(kind.as_str(), "videos" | "audio") || remote.is_empty() || parts.next().is_none() {
-        return Err(ApiError::NotFound);
-    }
-    let copy = state
-        .data
-        .links()
-        .find_copy(link_id, remote)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    super::access::require_item_access(&state, auth.user_id, copy).await?;
-    let link = state.links.get(link_id).await.ok_or(ApiError::NotFound)?;
-    let client_key = query.as_deref().and_then(api_key_of);
-    let path_and_query = without_api_key(
-        &match &query {
-            Some(q) => format!("/{path}?{q}"),
-            None => format!("/{path}"),
-        },
-        None,
-    );
-    let mut forward = HeaderMap::new();
-    for name in [header::RANGE, header::IF_RANGE] {
-        if let Some(v) = headers.get(&name) {
-            forward.insert(name, v.clone());
-        }
-    }
-    let response = link
-        .client
-        .relay_url(&path_and_query, forward)
-        .await
-        .map_err(|e| unreachable(&state, &link, &e))?;
-    let status = response.status();
-    if status == StatusCode::NOT_FOUND {
-        return Err(ApiError::NotFound);
-    }
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
-        .to_string();
-    if path.ends_with(".m3u8") || content_type.contains("mpegurl") {
-        let text = response
-            .text()
-            .await
-            .map_err(|e| unreachable(&state, &link, &e))?;
-        return Ok(Response::builder()
-            .status(status)
-            .header(header::CONTENT_TYPE, "application/vnd.apple.mpegurl")
-            .header(header::CACHE_CONTROL, "no-cache")
-            .body(Body::from(rewrite_playlist(&text, client_key.as_deref())))
-            .unwrap());
-    }
-    let mut builder = Response::builder().status(status);
-    for name in STREAM_HEADERS {
-        if let Some(v) = response.headers().get(&name) {
-            builder = builder.header(name, v.clone());
-        }
-    }
-    Ok(builder
-        .body(Body::from_stream(response.bytes_stream()))
-        .unwrap())
-}
-
-/// The value of an `api_key` (any case) in a query string.
-fn api_key_of(query: &str) -> Option<String> {
-    query.split('&').find_map(|pair| {
-        let (k, v) = pair.split_once('=')?;
-        k.eq_ignore_ascii_case("api_key").then(|| v.to_string())
-    })
-}
-
-/// `url` with any `api_key`/`ApiKey` parameter taken out, and `key` (already
-/// URL-encoded) appended as `api_key` when given.
-fn without_api_key(url: &str, key: Option<&str>) -> String {
-    let (base, query) = url.split_once('?').unwrap_or((url, ""));
-    let mut kept: Vec<&str> = query
-        .split('&')
-        .filter(|p| {
-            !p.is_empty()
-                && !p.split('=').next().is_some_and(|k| {
-                    k.eq_ignore_ascii_case("api_key") || k.eq_ignore_ascii_case("apikey")
-                })
-        })
-        .collect();
-    let added;
-    if let Some(key) = key {
-        added = format!("api_key={key}");
-        kept.push(&added);
-    }
-    if kept.is_empty() {
-        base.to_string()
-    } else {
-        format!("{base}?{}", kept.join("&"))
-    }
-}
-
-/// Every URI in an HLS playlist (its own lines and `URI="..."` attributes)
-/// with the friend's token out and the client's in.
-fn rewrite_playlist(text: &str, key: Option<&str>) -> String {
-    let mut out = String::with_capacity(text.len() + 64);
-    for line in text.lines() {
-        if line.is_empty() {
-            out.push('\n');
-            continue;
-        }
-        if !line.starts_with('#') {
-            out.push_str(&without_api_key(line, key));
-        } else if let Some(start) = line.find("URI=\"") {
-            let from = start + 5;
-            match line[from..].find('"') {
-                Some(len) => {
-                    out.push_str(&line[..from]);
-                    out.push_str(&without_api_key(&line[from..from + len], key));
-                    out.push_str(&line[from + len..]);
-                }
-                None => out.push_str(line),
-            }
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_friends_token_goes_and_the_clients_comes() {
-        assert_eq!(
-            without_api_key(
-                "/videos/a/master.m3u8?MediaSourceId=a&api_key=tok&x=1",
-                None
-            ),
-            "/videos/a/master.m3u8?MediaSourceId=a&x=1"
-        );
-        assert_eq!(
-            without_api_key("main.m3u8?ApiKey=tok", Some("mine")),
-            "main.m3u8?api_key=mine"
-        );
-        assert_eq!(without_api_key("0.ts", Some("mine")), "0.ts?api_key=mine");
-        assert_eq!(api_key_of("a=1&API_KEY=k"), Some("k".into()));
-        let list =
-            "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4?api_key=tok\"\n#EXTINF:6,\n0.mp4?x=1&api_key=tok\n";
-        assert_eq!(
-            rewrite_playlist(list, Some("mine")),
-            "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4?api_key=mine\"\n#EXTINF:6,\n0.mp4?x=1&api_key=mine\n"
-        );
-        assert!(!rewrite_playlist(list, None).contains("tok"));
-    }
 }

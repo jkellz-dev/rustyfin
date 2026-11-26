@@ -14,6 +14,7 @@
 mod jellyfin;
 pub use jellyfin::LinkStats;
 mod oidc;
+pub mod relay;
 pub mod scope;
 mod sync;
 

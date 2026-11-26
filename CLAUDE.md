@@ -77,7 +77,8 @@ The crates follow this layout. Left on purpose, to change with the native client
   client endpoints.
 - Choosing direct play, remux or transcode is in `rustyfin-jellyfin` (`play_method.rs`): it reads a Jellyfin app's
   device profile. A neutral playback decision moves into services when the native client needs one.
-- The relay of a linked copy's transcode stays in `rustyfin-jellyfin` at `/api/v1/links/{id}/relay/...`: Jellyfin apps
-  fetch it, and its address is published.
+- Every route under `/api/v1` is `rustyfin-api`'s, and every route outside it is `rustyfin-jellyfin`'s (owner,
+  2026-11-26). The relay of a linked copy's transcode (`/api/v1/links/{id}/relay/...`) is Rustyfin's: Jellyfin's
+  `PlaybackInfo` offers its address (`rustyfin_services::link::relay`) and `rustyfin-api` serves it.
 
 Code you touch keeps to the layout; never add new direct database access outside `rustyfin-data`.

@@ -182,6 +182,7 @@ impl TestApp {
             data: data.clone(),
             services: services.clone(),
             links: links.clone(),
+            local_only: false,
             proxy: forward_auth.then(|| rustyfin_api::state::Proxy {
                 trusted: rustyfin_services::proxy::TrustedProxies::new(vec![
                     "127.0.0.0/8".parse().unwrap(),

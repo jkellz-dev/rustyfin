@@ -374,6 +374,7 @@ async fn main() -> anyhow::Result<()> {
         data: data.clone(),
         services: services.clone(),
         links: links.clone(),
+        local_only: false,
         proxy: forward_auth_config
             .as_ref()
             .map(|fa| rustyfin_api::state::Proxy {

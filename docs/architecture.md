@@ -101,8 +101,9 @@ PascalCase), `auth/` (Jellyfin's ways of naming a user: the `MediaBrowser` heade
 `ApiError` mapped to status codes and log levels), `query_case.rs` and `route_case.rs` (names in any case),
 `guid_format.rs` (ids as 32 hex digits), `play_method.rs` and `playback_info.rs` (direct play, remux or transcode from
 the app's device profile), `remote.rs` (remote-control commands to and from the session service), `link_scope.rs` (a
-linking server's view) and `health.rs`. The relay of a linked copy's transcode (`/api/v1/links/{id}/relay/...`) is
-here too: only Jellyfin apps fetch it. Route rules are in the [API Reference](api-reference.md).
+linking server's view) and `health.rs`. It serves every route outside `/api/v1`; a linked copy's `PlaybackInfo` offers
+the address of Rustyfin's relay (`/api/v1/links/{id}/relay/...`, in `rustyfin-api`). Route rules are in the
+[API Reference](api-reference.md).
 
 ### `rustyfin-api`
 
@@ -171,14 +172,13 @@ the only writer to the media folders and runs with its own writable mount (a con
 ## Application state
 
 `AppState<D>` (in `rustyfin-jellyfin/src/router.rs`) is cloned into every Jellyfin handler. It holds the data layer `D`
-and the services over it; the server's id,
-name, address and port; the session manager and transcode manager; the forward-auth settings;
-the image and people cache folders; which libraries are being scanned and the scan schedules; the task scheduler; the
-shutdown signal; and the linked servers (`links`), whose copies the stream and image routes
-relay. Handlers are generic over `D: Data`; the server binary builds `AppState<PgData>`. The auth extractors reach the
-data layer through the `DataState` trait the state implements. `rustyfin-api` has its own, smaller `ApiState<D>`
-(data, services, links, the trusted proxy). The scan board is one shared instance for the process
-(`ScanBoard::global()`), so the scanner can report without being handed the state.
+and the services over it; the server's id, name, address and port; the session manager and transcode manager; the
+forward-auth settings; the image and people cache folders; which libraries are being scanned and the scan schedules; the
+task scheduler; the shutdown signal; and the linked servers (`links`), whose copies the stream and image routes relay.
+Handlers are generic over `D: Data`; the server binary builds `AppState<PgData>`. The auth extractors reach the data
+layer through the `DataState` trait the state implements. `rustyfin-api` has its own, smaller `ApiState<D>` (data,
+services, links, whether it serves a linking server, the trusted proxy). The scan board is one shared instance for the
+process (`ScanBoard::global()`), so the scanner can report without being handed the state.
 
 ## Startup
 

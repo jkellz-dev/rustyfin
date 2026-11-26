@@ -61,10 +61,11 @@ impl<D: Data> crate::auth::middleware::DataState for AppState<D> {
     }
 }
 
-/// Build the complete Axum router with all Jellyfin-compatible API routes.
-/// The router. Rustyfin's own routes (`/api/v1`) match in any case: their
-/// path is put in lower case before routing, which a layer inside the router
-/// would be too late for, so the routes sit behind a fallback that does it.
+/// The Jellyfin API's router: every route not under `/api/v1` (that is
+/// Rustyfin's own, `rustyfin-api`). Routes match in any case (`route_case`):
+/// a request's path is given its route's case before routing, which a layer
+/// inside the router would be too late for, so the routes sit behind a
+/// fallback that does it.
 ///
 /// A server linking this one is served by a second copy of the routes that
 /// sees only this server's own media (`link_scope`).
@@ -87,7 +88,6 @@ pub fn build_router<D: Data>(state: AppState<D>, observe: fn(Router) -> Router) 
         tower::ServiceBuilder::new()
             // Ids in answers as Jellyfin writes them (32 hex digits).
             .layer(axum::middleware::from_fn(crate::guid_format::simple_guids))
-            .layer(axum::middleware::from_fn(crate::api_v1::lower_case_path))
             .layer(axum::middleware::from_fn(crate::route_case::route_case))
             // Tailscale (the trusted proxy) is the authentication.
             .layer(axum::middleware::from_fn_with_state(
@@ -731,8 +731,6 @@ fn routes<D: Data>(state: AppState<D>, observe: fn(Router) -> Router) -> Router 
             "/Collections/{collectionId}/Items",
             post(collections::add_collection_items::<D>).delete(collections::remove_collection_items::<D>),
         )
-        // ── Rustyfin's own API, apart from Jellyfin's ─────────────
-        .nest(crate::api_v1::PREFIX, crate::api_v1::router())
         // ── WebSocket ────────────────────────────────────────────
         .route("/socket", get(websocket::websocket_handler::<D>))
         // ── State ───────────────────────────────────────────────

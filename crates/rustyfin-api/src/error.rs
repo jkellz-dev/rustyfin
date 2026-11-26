@@ -24,6 +24,10 @@ pub enum ApiError {
     #[error("Conflict: {0}")]
     Conflict(String),
 
+    /// Something on this side failed (a linked server not answering).
+    #[error("Internal error: {0}")]
+    Internal(String),
+
     /// A data-layer failure.
     #[error("{0}")]
     Data(#[from] DataError),
@@ -71,6 +75,7 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::Conflict(_) => StatusCode::CONFLICT,
+            ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Data(DataError::MissingReference(_)) => StatusCode::NOT_FOUND,
             ApiError::Data(DataError::Unavailable(_)) => StatusCode::SERVICE_UNAVAILABLE,
             ApiError::Data(DataError::Other(_)) => StatusCode::INTERNAL_SERVER_ERROR,

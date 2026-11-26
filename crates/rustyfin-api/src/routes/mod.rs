@@ -3,3 +3,4 @@
 pub mod catalog;
 pub mod links;
 pub mod permissions;
+pub mod relay;

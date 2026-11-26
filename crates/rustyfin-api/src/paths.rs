@@ -1,7 +1,8 @@
 //! Which paths are this API's, in any case (owner, 2026-11-19: Rustyfin's
 //! routes match in any case, as Jellyfin's do). A path is written in lower
 //! case in [`ROUTES`]; a request's path is compared word by word, ignoring
-//! case, and an id (a `{...}` in the route) is kept as it came.
+//! case, and an id (a `{...}` in the route) is kept as it came, as is all a
+//! `{*...}` at a route's end takes (the friend's path a relay passes on).
 
 /// Where the API is mounted.
 pub const PREFIX: &str = "/api/v1";
@@ -10,6 +11,7 @@ pub const PREFIX: &str = "/api/v1";
 pub const ROUTES: &[&str] = &[
     "/links",
     "/links/{id}/sync",
+    "/links/{id}/relay/{*path}",
     "/catalog",
     "/users/permissions",
     "/users/{id}/permissions",
@@ -22,11 +24,21 @@ pub fn canonical(path: &str) -> Option<String> {
     let given: Vec<&str> = rest.split('/').collect();
     ROUTES.iter().find_map(|route| {
         let words: Vec<&str> = route.split('/').collect();
-        if words.len() != given.len() {
+        let rest_at = words.iter().position(|w| w.starts_with("{*"));
+        let fits = match rest_at {
+            Some(at) => given.len() > at && !given[at..].join("/").is_empty(),
+            None => words.len() == given.len(),
+        };
+        if !fits {
             return None;
         }
         let mut out = String::from(PREFIX);
-        for (word, part) in words.iter().zip(&given) {
+        for (at, (word, part)) in words.iter().zip(&given).enumerate() {
+            if Some(at) == rest_at {
+                out.push('/');
+                out.push_str(&given[at..].join("/"));
+                break;
+            }
             if word.is_empty() {
                 if !part.is_empty() {
                     return None;
@@ -119,9 +131,21 @@ mod tests {
     }
 
     #[test]
+    fn a_relay_passes_on_the_friends_path_as_it_came() {
+        assert_eq!(
+            canonical("/api/v1/LINKS/x/RELAY/videos/Ab/Master.m3u8").as_deref(),
+            Some("/api/v1/links/x/relay/videos/Ab/Master.m3u8")
+        );
+        assert_eq!(
+            canonical("/api/v1/links/x/relay/Users").as_deref(),
+            Some("/api/v1/links/x/relay/Users")
+        );
+        assert!(!owns("/api/v1/links/x/relay"));
+        assert!(!owns("/api/v1/links/x/relay/"));
+    }
+
+    #[test]
     fn other_paths_are_not_this_apis() {
-        // A linked copy's relay is the Jellyfin side's.
-        assert!(!owns("/api/v1/links/x/relay/videos/a/master.m3u8"));
         assert!(!owns("/api/v1/links/"));
         assert!(!owns("/api/v1/links/x"));
         assert!(!owns("/api/v1/nothing"));

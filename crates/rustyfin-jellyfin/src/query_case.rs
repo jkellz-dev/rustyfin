@@ -9,7 +9,7 @@
 //!
 //! Keys containing `_` (`api_key`) are left alone: they are snake_case by
 //! convention and read verbatim by the auth layer. Rustyfin's own API
-//! (`/api/v1`) is left alone entirely: its keys are snake_case.
+//! (`/api/v1`, snake_case keys) is a different crate and never comes here.
 
 use axum::{
     extract::Request,
@@ -44,12 +44,7 @@ pub fn normalize_query(query: &str) -> String {
 
 /// Axum middleware applying [`normalize_query`] to the request URI.
 pub async fn normalize_query_keys(mut req: Request, next: Next) -> Response {
-    let own_api = req
-        .uri()
-        .path()
-        .strip_prefix(crate::api_v1::PREFIX)
-        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'));
-    if !own_api && let Some(query) = req.uri().query() {
+    if let Some(query) = req.uri().query() {
         let normalized = normalize_query(query);
         if normalized != query {
             let path = req.uri().path();
