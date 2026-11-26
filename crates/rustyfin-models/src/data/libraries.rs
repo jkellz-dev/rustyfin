@@ -22,6 +22,8 @@ pub struct Library {
     pub last_scan_duration_ms: Option<i64>,
     /// The link whose library this is, for one made for a friend's library.
     pub link_id: Option<Uuid>,
+    /// Set in `rustyfin.toml` (`[[library]]`): changed only there.
+    pub configured: bool,
 }
 
 impl Library {
@@ -129,6 +131,17 @@ pub trait LibraryStore {
 
     /// Delete a library by ID.
     fn delete(&self, id: uuid::Uuid) -> impl Future<Output = DataResult<bool>> + Send;
+
+    /// Mark exactly the libraries in `ids` as set in the config file; every
+    /// other library is no longer marked.
+    fn mark_configured(&self, ids: &[uuid::Uuid]) -> impl Future<Output = DataResult<()>> + Send;
+
+    /// Change a library's kind (`movies`, `tvshows`, `music`).
+    fn set_type(
+        &self,
+        id: uuid::Uuid,
+        library_type: &str,
+    ) -> impl Future<Output = DataResult<Option<Library>>> + Send;
 
     /// Update a library's scan schedule override.
     fn update_scan_schedule(

@@ -4,13 +4,15 @@
 //! media). Subcommands fetch artwork ([`artwork`], [`album_art`]) and
 //! lyrics ([`lyrics`]) for what the server scanned, write them next to the
 //! files, and remember what was not found ([`fetch`], [`scan`],
-//! [`config`]).
+//! [`config`]). [`prune`] removes from the database the libraries the
+//! server's config no longer sets.
 
 mod album_art;
 mod artwork;
 mod config;
 mod fetch;
 mod lyrics;
+mod prune;
 mod scan;
 
 use std::path::{Path, PathBuf};
@@ -84,6 +86,17 @@ enum Command {
     Lyrics {
         /// A music library, artist or album folder.
         path: PathBuf,
+    },
+    /// Remove from the database the libraries rustyfin.toml does not set
+    /// ([[library]]), with their titles and everyone's watched history of
+    /// them. Lists them; --yes removes them. Files on disk are not touched.
+    Prune {
+        /// The server's config file (its [database] and [[library]]).
+        #[arg(long, default_value = "/app/rustyfin.toml")]
+        server_config: PathBuf,
+        /// Remove them (without it, only list them).
+        #[arg(long)]
+        yes: bool,
     },
     /// Notify the server about changed paths
     Notify {
@@ -244,6 +257,9 @@ async fn main() -> anyhow::Result<()> {
             {
                 tracing::warn!("Failed to notify server: {e}");
             }
+        }
+        Command::Prune { server_config, yes } => {
+            prune::run(&server_config, yes && !cli.dry_run).await?;
         }
         Command::Notify { paths } => {
             let server_url = config

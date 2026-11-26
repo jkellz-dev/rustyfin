@@ -39,11 +39,10 @@ pub async fn update_scan_schedule<D: Data>(
     Json(req): Json<UpdateScanScheduleRequest>,
 ) -> Result<StatusCode, ApiError> {
     state
-        .data
+        .services
         .libraries()
-        .update_scan_schedule(id, req.scan_schedule.as_deref())
-        .await?
-        .ok_or(ApiError::NotFound)?;
+        .set_scan_schedule(id, req.scan_schedule.as_deref())
+        .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -530,6 +529,7 @@ fn folder_info(lib: Library) -> VirtualFolderInfo {
         last_scan_errors: None,
         last_scan_failure: None,
         linked_servers: Vec::new(),
+        configured: lib.configured,
     }
 }
 

@@ -84,6 +84,14 @@ impl LibraryStore for PgLibraries {
         repo::delete(&self.pool, id).await.data()
     }
 
+    async fn mark_configured(&self, ids: &[uuid::Uuid]) -> DataResult<()> {
+        repo::mark_configured(&self.pool, ids).await.data()
+    }
+
+    async fn set_type(&self, id: uuid::Uuid, library_type: &str) -> DataResult<Option<Library>> {
+        repo::set_type(&self.pool, id, library_type).await.data()
+    }
+
     async fn update_scan_schedule(
         &self,
         id: uuid::Uuid,

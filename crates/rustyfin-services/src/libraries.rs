@@ -4,6 +4,13 @@
 //! A library a linked server made belongs to that link: it is set in
 //! `rustyfin.toml` (`[[link]]`) and the next sync would make it again, so
 //! it is never renamed, deleted or given folders here.
+//!
+//! Libraries are set in `rustyfin.toml` too (`[[library]]`; owner,
+//! 2026-11-26: "completely config file driven"): [`Libraries::apply_config`]
+//! makes or updates them at start. Once any library is set there, no
+//! library is made, changed or deleted here; one left in the database but
+//! not in the file is kept (with its watched history) until
+//! `rustyfin prune` removes it ([`Libraries::prune`]).
 
 use rustyfin_models::data::{
     ActivityLogStore, Data, Library, LibraryAccessStore, LibraryStore, LinkStore,
@@ -48,9 +55,41 @@ pub struct NewLibrary {
     pub options: serde_json::Value,
 }
 
+/// One `[[library]]` in `rustyfin.toml`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+pub struct ConfiguredLibrary {
+    pub name: String,
+    /// One of [`SUPPORTED_KINDS`].
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Its folders.
+    pub paths: Vec<String>,
+}
+
+/// What [`Libraries::apply_config`] did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ConfigReport {
+    /// Libraries made.
+    pub created: Vec<String>,
+    /// Libraries whose name case, kind or folders changed.
+    pub updated: Vec<String>,
+    /// `[[library]]` entries that could not be applied, and why.
+    pub refused: Vec<(String, String)>,
+    /// Libraries in the database that are not in the file (links' aside).
+    pub unconfigured: Vec<String>,
+}
+
 /// Library management over a data layer.
 pub struct Libraries<'a, D> {
     pub(crate) data: &'a D,
+}
+
+impl<'a, D> Libraries<'a, D> {
+    /// The rules over `data`, before the rest of the services exist (the
+    /// config file's libraries are applied first thing at start).
+    pub fn over(data: &'a D) -> Self {
+        Libraries { data }
+    }
 }
 
 impl<D: Data> Libraries<'_, D> {
@@ -82,8 +121,164 @@ impl<D: Data> Libraries<'_, D> {
             .collect())
     }
 
+    /// Make or update the libraries set in the config file, matched to the
+    /// database's by name (in any case, so a library keeps its id and
+    /// everything attached to it), and mark them as the file's. Folders
+    /// that do not exist yet are kept: a share may be mounted later.
+    pub async fn apply_config(&self, wanted: &[ConfiguredLibrary]) -> ServiceResult<ConfigReport> {
+        let store = self.data.libraries();
+        let mut report = ConfigReport::default();
+        let mut ids = Vec::new();
+        for entry in wanted {
+            let name = match require_new_name(&entry.name) {
+                Ok(n) => n.to_owned(),
+                Err(e) => {
+                    report.refused.push((entry.name.clone(), e.to_string()));
+                    continue;
+                }
+            };
+            let kind = entry.kind.trim().to_ascii_lowercase();
+            if !SUPPORTED_KINDS.contains(&kind.as_str()) {
+                report.refused.push((
+                    name,
+                    format!("type must be one of: {}", SUPPORTED_KINDS.join(", ")),
+                ));
+                continue;
+            }
+            let paths = clean_paths(&entry.paths);
+            if paths.is_empty() {
+                report
+                    .refused
+                    .push((name, "at least one path is required".into()));
+                continue;
+            }
+            if ids
+                .iter()
+                .any(|(_, n): &(Uuid, String)| n.eq_ignore_ascii_case(&name))
+            {
+                report
+                    .refused
+                    .push((name, "set twice in rustyfin.toml".into()));
+                continue;
+            }
+            let id = match store.find_by_name(&name).await? {
+                Some(lib) if lib.link_id.is_some() => {
+                    report
+                        .refused
+                        .push((name, "a linked server's library has this name".into()));
+                    continue;
+                }
+                Some(lib) => {
+                    let mut changed = false;
+                    if lib.name != name {
+                        store.rename(lib.id, &name).await?;
+                        changed = true;
+                    }
+                    if lib.library_type != kind {
+                        store.set_type(lib.id, &kind).await?;
+                        changed = true;
+                    }
+                    if !same_folders(&lib.paths, &paths) {
+                        store.set_paths(lib.id, &paths).await?;
+                        changed = true;
+                    }
+                    if changed {
+                        self.log("Library updated", &name, "LibraryUpdated").await;
+                        report.updated.push(name.clone());
+                    }
+                    lib.id
+                }
+                None => {
+                    let lib = store.create(&name, &kind, &paths).await?;
+                    self.log("Library created", &name, "LibraryCreated").await;
+                    report.created.push(name.clone());
+                    lib.id
+                }
+            };
+            ids.push((id, name));
+        }
+        let ids: Vec<Uuid> = ids.into_iter().map(|(id, _)| id).collect();
+        store.mark_configured(&ids).await?;
+        report.unconfigured = store
+            .list_all()
+            .await?
+            .into_iter()
+            .filter(|lib| lib.link_id.is_none() && !ids.contains(&lib.id))
+            .map(|lib| lib.name)
+            .collect();
+        Ok(report)
+    }
+
+    /// The libraries the config file does not set (a linked server's
+    /// aside), matched by name in any case as [`Self::apply_config`] does;
+    /// deleted, with everything in them, when `apply`. Refused when the file
+    /// sets no library at all: a missing or empty file would empty the
+    /// server.
+    pub async fn prune(
+        &self,
+        wanted: &[ConfiguredLibrary],
+        apply: bool,
+    ) -> ServiceResult<Vec<Library>> {
+        if wanted.is_empty() {
+            return Err(ServiceError::Invalid(
+                "the config sets no library ([[library]]): nothing would be left".into(),
+            ));
+        }
+        let store = self.data.libraries();
+        let stray: Vec<Library> = store
+            .list_all()
+            .await?
+            .into_iter()
+            .filter(|lib| lib.link_id.is_none())
+            .filter(|lib| {
+                !wanted
+                    .iter()
+                    .any(|w| w.name.trim().eq_ignore_ascii_case(&lib.name))
+            })
+            .collect();
+        if apply {
+            for lib in &stray {
+                store.delete(lib.id).await?;
+                self.log("Library deleted", &lib.name, "LibraryDeleted")
+                    .await;
+            }
+        }
+        Ok(stray)
+    }
+
+    /// Libraries come from the config file once any is set there.
+    async fn refuse_if_config_driven(&self) -> ServiceResult<()> {
+        if self
+            .data
+            .libraries()
+            .list_all()
+            .await?
+            .iter()
+            .any(|lib| lib.configured)
+        {
+            return Err(ServiceError::Conflict(
+                "libraries are set in rustyfin.toml ([[library]])".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// A library that may be changed here: not a link's, and none while the
+    /// config file sets libraries.
+    async fn refuse_change(&self, lib: &Library) -> ServiceResult<()> {
+        refuse_if_linked(lib)?;
+        if lib.configured {
+            return Err(ServiceError::Conflict(format!(
+                "'{}' is set in rustyfin.toml ([[library]]); change it there",
+                lib.name
+            )));
+        }
+        self.refuse_if_config_driven().await
+    }
+
     /// Make a library after checking its name, kind and folders.
     pub async fn create(&self, new: NewLibrary) -> ServiceResult<Library> {
+        self.refuse_if_config_driven().await?;
         let name = require_new_name(&new.name)?.to_owned();
         let kind = new.kind.to_ascii_lowercase();
         if !SUPPORTED_KINDS.contains(&kind.as_str()) {
@@ -92,12 +287,7 @@ impl<D: Data> Libraries<'_, D> {
                 SUPPORTED_KINDS.join(", ")
             )));
         }
-        let mut paths: Vec<String> = Vec::new();
-        for path in new.paths.iter().map(|p| p.trim()) {
-            if !path.is_empty() && !paths.iter().any(|p| p == path) {
-                paths.push(path.to_owned());
-            }
-        }
+        let paths = clean_paths(&new.paths);
         if paths.iter().any(|p| !std::path::Path::new(p).is_dir()) {
             return Err(ServiceError::NotFound);
         }
@@ -122,6 +312,7 @@ impl<D: Data> Libraries<'_, D> {
         kind: &str,
         paths: &[String],
     ) -> ServiceResult<Library> {
+        self.refuse_if_config_driven().await?;
         let lib = self.data.libraries().create(name, kind, paths).await?;
         self.log("Library created", name, "LibraryCreated").await;
         Ok(lib)
@@ -142,7 +333,7 @@ impl<D: Data> Libraries<'_, D> {
         }
         let store = self.data.libraries();
         let before = store.find_by_id(id).await?.ok_or(ServiceError::NotFound)?;
-        refuse_if_linked(&before)?;
+        self.refuse_change(&before).await?;
         let lib = store
             .update(id, name, paths)
             .await?
@@ -166,7 +357,7 @@ impl<D: Data> Libraries<'_, D> {
     async fn delete(&self, id: Uuid, name: &str) -> ServiceResult<()> {
         let store = self.data.libraries();
         if let Some(lib) = store.find_by_id(id).await? {
-            refuse_if_linked(&lib)?;
+            self.refuse_change(&lib).await?;
         }
         if !store.delete(id).await? {
             return Err(ServiceError::NotFound);
@@ -180,7 +371,7 @@ impl<D: Data> Libraries<'_, D> {
         let name = require_name(name)?;
         let new_name = require_new_name(new_name)?;
         let lib = self.named(name).await?;
-        refuse_if_linked(&lib)?;
+        self.refuse_change(&lib).await?;
         let store = self.data.libraries();
         if let Some(other) = store.find_by_name(new_name).await?
             && other.id != lib.id
@@ -206,7 +397,7 @@ impl<D: Data> Libraries<'_, D> {
             return Err(ServiceError::Invalid("path must not be blank".into()));
         }
         let lib = self.named(name).await?;
-        refuse_if_linked(&lib)?;
+        self.refuse_change(&lib).await?;
         if !std::path::Path::new(path).is_dir() {
             return Err(ServiceError::NotFound);
         }
@@ -244,6 +435,7 @@ impl<D: Data> Libraries<'_, D> {
         if !lib.paths.iter().any(|p| p == path) {
             return Err(ServiceError::NotFound);
         }
+        self.refuse_change(&lib).await?;
         if lib.paths.len() == 1 {
             return Err(ServiceError::Invalid(
                 "a library needs at least one path".into(),
@@ -262,6 +454,13 @@ impl<D: Data> Libraries<'_, D> {
 
     /// Replace a library's options.
     pub async fn set_options(&self, id: Uuid, options: &serde_json::Value) -> ServiceResult<()> {
+        let before = self
+            .data
+            .libraries()
+            .find_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        self.refuse_change(&before).await?;
         let lib = self
             .data
             .libraries()
@@ -270,6 +469,18 @@ impl<D: Data> Libraries<'_, D> {
             .ok_or(ServiceError::NotFound)?;
         self.log("Library options updated", &lib.name, "LibraryUpdated")
             .await;
+        Ok(())
+    }
+
+    /// Set or clear a library's own scan schedule.
+    pub async fn set_scan_schedule(&self, id: Uuid, schedule: Option<&str>) -> ServiceResult<()> {
+        let store = self.data.libraries();
+        let lib = store.find_by_id(id).await?.ok_or(ServiceError::NotFound)?;
+        self.refuse_change(&lib).await?;
+        store
+            .update_scan_schedule(id, schedule)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
         Ok(())
     }
 
@@ -289,6 +500,26 @@ impl<D: Data> Libraries<'_, D> {
             .insert(message, Some(name), kind, "Informational", None, None)
             .await;
     }
+}
+
+/// Folders trimmed, blanks and repeats dropped, in the order given.
+fn clean_paths(raw: &[String]) -> Vec<String> {
+    let mut paths: Vec<String> = Vec::new();
+    for path in raw.iter().map(|p| p.trim()) {
+        if !path.is_empty() && !paths.iter().any(|p| p == path) {
+            paths.push(path.to_owned());
+        }
+    }
+    paths
+}
+
+/// The same folders, in any order.
+fn same_folders(a: &[String], b: &[String]) -> bool {
+    let mut a: Vec<&String> = a.iter().collect();
+    let mut b: Vec<&String> = b.iter().collect();
+    a.sort();
+    b.sort();
+    a == b
 }
 
 /// A library a link made is the link's (see the module docs).

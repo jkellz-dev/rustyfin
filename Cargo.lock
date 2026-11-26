@@ -3342,6 +3342,8 @@ dependencies = [
  "dialoguer",
  "reqwest 0.13.5",
  "rustyfin-common",
+ "rustyfin-data",
+ "rustyfin-services",
  "serde",
  "serde_json",
  "tokio",

@@ -34,6 +34,9 @@ pub struct VirtualFolderInfo {
     /// The linked servers that fill it; a scan of it syncs them.
     #[serde(default)]
     pub linked_servers: Vec<LinkedServer>,
+    /// Set in rustyfin.toml (`[[library]]`): changed only there.
+    #[serde(default)]
+    pub configured: bool,
 }
 
 /// A linked server that fills a library, and the library of its that does.

@@ -25,6 +25,9 @@ pub(crate) struct LibraryRecord {
     /// The link whose library this is, for one made for a friend's library.
     #[sqlx(default)]
     pub link_id: Option<Uuid>,
+    /// Set in `rustyfin.toml` (absent from queries that name columns).
+    #[sqlx(default)]
+    pub configured: bool,
 }
 
 /// Transitional name until callers move onto the data-layer traits.
@@ -44,6 +47,7 @@ impl From<LibraryRecord> for Library {
             last_scanned_at,
             last_scan_duration_ms,
             link_id,
+            configured,
         } = r;
         Library {
             id,
@@ -57,6 +61,7 @@ impl From<LibraryRecord> for Library {
             last_scanned_at,
             last_scan_duration_ms,
             link_id,
+            configured,
         }
     }
 }
@@ -226,6 +231,34 @@ pub async fn set_paths(
         "UPDATE libraries SET paths = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
     )
     .bind(paths)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map(opt)
+}
+
+/// Mark exactly the libraries in `ids` as set in the config file.
+pub async fn mark_configured(pool: &PgPool, ids: &[Uuid]) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE libraries SET configured = (id = ANY($1)) \
+         WHERE configured IS DISTINCT FROM (id = ANY($1))",
+    )
+    .bind(ids)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Change a library's kind.
+pub async fn set_type(
+    pool: &PgPool,
+    id: Uuid,
+    library_type: &str,
+) -> Result<Option<LibraryRow>, sqlx::Error> {
+    sqlx::query_as::<_, LibraryRecord>(
+        "UPDATE libraries SET library_type = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    )
+    .bind(library_type)
     .bind(id)
     .fetch_optional(pool)
     .await

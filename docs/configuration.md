@@ -217,6 +217,40 @@ of the same name replaces one, and the rest are kept.
 Obtain a free key from [themoviedb.org](https://www.themoviedb.org/settings/api). Without it, metadata enrichment relies
 solely on local NFO files.
 
+### `[[library]]` (repeatable)
+
+The libraries. Each is made at start if it does not exist, and updated if its type or folders changed; an existing
+library is matched by name in any case, so it keeps its id, its titles and everyone's watched history.
+
+```toml
+[[library]]
+name = "Movies"
+type = "movies"          # movies, tvshows or music
+paths = ["/data/media/movies", "/mnt/media/movies"]
+
+[[library]]
+name = "TV Shows"
+type = "tvshows"
+paths = ["/data/media/tv"]
+```
+
+Once any `[[library]]` is set, libraries are changed only here: the admin page offers no add, edit or delete, and
+Jellyfin apps' library-changing requests answer 409. A library in the database that is no longer here stays, with its
+watched history, until `rustyfin prune` removes it:
+
+```bash
+rustyfin prune --server-config /app/rustyfin.toml        # lists what would go
+rustyfin prune --server-config /app/rustyfin.toml --yes  # removes it
+```
+
+`prune` (in the `rustyfin-meta` image) reads this file's `[database]` and `[[library]]` and the `RUSTYFIN__DATABASE__*`
+variables, as the server does. It removes each such library with its titles and everyone's watched history of them;
+the files on disk are not touched, and a linked server's libraries are the link's. It refuses to run when the file sets
+no library. A `[[link.libraries]]` `local` names one of these libraries. Folders that do not exist yet are kept (a share
+may be mounted later); renaming a library here makes a new one, and the old one waits for `prune`.
+
+Without any `[[library]]`, libraries are made and changed on the admin page instead.
+
 ### `[[link]]` (optional, repeatable)
 
 A friend's Jellyfin or Rustyfin whose shared libraries merge into yours. One table per friend; the guide, with what

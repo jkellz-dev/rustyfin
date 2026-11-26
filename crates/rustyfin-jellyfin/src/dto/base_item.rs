@@ -531,6 +531,10 @@ pub struct VirtualFolderInfo {
     /// (Rustyfin's own): a scan of it syncs them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub linked_servers: Vec<LinkedServer>,
+    /// Set in `rustyfin.toml` (`[[library]]`): the admin page offers no
+    /// changes to it. Not Jellyfin's; left out when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub configured: bool,
 }
 
 /// A linked server that fills a library, and the library of its that does.

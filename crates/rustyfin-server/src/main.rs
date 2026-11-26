@@ -158,6 +158,33 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("People cache directory: {}", dir.display());
     }
 
+    // The libraries in rustyfin.toml, before anything scans them or a link
+    // looks for its local ones.
+    match rustyfin_services::libraries::Libraries::over(&data)
+        .apply_config(&config.libraries)
+        .await
+    {
+        Ok(report) => {
+            for name in &report.created {
+                tracing::info!("Library {name}: made from rustyfin.toml");
+            }
+            for name in &report.updated {
+                tracing::info!("Library {name}: updated from rustyfin.toml");
+            }
+            for (name, why) in &report.refused {
+                tracing::error!("Library {name} in rustyfin.toml: {why}");
+            }
+            if !config.libraries.is_empty() {
+                for name in &report.unconfigured {
+                    tracing::warn!(
+                        "Library {name} is not in rustyfin.toml: kept, with its watched \
+                         history, until an administrator deletes it"
+                    );
+                }
+            }
+        }
+        Err(e) => tracing::error!("Could not apply the libraries in rustyfin.toml: {e}"),
+    }
     // Initialize task scheduler
     let mut task_scheduler_for_state: Option<
         Arc<rustyfin_services::TaskScheduler<rustyfin_data::PgData>>,

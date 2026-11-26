@@ -29,7 +29,6 @@ pub fn Dashboard() -> View {
     let info: Signal<Option<SystemInfo>> = create_signal(None);
     let stats: Signal<Option<DashboardStats>> = create_signal(None);
     let loading = create_signal(true);
-    let scan_loading = create_signal(false);
     let error: Signal<Option<String>> = create_signal(None);
     let activity: Signal<Vec<ActivityLogEntry>> = create_signal(Vec::new());
     let sessions: Signal<Vec<SessionInfo>> = create_signal(Vec::new());
@@ -99,26 +98,10 @@ pub fn Dashboard() -> View {
         }
     });
 
-    let on_scan_all = move |_| {
-        scan_loading.set(true);
-        spawn_local({
-            async move {
-                match api::scan_library(None).await {
-                    Ok(()) => {}
-                    Err(e) => error.set(Some(e.to_string())),
-                }
-                scan_loading.set(false);
-            }
-        });
-    };
-
     view! {
         div {
             div(class="page-header") {
                 h1 { "Dashboard" }
-                button(class="btn btn-primary", on:click=on_scan_all, disabled=scan_loading.get()) {
-                    (if scan_loading.get() { "Scanning..." } else { "Scan All Libraries" })
-                }
             }
 
             ErrorNotice(error=error)

@@ -13,11 +13,13 @@
 //! Transitional: `pool` and `repo` are still public while callers move onto
 //! the traits one area at a time; they become private once none is left.
 
+mod config;
 mod pg;
 pub mod pool;
 pub mod repo;
 mod search;
 
+pub use config::DatabaseConfig;
 pub use pg::{PgData, data_error};
 pub use pool::DbPool;
 pub use search::PgSearch;

@@ -125,6 +125,32 @@ pub fn Libraries() -> View {
     };
 
     let polling = create_signal(false);
+    // Libraries come from rustyfin.toml once any is set there: none is
+    // added, edited or deleted here (`rustyfin prune` removes the rest).
+    let config_driven = create_memo(move || libs.with(|l| l.iter().any(|lib| lib.configured)));
+    // Every library at once (it was on the Dashboard; owner, 2026-11-26).
+    let scan_all_busy = create_signal(false);
+    let on_scan_all = move |_| {
+        scan_all_busy.set(true);
+        libs.update(|list| {
+            for lib in list.iter_mut() {
+                lib.refresh_status = Some("Active".to_string());
+            }
+        });
+        spawn_local(async move {
+            match api::scan_library(None).await {
+                Ok(()) => {
+                    toast.set(Some("Scanning every library".to_string()));
+                    if !polling.get() {
+                        polling.set(true);
+                        poll_scans(libs, toast, polling);
+                    }
+                }
+                Err(e) => error.set(Some(e.to_string())),
+            }
+            scan_all_busy.set(false);
+        });
+    };
     let on_scan = move |id: String| {
         // Show it at once; the server's RefreshStatus takes over on the next poll.
         libs.update(|list| {
@@ -424,10 +450,26 @@ pub fn Libraries() -> View {
 
                 div(class="page-header") {
                     h1 { "Libraries" }
+                    button(class="btn btn-primary", on:click=on_scan_all, disabled=move || scan_all_busy.get()) {
+                        "Scan All Libraries"
+                    }
                 }
 
-                // Add Library form
-                div(class="card mb-24") {
+                (if config_driven.get() {
+                    view! {
+                        div(class="card mb-24 text-muted") {
+                            "Libraries are set in rustyfin.toml ([[library]]). "
+                            "One taken out of it stays until "
+                            code { "rustyfin prune" }
+                            " removes it."
+                        }
+                    }
+                } else {
+                    view! {}
+                })
+
+                // Add Library form (none while rustyfin.toml sets libraries)
+                div(class="card mb-24", hidden=move || config_driven.get()) {
                     h2 { "Add Library" }
                     div(class="form-group") {
                         label { "Name" }
@@ -546,6 +588,7 @@ pub fn Libraries() -> View {
                                             let ctype = lib.collection_type.clone().unwrap_or_else(|| "unknown".to_string());
                                             // A library a link made has no folders: the link fills it.
                                             let linked = lib.locations.is_empty();
+                                            let in_file = lib.configured;
                                             let locations = lib.locations.join(", ");
                                             let sources: Vec<(String, String)> = lib
                                                 .linked_servers
@@ -584,7 +627,7 @@ pub fn Libraries() -> View {
                                                     }
                                                     td(data-label="Actions") {
                                                         div(class="flex-gap") {
-                                                            (if linked {
+                                                            (if linked || in_file || config_driven.get() {
                                                                 view! {}
                                                             } else {
                                                                 let edit_lib = edit_lib.clone();
@@ -617,9 +660,11 @@ pub fn Libraries() -> View {
                                                                     view! { "Scan" }
                                                                 })
                                                             }
-                                                            (if linked {
-                                                                // Set in rustyfin.toml ([[link]]): nothing to change here.
+                                                            (if linked || in_file {
+                                                                // Set in rustyfin.toml ([[link]] or [[library]]): nothing to change here.
                                                                 view! { span(class="text-muted text-small") { "Set in rustyfin.toml" } }
+                                                            } else if config_driven.get() {
+                                                                view! { span(class="text-muted text-small") { "Not in rustyfin.toml: rustyfin prune removes it" } }
                                                             } else {
                                                                 let del_lib = del_lib.clone();
                                                                 view! {

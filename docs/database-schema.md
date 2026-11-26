@@ -79,6 +79,7 @@ Media library definitions.
 | `name` | TEXT | No | | Library display name |
 | `library_type` | TEXT | No | | Type: `movies`, `tvshows`, `music`, `mixed` |
 | `paths` | TEXT[] | No | | Array of filesystem paths |
+| `configured` | BOOLEAN | No | `false` | Set in `rustyfin.toml` (`[[library]]`); changed only there |
 | `created_at` | TIMESTAMPTZ | No | `NOW()` | Creation time |
 | `updated_at` | TIMESTAMPTZ | No | `NOW()` | Last scan/update time |
 
