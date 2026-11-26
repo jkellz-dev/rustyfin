@@ -351,9 +351,7 @@ fn default_remote_email() -> String {
 fn default_remote_groups() -> String {
     "Remote-Groups".to_string()
 }
-fn default_user_filter() -> String {
-    "(uid={})".to_string()
-}
+
 // ── Task scheduler configuration ─────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
