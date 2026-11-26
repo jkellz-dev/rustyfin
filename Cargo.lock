@@ -3383,10 +3383,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "hex",
  "ipnet",
  "ldap3",
- "rand 0.10.4",
  "rustyfin-data",
  "rustyfin-models",
  "rustyfin-services",

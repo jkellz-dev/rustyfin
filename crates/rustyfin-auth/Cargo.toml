@@ -18,9 +18,7 @@ uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
-rand.workspace = true
 
-hex = "0.4"
 url = "2"
 ldap3.workspace = true
 ipnet.workspace = true

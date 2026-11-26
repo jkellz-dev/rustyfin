@@ -16,7 +16,6 @@ mod api_keys;
 mod catalog;
 mod chapters;
 mod collections;
-mod device_auth;
 mod display_preferences;
 mod error;
 mod images;
@@ -40,7 +39,6 @@ pub use api_keys::{ApiKey, ApiKeyStore};
 pub use catalog::{CatalogChange, CatalogPage, CatalogStore};
 pub use chapters::{Chapter, ChapterStore};
 pub use collections::{AutoSet, CollectionStore};
-pub use device_auth::{DeviceAuth, DeviceAuthStore};
 pub use display_preferences::DisplayPreferencesStore;
 pub use error::{DataError, DataResult};
 pub use images::{Image, ImageStore, NewImage};
@@ -84,10 +82,6 @@ pub trait Data: Clone + Send + Sync + 'static {
     /// Collections.
     type Collections: CollectionStore + Send + Sync;
     fn collections(&self) -> &Self::Collections;
-
-    /// Device auth.
-    type DeviceAuth: DeviceAuthStore + Send + Sync;
-    fn device_auth(&self) -> &Self::DeviceAuth;
 
     /// Display preferences.
     type DisplayPreferences: DisplayPreferencesStore + Send + Sync;

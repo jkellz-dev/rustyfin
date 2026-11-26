@@ -38,39 +38,6 @@ pub struct AuthProviderInfo {
     pub login_url: String,
 }
 
-/// Device code response for `POST /auth/device/code` (RFC 8628).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceCodeResponse {
-    pub device_code: String,
-    pub user_code: String,
-    pub verification_uri: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub verification_uri_complete: Option<String>,
-    pub expires_in: i64,
-    pub interval: i32,
-}
-
-/// Device token request for `POST /auth/device/token`.
-#[derive(Debug, Clone, Deserialize)]
-pub struct DeviceTokenRequest {
-    pub device_code: String,
-}
-
-/// Device token response (polling result).
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
-#[allow(clippy::large_enum_variant)]
-pub enum DeviceTokenResponse {
-    Success(AuthenticationResult),
-    Pending(DeviceTokenPending),
-}
-
-/// Pending state while device authorization is in progress.
-#[derive(Debug, Clone, Serialize)]
-pub struct DeviceTokenPending {
-    pub error: String,
-}
-
 /// Parsed fields from the `Authorization: MediaBrowser ...` header.
 #[derive(Debug, Clone, Default)]
 pub struct MediaBrowserAuth {

@@ -5,11 +5,10 @@
 //! that sign in with a password, an LDAPS bind ([`ldap`]); Rustyfin stores
 //! no passwords. [`middleware`] reads Jellyfin's `Authorization:
 //! MediaBrowser ...` header (or `X-Emby-Token`, or `api_key`) into the
-//! `AuthenticatedUser` extractor; [`session`] and [`device_auth`] tie tokens
-//! to devices; [`api_key`] covers server API keys.
+//! `AuthenticatedUser` extractor; [`session`] ties tokens to devices;
+//! [`api_key`] covers server API keys.
 
 pub mod api_key;
-pub mod device_auth;
 pub mod forward_auth;
 pub mod ldap;
 pub mod middleware;

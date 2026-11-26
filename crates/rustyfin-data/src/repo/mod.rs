@@ -3,7 +3,6 @@ pub mod api_keys;
 pub mod catalog;
 pub mod chapters;
 pub mod collections;
-pub mod device_auth;
 pub mod display_preferences;
 pub mod images;
 pub mod libraries;

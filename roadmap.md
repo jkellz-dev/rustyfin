@@ -91,7 +91,7 @@ Meilisearch, session playback tracking, activity logging, chapters, stubs.
 - [x] Per-user library access control
 - [x] File browser (`GET /Environment/DirectoryContents`)
 - [x] LDAP auth config (optional)
-- [x] Device authorization grant (RFC 8628)
+- [x] Device authorization grant (RFC 8628) (removed 2026-11-26, never routed: signing in is Tailscale's)
 
 ### 6b. API Endpoint Stubs [DONE]
 

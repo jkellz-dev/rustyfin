@@ -312,7 +312,8 @@ Chapter markers within a media item.
 
 ### `device_auth_requests`
 
-RFC 8628 Device Authorization Grant flow (future use).
+RFC 8628 Device Authorization Grant flow. Unused: the code that wrote it was removed, as signing in is the proxy's job;
+the table is kept so no migration drops data.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|

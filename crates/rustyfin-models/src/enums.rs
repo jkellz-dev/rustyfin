@@ -170,16 +170,6 @@ pub enum SubtitleMode {
     Smart = 4,
 }
 
-/// Device authorization status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DeviceAuthStatus {
-    Pending,
-    Authorized,
-    Expired,
-    Denied,
-}
-
 /// Activity log severity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LogSeverity {

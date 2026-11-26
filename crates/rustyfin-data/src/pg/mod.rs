@@ -8,7 +8,6 @@ mod api_keys;
 mod catalog;
 mod chapters;
 mod collections;
-mod device_auth;
 mod display_preferences;
 mod images;
 mod libraries;
@@ -38,7 +37,6 @@ pub struct PgData {
     catalog: PgCatalog,
     chapters: PgChapters,
     collections: PgCollections,
-    device_auth: PgDeviceAuth,
     display_preferences: PgDisplayPreferences,
     images: PgImages,
     libraries: PgLibraries,
@@ -70,7 +68,6 @@ impl PgData {
             catalog: PgCatalog { pool: pool.clone() },
             chapters: PgChapters { pool: pool.clone() },
             collections: PgCollections { pool: pool.clone() },
-            device_auth: PgDeviceAuth { pool: pool.clone() },
             display_preferences: PgDisplayPreferences { pool: pool.clone() },
             images: PgImages { pool: pool.clone() },
             libraries: PgLibraries { pool: pool.clone() },
@@ -111,10 +108,6 @@ impl Data for PgData {
     type Collections = PgCollections;
     fn collections(&self) -> &PgCollections {
         &self.collections
-    }
-    type DeviceAuth = PgDeviceAuth;
-    fn device_auth(&self) -> &PgDeviceAuth {
-        &self.device_auth
     }
     type DisplayPreferences = PgDisplayPreferences;
     fn display_preferences(&self) -> &PgDisplayPreferences {
@@ -209,12 +202,6 @@ pub struct PgChapters {
 /// Collections in Postgres.
 #[derive(Clone)]
 pub struct PgCollections {
-    pool: PgPool,
-}
-
-/// Device auth in Postgres.
-#[derive(Clone)]
-pub struct PgDeviceAuth {
     pool: PgPool,
 }
 
