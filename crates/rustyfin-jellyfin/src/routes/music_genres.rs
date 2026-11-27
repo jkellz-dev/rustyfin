@@ -70,9 +70,24 @@ pub async fn get_music_genres<D: Data>(
 
 /// The cache key of a library's genre list: database and schema (tests share
 /// one database, a schema each), and the library.
+/// A kept list is good until the next scan finishes: the key names the
+/// latest finished scan, so new genres show at once instead of up to five
+/// minutes later (a fresh server listed none until then: the parity run of
+/// 2026-11-26 asked right after its first scan).
 async fn genre_list_key<D: Data>(state: &AppState<D>, parent_id: Option<Uuid>) -> String {
     let schema: String = state.data.status().scope().await.unwrap_or_default();
-    format!("{schema}|{parent_id:?}")
+    let scanned = state
+        .data
+        .libraries()
+        .scan_times()
+        .await
+        .or_log_default("libraries::scan_times")
+        .into_iter()
+        .filter_map(|(_, at)| at)
+        .max()
+        .map(|at| at.timestamp_millis())
+        .unwrap_or_default();
+    format!("{schema}|{parent_id:?}|{scanned}")
 }
 
 /// Build a library's genre list and keep it.

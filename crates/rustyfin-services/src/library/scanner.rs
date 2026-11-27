@@ -309,6 +309,17 @@ impl<D: Data> LibraryScanner<D> {
         if library_type == "movies" {
             self.sync_movie_collections(library_id).await;
         }
+        // An album's genres are its tracks' (Jellyfin's album pages and genre
+        // lists count on them).
+        if library_type == "music"
+            && let Err(e) = self
+                .data
+                .media_items()
+                .album_genres_from_tracks(library_id)
+                .await
+        {
+            tracing::warn!("Could not give albums their tracks' genres: {e}");
+        }
         // A title this scan found may be one a linked server shares: merge
         // now, not at the link's next sync, so it is never listed twice.
         if library_type != "music"

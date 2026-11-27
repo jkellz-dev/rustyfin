@@ -704,6 +704,13 @@ pub trait MediaItemStore {
         library: Option<uuid::Uuid>,
     ) -> impl Future<Output = DataResult<Option<Image>>> + Send;
 
+    /// Give each album of `library` its tracks' genres (Jellyfin's album
+    /// genres are its tracks'); how many albums changed.
+    fn album_genres_from_tracks(
+        &self,
+        library: uuid::Uuid,
+    ) -> impl Future<Output = DataResult<u64>> + Send;
+
     /// The picture of each of `genres` that has one, as [`genre_image`]
     /// picks it: (genre, image).
     ///

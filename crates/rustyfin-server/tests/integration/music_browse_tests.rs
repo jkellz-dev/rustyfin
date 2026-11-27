@@ -5,7 +5,8 @@
 use crate::common;
 
 use axum::http::StatusCode;
-use rustyfin_data::repo::user_data;
+use rustyfin_data::repo::{libraries, user_data};
+use rustyfin_models::data::{Data, MediaItemStore};
 use serde_json::Value;
 
 fn names(body: &Value) -> Vec<String> {
@@ -844,5 +845,92 @@ async fn stored_id3_genre_codes_are_named() {
         .await
         .unwrap();
     assert_eq!(genres, ["Rock", "Alternative", "Metal"]);
+    app.cleanup().await;
+}
+
+/// A music genre list kept to answer fast is good until the next scan
+/// finishes, not five minutes: a fresh server listed none right after its
+/// first scan (the parity run of 2026-11-26).
+#[tokio::test]
+async fn a_scan_shows_its_new_music_genres_at_once() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let music = app.create_library("Music", "music").await;
+    let names = |body: &serde_json::Value| -> Vec<String> {
+        body["Items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{body}"))
+            .iter()
+            .map(|g| g["Name"].as_str().unwrap_or_default().to_string())
+            .collect()
+    };
+    let (_, before) = app.get("/MusicGenres", &token).await;
+    assert!(names(&before).is_empty(), "{before}");
+
+    let track = app
+        .create_media_item("Purple Hat", "Audio", music, None)
+        .await;
+    sqlx::query("UPDATE media_items SET genres = ARRAY['Electronic'] WHERE id = $1")
+        .bind(track)
+        .execute(&app.pool)
+        .await
+        .unwrap();
+    libraries::mark_scanned(&app.pool, music, std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+    let (_, after) = app.get("/MusicGenres", &token).await;
+    assert_eq!(names(&after), ["Electronic"], "{after}");
+    app.cleanup().await;
+}
+
+/// An album's genres are its tracks', as in Jellyfin (an album page lists
+/// them; the parity run of 2026-11-26 found albums with none).
+#[tokio::test]
+async fn an_album_takes_its_tracks_genres() {
+    let app = common::TestApp::new().await;
+    let (_, token) = app.create_user("viewer", true).await;
+    let music = app.create_library("Music", "music").await;
+    let album = app
+        .create_media_item("Album", "MusicAlbum", music, None)
+        .await;
+    let disc = app
+        .create_media_item("CD2", "Folder", music, Some(album))
+        .await;
+    let one = app
+        .create_media_item("One", "Audio", music, Some(album))
+        .await;
+    let two = app
+        .create_media_item("Two", "Audio", music, Some(disc))
+        .await;
+    for (id, genres) in [(one, vec!["Rock", "Pop"]), (two, vec!["Rock", "Jazz"])] {
+        sqlx::query("UPDATE media_items SET genres = $2 WHERE id = $1")
+            .bind(id)
+            .bind(genres)
+            .execute(&app.pool)
+            .await
+            .unwrap();
+    }
+    let changed = app
+        .data
+        .media_items()
+        .album_genres_from_tracks(music)
+        .await
+        .unwrap();
+    assert_eq!(changed, 1);
+    let (_, body) = app.get(&format!("/Items/{album}"), &token).await;
+    assert_eq!(
+        body["Genres"],
+        serde_json::json!(["Jazz", "Pop", "Rock"]),
+        "{body}"
+    );
+    assert_eq!(body["GenreItems"][0]["Name"], "Jazz", "{body}");
+    // Again: nothing to change.
+    let again = app
+        .data
+        .media_items()
+        .album_genres_from_tracks(music)
+        .await
+        .unwrap();
+    assert_eq!(again, 0);
     app.cleanup().await;
 }

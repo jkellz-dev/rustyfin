@@ -168,9 +168,9 @@ jsonpath "$.EnableGroupingIntoCollections" isBoolean
 jsonpath "$.DisplaySpecialsWithinSeasons" isBoolean
 jsonpath "$.CodecsUsed" isCollection
 jsonpath "$.PluginRepositories" isCollection
-jsonpath "$.PluginRepositories[0].Name" isString
-jsonpath "$.PluginRepositories[0].Url" isString
-jsonpath "$.PluginRepositories[0].Enabled" isBoolean
+# known difference, not asserted: jsonpath "$.PluginRepositories[0].Name" isString (no plugins (design rule): Rustyfin lists no plugin repository)
+# known difference, not asserted: jsonpath "$.PluginRepositories[0].Url" isString (no plugins (design rule): Rustyfin lists no plugin repository)
+# known difference, not asserted: jsonpath "$.PluginRepositories[0].Enabled" isBoolean (no plugins (design rule): Rustyfin lists no plugin repository)
 jsonpath "$.EnableExternalContentInSuggestions" isBoolean
 jsonpath "$.ImageExtractionTimeoutMs" isNumber
 jsonpath "$.PathSubstitutions" isCollection
@@ -251,11 +251,11 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
-jsonpath "$[0]" exists
-jsonpath "$[0].DateCreated" isString
-jsonpath "$[0].DateModified" isString
-jsonpath "$[0].Size" isNumber
-jsonpath "$[0].Name" isString
+# known difference, not asserted: jsonpath "$[0]" exists (Rustyfin logs to stdout (the container's log), not to log files)
+# known difference, not asserted: jsonpath "$[0].DateCreated" isString (Rustyfin logs to stdout (the container's log), not to log files)
+# known difference, not asserted: jsonpath "$[0].DateModified" isString (Rustyfin logs to stdout (the container's log), not to log files)
+# known difference, not asserted: jsonpath "$[0].Size" isNumber (Rustyfin logs to stdout (the container's log), not to log files)
+# known difference, not asserted: jsonpath "$[0].Name" isString (Rustyfin logs to stdout (the container's log), not to log files)
 
 GET {{base_url}}/System/ActivityLog/Entries
 Authorization: MediaBrowser Token="{{token}}"
@@ -267,9 +267,9 @@ header "Content-Type" contains "application/json"
 jsonpath "$.Items" isCollection
 jsonpath "$.Items[0].Id" isNumber
 jsonpath "$.Items[0].Name" isString
-jsonpath "$.Items[0].ShortOverview" isString
+# known difference, not asserted: jsonpath "$.Items[0].ShortOverview" isString (the first entry is whatever each server did last (Jellyfin: a sign-in, with its address; Rustyfin: a library change), and those keys are per entry)
 jsonpath "$.Items[0].Type" isString
-jsonpath "$.Items[0].ItemId" isString
+# known difference, not asserted: jsonpath "$.Items[0].ItemId" isString (the first entry is whatever each server did last (Jellyfin: a sign-in, with its address; Rustyfin: a library change), and those keys are per entry)
 jsonpath "$.Items[0].Date" isString
 jsonpath "$.Items[0].UserId" isString
 jsonpath "$.Items[0].Severity" isString
@@ -301,9 +301,9 @@ HTTP 200
 [Asserts]
 header "Content-Type" contains "application/json"
 jsonpath "$" isCollection
-jsonpath "$[0]" exists
-jsonpath "$[0].Name" isString
-jsonpath "$[0].Id" isString
+# known difference, not asserted: jsonpath "$[0]" exists (sign-in is forward auth: the server resets no passwords)
+# known difference, not asserted: jsonpath "$[0].Name" isString (sign-in is forward auth: the server resets no passwords)
+# known difference, not asserted: jsonpath "$[0].Id" isString (sign-in is forward auth: the server resets no passwords)
 
 GET {{base_url}}/Devices
 Authorization: MediaBrowser Token="{{token}}"
@@ -363,7 +363,7 @@ jsonpath "$.LastExecutionResult.Key" isString
 jsonpath "$.LastExecutionResult.Id" isString
 jsonpath "$.Triggers" isCollection
 jsonpath "$.Triggers[0].Type" isString
-jsonpath "$.Triggers[0].IntervalTicks" isNumber
+# known difference, not asserted: jsonpath "$.Triggers[0].IntervalTicks" isNumber (Rustyfin schedules by cron; a daily scan is a DailyTrigger where Jellyfin's default is a 12-hour interval)
 jsonpath "$.Description" isString
 jsonpath "$.Category" isString
 jsonpath "$.IsHidden" isBoolean
@@ -371,28 +371,20 @@ jsonpath "$.Key" isString
 
 GET {{base_url}}/Environment/Drives
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$" isCollection
-jsonpath "$[0]" exists
-jsonpath "$[0].Name" isString
-jsonpath "$[0].Path" isString
-jsonpath "$[0].Type" isString
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (the server's folder browser is not served (owner decision 2026-11-22): libraries are set in Rustyfin's admin)
 
 GET {{base_url}}/Environment/DefaultDirectoryBrowser
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (the server's folder browser is not served (owner decision 2026-11-22): libraries are set in Rustyfin's admin)
 
 GET {{base_url}}/Environment/ParentPath
 Authorization: MediaBrowser Token="{{token}}"
 [QueryStringParams]
 path: /media
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (the server's folder browser is not served (owner decision 2026-11-22): libraries are set in Rustyfin's admin)
 
 GET {{base_url}}/Startup/Configuration
 Authorization: MediaBrowser Token="{{token}}"
@@ -405,11 +397,8 @@ jsonpath "$.PreferredMetadataLanguage" isString
 
 GET {{base_url}}/Startup/User
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$.Name" isString
-jsonpath "$.Password" isString
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (no setup wizard: users come from forward auth (owner decision 2026-11-22))
 
 GET {{base_url}}/Users/Public
 HTTP 200
@@ -426,7 +415,5 @@ jsonpath "$" isCollection
 
 GET {{base_url}}/Audio/{{track_id}}/RemoteSearch/Lyrics
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$" isCollection
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (the metadata editor's remote searches are not served (owner decision 2026-11-22): rustyfin-meta fetches)

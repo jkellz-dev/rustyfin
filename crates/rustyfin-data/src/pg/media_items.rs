@@ -606,6 +606,12 @@ impl MediaItemStore for PgMediaItems {
         repo::genre_image(&self.pool, genre, library).await.data()
     }
 
+    async fn album_genres_from_tracks(&self, library: uuid::Uuid) -> DataResult<u64> {
+        repo::album_genres_from_tracks(&self.pool, library)
+            .await
+            .data()
+    }
+
     async fn genre_images(
         &self,
         genres: &[String],

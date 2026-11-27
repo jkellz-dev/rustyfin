@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use rustyfin_models::data::{Data, ImageStore, MediaItemStore};
+use rustyfin_models::data::{ChapterStore, Data, ImageStore, MediaItemStore};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -79,5 +79,36 @@ pub async fn get_suggestions<D: Data>(
     .await;
     // Badges: clients fall back to ChildCount (a show's seasons) without it.
     super::items::attach_user_data(&state.data, auth.user_id, &mut dtos).await;
+    // Jellyfin sends suggestions with every field, as on an item's page: its
+    // cast, chapters and trickplay (empty when there are none) and, for an
+    // administrator, its path.
+    super::items::attach_people_if_asked(&state, &Some("People".to_string()), &mut dtos).await;
+    let chapters = state
+        .data
+        .chapters()
+        .list_by_items(&item_ids)
+        .await
+        .or_log_default("chapters::list_by_items");
+    for (dto, item) in dtos.iter_mut().zip(&items) {
+        if !item.is_folder {
+            dto.chapters = Some(
+                chapters
+                    .iter()
+                    .filter(|ch| ch.item_id == item.id)
+                    .map(|ch| crate::dto::ChapterInfo {
+                        start_position_ticks: ch.start_position_ticks,
+                        name: ch.name.clone(),
+                        image_path: ch.image_path.clone(),
+                        image_tag: ch.image_path.as_ref().map(|_| ch.id.to_string()),
+                    })
+                    .collect(),
+            );
+        }
+        dto.chapters.get_or_insert_with(Vec::new);
+        dto.trickplay.get_or_insert_with(Default::default);
+        if auth.is_administrator {
+            dto.path = item.path.clone();
+        }
+    }
     Ok(Json(QueryResult::new(dtos, total)))
 }

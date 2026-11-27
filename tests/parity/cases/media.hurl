@@ -227,9 +227,8 @@ jsonpath "$" isCollection
 # known difference, not asserted: jsonpath "$[0].Size" isNumber (Jellyfin grabs a video frame as the poster of a film without art; Rustyfin does not extract images)
 
 GET {{base_url}}/Items/{{track_id}}/Images/Primary
-HTTP 404
-[Asserts]
-header "Content-Type" contains "application/json"
+HTTP *
+# known difference, not asserted: HTTP 404 and its body (a track without art shows its embedded cover or a placeholder (owner decision 2026-11-16); Jellyfin answers 404)
 
 GET {{base_url}}/Users/{{user_id}}/Images/Primary
 HTTP 404

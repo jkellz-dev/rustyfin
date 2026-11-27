@@ -137,7 +137,7 @@ jsonpath "$.CanDelete" isBoolean
 jsonpath "$.CanDownload" isBoolean
 jsonpath "$.SortName" isString
 jsonpath "$.ExternalUrls" isCollection
-jsonpath "$.Path" isString
+# known difference, not asserted: jsonpath "$.Path" isString (Jellyfin's root folder is a folder in its config directory; Rustyfin's is virtual)
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
 jsonpath "$.Taglines" isCollection
 jsonpath "$.Genres" isCollection
@@ -186,7 +186,7 @@ jsonpath "$.CanDelete" isBoolean
 jsonpath "$.CanDownload" isBoolean
 jsonpath "$.SortName" isString
 jsonpath "$.ExternalUrls" isCollection
-jsonpath "$.Path" isString
+# known difference, not asserted: jsonpath "$.Path" isString (Jellyfin's root folder is a folder in its config directory; Rustyfin's is virtual)
 jsonpath "$.EnableMediaSourceDisplay" isBoolean
 jsonpath "$.Taglines" isCollection
 jsonpath "$.Genres" isCollection
@@ -565,8 +565,8 @@ jsonpath "$[0]" exists
 jsonpath "$[0].Name" isString
 jsonpath "$[0].ServerId" isString
 jsonpath "$[0].Id" isString
-jsonpath "$[0].Container" isString
-jsonpath "$[0].RunTimeTicks" isNumber
+# known difference, not asserted: jsonpath "$[0].Container" isString (the synthetic titles share one date added, and the two servers break the tie differently (film first or show first))
+# known difference, not asserted: jsonpath "$[0].RunTimeTicks" isNumber (the synthetic titles share one date added, and the two servers break the tie differently (film first or show first))
 jsonpath "$[0].ProductionYear" isNumber
 jsonpath "$[0].IsFolder" isBoolean
 jsonpath "$[0].Type" isString
@@ -578,7 +578,7 @@ jsonpath "$[0].UserData.Played" isBoolean
 jsonpath "$[0].UserData.Key" isString
 jsonpath "$[0].UserData.ItemId" isString
 jsonpath "$[0].ChildCount" isNumber
-jsonpath "$[0].VideoType" isString
+# known difference, not asserted: jsonpath "$[0].VideoType" isString (the synthetic titles share one date added, and the two servers break the tie differently (film first or show first))
 jsonpath "$[0].ImageTags" exists
 jsonpath "$[0].ImageTags.Primary" isString
 jsonpath "$[0].BackdropImageTags" isCollection
@@ -803,7 +803,7 @@ jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].PixelFormat" isString
-jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].Level" isNumber
+# known difference, not asserted: jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].Level" isNumber (audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests))
 jsonpath "$.Items[0].MediaSources[0].MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.Items[0].MediaSources[0].MediaAttachments" isCollection
 jsonpath "$.Items[0].MediaSources[0].Formats" isCollection
@@ -879,7 +879,7 @@ jsonpath "$.Items[0].MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.Items[0].MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.Items[0].MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.Items[0].MediaStreams[0].PixelFormat" isString
-jsonpath "$.Items[0].MediaStreams[0].Level" isNumber
+# known difference, not asserted: jsonpath "$.Items[0].MediaStreams[0].Level" isNumber (audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests))
 jsonpath "$.Items[0].MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.Items[0].VideoType" isString
 jsonpath "$.Items[0].ImageTags" exists
@@ -1069,7 +1069,7 @@ jsonpath "$.MediaSources[0].MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].PixelFormat" isString
-jsonpath "$.MediaSources[0].MediaStreams[0].Level" isNumber
+# known difference, not asserted: jsonpath "$.MediaSources[0].MediaStreams[0].Level" isNumber (audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests))
 jsonpath "$.MediaSources[0].MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.MediaSources[0].MediaAttachments" isCollection
 jsonpath "$.MediaSources[0].Formats" isCollection
@@ -1141,7 +1141,7 @@ jsonpath "$.MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaStreams[0].SupportsExternalStream" isBoolean
 jsonpath "$.MediaStreams[0].PixelFormat" isString
-jsonpath "$.MediaStreams[0].Level" isNumber
+# known difference, not asserted: jsonpath "$.MediaStreams[0].Level" isNumber (audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests))
 jsonpath "$.MediaStreams[0].IsAnamorphic" isBoolean
 jsonpath "$.VideoType" isString
 jsonpath "$.ImageTags" exists
@@ -1230,7 +1230,7 @@ jsonpath "$.CanDownload" isBoolean
 jsonpath "$.HasLyrics" isBoolean
 jsonpath "$.Container" isString
 jsonpath "$.SortName" isString
-jsonpath "$.PremiereDate" isString
+# known difference, not asserted: jsonpath "$.PremiereDate" isString (tracks carry only ProductionYear, not a full release date (owner decision 2026-11-14))
 jsonpath "$.ExternalUrls" isCollection
 jsonpath "$.ExternalUrls[0].Name" isString
 jsonpath "$.ExternalUrls[0].Url" isString
@@ -1281,7 +1281,7 @@ jsonpath "$.MediaSources[0].MediaStreams[0].Index" isNumber
 jsonpath "$.MediaSources[0].MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaSources[0].MediaStreams[0].SupportsExternalStream" isBoolean
-jsonpath "$.MediaSources[0].MediaStreams[0].Level" isNumber
+# known difference, not asserted: jsonpath "$.MediaSources[0].MediaStreams[0].Level" isNumber (audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests))
 jsonpath "$.MediaSources[0].MediaAttachments" isCollection
 jsonpath "$.MediaSources[0].Formats" isCollection
 jsonpath "$.MediaSources[0].Bitrate" isNumber
@@ -1355,7 +1355,7 @@ jsonpath "$.MediaStreams[0].Index" isNumber
 jsonpath "$.MediaStreams[0].IsExternal" isBoolean
 jsonpath "$.MediaStreams[0].IsTextSubtitleStream" isBoolean
 jsonpath "$.MediaStreams[0].SupportsExternalStream" isBoolean
-jsonpath "$.MediaStreams[0].Level" isNumber
+# known difference, not asserted: jsonpath "$.MediaStreams[0].Level" isNumber (audio has no level: Rustyfin leaves the key out rather than send a made-up 0 (stream_details_tests))
 jsonpath "$.ImageTags" exists
 jsonpath "$.BackdropImageTags" isCollection
 jsonpath "$.ImageBlurHashes" exists
@@ -1755,30 +1755,8 @@ GET {{base_url}}/Libraries/AvailableOptions
 Authorization: MediaBrowser Token="{{token}}"
 [QueryStringParams]
 LibraryContentType: movies
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$.MetadataSavers" isCollection
-jsonpath "$.MetadataSavers[0].Name" isString
-jsonpath "$.MetadataSavers[0].DefaultEnabled" isBoolean
-jsonpath "$.MetadataReaders" isCollection
-jsonpath "$.MetadataReaders[0].Name" isString
-jsonpath "$.MetadataReaders[0].DefaultEnabled" isBoolean
-jsonpath "$.SubtitleFetchers" isCollection
-jsonpath "$.LyricFetchers" isCollection
-jsonpath "$.TypeOptions" isCollection
-jsonpath "$.TypeOptions[0].Type" isString
-jsonpath "$.TypeOptions[0].MetadataFetchers" isCollection
-jsonpath "$.TypeOptions[0].MetadataFetchers[0].Name" isString
-jsonpath "$.TypeOptions[0].MetadataFetchers[0].DefaultEnabled" isBoolean
-jsonpath "$.TypeOptions[0].ImageFetchers" isCollection
-jsonpath "$.TypeOptions[0].ImageFetchers[0].Name" isString
-jsonpath "$.TypeOptions[0].ImageFetchers[0].DefaultEnabled" isBoolean
-jsonpath "$.TypeOptions[0].SupportedImageTypes" isCollection
-jsonpath "$.TypeOptions[0].DefaultImageOptions" isCollection
-jsonpath "$.TypeOptions[0].DefaultImageOptions[0].Type" isString
-jsonpath "$.TypeOptions[0].DefaultImageOptions[0].Limit" isNumber
-jsonpath "$.TypeOptions[0].DefaultImageOptions[0].MinWidth" isNumber
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (libraries are set in rustyfin.toml (owner decision 2026-11-26): the add-library dialog's options are not served)
 
 GET {{base_url}}/Items/{{movie_id}}/ExternalIdInfos
 Authorization: MediaBrowser Token="{{token}}"

@@ -1530,6 +1530,27 @@ pub async fn set_genres(pool: &PgPool, id: Uuid, genres: &[String]) -> Result<()
     Ok(())
 }
 
+/// Give each album of `library` its tracks' genres, as Jellyfin does (an
+/// album's tags are its tracks'). Returns how many albums changed.
+pub async fn album_genres_from_tracks(pool: &PgPool, library: Uuid) -> Result<u64, sqlx::Error> {
+    let done = sqlx::query(
+        "UPDATE media_items a SET genres = g.genres \
+         FROM (SELECT CASE WHEN p.item_type = 'MusicAlbum' THEN p.id ELSE p.parent_id END AS album, \
+                      array_agg(DISTINCT x ORDER BY x) AS genres \
+               FROM media_items t \
+               JOIN media_items p ON p.id = t.parent_id \
+               CROSS JOIN LATERAL unnest(t.genres) AS x \
+               WHERE t.item_type = 'Audio' AND t.library_id = $1 \
+               GROUP BY 1) g \
+         WHERE a.id = g.album AND a.item_type = 'MusicAlbum' \
+           AND a.genres IS DISTINCT FROM g.genres",
+    )
+    .bind(library)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected())
+}
+
 /// When the first title with this name (a genre, studio, year or person) was
 /// added: the date a name item gives as created.
 pub async fn first_added_with(

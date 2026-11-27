@@ -153,6 +153,11 @@ async fn lists_carry_what_jellyfin_puts_in_them() {
         )
         .await;
     assert!(s["Items"][0]["MediaSources"].is_array(), "{s}");
+    // Jellyfin sends suggestions with every field, as on an item's page.
+    let first = &s["Items"][0];
+    assert_eq!(first["People"][0]["Name"], "Some Actor", "{s}");
+    assert!(first["Chapters"].is_array(), "{s}");
+    assert!(first["Trickplay"].is_object(), "{s}");
 
     let (_, list) = app
         .get(

@@ -190,6 +190,47 @@ KNOWN_DIFFERENCES = [
         r'RemoteEndPoint',
         "behind forward auth the client's address is the proxy's, so Rustyfin leaves it out",
     ),
+    (
+        "/System/ActivityLog/Entries",
+        {},
+        r'Items\[0\]\.(ShortOverview|ItemId)"',
+        "the first entry is whatever each server did last (Jellyfin: a sign-in, with its address; Rustyfin: a library change), and those keys are per entry",
+    ),
+    (
+        "/Genres/{genre_name}",
+        {},
+        r'ImageTags\.Primary|ImageBlurHashes\.Primary|PrimaryImageAspectRatio',
+        "Jellyfin makes a genre's picture from its titles' video frames; the test media have no art, and Rustyfin does not grab frames for genres",
+    ),
+    *[
+        (
+            path,
+            query,
+            r'\.PremiereDate" ',
+            "tracks carry only ProductionYear, not a full release date (owner decision 2026-11-14)",
+        )
+        for path, query in (
+            ("/Songs/{track_id}/InstantMix", {}),
+            ("/Albums/{album_id}/InstantMix", {}),
+            ("/Artists/{artist_id}/InstantMix", {}),
+            ("/Items/{track_id}/InstantMix", {}),
+            ("/Artists/InstantMix", {}),
+            ("/MusicGenres/{music_genre_name}/InstantMix", {}),
+            ("/MusicGenres/InstantMix", {}),
+        )
+    ],
+    (
+        "/Items",
+        {"Years": "{year}"},
+        r'Items\[0\]\.AirDays"',
+        "the year asked is each server's first listed: Jellyfin's is 2021 (a show; its test album has no year), Rustyfin's is 2019 (the album), and an album has no AirDays",
+    ),
+    (
+        "/Libraries/AvailableOptions",
+        {},
+        r'^HTTP ',
+        "libraries are set in rustyfin.toml (owner decision 2026-11-26): the add-library dialog's options are not served",
+    ),
 ]
 
 
