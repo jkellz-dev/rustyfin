@@ -225,6 +225,19 @@ KNOWN_DIFFERENCES = [
         r'Items\[0\]\.AirDays"',
         "the year asked is each server's first listed: Jellyfin's is 2021 (a show; its test album has no year), Rustyfin's is 2019 (the album), and an album has no AirDays",
     ),
+    *[
+        (
+            path,
+            {},
+            r'^HTTP ',
+            "metadata is not edited in the server (owner decision 2026-11-26: no editor view): the files, their NFOs and rustyfin-meta own it",
+        )
+        for path in (
+            "/Items/{movie_id}/ExternalIdInfos",
+            "/Items/{movie_id}/MetadataEditor",
+            "/Items/{movie_id}/RemoteImages/Providers",
+        )
+    ],
     (
         "/Libraries/AvailableOptions",
         {},

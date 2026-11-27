@@ -1760,48 +1760,18 @@ HTTP *
 
 GET {{base_url}}/Items/{{movie_id}}/ExternalIdInfos
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$" isCollection
-jsonpath "$[0]" exists
-jsonpath "$[0].Name" isString
-jsonpath "$[0].Key" isString
-jsonpath "$[0].UrlFormatString" isString
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (metadata is not edited in the server (owner decision 2026-11-26: no editor view): the files, their NFOs and rustyfin-meta own it)
 
 GET {{base_url}}/Items/{{movie_id}}/MetadataEditor
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$.ParentalRatingOptions" isCollection
-jsonpath "$.ParentalRatingOptions[0].Name" isString
-jsonpath "$.Countries" isCollection
-jsonpath "$.Countries[0].Name" isString
-jsonpath "$.Countries[0].DisplayName" isString
-jsonpath "$.Countries[0].TwoLetterISORegionName" isString
-jsonpath "$.Countries[0].ThreeLetterISORegionName" isString
-jsonpath "$.Cultures" isCollection
-jsonpath "$.Cultures[0].Name" isString
-jsonpath "$.Cultures[0].DisplayName" isString
-jsonpath "$.Cultures[0].TwoLetterISOLanguageName" isString
-jsonpath "$.Cultures[0].ThreeLetterISOLanguageName" isString
-jsonpath "$.Cultures[0].ThreeLetterISOLanguageNames" isCollection
-jsonpath "$.ExternalIdInfos" isCollection
-jsonpath "$.ExternalIdInfos[0].Name" isString
-jsonpath "$.ExternalIdInfos[0].Key" isString
-jsonpath "$.ExternalIdInfos[0].UrlFormatString" isString
-jsonpath "$.ContentTypeOptions" isCollection
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (metadata is not edited in the server (owner decision 2026-11-26: no editor view): the files, their NFOs and rustyfin-meta own it)
 
 GET {{base_url}}/Items/{{movie_id}}/RemoteImages/Providers
 Authorization: MediaBrowser Token="{{token}}"
-HTTP 200
-[Asserts]
-header "Content-Type" contains "application/json"
-jsonpath "$" isCollection
-jsonpath "$[0]" exists
-jsonpath "$[0].Name" isString
-jsonpath "$[0].SupportedImages" isCollection
+HTTP *
+# known difference, not asserted: HTTP 200 and its body (metadata is not edited in the server (owner decision 2026-11-26: no editor view): the files, their NFOs and rustyfin-meta own it)
 
 GET {{base_url}}/Search/Hints
 Authorization: MediaBrowser Token="{{token}}"
