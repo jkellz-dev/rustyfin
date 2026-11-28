@@ -1519,7 +1519,8 @@ Design, settled before any code:
       tests over real-world stream pairs (4K HDR HEVC remux vs 1080p H.264, DV vs HDR10, 5.1 vs stereo, TrueHD vs EAC3)
 - [x] Local films with several versions list their best one first in `MediaSources` (item and `PlaybackInfo`),
       and the best one plays when no `MediaSourceId` is named; on a tie the film's own file stays first
-- [ ] Optional per-user preference "prefer a copy that plays without transcoding" (open question: default off)
+- [x] Preference "prefer a copy that plays without transcoding": a server setting in `rustyfin.toml`
+      (`prefer_direct_play`, off by default) rather than per user, as configuration lives in the file
 - [ ] Admin player and version menu labels show the ranking inputs ("2160p HDR10 · TrueHD 7.1")
 
 #### 16b.2 Jellyfin links (any current Jellyfin server)
@@ -1594,7 +1595,7 @@ Design, settled before any code:
 - [x] Films match by provider id (TMDB or IMDb): a linked copy becomes a `Version` of the local film, or of
       another friend's copy of a film the server lacks. Stable ids: the local film keeps its id; a linked copy keeps
       its row across syncs.
-- [ ] Series and seasons by provider id, episodes by series plus season and episode numbers
+- [x] Series and seasons by provider id, episodes by series plus season and episode numbers
 - [x] Collections (owner, 2026-11-23: "Build it"): a friend's films join this server's collections by TMDB collection
       id (Jellyfin's `TmdbCollection` provider id); the friend's collections come across under their name when this
       server has none of that id, and the ones with no TMDB id by their films. This server's names and its own films'
@@ -1602,9 +1603,11 @@ Design, settled before any code:
       collection id).
 - [ ] An item matched to several items on one server, or carrying conflicting provider ids, is never merged; it is
       listed in an admin "conflicts" view
-- [ ] Series and seasons merge too, so one show lists episodes from both servers, each episode with its copies
-- [ ] Libraries merge by explicit mapping in the link config (e.g. the friend's "Films" into local "Movies"), or by
-      matching type and name when unmapped; per-user library access applies to merged libraries
+- [x] Series and seasons merge too, so one show lists episodes from both servers, each episode with its copies
+- [x] Libraries merge by explicit mapping in the link config (e.g. the friend's "Films" into local "Movies"), or by
+      matching type and name when unmapped; per-user library access applies to merged libraries. Done as
+      `[[link.libraries]] local = "..."`; an unmapped library is a library of its own, "Remote · Link"
+      (changed from matching by name, so nothing merges without being asked)
 
 #### 16b.5 One interface
 
@@ -1613,11 +1616,12 @@ Design, settled before any code:
       route forgets the linked rows (the rule already used for `owner_id` rows).
 - [ ] Search (Postgres and Meilisearch) indexes merged items once
 - [ ] Item details show which servers hold a copy; version names say where each copy is ("2160p HDR · Alex")
-- [ ] Admin: a Links page (status, last sync, item counts, conflicts)
+- [x] Admin: a Links page (status, last sync, item counts, sync now); the conflicts list comes with conflict
+      detection above
 
 #### 16b.6 Playback
 
-- [ ] `PlaybackInfo` for a merged item lists all reachable copies best first, each with its own `MediaSourceId`
+- [x] `PlaybackInfo` for a merged item lists all reachable copies best first, each with its own `MediaSourceId`
 - [x] Direct play of a linked copy: the home server relays byte ranges from the linked server (Range, If-Range
       forwarded; Content-Range, ETag, Last-Modified passed back); posters and backdrops relayed, sized by the friend's
       server
@@ -1668,6 +1672,30 @@ priority between servers, SyncPlay and WebSocket fan-out, and Quick Connect betw
       hints, merged with titles by Meilisearch's score) (owner, 2026-11-20)
 
 ---
+
+## Configuration From the File, and This Week's Fixes (owner, 2026-11-26)
+
+Owner: "My goal with configuration is to have it completely config file driven."
+
+- [x] Libraries are set in `rustyfin.toml` (`[[library]]`: name, type, paths), applied at start and matched by name,
+      so ids and watched history stay; once any is set, the admin and Jellyfin's library writes answer 409 and the
+      admin shows "Set in rustyfin.toml"
+- [x] `rustyfin prune`: lists the libraries the file no longer sets, and removes them with `--yes`
+- [x] "Scan All Libraries" moved from the dashboard to the Libraries page
+- [ ] Server API keys from `rustyfin.toml` (`[[api_key]]`: name and `key_file`, so a secret can hold the key); the
+      admin's key creation goes (owner, 2026-11-27: "Use option one. So secrets can be used.")
+- [ ] Media managers tell Rustyfin about new media: `POST /api/v1/webhooks/media` reads their webhook format. Imported,
+      upgraded, renamed and deleted files rescan the title's folder, a deleted title is removed, and a test ping
+      answers OK; one URL for films, shows and music (owner, 2026-11-27). Docs name no such program
+- [x] Rustyfin's own routes are all in `rustyfin-api`: the linked-copy relay moved there; `/metrics` stays at the root
+- [x] Title logos: `rustyfin artwork` fetches TMDB's English, else wordless, logo as `clearlogo.png`; art named
+      after the video (`<name>-clearlogo.png`) is read; a resized logo keeps its transparency; seasons and episodes
+      name their show's logo, backdrop and thumb (`ParentLogoItemId` and the rest)
+- [x] `/Genres` pictures and counts in one query each per page
+- [x] Parity: music genres show right after a scan, albums take their tracks' genres, suggestions carry cast,
+      chapters and trickplay; the metadata editor is a known difference (owner: no editor view)
+- [ ] Artwork kept on a fast disk, so browsing never waits on a sleeping media drive (proposed 2026-11-27, waiting
+      on the owner)
 
 ## Known Bugs
 
@@ -1739,5 +1767,5 @@ Work:
 | Metadata | ~96% | NFO + TMDB + TVDB + MusicBrainz + Fanart.tv + Discogs + Cover Art Archive; `rustyfin` CLI with rate limiting, disambiguation, provider IDs; music NFO pipeline (tags → MB → NFO → server); self-hosted MusicBrainz support |
 | Admin frontend | ~50% | 5 pages; no settings, no playback dashboard |
 | Search | ~90% | Meilisearch + fallback; full filter engine (genre/year/studio/rating/person/tags); 17 sort options |
-| Notifications | ~50% | Activity log + inbound media update webhook + API key auth; no outbound webhooks |
+| Notifications | ~50% | Activity log + inbound media update webhook + API key auth; media-manager webhook in progress; no outbound webhooks |
 | Testing | ~70% | 462 tests (common 230 [naming 196, NFO 34], API 137 [parity 67, repo 29, DTO 12, query parsing 15, smoke+CRUD 14], media 69 [command 44, probe 14, subtitles 11], auth 26); per-test Postgres schema isolation |
