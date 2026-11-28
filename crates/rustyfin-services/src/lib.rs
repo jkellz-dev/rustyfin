@@ -44,11 +44,29 @@ use rustyfin_models::data::Data;
 pub struct Services<D> {
     data: D,
     scans: scans::ScanRuntime,
+    /// The API keys `rustyfin.toml` sets; `None` when it sets none.
+    keys: std::sync::Arc<Option<Vec<api_keys::ConfiguredKey>>>,
 }
 
 impl<D: Data> Services<D> {
     pub fn new(data: D, scans: scans::ScanRuntime) -> Self {
-        Self { data, scans }
+        Self {
+            data,
+            scans,
+            keys: std::sync::Arc::new(None),
+        }
+    }
+
+    /// The same services with the API keys `rustyfin.toml` sets (each a
+    /// name and the key itself); `None` when it sets none.
+    #[must_use]
+    pub fn with_api_keys(mut self, keys: Option<Vec<(String, String)>>) -> Self {
+        self.keys = std::sync::Arc::new(keys.map(|keys| {
+            keys.into_iter()
+                .map(|(name, key)| api_keys::ConfiguredKey::new(name, &key))
+                .collect()
+        }));
+        self
     }
 
     /// The same services over another data layer (the linking servers'
@@ -57,12 +75,16 @@ impl<D: Data> Services<D> {
         Self {
             data,
             scans: self.scans.clone(),
+            keys: self.keys.clone(),
         }
     }
 
     /// API keys for programs.
     pub fn api_keys(&self) -> api_keys::ApiKeys<'_, D> {
-        api_keys::ApiKeys { data: &self.data }
+        api_keys::ApiKeys {
+            data: &self.data,
+            configured: self.keys.as_ref().as_deref(),
+        }
     }
 
     /// Collections made by hand.

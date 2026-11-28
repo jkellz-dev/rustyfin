@@ -388,14 +388,41 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // API keys from rustyfin.toml: a key whose file cannot be read is left
+    // out (and said), but the file still decides: the admin's keys stop.
+    let api_keys = (!config.api_keys.is_empty()).then(|| {
+        config
+            .api_keys
+            .iter()
+            .filter_map(|k| match k.read() {
+                Ok(key) => {
+                    tracing::info!("API key {}: from rustyfin.toml", k.name);
+                    Some((k.name.clone(), key))
+                }
+                Err(e) => {
+                    tracing::error!("{e}");
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    });
     let services = rustyfin_services::Services::new(
         data.clone(),
         rustyfin_services::scans::ScanRuntime {
             in_flight: scan_in_flight.clone(),
             links: links.clone(),
             people_cache_dir: people_cache_dir.clone(),
+            path_map: Arc::new(rustyfin_services::scans::PathMap::new(
+                config
+                    .path_maps
+                    .iter()
+                    .map(|m| (m.from.clone(), m.to.clone()))
+                    .collect(),
+            )),
+            waiting: Arc::default(),
         },
-    );
+    )
+    .with_api_keys(api_keys);
     // Rustyfin's own API: the same data, rules, links and proxy.
     let api_state = rustyfin_api::state::ApiState {
         data: data.clone(),

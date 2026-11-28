@@ -861,6 +861,25 @@ pub async fn delete_by_path(pool: &PgPool, path: &str) -> Result<bool, sqlx::Err
     Ok(result.rows_affected() > 0)
 }
 
+/// Delete the item at `path` and every item under it (a folder that is gone:
+/// a title deleted with its files). Returns how many went.
+pub async fn delete_under_path(pool: &PgPool, path: &str) -> Result<u64, sqlx::Error> {
+    let folder = path.trim_end_matches('/');
+    let pattern = format!(
+        "{}/%",
+        folder
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
+    let result = sqlx::query("DELETE FROM media_items WHERE path = $1 OR path LIKE $2")
+        .bind(folder)
+        .bind(pattern)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
 /// The paths of the items of `item_type` whose provider id `key` (`Imdb`,
 /// `Tmdb`, `Tvdb`) is `value`, in any case.
 pub async fn paths_by_external_id(

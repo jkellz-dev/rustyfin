@@ -11,7 +11,7 @@ use rustyfin_models::data::Data;
 use tower::ServiceExt;
 
 use crate::paths::PREFIX;
-use crate::routes::{catalog, links, permissions, relay};
+use crate::routes::{catalog, links, permissions, relay, webhooks};
 use crate::state::ApiState;
 
 /// The API's router. A server linking this one is served by a second copy
@@ -59,7 +59,9 @@ fn routes<D: Data>(state: ApiState<D>, observe: fn(Router) -> Router) -> Router 
         .route(
             "/users/{id}/permissions",
             get(permissions::get::<D>).patch(permissions::patch::<D>),
-        );
+        )
+        // Media managers say a title's files changed (an API key signs in).
+        .route("/webhooks/media", post(webhooks::media::<D>));
     observe(Router::new().nest(PREFIX, api).with_state(state))
 }
 

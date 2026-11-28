@@ -207,15 +207,18 @@ Tailscale account, which becomes their Rustyfin user; give them the libraries yo
   the `rustyfin` container (`devices: ["/dev/dri:/dev/dri"]` for Intel and AMD). Without it, ffmpeg converts on the CPU
   when an app cannot play a file as it is.
 - **Metrics**: `[metrics] listen = "0.0.0.0:9090"` serves Prometheus metrics on a second port.
-- **Library notifications**: a program that adds or changes files can tell Rustyfin which folder changed, so it scans
-  just that folder, with Jellyfin's `POST /Library/Media/Updated`. Make a key for it from a device on your tailnet:
+- **Library notifications**: a program that adds or changes files can tell Rustyfin which title changed, so it scans
+  just that folder: media managers through their webhook ([Media webhook](rustyfin-api.md#media-webhook)), other
+  programs with Jellyfin's `POST /Library/Media/Updated`. Put a key of at least 16 characters in a file, name it in
+  `rustyfin.toml`, and add `[[path_map]]` if the program sees your media under other folders:
 
-  ```bash
-  curl -X POST https://rustyfin.<your-tailnet>.ts.net/Auth/Keys \
-    -H 'Content-Type: application/json' -d '{"Name": "Notifier"}'
+  ```toml
+  [[api_key]]
+  name = "notifier"
+  key_file = "/run/secrets/notifier-key"
   ```
 
-  The program sends the `Key` from the answer as `X-Api-Key` (or `?api_key=`), straight to the `tailscale` container on
-  port `8096` (run it in the same Compose file). The key only lets it send these notifications.
+  The program sends the key as `X-Api-Key` (or `?api_key=`), straight to the `tailscale` container on port `8096` (run
+  it in the same Compose file). The key only lets it send these notifications.
 - **A friend's Jellyfin**: their libraries can merge into yours ([Linked Servers](linked-servers.md)).
 - **Coming from Jellyfin**: what comes across and what does not ([Moving from Jellyfin](migrating-from-jellyfin.md)).

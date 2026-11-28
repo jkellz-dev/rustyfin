@@ -103,9 +103,11 @@ apps on TVs and phones cannot, and the proxy refuses their requests. If those ap
 
 ## Server API keys
 
-An administrator makes an API key by sending `POST /Auth/Keys` with `{"Name": "Library notifier"}` (the admin has no
-page for it yet); the answer's `Key` is shown only then. A key names no person and signs no one in: it is only for the
-"a file changed" notifications other programs can send (`POST /Library/Media/Updated` and the older
+API keys are set in `rustyfin.toml` ([`[[api_key]]`](configuration.md#api_key-optional-repeatable), each read from a
+file such as a mounted secret). Without any there, an administrator makes one by sending `POST /Auth/Keys` with
+`{"Name": "Library notifier"}`; the answer's `Key` is shown only then. A key names no person and signs no one in: it is
+only for the "a file changed" notifications other programs can send (media managers' webhooks at
+[`POST /api/v1/webhooks/media`](rustyfin-api.md#media-webhook), Jellyfin's `POST /Library/Media/Updated` and the older
 `/Library/Movies/...` and `/Library/Series/...`), which they send with the key straight to Rustyfin, not through the
 proxy.
 

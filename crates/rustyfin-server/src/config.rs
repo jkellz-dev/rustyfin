@@ -27,11 +27,57 @@ pub struct Config {
     /// updated at start, and changed only here once any is set.
     #[serde(default, rename = "library")]
     pub libraries: Vec<rustyfin_services::libraries::ConfiguredLibrary>,
+    /// API keys for programs (`[[api_key]]`; docs/configuration.md). Once
+    /// any is set only these work, and the admin makes none.
+    #[serde(default, rename = "api_key")]
+    pub api_keys: Vec<ApiKeyConfig>,
+    /// How other programs' paths read here (`[[path_map]]`), for the
+    /// changed paths they report.
+    #[serde(default, rename = "path_map")]
+    pub path_maps: Vec<PathMapConfig>,
     /// Linked servers (`[[link]]`, roadmap 16b; docs/linked-servers.md).
     #[serde(default, rename = "link")]
     pub links: Vec<LinkConfig>,
     #[serde(default)]
     pub playback: PlaybackConfig,
+}
+
+/// One `[[api_key]]`: a key for a program, read from a file (a mounted
+/// secret) so the key itself is never in `rustyfin.toml`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiKeyConfig {
+    pub name: String,
+    pub key_file: std::path::PathBuf,
+}
+
+impl ApiKeyConfig {
+    /// The key: the file's contents without surrounding whitespace.
+    pub fn read(&self) -> anyhow::Result<String> {
+        let key = std::fs::read_to_string(&self.key_file).map_err(|e| {
+            anyhow::anyhow!(
+                "api key {}: cannot read {}: {e}",
+                self.name,
+                self.key_file.display()
+            )
+        })?;
+        let key = key.trim().to_string();
+        if key.len() < 16 {
+            anyhow::bail!(
+                "api key {}: {} holds fewer than 16 characters",
+                self.name,
+                self.key_file.display()
+            );
+        }
+        Ok(key)
+    }
+}
+
+/// One `[[path_map]]`: a path another program reports under `from` is this
+/// server's under `to`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PathMapConfig {
+    pub from: String,
+    pub to: String,
 }
 
 /// One `[[link]]`: a friend's server whose shared libraries merge into this

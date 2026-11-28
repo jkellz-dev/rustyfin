@@ -43,6 +43,15 @@ pub struct TestApp {
     pub search: rustyfin_data::PgSearch,
 }
 
+/// Settings only some tests need.
+#[derive(Default)]
+struct Extras {
+    /// `[[api_key]]`: (name, key); `None` when the file sets none.
+    api_keys: Option<Vec<(String, String)>>,
+    /// `[[path_map]]`: (from, to).
+    path_map: Vec<(String, String)>,
+}
+
 impl TestApp {
     /// Create a new test app with a random Postgres schema and all migrations applied.
     pub async fn new() -> Self {
@@ -65,6 +74,30 @@ impl TestApp {
     /// `app.search.sync()`, which tests call when they want it.
     pub async fn with_meilisearch() -> Self {
         Self::build_with(None, None, false, false, true).await
+    }
+
+    /// A test app with API keys from `rustyfin.toml` (name, key) and its
+    /// `[[path_map]]` pairs (from, to).
+    pub async fn with_keys_and_path_map(
+        keys: Vec<(&str, &str)>,
+        path_map: Vec<(String, String)>,
+    ) -> Self {
+        Self::build_full(
+            None,
+            None,
+            false,
+            false,
+            false,
+            Extras {
+                api_keys: Some(
+                    keys.into_iter()
+                        .map(|(n, k)| (n.to_string(), k.to_string()))
+                        .collect(),
+                ),
+                path_map,
+            },
+        )
+        .await
     }
 
     /// A test app whose people headshots come from `dir`.
@@ -99,6 +132,25 @@ impl TestApp {
         forward_auth: bool,
         prefer_direct_play: bool,
         meilisearch: bool,
+    ) -> Self {
+        Self::build_full(
+            people_cache_dir,
+            acquire_timeout,
+            forward_auth,
+            prefer_direct_play,
+            meilisearch,
+            Extras::default(),
+        )
+        .await
+    }
+
+    async fn build_full(
+        people_cache_dir: Option<PathBuf>,
+        acquire_timeout: Option<std::time::Duration>,
+        forward_auth: bool,
+        prefer_direct_play: bool,
+        meilisearch: bool,
+        extras: Extras,
     ) -> Self {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://rustyfin:rustyfin@localhost:5432/rustyfin".to_string());
@@ -176,8 +228,11 @@ impl TestApp {
                 in_flight: scan_in_flight.clone(),
                 links: links.clone(),
                 people_cache_dir: people_cache_dir.clone(),
+                path_map: Arc::new(rustyfin_services::scans::PathMap::new(extras.path_map)),
+                waiting: Arc::default(),
             },
-        );
+        )
+        .with_api_keys(extras.api_keys);
         let api_state = rustyfin_api::state::ApiState {
             data: data.clone(),
             services: services.clone(),

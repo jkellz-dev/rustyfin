@@ -21,13 +21,72 @@ use crate::link::Links;
 
 /// What starting scans needs besides the data layer; shared with the
 /// scheduler, which uses the same in-flight set.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ScanRuntime {
     /// Libraries being scanned now.
     pub in_flight: Arc<RwLock<HashSet<Uuid>>>,
     pub links: Arc<Links>,
     /// The shared people folder (headshots), when configured.
     pub people_cache_dir: Option<PathBuf>,
+    /// How other programs' paths read here (`[[path_map]]`).
+    pub path_map: Arc<PathMap>,
+    /// Folders a notification named while their library was being scanned:
+    /// scanned once it is free, so no notification is lost.
+    pub waiting: Arc<std::sync::Mutex<HashMap<Uuid, Vec<String>>>>,
+}
+
+/// `[[path_map]]` in `rustyfin.toml`: a program that tells Rustyfin about
+/// changed files may see the media under another folder (`/media/movies`
+/// for this server's `/data/media/movies`). Each pair turns a path that
+/// starts with `from` into one that starts with `to`; the longest `from`
+/// that fits wins, and a path no pair fits is kept as it is.
+#[derive(Debug, Clone, Default)]
+pub struct PathMap(Vec<(String, String)>);
+
+impl PathMap {
+    pub fn new(pairs: Vec<(String, String)>) -> Self {
+        let mut pairs: Vec<(String, String)> = pairs
+            .into_iter()
+            .map(|(from, to)| (trim_slash(&from), trim_slash(&to)))
+            .collect();
+        pairs.sort_by_key(|(from, _)| std::cmp::Reverse(from.len()));
+        Self(pairs)
+    }
+
+    /// `path` as this server sees it.
+    pub fn apply(&self, path: &str) -> String {
+        for (from, to) in &self.0 {
+            if let Some(rest) = path.strip_prefix(from.as_str())
+                && (rest.is_empty() || rest.starts_with('/') || from.is_empty())
+            {
+                return format!("{to}{rest}");
+            }
+        }
+        path.to_string()
+    }
+}
+
+/// A folder without its trailing slash (but `/` stays the root).
+fn trim_slash(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() && path.starts_with('/') {
+        String::new()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// What a media manager's webhook asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notified {
+    /// Its "test" button: nothing to do, and the answer says the key works.
+    Test,
+    /// Nothing on disk changed yet (a download was only started), or it
+    /// named no folder.
+    Ignored,
+    /// The title folders it named are being rescanned (or their titles
+    /// removed, where the folder is gone).
+    Rescanning,
 }
 
 /// Scan starting over the data layer.
@@ -36,17 +95,39 @@ pub struct Scans<'a, D> {
     pub(crate) runtime: &'a ScanRuntime,
 }
 
+/// The folders waiting for `library`'s next webhook scan, taken. When there
+/// are none (or `all` is set) the library's entry goes too, in the same
+/// step, so a notification arriving now starts a scan of its own.
+fn take_waiting(runtime: &ScanRuntime, library: Uuid, all: bool) -> Vec<String> {
+    let mut waiting = runtime
+        .waiting
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dirs = waiting
+        .get_mut(&library)
+        .map(std::mem::take)
+        .unwrap_or_default();
+    if dirs.is_empty() || all {
+        waiting.remove(&library);
+    }
+    dirs
+}
+
 impl<D: Data> Scans<'_, D> {
     /// What a library notification asks: rescan the folders of `paths` (a
     /// file's folder, or the folder itself) and drop the items whose path is
     /// gone.
     pub async fn paths_changed(&self, paths: &[String]) -> ServiceResult<()> {
         let libs = self.data.libraries().list_scannable().await?;
+        let paths: Vec<String> = paths
+            .iter()
+            .map(|p| self.runtime.path_map.apply(p))
+            .collect();
 
         // Which folders of which library to scan.
         let mut targets: HashMap<Uuid, Vec<String>> = HashMap::new();
         let mut gone: Vec<&String> = Vec::new();
-        for changed in paths {
+        for changed in &paths {
             let path = std::path::Path::new(changed);
             if !path.exists() {
                 gone.push(changed);
@@ -68,17 +149,59 @@ impl<D: Data> Scans<'_, D> {
         }
 
         for path in gone {
-            match self.data.media_items().delete_by_path(path).await {
-                Ok(true) => tracing::info!("Deleted media item for removed path: {path}"),
-                Ok(false) => tracing::debug!("No media item found for path: {path}"),
-                Err(e) => tracing::error!("Failed to delete media item for path {path}: {e}"),
-            }
+            self.remove_gone(&libs, path).await;
         }
 
         for (library, dirs) in targets {
             self.start_folders(library, dirs).await;
         }
         Ok(())
+    }
+
+    /// A path that is gone: its item, or every item under it when it was a
+    /// folder (a title deleted with its files). Only inside a library folder
+    /// that is there and not empty, and never the library folder itself: a
+    /// share that is not mounted is not a deleted library (the scanner's
+    /// prune keeps the same rule).
+    async fn remove_gone(&self, libs: &[Library], path: &str) {
+        let inside = libs.iter().any(|lib| {
+            lib.paths.iter().any(|root| {
+                let root = std::path::Path::new(root);
+                let gone = std::path::Path::new(path);
+                gone.starts_with(root)
+                    && gone != root
+                    && std::fs::read_dir(root).is_ok_and(|mut d| d.next().is_some())
+            })
+        });
+        if !inside {
+            tracing::warn!("Not removing {path}: it is not inside a library folder that is there");
+            return;
+        }
+        match self.data.media_items().delete_under_path(path).await {
+            Ok(0) => tracing::debug!("No media item found for path: {path}"),
+            Ok(n) => tracing::info!("Removed {n} item(s) for the removed path {path}"),
+            Err(e) => tracing::error!("Failed to remove the items of {path}: {e}"),
+        }
+    }
+
+    /// A media manager's webhook: `event` is its `eventType`, `folders` the
+    /// title folders it names (a film's, a show's or an artist's), as it
+    /// sees them. Owner, 2026-11-27: imported, upgraded, renamed and deleted
+    /// files rescan the title's folder, a deleted title is removed, and a
+    /// test answers OK. A grab changes nothing on disk yet, so it is let be.
+    pub async fn media_manager_event(
+        &self,
+        event: &str,
+        folders: &[String],
+    ) -> ServiceResult<Notified> {
+        if event.eq_ignore_ascii_case("test") {
+            return Ok(Notified::Test);
+        }
+        if event.eq_ignore_ascii_case("grab") || folders.is_empty() {
+            return Ok(Notified::Ignored);
+        }
+        self.paths_changed(folders).await?;
+        Ok(Notified::Rescanning)
     }
 
     /// Jellyfin's older notification for films: the films with this IMDb id
@@ -207,50 +330,82 @@ impl<D: Data> Scans<'_, D> {
     }
 
     /// Scan only `dirs` of a library in the background (a webhook named
-    /// them), unless the library is being scanned already.
-    pub async fn start_folders(&self, library: Uuid, mut dirs: Vec<String>) {
-        dirs.sort();
-        dirs.dedup();
-        let label = library.to_string();
-        if self.claim(&[(library, label.as_str())]).await.is_empty() {
-            return;
+    /// them). While the library is being scanned they wait, with any other
+    /// folders named meanwhile, and are scanned once it is free: media
+    /// managers send one notification per file, often several a second.
+    pub async fn start_folders(&self, library: Uuid, dirs: Vec<String>) {
+        {
+            let mut waiting = self
+                .runtime
+                .waiting
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(queued) = waiting.get_mut(&library) {
+                // A scan of this library is starting or running: it takes
+                // these up next.
+                queued.extend(dirs);
+                return;
+            }
+            waiting.insert(library, dirs);
         }
 
         let data = self.data.clone();
         let runtime = self.runtime.clone();
         tokio::spawn(async move {
-            let scanner = LibraryScanner::new(data.clone(), runtime.people_cache_dir.clone());
-            tracing::info!(
-                "Webhook scan starting: library={library}, dirs={}",
-                dirs.join(", ")
-            );
-            match scanner.scan(library, &dirs).await {
-                Ok(result) => {
-                    tracing::info!(
-                        "Webhook scan complete: library={library} \
-                         (added={}, updated={}, skipped={}, errors={})",
-                        result.items_added,
-                        result.items_updated,
-                        result.items_skipped,
-                        result.errors,
+            // Wait for any other scan of the library (a manual or scheduled
+            // one) to finish; give up after a day.
+            let mut tries = 0u32;
+            while !runtime.in_flight.write().await.insert(library) {
+                tries += 1;
+                if tries > 17_280 {
+                    tracing::warn!(
+                        "Webhook scan of library {library} gave up waiting for a free library"
                     );
-                    let _ = data
-                        .activity_log()
-                        .insert(
-                            &format!(
-                                "Webhook scan completed (added={}, updated={})",
-                                result.items_added, result.items_updated
-                            ),
-                            None,
-                            "TaskCompleted",
-                            "Informational",
-                            None,
-                            None,
-                        )
-                        .await;
+                    take_waiting(&runtime, library, true);
+                    return;
                 }
-                Err(e) => {
-                    tracing::error!("Webhook scan failed for library {library}: {e}");
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+            let scanner = LibraryScanner::new(data.clone(), runtime.people_cache_dir.clone());
+            loop {
+                let mut dirs = take_waiting(&runtime, library, false);
+                if dirs.is_empty() {
+                    break;
+                }
+                dirs.sort();
+                dirs.dedup();
+                tracing::info!(
+                    "Webhook scan starting: library={library}, dirs={}",
+                    dirs.join(", ")
+                );
+                match scanner.scan(library, &dirs).await {
+                    Ok(result) => {
+                        tracing::info!(
+                            "Webhook scan complete: library={library} \
+                             (added={}, updated={}, skipped={}, errors={})",
+                            result.items_added,
+                            result.items_updated,
+                            result.items_skipped,
+                            result.errors,
+                        );
+                        let _ = data
+                            .activity_log()
+                            .insert(
+                                &format!(
+                                    "Webhook scan completed (added={}, updated={})",
+                                    result.items_added, result.items_updated
+                                ),
+                                None,
+                                "TaskCompleted",
+                                "Informational",
+                                None,
+                                None,
+                            )
+                            .await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Webhook scan failed for library {library}: {e}");
+                    }
                 }
             }
             runtime.in_flight.write().await.remove(&library);
@@ -280,4 +435,24 @@ impl<D: Data> Scans<'_, D> {
 /// A provider id a notification gave: present and not blank.
 fn given(id: Option<&str>) -> Option<&str> {
     id.filter(|s| !s.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PathMap;
+
+    #[test]
+    fn a_programs_path_reads_as_this_servers() {
+        let map = PathMap::new(vec![
+            ("/media/".to_string(), "/data/media".to_string()),
+            ("/media/music".to_string(), "/mnt/media/music".to_string()),
+        ]);
+        assert_eq!(map.apply("/media/movies/Film"), "/data/media/movies/Film");
+        // The longest `from` wins.
+        assert_eq!(map.apply("/media/music/Artist"), "/mnt/media/music/Artist");
+        assert_eq!(map.apply("/media"), "/data/media");
+        // Only whole folder names: `/mediaserver` is not under `/media`.
+        assert_eq!(map.apply("/mediaserver/x"), "/mediaserver/x");
+        assert_eq!(PathMap::default().apply("/a/b"), "/a/b");
+    }
 }

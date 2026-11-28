@@ -351,6 +351,10 @@ pub trait MediaItemStore {
     /// Delete the item for this file; `false` when there was none.
     fn delete_by_path(&self, path: &str) -> impl Future<Output = DataResult<bool>> + Send;
 
+    /// Delete the item at `path` and every item under it (a folder that is
+    /// gone); how many went.
+    fn delete_under_path(&self, path: &str) -> impl Future<Output = DataResult<u64>> + Send;
+
     /// The paths of the items of `item_type` whose provider id `key` (`Imdb`,
     /// `Tmdb`, `Tvdb`) is `value`, in any case.
     fn paths_by_external_id(

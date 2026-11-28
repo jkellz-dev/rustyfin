@@ -236,6 +236,10 @@ impl MediaItemStore for PgMediaItems {
         repo::delete_by_path(&self.pool, path).await.data()
     }
 
+    async fn delete_under_path(&self, path: &str) -> DataResult<u64> {
+        repo::delete_under_path(&self.pool, path).await.data()
+    }
+
     async fn paths_by_external_id(
         &self,
         item_type: &str,

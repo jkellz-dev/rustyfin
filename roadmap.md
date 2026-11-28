@@ -1682,11 +1682,12 @@ Owner: "My goal with configuration is to have it completely config file driven."
       admin shows "Set in rustyfin.toml"
 - [x] `rustyfin prune`: lists the libraries the file no longer sets, and removes them with `--yes`
 - [x] "Scan All Libraries" moved from the dashboard to the Libraries page
-- [ ] Server API keys from `rustyfin.toml` (`[[api_key]]`: name and `key_file`, so a secret can hold the key); the
+- [x] Server API keys from `rustyfin.toml` (`[[api_key]]`: name and `key_file`, so a secret can hold the key); the
       admin's key creation goes (owner, 2026-11-27: "Use option one. So secrets can be used.")
-- [ ] Media managers tell Rustyfin about new media: `POST /api/v1/webhooks/media` reads their webhook format. Imported,
+- [x] Media managers tell Rustyfin about new media: `POST /api/v1/webhooks/media` reads their webhook format. Imported,
       upgraded, renamed and deleted files rescan the title's folder, a deleted title is removed, and a test ping
-      answers OK; one URL for films, shows and music (owner, 2026-11-27). Docs name no such program
+      answers OK; one URL for films, shows and music (owner, 2026-11-27). Docs name no such program. Their paths are
+      translated by `[[path_map]]`; notifications during a scan wait for it instead of being dropped
 - [x] Rustyfin's own routes are all in `rustyfin-api`: the linked-copy relay moved there; `/metrics` stays at the root
 - [x] Title logos: `rustyfin artwork` fetches TMDB's English, else wordless, logo as `clearlogo.png`; art named
       after the video (`<name>-clearlogo.png`) is read; a resized logo keeps its transparency; seasons and episodes

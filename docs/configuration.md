@@ -251,6 +251,35 @@ may be mounted later); renaming a library here makes a new one, and the old one 
 
 Without any `[[library]]`, libraries are made and changed on the admin page instead.
 
+### `[[api_key]]` (optional, repeatable)
+
+Keys for programs that tell Rustyfin about changed files: media managers' webhooks
+([`POST /api/v1/webhooks/media`](rustyfin-api.md#media-webhook)) and Jellyfin's library notifications
+(`POST /Library/Media/Updated`). The key itself is read from a file, so it can come from a secret and never sits in this
+file:
+
+```toml
+[[api_key]]
+name = "media manager"
+key_file = "/run/secrets/rustyfin-webhook-key"   # at least 16 characters; a trailing newline is ignored
+```
+
+Once any `[[api_key]]` is set, only these keys work: keys made earlier with `POST /Auth/Keys` stop, and making or
+deleting keys there answers 409. A key whose file cannot be read is left out and logged at start. Without any
+`[[api_key]]`, keys are made with `POST /Auth/Keys` instead ([Authentication](authentication.md#server-api-keys)).
+
+### `[[path_map]]` (optional, repeatable)
+
+A program that reports changed files may see your media under other folders than Rustyfin does (its `/media/movies` is
+Rustyfin's `/data/media/movies`). Each pair turns a reported path starting with `from` into one starting with `to`; the
+longest `from` that fits wins, only whole folder names match, and a path no pair fits is used as it is.
+
+```toml
+[[path_map]]
+from = "/media"
+to = "/data/media"
+```
+
 ### `[[link]]` (optional, repeatable)
 
 A friend's Jellyfin or Rustyfin whose shared libraries merge into yours. One table per friend; the guide, with what

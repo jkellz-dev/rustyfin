@@ -15,6 +15,7 @@ pub const ROUTES: &[&str] = &[
     "/catalog",
     "/users/permissions",
     "/users/{id}/permissions",
+    "/webhooks/media",
 ];
 
 /// The path as the router knows it (fixed words in lower case) when `path`

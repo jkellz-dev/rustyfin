@@ -55,6 +55,7 @@ mod list_item_shape_tests;
 mod live_scan_fixes_tests;
 mod lyrics_segments_tests;
 mod media_routes_tests;
+mod media_webhook_tests;
 mod metrics_tests;
 mod migration_upgrade_tests;
 mod music_browse_tests;
